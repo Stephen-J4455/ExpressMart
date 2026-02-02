@@ -72,6 +72,8 @@ export const ForgotPasswordScreen = ({ navigation }) => {
             <LinearGradient
               colors={[colors.primary, colors.accent]}
               style={styles.buttonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
             >
               <Text style={styles.buttonText}>Back to Login</Text>
             </LinearGradient>
@@ -142,6 +144,8 @@ export const ForgotPasswordScreen = ({ navigation }) => {
             <LinearGradient
               colors={[colors.primary, colors.accent]}
               style={styles.buttonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />

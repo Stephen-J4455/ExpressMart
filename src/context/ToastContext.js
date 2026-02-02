@@ -15,8 +15,8 @@ export const ToastProvider = ({ children }) => {
     setToast({
       visible: true,
       type,
-      title,
-      message,
+      title: title || "",
+      message: message || "",
     });
   }, []);
 
@@ -27,22 +27,22 @@ export const ToastProvider = ({ children }) => {
   // Convenience methods
   const success = useCallback(
     (title, message) => showToast("success", title, message),
-    [showToast]
+    [showToast],
   );
 
   const error = useCallback(
     (title, message) => showToast("error", title, message),
-    [showToast]
+    [showToast],
   );
 
   const warning = useCallback(
     (title, message) => showToast("warning", title, message),
-    [showToast]
+    [showToast],
   );
 
   const info = useCallback(
     (title, message) => showToast("info", title, message),
-    [showToast]
+    [showToast],
   );
 
   return (

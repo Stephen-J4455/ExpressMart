@@ -3,14 +3,17 @@ import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
-import { Text, View, StyleSheet } from "react-native";
+import { Text, View, StyleSheet, Animated, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as Linking from "expo-linking";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { CartProvider, useCart } from "./src/context/CartContext";
 import { ShopProvider } from "./src/context/ShopContext";
 import { OrderProvider } from "./src/context/OrderContext";
 import { ToastProvider } from "./src/context/ToastContext";
+import { ChatProvider } from "./src/context/ChatContext";
+import { AdsProvider } from "./src/context/AdsContext";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { CategoriesScreen } from "./src/screens/CategoriesScreen";
 import { FeedScreen } from "./src/screens/FeedScreen";
@@ -21,9 +24,25 @@ import { ProductDetailScreen } from "./src/screens/ProductDetailScreen";
 import { AuthScreen } from "./src/screens/AuthScreen";
 import { CheckoutScreen } from "./src/screens/CheckoutScreen";
 import { OrdersScreen } from "./src/screens/OrdersScreen";
+import { OrderDetailScreen } from "./src/screens/OrderDetailScreen";
 import { WishlistScreen } from "./src/screens/WishlistScreen";
 import { NotificationsScreen } from "./src/screens/NotificationsScreen";
+import { AddressesScreen } from "./src/screens/AddressesScreen";
+import { PaymentsScreen } from "./src/screens/PaymentsScreen";
+import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { SecurityScreen } from "./src/screens/SecurityScreen";
+import { HelpSupportScreen } from "./src/screens/HelpSupportScreen";
+import { CategoryProductsScreen } from "./src/screens/CategoryProductsScreen";
+import { StoreScreen } from "./src/screens/StoreScreen";
+import { StoresScreen } from "./src/screens/StoresScreen";
 import { ForgotPasswordScreen } from "./src/screens/ForgotPasswordScreen";
+import { ProfileEditScreen } from "./src/screens/ProfileEditScreen";
+import { ChangePasswordScreen } from "./src/screens/ChangePasswordScreen";
+import { ChangeEmailScreen } from "./src/screens/ChangeEmailScreen";
+import { PrivacySettingsScreen } from "./src/screens/PrivacySettingsScreen";
+import { ChatScreen } from "./src/screens/ChatScreen";
+import { ChatsScreen } from "./src/screens/ChatsScreen";
+import { PaymentWebViewScreen } from "./src/screens/PaymentWebViewScreen";
 import { colors } from "./src/theme/colors";
 
 const Tab = createBottomTabNavigator();
@@ -31,8 +50,11 @@ const Stack = createNativeStackNavigator();
 
 const tabIcon =
   (name) =>
-  ({ color, size }) =>
-    <Ionicons name={name} size={size} color={color} />;
+    ({ color, size, focused }) => {
+      return (
+        <Ionicons name={name} size={size} color={color} />
+      );
+    };
 
 const TabNavigator = () => {
   const { items } = useCart();
@@ -121,6 +143,25 @@ const navTheme = {
   },
 };
 
+const linking = {
+  prefixes: [Linking.createURL("/"), "expressmart://"],
+  config: {
+    screens: {
+      Main: "",
+      Checkout: {
+        path: "checkout",
+        parse: {
+          payment: (payment) => payment,
+          reference: (reference) => reference,
+          order_id: (order_id) => order_id,
+        },
+      },
+      PaymentWebView: "payment",
+      Orders: "orders",
+    },
+  },
+};
+
 const AuthenticatedApp = () => {
   const { isAuthenticated, loading } = useAuth();
 
@@ -140,7 +181,13 @@ const AuthenticatedApp = () => {
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        animation: "fade",
+        animationDuration: 100,
+      }}
+    >
       {!isAuthenticated ? (
         <>
           <Stack.Screen name="Auth" component={AuthScreen} />
@@ -153,11 +200,39 @@ const AuthenticatedApp = () => {
         <>
           <Stack.Screen name="Main" component={TabNavigator} />
           <Stack.Screen name="Search" component={SearchScreen} />
+          <Stack.Screen
+            name="CategoryProducts"
+            component={CategoryProductsScreen}
+          />
+          <Stack.Screen name="Store" component={StoreScreen} />
+          <Stack.Screen name="Stores" component={StoresScreen} />
           <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+          <Stack.Screen name="Chat" component={ChatScreen} />
+          <Stack.Screen name="Chats" component={ChatsScreen} />
           <Stack.Screen name="Checkout" component={CheckoutScreen} />
+          <Stack.Screen
+            name="PaymentWebView"
+            component={PaymentWebViewScreen}
+          />
           <Stack.Screen name="Orders" component={OrdersScreen} />
+          <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
           <Stack.Screen name="Wishlist" component={WishlistScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="Addresses" component={AddressesScreen} />
+          <Stack.Screen name="Payments" component={PaymentsScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="Security" component={SecurityScreen} />
+          <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+          <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
+          <Stack.Screen
+            name="ChangePassword"
+            component={ChangePasswordScreen}
+          />
+          <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
+          <Stack.Screen
+            name="PrivacySettings"
+            component={PrivacySettingsScreen}
+          />
         </>
       )}
     </Stack.Navigator>
@@ -172,10 +247,14 @@ export default function App() {
           <CartProvider>
             <ShopProvider>
               <OrderProvider>
-                <NavigationContainer theme={navTheme}>
-                  <StatusBar style="dark" />
-                  <AuthenticatedApp />
-                </NavigationContainer>
+                <ChatProvider>
+                  <AdsProvider>
+                    <NavigationContainer theme={navTheme} linking={linking}>
+                      <StatusBar style="dark" />
+                      <AuthenticatedApp />
+                    </NavigationContainer>
+                  </AdsProvider>
+                </ChatProvider>
               </OrderProvider>
             </ShopProvider>
           </CartProvider>

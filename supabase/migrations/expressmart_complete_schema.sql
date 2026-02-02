@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS express_addresses (
     city text NOT NULL,
     state text NOT NULL,
     postal_code text,
-    country text DEFAULT 'Nigeria',
+    country text DEFAULT 'Ghana',
     latitude numeric(10,8),
     longitude numeric(11,8),
     is_default boolean DEFAULT false,
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS express_orders (
     shipping_fee numeric(12,2) DEFAULT 0,
     tax_amount numeric(12,2) DEFAULT 0,
     total numeric(12,2) NOT NULL DEFAULT 0,
-    currency text DEFAULT 'NGN',
+    currency text DEFAULT 'GHS',
     customer jsonb DEFAULT '{}'::jsonb,
     shipping_address jsonb DEFAULT '{}'::jsonb,
     billing_address jsonb DEFAULT '{}'::jsonb,
@@ -263,7 +263,7 @@ CREATE TABLE IF NOT EXISTS express_payments (
     order_id uuid NOT NULL REFERENCES express_orders(id) ON DELETE CASCADE,
     user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
     amount numeric(12,2) NOT NULL,
-    currency text DEFAULT 'NGN',
+    currency text DEFAULT 'GHS',
     provider text NOT NULL DEFAULT 'paystack',
     reference text NOT NULL UNIQUE,
     authorization_code text,
@@ -618,6 +618,11 @@ CREATE POLICY "Admins can manage all orders" ON express_orders
 -- Order items policies
 CREATE POLICY "Users can view their own order items" ON express_order_items
     FOR SELECT USING (
+        order_id IN (SELECT id FROM express_orders WHERE user_id = auth.uid())
+    );
+
+CREATE POLICY "Users can create order items" ON express_order_items
+    FOR INSERT WITH CHECK (
         order_id IN (SELECT id FROM express_orders WHERE user_id = auth.uid())
     );
 

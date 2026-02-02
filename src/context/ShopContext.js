@@ -25,12 +25,19 @@ const mapProduct = (product) => ({
   quantity: product.quantity || 0,
   sizes: product.sizes || [],
   colors: product.colors || [],
-  seller: product.seller || null,
+  specifications: product.specifications || null,
+  tags: product.tags || [],
+  weight: product.weight || null,
+  weight_unit: product.weight_unit || null,
+  sku: product.sku || null,
+  barcode: product.barcode || null,
+  seller: product.seller_id || null,
 });
 
 export const ShopProvider = ({ children }) => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [sellers, setSellers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -38,6 +45,7 @@ export const ShopProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     if (!supabase) {
+      console.error("Supabase not initialized");
       setLoading(false);
       return;
     }
@@ -46,10 +54,12 @@ export const ShopProvider = ({ children }) => {
       const [
         { data: productsData, error: productError },
         { data: categoriesData, error: categoriesError },
+        { data: sellersData, error: sellersError },
+        { data: reviewsData, error: reviewsError },
       ] = await Promise.all([
         supabase
           .from("express_products")
-          .select("*, seller:express_sellers(badges)")
+          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
           .eq("status", "active")
           .order("created_at", { ascending: false }),
         supabase
@@ -57,16 +67,69 @@ export const ShopProvider = ({ children }) => {
           .select("id,name,icon,color")
           .eq("is_active", true)
           .order("sort_order"),
+        supabase
+          .from("express_sellers")
+          .select("id,name,avatar,rating,total_ratings,badges")
+          .eq("is_active", true)
+          .order("rating", { ascending: false })
+          .limit(10),
+        supabase
+          .from("express_reviews")
+          .select("product_id, rating")
+          .eq("is_approved", true),
       ]);
 
       if (productError) throw productError;
       if (categoriesError) throw categoriesError;
+      if (sellersError) throw sellersError;
+      if (reviewsError) throw reviewsError;
 
-      setProducts((productsData || []).map(mapProduct));
+      const mappedProducts = (productsData || []).map(mapProduct);
+      setProducts(mappedProducts);
+
+      // Calculate seller ratings from actual reviews
+      const sellerRatings = {};
+      (reviewsData || []).forEach((review) => {
+        // Find the product to get the seller_id
+        const product = mappedProducts.find((p) => p.id === review.product_id);
+        if (product?.seller?.id) {
+          if (!sellerRatings[product.seller.id]) {
+            sellerRatings[product.seller.id] = {
+              totalRating: 0,
+              count: 0,
+            };
+          }
+          sellerRatings[product.seller.id].totalRating += review.rating;
+          sellerRatings[product.seller.id].count += 1;
+        }
+      });
+
+      // Update sellers with calculated ratings
+      const updatedSellers = (sellersData || []).map((seller) => {
+        const sellerStats = sellerRatings[seller.id];
+        if (sellerStats && sellerStats.count > 0) {
+          const calculatedRating = sellerStats.totalRating / sellerStats.count;
+          return {
+            ...seller,
+            rating: Number(calculatedRating.toFixed(1)),
+            total_ratings: sellerStats.count,
+          };
+        }
+        return {
+          ...seller,
+          rating: 0,
+          total_ratings: 0,
+        };
+      });
+
       setCategories(categoriesData || []);
+      setSellers(updatedSellers);
     } catch (err) {
-      setError(err.message);
-      console.error("Error fetching products:", err);
+      setError(err?.message || JSON.stringify(err));
+      console.error(
+        "Error fetching products:",
+        err?.message || JSON.stringify(err),
+      );
     } finally {
       setLoading(false);
     }
@@ -74,11 +137,18 @@ export const ShopProvider = ({ children }) => {
 
   useEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+  }, []);
 
   const value = useMemo(
-    () => ({ products, categories, loading, error, refresh: fetchProducts }),
-    [products, categories, loading, error, fetchProducts]
+    () => ({
+      products,
+      categories,
+      sellers,
+      loading,
+      error,
+      refresh: fetchProducts,
+    }),
+    [products, categories, sellers, loading, error],
   );
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;

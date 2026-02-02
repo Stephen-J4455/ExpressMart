@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "../theme/colors";
 import { SearchBar } from "./SearchBar";
 
-export const AppHeader = ({ onSearchPress }) => {
+export const AppHeader = ({ onSearchPress, onChatPress, onStoresPress }) => {
   return (
     <LinearGradient
       colors={[colors.primary, colors.accent]}
@@ -18,15 +18,24 @@ export const AppHeader = ({ onSearchPress }) => {
             <Ionicons name="chevron-down" size={16} color="#fff" />
           </View>
         </View>
-        <Pressable style={styles.iconButton}>
-          <Ionicons name="notifications-outline" size={20} color="#fff" />
-        </Pressable>
+        <View style={styles.iconRow}>
+          <Pressable style={styles.iconButton} onPress={onStoresPress}>
+            <Ionicons name="storefront-outline" size={20} color="#fff" />
+          </Pressable>
+          <Pressable style={styles.iconButton} onPress={onChatPress}>
+            <Ionicons name="chatbubble-outline" size={20} color="#fff" />
+          </Pressable>
+          <Pressable style={styles.iconButton}>
+            <Ionicons name="notifications-outline" size={20} color="#fff" />
+          </Pressable>
+        </View>
       </View>
       <View style={styles.searchWrap}>
         <SearchBar
           editable={false}
           onPress={onSearchPress}
-          placeholder="Search Alibaba-style deals"
+          placeholder="Search Express-style deals"
+          style={{ paddingVertical: 14 }}
         />
         <Pressable style={styles.iconButton}>
           <Ionicons name="qr-code-outline" size={20} color="#fff" />
@@ -79,5 +88,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  iconRow: {
+    flexDirection: "row",
+    gap: 8,
   },
 });

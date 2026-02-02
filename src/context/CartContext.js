@@ -50,7 +50,7 @@ export const CartProvider = ({ children }) => {
               variant_id,
               price,
               product:express_products(*)
-            `
+            `,
             )
             .eq("cart_id", cart.id);
 
@@ -66,6 +66,7 @@ export const CartProvider = ({ children }) => {
                 size: item.size,
                 color: item.color,
                 variant_id: item.variant_id,
+                price: item.price, // Store the discounted price
               }));
             setItems(formattedItems);
           }
@@ -106,7 +107,7 @@ export const CartProvider = ({ children }) => {
   useEffect(() => {
     if (!ready || user) return;
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items)).catch((error) =>
-      console.warn("Failed to persist cart", error)
+      console.warn("Failed to persist cart", error),
     );
   }, [items, ready, user]);
 
@@ -130,14 +131,17 @@ export const CartProvider = ({ children }) => {
               cart_id: cartId,
               product_id: item.product.id,
               quantity: item.quantity,
-              price: item.product.price,
+              price:
+                item.product.discount > 0
+                  ? item.product.price * (1 - item.product.discount / 100)
+                  : item.product.price,
               size: item.size || null,
               color: item.color || null,
               variant_id: item.variant_id || null,
             },
             {
               onConflict: "cart_id,product_id,size,color,variant_id",
-            }
+            },
           );
         }
         // Clear local storage after syncing
@@ -158,7 +162,7 @@ export const CartProvider = ({ children }) => {
     product,
     quantity = 1,
     size = null,
-    color = null
+    color = null,
   ) => {
     if (user && cartId && supabase) {
       // Add to database
@@ -208,7 +212,10 @@ export const CartProvider = ({ children }) => {
               cart_id: cartId,
               product_id: product.id,
               quantity,
-              price: product.price,
+              price:
+                product.discount > 0
+                  ? product.price * (1 - product.discount / 100)
+                  : product.price,
               size,
               color,
             });
@@ -229,7 +236,7 @@ export const CartProvider = ({ children }) => {
           (item) =>
             item.product.id === product.id &&
             item.size === size &&
-            item.color === color
+            item.color === color,
         );
         if (existing) {
           return prev.map((item) =>
@@ -237,10 +244,22 @@ export const CartProvider = ({ children }) => {
             item.size === size &&
             item.color === color
               ? { ...item, quantity: item.quantity + quantity }
-              : item
+              : item,
           );
         }
-        return [...prev, { product, quantity, size, color }];
+        return [
+          ...prev,
+          {
+            product,
+            quantity,
+            size,
+            color,
+            price:
+              product.discount > 0
+                ? product.price * (1 - product.discount / 100)
+                : product.price,
+          },
+        ];
       });
     }
   };
@@ -282,31 +301,60 @@ export const CartProvider = ({ children }) => {
       setItems((prev) =>
         prev
           .map((item) =>
-            item.product.id === productId ? { ...item, quantity } : item
+            item.product.id === productId ? { ...item, quantity } : item,
           )
-          .filter((item) => item.quantity > 0)
+          .filter((item) => item.quantity > 0),
       );
     }
   };
 
-  const removeFromCart = async (productId, itemId = null) => {
+  const removeFromCart = async (
+    productId,
+    size = null,
+    color = null,
+    itemId = null,
+  ) => {
     if (user && cartId && supabase) {
       try {
         if (itemId) {
           await supabase.from("express_cart_items").delete().eq("id", itemId);
         } else {
-          await supabase
+          // Delete by product_id, size, color
+          let query = supabase
             .from("express_cart_items")
             .delete()
             .eq("cart_id", cartId)
             .eq("product_id", productId);
+
+          if (size === null) {
+            query = query.is("size", null);
+          } else {
+            query = query.eq("size", size);
+          }
+
+          if (color === null) {
+            query = query.is("color", null);
+          } else {
+            query = query.eq("color", color);
+          }
+
+          await query;
         }
         await loadCart();
       } catch (error) {
         console.warn("Failed to remove from cart:", error);
       }
     } else {
-      setItems((prev) => prev.filter((item) => item.product.id !== productId));
+      setItems((prev) =>
+        prev.filter(
+          (item) =>
+            !(
+              item.product.id === productId &&
+              item.size === size &&
+              item.color === color
+            ),
+        ),
+      );
     }
   };
 
@@ -326,10 +374,15 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const total = items.reduce(
-    (sum, item) => sum + Number(item.product.price || 0) * item.quantity,
-    0
-  );
+  const total = items.reduce((sum, item) => {
+    // Use stored price for authenticated users, calculate for guests
+    const price =
+      item.price ||
+      (item.product.discount > 0
+        ? item.product.price * (1 - item.product.discount / 100)
+        : item.product.price);
+    return sum + Number(price || 0) * item.quantity;
+  }, 0);
 
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -346,7 +399,7 @@ export const CartProvider = ({ children }) => {
       clearCart,
       refreshCart: loadCart,
     }),
-    [ready, items, total, itemCount, cartId, loadCart]
+    [ready, items, total, itemCount, cartId, loadCart],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

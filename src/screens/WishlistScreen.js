@@ -35,32 +35,38 @@ export const WishlistScreen = ({ navigation }) => {
     try {
       const { data, error } = await supabase
         .from("express_wishlists")
-        .select(
-          `
-          id,
-          created_at,
-          product:express_products(
-            id,
-            title,
-            price,
-            thumbnail,
-            vendor,
-            rating,
-            stock
-          )
-        `
-        )
+        .select("id,created_at,product_id")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setWishlist(data || []);
+
+      // Fetch product details for each wishlist item
+      if (data && data.length > 0) {
+        const productIds = data.map((w) => w.product_id);
+        const { data: productsData, error: productsError } = await supabase
+          .from("express_products")
+          .select("id,title,price,discount,thumbnail,vendor,rating,quantity")
+          .in("id", productIds);
+
+        if (productsError) throw productsError;
+
+        const wishlistWithProducts = data.map((item) => ({
+          ...item,
+          product: productsData?.find((p) => p.id === item.product_id),
+        }));
+
+        setWishlist(wishlistWithProducts);
+      } else {
+        setWishlist(data || []);
+      }
     } catch (err) {
-      toast.error("Error", err.message);
+      console.error("Wishlist fetch error:", err);
+      setWishlist([]);
     } finally {
       setLoading(false);
     }
-  }, [user, toast]);
+  }, [user]);
 
   useEffect(() => {
     fetchWishlist();
@@ -72,7 +78,7 @@ export const WishlistScreen = ({ navigation }) => {
       await supabase.from("express_wishlists").delete().eq("id", wishlistId);
       setWishlist((prev) => prev.filter((item) => item.id !== wishlistId));
     } catch (err) {
-      toast.error("Error", err.message);
+      console.error("Remove wishlist error:", err);
     }
   };
 
@@ -81,7 +87,7 @@ export const WishlistScreen = ({ navigation }) => {
     addToCart(item.product, 1);
     toast.success(
       "Added to Cart",
-      `${item.product.title} has been added to your cart`
+      `${item.product.title} has been added to your cart`,
     );
   };
 
@@ -97,9 +103,9 @@ export const WishlistScreen = ({ navigation }) => {
         >
           <Image source={{ uri: product.thumbnail }} style={styles.image} />
           <View style={styles.info}>
-            <Text style={styles.vendor}>{product.vendor}</Text>
+            <Text style={styles.vendor}>{product.vendor || "Unknown"}</Text>
             <Text style={styles.title} numberOfLines={2}>
-              {product.title}
+              {product.title || "Product"}
             </Text>
             <View style={styles.priceRow}>
               <Text style={styles.price}>{formatPrice(product.price)}</Text>
@@ -113,10 +119,12 @@ export const WishlistScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.stock,
-                { color: product.stock > 0 ? colors.success : colors.accent },
+                {
+                  color: product.quantity > 0 ? colors.success : colors.accent,
+                },
               ]}
             >
-              {product.stock > 0 ? "In Stock" : "Out of Stock"}
+              {product.quantity > 0 ? "In Stock" : "Out of Stock"}
             </Text>
           </View>
         </Pressable>
@@ -124,7 +132,7 @@ export const WishlistScreen = ({ navigation }) => {
           <Pressable
             style={styles.addButton}
             onPress={() => handleAddToCart(item)}
-            disabled={product.stock === 0}
+            disabled={product.quantity === 0}
           >
             <Ionicons name="cart-outline" size={20} color={colors.primary} />
           </Pressable>
@@ -159,6 +167,8 @@ export const WishlistScreen = ({ navigation }) => {
             <LinearGradient
               colors={[colors.primary, colors.accent]}
               style={styles.signInGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
             >
               <Text style={styles.signInText}>Sign In</Text>
             </LinearGradient>

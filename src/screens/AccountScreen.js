@@ -5,20 +5,35 @@ import {
   Text,
   View,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../context/OrderContext";
 import { colors } from "../theme/colors";
 
-const shortcuts = [
+const accountMenuItems = [
   { icon: "cube-outline", label: "Orders", screen: "Orders" },
-  { icon: "card-outline", label: "Payment", screen: null },
-  { icon: "location-outline", label: "Addresses", screen: null },
-  { icon: "heart-outline", label: "Wishlist", screen: null },
-  { icon: "headset-outline", label: "Support", screen: null },
-  { icon: "settings-outline", label: "Settings", screen: null },
+  { icon: "heart-outline", label: "Wishlist", screen: "Wishlist" },
+  { icon: "location-outline", label: "Addresses", screen: "Addresses" },
+  { icon: "card-outline", label: "Payments", screen: "Payments" },
+];
+
+const settingsMenuItems = [
+  { icon: "settings-outline", label: "Settings", screen: "Settings" },
+  { icon: "shield-checkmark-outline", label: "Security", screen: "Security" },
+  {
+    icon: "notifications-outline",
+    label: "Notifications",
+    screen: "Notifications",
+  },
+  {
+    icon: "help-circle-outline",
+    label: "Help & Support",
+    screen: "HelpSupport",
+  },
 ];
 
 export const AccountScreen = ({ navigation }) => {
@@ -26,7 +41,7 @@ export const AccountScreen = ({ navigation }) => {
   const { orders } = useOrder();
 
   const activeOrders = orders.filter((o) =>
-    ["processing", "packed", "shipped"].includes(o.status)
+    ["processing", "packed", "shipped"].includes(o.status),
   ).length;
   const totalSpent = orders
     .filter((o) => o.payment_status === "success")
@@ -60,6 +75,8 @@ export const AccountScreen = ({ navigation }) => {
             <LinearGradient
               colors={[colors.primary, colors.accent]}
               style={styles.signInGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
             >
               <Text style={styles.signInText}>Sign In</Text>
             </LinearGradient>
@@ -76,73 +93,112 @@ export const AccountScreen = ({ navigation }) => {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentInsetAdjustmentBehavior="automatic"
-      showsVerticalScrollIndicator={false}
-    >
-      <LinearGradient
-        colors={[colors.primary, colors.accent]}
-        style={styles.profileHeader}
+    <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl refreshing={false} onRefresh={() => {}} />
+        }
       >
-        <View style={styles.avatarContainer}>
-          <Text style={styles.avatarText}>
-            {(profile?.full_name || user?.email)?.[0]?.toUpperCase()}
-          </Text>
-        </View>
-        <Text style={styles.profileName}>
-          {profile?.full_name || "ExpressMart User"}
-        </Text>
-        <Text style={styles.profileEmail}>{user?.email}</Text>
-        <View style={styles.memberBadge}>
-          <Ionicons name="star" size={14} color="#FFD700" />
-          <Text style={styles.memberText}>Premium Member</Text>
-        </View>
-      </LinearGradient>
-
-      <View style={styles.content}>
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{orders.length}</Text>
-            <Text style={styles.statLabel}>Total Orders</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{activeOrders}</Text>
-            <Text style={styles.statLabel}>Active Orders</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>
-              GH₵{(totalSpent / 1000).toFixed(0)}k
+        <LinearGradient
+          colors={[colors.primary, colors.accent]}
+          style={styles.profileHeader}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+        >
+          <View style={styles.avatarContainer}>
+            <Text style={styles.avatarText}>
+              {(profile?.full_name || user?.email)?.[0]?.toUpperCase()}
             </Text>
-            <Text style={styles.statLabel}>Total Spent</Text>
           </View>
-        </View>
+          <Text style={styles.profileName}>
+            {profile?.full_name || "ExpressMart User"}
+          </Text>
+          <Text style={styles.profileEmail}>{user?.email}</Text>
+          <View style={styles.memberBadge}>
+            <Ionicons name="star" size={14} color="#FFD700" />
+            <Text style={styles.memberText}>Premium Member</Text>
+          </View>
+        </LinearGradient>
 
-        <View style={styles.shortcuts}>
-          {shortcuts.map((shortcut) => (
-            <Pressable
-              key={shortcut.label}
-              style={styles.shortcutCard}
-              onPress={() => handleShortcutPress(shortcut.screen)}
-            >
-              <View style={styles.shortcutIcon}>
+        <View style={styles.content}>
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{orders.length}</Text>
+              <Text style={styles.statLabel}>Total Orders</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{activeOrders}</Text>
+              <Text style={styles.statLabel}>Active Orders</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                GH₵{(totalSpent / 1000).toFixed(0)}k
+              </Text>
+              <Text style={styles.statLabel}>Total Spent</Text>
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>My Account</Text>
+            {accountMenuItems.map((item, index) => (
+              <Pressable
+                key={item.label}
+                style={[
+                  styles.menuItem,
+                  index === accountMenuItems.length - 1 && styles.menuItemLast,
+                ]}
+                onPress={() => handleShortcutPress(item.screen)}
+              >
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name={item.icon} size={20} color={colors.primary} />
+                  <Text style={styles.menuItemLabel}>{item.label}</Text>
+                </View>
                 <Ionicons
-                  name={shortcut.icon}
-                  size={24}
-                  color={colors.primary}
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.muted}
                 />
-              </View>
-              <Text style={styles.shortcutLabel}>{shortcut.label}</Text>
-            </Pressable>
-          ))}
-        </View>
+              </Pressable>
+            ))}
+          </View>
 
-        <Pressable style={styles.logoutButton} onPress={signOut}>
-          <Ionicons name="log-out-outline" size={20} color={colors.accent} />
-          <Text style={styles.logoutText}>Sign Out</Text>
-        </Pressable>
-      </View>
-    </ScrollView>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Settings & Support</Text>
+            {settingsMenuItems.map((item, index) => (
+              <Pressable
+                key={item.label}
+                style={[
+                  styles.menuItem,
+                  index === settingsMenuItems.length - 1 && styles.menuItemLast,
+                ]}
+                onPress={() => handleShortcutPress(item.screen)}
+              >
+                <View style={styles.menuItemLeft}>
+                  <Ionicons name={item.icon} size={20} color={colors.primary} />
+                  <Text style={styles.menuItemLabel}>{item.label}</Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.muted}
+                />
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={styles.spacer} />
+
+          <Pressable style={styles.logoutButton} onPress={signOut}>
+            <Ionicons name="log-out-outline" size={20} color={colors.accent} />
+            <Text style={styles.logoutText}>Sign Out</Text>
+          </Pressable>
+          <View style={styles.spacer} />
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -150,6 +206,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.light,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   centerContainer: {
     flex: 1,
@@ -191,11 +250,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   profileHeader: {
-    paddingTop: 60,
+    paddingTop: 100,
     paddingBottom: 30,
     alignItems: "center",
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
+    marginTop: -50,
   },
   avatarContainer: {
     width: 80,
@@ -266,6 +326,42 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 4,
   },
+  section: {
+    marginTop: 24,
+    marginHorizontal: 16,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.dark,
+    marginBottom: 12,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  menuItemLast: {
+    borderBottomWidth: 0,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+  },
+  menuItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  menuItemLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.dark,
+  },
   shortcuts: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -303,16 +399,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 10,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 16,
+    marginTop: 24,
     gap: 8,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: "#FEE2E2",
   },
   logoutText: {
-    color: colors.accent,
+    color: "#EF4444",
     fontWeight: "600",
-    fontSize: 16,
+    fontSize: 14,
+  },
+  spacer: {
+    height: 20,
   },
 });

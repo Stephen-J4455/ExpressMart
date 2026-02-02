@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,25 +12,21 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
-import { useOrder } from "../context/OrderContext";
 import { useToast } from "../context/ToastContext";
+import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
+import { verifyPaymentAndCreateOrder, generatePaymentReference } from "../services/payment";
 
 export const CheckoutScreen = ({ navigation }) => {
+  const route = useRoute();
   const { user, profile, isAuthenticated } = useAuth();
   const { items, total, clearCart } = useCart();
   const toast = useToast();
-  const {
-    addresses,
-    defaultAddress,
-    createOrder,
-    initializePayment,
-    verifyPayment,
-    addAddress,
-  } = useOrder();
 
+  const [addresses, setAddresses] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showAddAddress, setShowAddAddress] = useState(false);
@@ -40,7 +36,6 @@ export const CheckoutScreen = ({ navigation }) => {
     street_address: "",
     city: "",
     state: "",
-    is_default: false,
   });
 
   // Shipping calculation
@@ -53,11 +48,32 @@ export const CheckoutScreen = ({ navigation }) => {
     }
   }, [isAuthenticated, navigation]);
 
+  // Fetch addresses
   useEffect(() => {
-    if (defaultAddress) {
-      setSelectedAddress(defaultAddress);
+    if (user) {
+      fetchAddresses();
     }
-  }, [defaultAddress]);
+  }, [user]);
+
+  const fetchAddresses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("express_addresses")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("is_default", { ascending: false });
+
+      if (error) throw error;
+      setAddresses(data || []);
+
+      // Auto-select first address (default or first available) if no address is selected
+      if (data && data.length > 0 && !selectedAddress) {
+        setSelectedAddress(data[0]);
+      }
+    } catch (err) {
+      console.error("Error fetching addresses:", err);
+    }
+  };
 
   useEffect(() => {
     if (profile) {
@@ -68,6 +84,37 @@ export const CheckoutScreen = ({ navigation }) => {
       }));
     }
   }, [profile]);
+
+  // Handle payment success from WebView
+  useEffect(() => {
+    const params = route.params;
+    if (params?.payment === "success" && params?.reference) {
+      console.log("✅ Payment successful, verifying:", params.reference);
+      handlePaymentVerification(params.reference, params.orderData);
+    }
+  }, [route.params]);
+
+  const handlePaymentVerification = async (reference, orderData) => {
+    try {
+      setLoading(true);
+      console.log("🔄 Verifying payment...");
+
+      const result = await verifyPaymentAndCreateOrder(reference, orderData);
+
+      console.log("✅ Payment verified:", result);
+
+      clearCart();
+      toast.success("Order Placed!", "Your order has been successfully placed.");
+      setTimeout(() => {
+        navigation.navigate("Orders");
+      }, 1500);
+    } catch (error) {
+      console.error("❌ Verification error:", error);
+      toast.error("Error", error.message || "Payment verification failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAddAddress = async () => {
     if (
@@ -82,10 +129,16 @@ export const CheckoutScreen = ({ navigation }) => {
     }
 
     setLoading(true);
-    const { data, error } = await addAddress(newAddress);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from("express_addresses")
+        .insert({ ...newAddress, user_id: user.id })
+        .select()
+        .single();
 
-    if (!error && data) {
+      if (error) throw error;
+
+      setAddresses((prev) => [...prev, data]);
       setSelectedAddress(data);
       setShowAddAddress(false);
       setNewAddress({
@@ -94,8 +147,11 @@ export const CheckoutScreen = ({ navigation }) => {
         street_address: "",
         city: "",
         state: "",
-        is_default: false,
       });
+    } catch (err) {
+      toast.error("Error", err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -110,85 +166,25 @@ export const CheckoutScreen = ({ navigation }) => {
       return;
     }
 
-    setLoading(true);
-    try {
-      // Create order
-      const cartItems = items.map((item) => ({
-        product: item.product,
-        price: item.product.price,
-        quantity: item.quantity,
-      }));
+    if (!user) {
+      toast.error("Error", "Please log in to continue");
+      navigation.replace("Auth");
+      return;
+    }
 
-      const { data: orderData, error: orderError } = await createOrder({
-        items: cartItems,
+    const reference = generatePaymentReference(user.id);
+    console.log("💳 Payment reference:", reference);
+
+    navigation.navigate("PaymentWebView", {
+      amount: grandTotal,
+      email: user.email,
+      reference: reference,
+      orderData: {
         shippingAddress: selectedAddress,
         paymentMethod: "paystack",
-      });
-
-      if (orderError) throw orderError;
-
-      // Initialize payment
-      const paymentData = await initializePayment(
-        orderData.primaryOrder.id,
-        orderData.total,
-        user.email
-      );
-
-      // Open Paystack payment page
-      const supported = await Linking.canOpenURL(paymentData.authorization_url);
-      if (supported) {
-        await Linking.openURL(paymentData.authorization_url);
-
-        // Show verification dialog after user returns
-        Alert.alert("Verify Payment", "Have you completed the payment?", [
-          {
-            text: "Cancel Order",
-            style: "destructive",
-            onPress: () => {},
-          },
-          {
-            text: "Verify Payment",
-            onPress: async () => {
-              try {
-                setLoading(true);
-                await verifyPayment(
-                  paymentData.reference,
-                  orderData.primaryOrder.id
-                );
-                clearCart();
-                Alert.alert(
-                  "Success",
-                  "Payment verified! Your order is being processed.",
-                  [
-                    {
-                      text: "View Orders",
-                      onPress: () => navigation.navigate("Orders"),
-                    },
-                    {
-                      text: "Continue Shopping",
-                      onPress: () => navigation.navigate("Main"),
-                    },
-                  ]
-                );
-              } catch (error) {
-                Alert.alert(
-                  "Error",
-                  "Payment verification failed. Please contact support."
-                );
-              } finally {
-                setLoading(false);
-              }
-            },
-          },
-        ]);
-      } else {
-        toast.error("Error", "Cannot open payment page");
-      }
-    } catch (error) {
-      toast.error("Error", error.message);
-    } finally {
-      setLoading(false);
-    }
+        shippingFee,
+      },
+    });
   };
 
   if (!isAuthenticated) {
@@ -262,7 +258,7 @@ export const CheckoutScreen = ({ navigation }) => {
                   style={[
                     styles.addressOption,
                     selectedAddress?.id === addr.id &&
-                      styles.addressOptionSelected,
+                    styles.addressOptionSelected,
                   ]}
                   onPress={() => setSelectedAddress(addr)}
                 >
@@ -450,6 +446,8 @@ export const CheckoutScreen = ({ navigation }) => {
           <LinearGradient
             colors={[colors.primary, colors.accent]}
             style={styles.checkoutGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />

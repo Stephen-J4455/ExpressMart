@@ -53,7 +53,7 @@ export const CartScreen = ({ navigation }) => {
       </View>
 
       <ScrollView style={styles.itemList} showsVerticalScrollIndicator={false}>
-        {items.map(({ product, quantity }) => (
+        {items.map(({ id, product, quantity, size, color, price }) => (
           <Pressable
             key={product.id}
             style={styles.itemRow}
@@ -68,8 +68,14 @@ export const CartScreen = ({ navigation }) => {
                 {product.title}
               </Text>
               <Text style={styles.price}>
-                GH₵{Number(product.price).toLocaleString()}
+                GH₵{Number(price || product.price).toLocaleString()}
               </Text>
+              {(size || color) && (
+                <View style={styles.specsRow}>
+                  {size && <Text style={styles.specText}>Size: {size}</Text>}
+                  {color && <Text style={styles.specText}>Color: {color}</Text>}
+                </View>
+              )}
               <View style={styles.quantityRow}>
                 <Pressable
                   style={styles.qtyButton}
@@ -88,7 +94,7 @@ export const CartScreen = ({ navigation }) => {
                 </Pressable>
                 <Pressable
                   style={styles.remove}
-                  onPress={() => removeFromCart(product.id)}
+                  onPress={() => removeFromCart(product.id, size, color, id)}
                 >
                   <Ionicons
                     name="trash-outline"
@@ -133,6 +139,8 @@ export const CartScreen = ({ navigation }) => {
           <LinearGradient
             colors={[colors.primary, colors.accent]}
             style={styles.checkoutGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
           >
             <Ionicons name="lock-closed" size={18} color="#fff" />
             <Text style={styles.checkoutText}>Proceed to Checkout</Text>
@@ -195,7 +203,8 @@ const styles = StyleSheet.create({
   },
   itemList: {
     flex: 1,
-    padding: 16,
+    padding: 10,
+    paddingBottom: 100,
   },
   itemRow: {
     flexDirection: "row",
@@ -228,6 +237,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: colors.primary,
+  },
+  specsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 4,
+  },
+  specText: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: "500",
   },
   quantityRow: {
     flexDirection: "row",

@@ -6,8 +6,12 @@ import {
   useCallback,
   useMemo,
 } from "react";
-import { Alert } from "react-native";
-import { supabase, callEdgeFunction } from "../lib/supabase";
+import {
+  supabase,
+  callEdgeFunction,
+  supabaseUrl,
+  supabaseAnonKey,
+} from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 
 const OrderContext = createContext();
@@ -21,26 +25,44 @@ export const OrderProvider = ({ children }) => {
 
   // Fetch user's orders
   const fetchOrders = useCallback(async () => {
-    if (!supabase || !user) return;
+    if (!supabase || !user) {
+      if (!supabase) console.warn("Supabase not initialized in fetchOrders");
+      return;
+    }
 
     setLoading(true);
     try {
       const { data, error: fetchError } = await supabase
         .from("express_orders")
-        .select(
-          `
-          *,
-          items:express_order_items(*)
-        `
-        )
+        .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (fetchError) throw fetchError;
-      setOrders(data || []);
+
+      // Fetch order items separately if needed
+      if (data && data.length > 0) {
+        const orderIds = data.map((o) => o.id);
+        const { data: itemsData } = await supabase
+          .from("express_order_items")
+          .select("*")
+          .in("order_id", orderIds);
+
+        const ordersWithItems = data.map((order) => ({
+          ...order,
+          items: itemsData?.filter((item) => item.order_id === order.id) || [],
+        }));
+
+        setOrders(ordersWithItems);
+      } else {
+        setOrders(data || []);
+      }
     } catch (err) {
-      setError(err.message);
-      console.error("Error fetching orders:", err);
+      setError(err?.message || JSON.stringify(err));
+      console.error(
+        "Error fetching orders:",
+        err?.message || JSON.stringify(err),
+      );
     } finally {
       setLoading(false);
     }
@@ -48,7 +70,10 @@ export const OrderProvider = ({ children }) => {
 
   // Fetch user's addresses
   const fetchAddresses = useCallback(async () => {
-    if (!supabase || !user) return;
+    if (!supabase || !user) {
+      if (!supabase) console.warn("Supabase not initialized in fetchAddresses");
+      return;
+    }
 
     try {
       const { data, error: fetchError } = await supabase
@@ -60,7 +85,10 @@ export const OrderProvider = ({ children }) => {
       if (fetchError) throw fetchError;
       setAddresses(data || []);
     } catch (err) {
-      console.error("Error fetching addresses:", err);
+      console.error(
+        "Error fetching addresses:",
+        err?.message || JSON.stringify(err),
+      );
     }
   }, [user]);
 
@@ -97,15 +125,15 @@ export const OrderProvider = ({ children }) => {
               prev.map((order) =>
                 order.id === payload.new.id
                   ? { ...order, ...payload.new }
-                  : order
-              )
+                  : order,
+              ),
             );
           } else if (payload.eventType === "DELETE") {
             setOrders((prev) =>
-              prev.filter((order) => order.id !== payload.old.id)
+              prev.filter((order) => order.id !== payload.old.id),
             );
           }
-        }
+        },
       )
       .subscribe();
 
@@ -114,145 +142,103 @@ export const OrderProvider = ({ children }) => {
     };
   }, [user]);
 
-  // Create a new order
-  const createOrder = useCallback(
-    async ({ items, shippingAddress, paymentMethod = "paystack" }) => {
-      if (!supabase || !user) {
-        Alert.alert("Error", "Please sign in to place an order");
-        return { error: new Error("Not authenticated") };
-      }
-
-      try {
-        // Calculate totals
-        const subtotal = items.reduce(
-          (sum, item) => sum + item.price * item.quantity,
-          0
-        );
-        const shippingFee = subtotal >= 10000 ? 0 : 500; // Free shipping over GH₵10,000
-        const total = subtotal + shippingFee;
-
-        // Group items by seller/vendor
-        const vendorItems = items.reduce((acc, item) => {
-          const vendor = item.product.vendor || "ExpressMart";
-          if (!acc[vendor]) acc[vendor] = [];
-          acc[vendor].push(item);
-          return acc;
-        }, {});
-
-        // Create orders for each vendor
-        const createdOrders = [];
-        for (const [vendor, vendorItemList] of Object.entries(vendorItems)) {
-          const vendorSubtotal = vendorItemList.reduce(
-            (sum, item) => sum + item.price * item.quantity,
-            0
-          );
-          const vendorTotal =
-            vendorSubtotal + shippingFee / Object.keys(vendorItems).length;
-
-          // Create order
-          const { data: order, error: orderError } = await supabase
-            .from("express_orders")
-            .insert({
-              user_id: user.id,
-              vendor,
-              status: "pending_payment",
-              subtotal: vendorSubtotal,
-              shipping_fee: shippingFee / Object.keys(vendorItems).length,
-              total: vendorTotal,
-              currency: "NGN",
-              customer: {
-                name: shippingAddress.full_name,
-                email: user.email,
-                phone: shippingAddress.phone,
-              },
-              shipping_address: shippingAddress,
-              payment_method: paymentMethod,
-              payment_status: "pending",
-            })
-            .select()
-            .single();
-
-          if (orderError) throw orderError;
-
-          // Create order items
-          const orderItems = vendorItemList.map((item) => ({
-            order_id: order.id,
-            product_id: item.product.id,
-            title: item.product.title,
-            thumbnail: item.product.thumbnail || item.product.thumbnails?.[0],
-            quantity: item.quantity,
-            price: item.price,
-            total: item.price * item.quantity,
-            size: item.size,
-            color: item.color,
-          }));
-
-          const { error: itemsError } = await supabase
-            .from("express_order_items")
-            .insert(orderItems);
-
-          if (itemsError) throw itemsError;
-
-          createdOrders.push(order);
-        }
-
-        // Combine orders for payment
-        const totalAmount = createdOrders.reduce(
-          (sum, o) => sum + Number(o.total),
-          0
-        );
-        const primaryOrder = createdOrders[0];
-
-        return {
-          data: {
-            orders: createdOrders,
-            primaryOrder,
-            total: totalAmount,
-          },
-          error: null,
-        };
-      } catch (err) {
-        console.error("Create order error:", err);
-        Alert.alert("Error", err.message);
-        return { data: null, error: err };
-      }
-    },
-    [user]
-  );
-
-  // Initialize Paystack payment
-  const initializePayment = useCallback(
-    async (orderId, amount, email) => {
-      try {
-        const result = await callEdgeFunction("initialize-payment", {
-          email,
-          amount,
-          order_id: orderId,
-          user_id: user?.id,
-        });
-
-        if (!result.success) {
-          throw new Error(result.error || "Failed to initialize payment");
-        }
-
-        return result.data;
-      } catch (err) {
-        console.error("Initialize payment error:", err);
-        Alert.alert("Payment Error", err.message);
-        throw err;
-      }
-    },
-    [user]
-  );
-
   // Verify payment
   const verifyPayment = useCallback(
-    async (reference, orderId) => {
+    async (reference, orderData = null) => {
+      console.log(
+        "🚀 OrderContext.verifyPayment called with reference:",
+        reference,
+        "orderData:",
+        orderData,
+      );
       try {
-        const result = await callEdgeFunction("verify-payment", {
-          reference,
-          order_id: orderId,
+        // Refresh session to ensure token is valid
+        console.log(
+          "OrderContext: Refreshing session for payment verification...",
+        );
+        const { data: sessionData, error: refreshError } =
+          await supabase.auth.refreshSession();
+
+        if (refreshError) {
+          console.error("OrderContext: Session refresh error:", refreshError);
+          throw new Error("Authentication failed. Please log in again.");
+        }
+
+        // Get the refreshed session
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session) {
+          throw new Error("User not authenticated");
+        }
+
+        if (!session.access_token) {
+          throw new Error("No access token available. Please log in again.");
+        }
+
+        console.log("✅ Session token obtained:", session.access_token.substring(0, 20) + "...");
+        console.log("OrderContext: Verifying payment...");
+
+        // Call Edge Function directly
+        const edgeFunctionUrl = `${supabaseUrl}/functions/v1/payment`;
+        console.log("🔗 Edge Function URL:", edgeFunctionUrl);
+        console.log("📤 Sending POST request with:");
+        console.log("   - Authorization: Bearer " + session.access_token.substring(0, 20) + "...");
+        console.log("   - Content-Type: application/json");
+        console.log("   - Body:", JSON.stringify({ reference, orderData: orderData ? "provided" : "null" }));
+
+        const response = await fetch(edgeFunctionUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            reference,
+            orderData,
+          }),
         });
+
+        console.log(
+          "📥 Response status:",
+          response.status
+        );
+
+        let result;
+        try {
+          result = await response.json();
+          console.log("📥 Response body:", result);
+        } catch (parseError) {
+          console.error("❌ Failed to parse response as JSON:", parseError);
+          console.log("📥 Response text:", await response.text());
+          throw new Error("Invalid response from edge function");
+        }
+
+        if (!response.ok) {
+          // Check if it's a 404 or 500 error indicating the function might not be deployed
+          if (response.status === 404) {
+            throw new Error(
+              "❌ Payment edge function not found (404). Please ensure the function is deployed to Supabase. " +
+              "Run: supabase functions deploy payment"
+            );
+          }
+          if (response.status === 401) {
+            throw new Error(
+              "❌ Authorization failed (401). Your session may have expired. " +
+              "Error: " + (result.message || result.error || "Invalid credentials")
+            );
+          }
+          if (response.status === 500) {
+            throw new Error(
+              "❌ Server error (500). Edge function encountered an error. " +
+              "Error: " + (result.message || result.error || "Unknown server error")
+            );
+          }
+          throw new Error(
+            result.error || result.message || `HTTP ${response.status}: ${response.statusText}`,
+          );
+        }
 
         if (!result.success) {
           throw new Error(result.error || "Payment verification failed");
@@ -263,11 +249,87 @@ export const OrderProvider = ({ children }) => {
 
         return result.data;
       } catch (err) {
-        console.error("Verify payment error:", err);
+        console.error("❌ Verify payment error:", err);
+        console.error("❌ Error message:", err.message);
+        console.error("❌ Full error object:", JSON.stringify(err, null, 2));
+
+        // If it's an auth error, try to refresh the session and retry once
+        if (
+          err.message?.includes("auth") ||
+          err.message?.includes("token") ||
+          err.message?.includes("session")
+        ) {
+          console.log(
+            "Auth error detected, attempting to refresh session and retry...",
+          );
+
+          try {
+            // Force a session refresh
+            const { data, error } = await supabase.auth.refreshSession();
+            if (error) throw error;
+
+            // Get the refreshed session
+            const {
+              data: { session: refreshedSession },
+            } = await supabase.auth.getSession();
+
+            if (!refreshedSession) {
+              throw new Error("Failed to refresh session");
+            }
+
+            // Retry the payment verification
+            const retryResponse = await fetch(
+              `${supabaseUrl}/functions/v1/payment`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${refreshedSession.access_token}`,
+                },
+                body: JSON.stringify({
+                  reference,
+                  orderData,
+                }),
+              },
+            );
+
+            console.log(
+              "OrderContext: Retry verify payment response status:",
+              retryResponse.status,
+            );
+            const retryResult = await retryResponse.json();
+            console.log(
+              "OrderContext: Retry verify payment result:",
+              retryResult,
+            );
+
+            if (!retryResponse.ok) {
+              throw new Error(
+                retryResult.error ||
+                `HTTP ${retryResponse.status}: ${retryResponse.statusText}`,
+              );
+            }
+
+            if (!retryResult.success) {
+              throw new Error(
+                retryResult.error || "Payment verification failed after retry",
+              );
+            }
+
+            await fetchOrders();
+            return retryResult.data;
+          } catch (retryErr) {
+            console.error("Retry failed:", retryErr);
+            throw new Error(
+              "Authentication failed. Please log in again and try verifying your payment.",
+            );
+          }
+        }
+
         throw err;
       }
     },
-    [fetchOrders]
+    [fetchOrders],
   );
 
   // Add address
@@ -286,11 +348,11 @@ export const OrderProvider = ({ children }) => {
         setAddresses((prev) => [...prev, data]);
         return { data, error: null };
       } catch (err) {
-        Alert.alert("Error", err.message);
+        console.error("Add Address Error:", err.message);
         return { data: null, error: err };
       }
     },
-    [user]
+    [user],
   );
 
   // Update address
@@ -309,15 +371,15 @@ export const OrderProvider = ({ children }) => {
 
         if (error) throw error;
         setAddresses((prev) =>
-          prev.map((addr) => (addr.id === addressId ? data : addr))
+          prev.map((addr) => (addr.id === addressId ? data : addr)),
         );
         return { data, error: null };
       } catch (err) {
-        Alert.alert("Error", err.message);
+        console.error("Update Address Error:", err.message);
         return { data: null, error: err };
       }
     },
-    [user]
+    [user],
   );
 
   // Delete address
@@ -336,26 +398,18 @@ export const OrderProvider = ({ children }) => {
         setAddresses((prev) => prev.filter((addr) => addr.id !== addressId));
         return { error: null };
       } catch (err) {
-        Alert.alert("Error", err.message);
+        console.error("Delete Address Error:", err.message);
         return { error: err };
       }
     },
-    [user]
-  );
-
-  const defaultAddress = useMemo(
-    () => addresses.find((addr) => addr.is_default) || addresses[0],
-    [addresses]
+    [user],
   );
 
   const value = {
     orders,
     addresses,
-    defaultAddress,
     loading,
     error,
-    createOrder,
-    initializePayment,
     verifyPayment,
     fetchOrders,
     fetchAddresses,

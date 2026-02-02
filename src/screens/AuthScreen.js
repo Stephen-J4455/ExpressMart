@@ -58,6 +58,8 @@ export const AuthScreen = ({ navigation }) => {
         <LinearGradient
           colors={[colors.primary, colors.accent]}
           style={styles.header}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
         >
           <Ionicons name="cart" size={48} color="#fff" />
           <Text style={styles.headerTitle}>ExpressMart</Text>
@@ -146,6 +148,8 @@ export const AuthScreen = ({ navigation }) => {
             <LinearGradient
               colors={[colors.primary, colors.accent]}
               style={styles.buttonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />

@@ -5,7 +5,6 @@ import {
   useState,
   useCallback,
 } from "react";
-import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 
 const AuthContext = createContext();
@@ -27,12 +26,18 @@ export const AuthProvider = ({ children }) => {
         .single();
 
       if (error && error.code !== "PGRST116") {
-        console.error("Error fetching profile:", error);
+        console.error(
+          "Error fetching profile:",
+          error.message || JSON.stringify(error),
+        );
         return null;
       }
       return data;
     } catch (error) {
-      console.error("Profile fetch error:", error);
+      console.error(
+        "Profile fetch error:",
+        error?.message || JSON.stringify(error),
+      );
       return null;
     }
   }, []);
@@ -75,7 +80,7 @@ export const AuthProvider = ({ children }) => {
 
   const signUp = async (email, password, fullName) => {
     if (!supabase) {
-      Alert.alert("Error", "Supabase not configured");
+      console.error("Supabase not configured");
       return { error: new Error("Supabase not configured") };
     }
 
@@ -121,20 +126,16 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      Alert.alert(
-        "Success",
-        "Account created! Please check your email to verify your account."
-      );
       return { data, error: null };
     } catch (error) {
-      Alert.alert("Sign Up Error", error.message);
+      console.error("Sign Up Error:", error.message);
       return { data: null, error };
     }
   };
 
   const signIn = async (email, password) => {
     if (!supabase) {
-      Alert.alert("Error", "Supabase not configured");
+      console.error("Supabase not configured");
       return { error: new Error("Supabase not configured") };
     }
 
@@ -147,7 +148,7 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      Alert.alert("Sign In Error", error.message);
+      console.error("Sign In Error:", error.message);
       return { data: null, error };
     }
   };
@@ -167,7 +168,7 @@ export const AuthProvider = ({ children }) => {
 
   const resetPassword = async (email) => {
     if (!supabase) {
-      Alert.alert("Error", "Supabase not configured");
+      console.error("Supabase not configured");
       return { error: new Error("Supabase not configured") };
     }
 
@@ -178,10 +179,9 @@ export const AuthProvider = ({ children }) => {
 
       if (error) throw error;
 
-      Alert.alert("Success", "Password reset email sent!");
       return { error: null };
     } catch (error) {
-      Alert.alert("Error", error.message);
+      console.error("Reset Password Error:", error.message);
       return { error };
     }
   };
@@ -201,8 +201,53 @@ export const AuthProvider = ({ children }) => {
       setProfile(data);
       return { data, error: null };
     } catch (error) {
-      Alert.alert("Error", error.message);
+      console.error("Update Profile Error:", error.message);
       return { data: null, error };
+    }
+  };
+
+  const updatePassword = async (newPassword) => {
+    if (!supabase) return false;
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) throw error;
+      await signOut();
+      return true;
+    } catch (error) {
+      console.error("Update Password Error:", error.message);
+      return false;
+    }
+  };
+
+  const updateEmail = async (newEmail, password) => {
+    if (!supabase || !user) return false;
+
+    try {
+      // First verify the current password by attempting to sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: password,
+      });
+
+      if (signInError) {
+        throw new Error("Current password is incorrect");
+      }
+
+      // Update the email
+      const { error } = await supabase.auth.updateUser({
+        email: newEmail,
+      });
+
+      if (error) throw error;
+
+      return true;
+    } catch (error) {
+      console.error("Update Email Error:", error.message);
+      return false;
     }
   };
 
@@ -217,6 +262,8 @@ export const AuthProvider = ({ children }) => {
     signOut,
     resetPassword,
     updateProfile,
+    updatePassword,
+    updateEmail,
     refreshProfile: () => fetchProfile(user?.id).then(setProfile),
   };
 

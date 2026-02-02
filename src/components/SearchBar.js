@@ -8,12 +8,13 @@ export const SearchBar = ({
   placeholder = "Search products",
   editable = true,
   onPress,
+  style,
   ...inputProps
 }) => {
   if (!editable) {
     return (
       <Pressable
-        style={styles.wrapper}
+        style={[styles.wrapper, style]}
         onPress={onPress}
         accessibilityRole="button"
       >
@@ -24,7 +25,7 @@ export const SearchBar = ({
   }
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, style]}>
       <Ionicons name="search" size={18} color={colors.muted} />
       <TextInput
         placeholder={placeholder}
@@ -48,8 +49,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "#fff",
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 8,
     gap: 8,
+    maxWidth: 280,
   },
   input: {
     flex: 1,
