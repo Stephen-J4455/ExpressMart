@@ -38,8 +38,10 @@ export const ShopProvider = ({ children }) => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [sellers, setSellers] = useState([]);
+  const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [followedSellers, setFollowedSellers] = useState([]);
 
   const fetchProducts = useCallback(async () => {
     setLoading(true);
@@ -51,15 +53,21 @@ export const ShopProvider = ({ children }) => {
     }
 
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       const [
         { data: productsData, error: productError },
         { data: categoriesData, error: categoriesError },
         { data: sellersData, error: sellersError },
         { data: reviewsData, error: reviewsError },
+        { data: settingsData, error: settingsError },
+        { data: followsData, error: followsError },
       ] = await Promise.all([
         supabase
           .from("express_products")
-          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website)")
           .eq("status", "active")
           .order("created_at", { ascending: false }),
         supabase
@@ -69,7 +77,7 @@ export const ShopProvider = ({ children }) => {
           .order("sort_order"),
         supabase
           .from("express_sellers")
-          .select("id,name,avatar,rating,total_ratings,badges")
+          .select("id,name,avatar,rating,total_ratings,badges,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website")
           .eq("is_active", true)
           .order("rating", { ascending: false })
           .limit(10),
@@ -77,12 +85,32 @@ export const ShopProvider = ({ children }) => {
           .from("express_reviews")
           .select("product_id, rating")
           .eq("is_approved", true),
+        supabase.from("express_settings").select("key, value"),
+        user
+          ? supabase
+            .from("express_follows")
+            .select("seller_id")
+            .eq("user_id", user.id)
+          : { data: [], error: null },
       ]);
 
       if (productError) throw productError;
       if (categoriesError) throw categoriesError;
       if (sellersError) throw sellersError;
       if (reviewsError) throw reviewsError;
+      if (settingsError) throw settingsError;
+      if (followsError) throw followsError;
+
+      // Extract followed seller IDs
+      const followedIds = (followsData || []).map((f) => f.seller_id);
+      setFollowedSellers(followedIds);
+
+      // Map settings to object
+      const settingsMap = {};
+      (settingsData || []).forEach((s) => {
+        settingsMap[s.key] = s.value;
+      });
+      setSettings(settingsMap);
 
       const mappedProducts = (productsData || []).map(mapProduct);
       setProducts(mappedProducts);
@@ -135,6 +163,56 @@ export const ShopProvider = ({ children }) => {
     }
   }, []);
 
+  const followSeller = useCallback(async (sellerId) => {
+    if (!supabase) return;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const { error } = await supabase.from("express_follows").insert({
+        user_id: user.id,
+        seller_id: sellerId,
+      });
+
+      if (error) throw error;
+
+      setFollowedSellers((prev) => [...prev, sellerId]);
+    } catch (err) {
+      console.error("Error following seller:", err);
+      throw err;
+    }
+  }, []);
+
+  const unfollowSeller = useCallback(async (sellerId) => {
+    if (!supabase) return;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const { error } = await supabase
+        .from("express_follows")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("seller_id", sellerId);
+
+      if (error) throw error;
+
+      setFollowedSellers((prev) => prev.filter((id) => id !== sellerId));
+    } catch (err) {
+      console.error("Error unfollowing seller:", err);
+      throw err;
+    }
+  }, []);
+
+  const isFollowing = useCallback(
+    (sellerId) => followedSellers.includes(sellerId),
+    [followedSellers]
+  );
+
   useEffect(() => {
     fetchProducts();
   }, []);
@@ -144,11 +222,16 @@ export const ShopProvider = ({ children }) => {
       products,
       categories,
       sellers,
+      settings,
       loading,
       error,
       refresh: fetchProducts,
+      followedSellers,
+      followSeller,
+      unfollowSeller,
+      isFollowing,
     }),
-    [products, categories, sellers, loading, error],
+    [products, categories, sellers, settings, loading, error, followedSellers, followSeller, unfollowSeller, isFollowing],
   );
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;

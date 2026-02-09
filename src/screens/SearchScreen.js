@@ -400,27 +400,27 @@ export const SearchScreen = ({ navigation, route }) => {
             <View style={styles.grid}>
               {loading && results.length === 0
                 ? Array(4)
-                    .fill(null)
-                    .map((_, index) => (
-                      <View
-                        key={`placeholder-${index}`}
-                        style={styles.gridItem}
-                      >
-                        <ProductCardPlaceholder />
-                      </View>
-                    ))
-                : results.map((item) => (
-                    <View key={item.id} style={styles.gridItem}>
-                      <ProductCard
-                        product={item}
-                        onPress={() =>
-                          navigation.navigate("ProductDetail", {
-                            product: item,
-                          })
-                        }
-                      />
+                  .fill(null)
+                  .map((_, index) => (
+                    <View
+                      key={`placeholder-${index}`}
+                      style={styles.gridItem}
+                    >
+                      <ProductCardPlaceholder />
                     </View>
-                  ))}
+                  ))
+                : results.map((item) => (
+                  <View key={item.id} style={styles.gridItem}>
+                    <ProductCard
+                      product={item}
+                      onPress={() =>
+                        navigation.navigate("ProductDetail", {
+                          product: item,
+                        })
+                      }
+                    />
+                  </View>
+                ))}
             </View>
           ) : (
             <View style={styles.storeList}>
@@ -431,64 +431,66 @@ export const SearchScreen = ({ navigation, route }) => {
               )}
               {loading && query && results.length === 0
                 ? Array(3)
-                    .fill(null)
-                    .map((_, index) => (
-                      <View
-                        key={`store-placeholder-${index}`}
-                        style={styles.storeItem}
-                      >
-                        <View style={styles.storePlaceholder} />
-                      </View>
-                    ))
-                : results.map((store) => (
-                    <Pressable
-                      key={store.id}
+                  .fill(null)
+                  .map((_, index) => (
+                    <View
+                      key={`store-placeholder-${index}`}
                       style={styles.storeItem}
-                      onPress={() =>
-                        navigation.navigate("Store", { seller: store })
-                      }
                     >
-                      <View style={styles.storeContent}>
-                        <View style={styles.storeAvatar}>
-                          {store.avatar ? (
-                            <Image
-                              source={{ uri: store.avatar }}
-                              style={styles.storeAvatarImage}
-                            />
-                          ) : (
-                            <View style={styles.storeAvatarPlaceholder}>
-                              <Ionicons
-                                name="storefront"
-                                size={24}
-                                color={colors.muted}
-                              />
-                            </View>
-                          )}
-                        </View>
-                        <View style={styles.storeInfo}>
-                          <Text style={styles.storeName}>{store.name}</Text>
-                          <View style={styles.storeStats}>
+                      <View style={styles.storePlaceholder} />
+                    </View>
+                  ))
+                : results.map((store) => (
+                  <Pressable
+                    key={store.id}
+                    style={styles.storeItem}
+                    onPress={() =>
+                      navigation.navigate("Store", { seller: store })
+                    }
+                  >
+                    <View style={styles.storeContent}>
+                      <View style={styles.storeAvatar}>
+                        {store.avatar ? (
+                          <Image
+                            source={{ uri: store.avatar }}
+                            style={styles.storeAvatarImage}
+                          />
+                        ) : (
+                          <View style={styles.storeAvatarPlaceholder}>
                             <Ionicons
-                              name="star"
-                              size={14}
-                              color={colors.secondary}
+                              name="storefront"
+                              size={26}
+                              color={colors.primary}
                             />
-                            <Text style={styles.storeRating}>
-                              {store.rating?.toFixed(1) || "0.0"}
-                            </Text>
-                            <Text style={styles.storeReviews}>
-                              ({store.total_ratings || 0} reviews)
-                            </Text>
                           </View>
+                        )}
+                      </View>
+                      <View style={styles.storeInfo}>
+                        <Text style={styles.storeName}>{store.name}</Text>
+                        <View style={styles.storeStats}>
+                          <Ionicons
+                            name="star"
+                            size={12}
+                            color="#F59E0B"
+                          />
+                          <Text style={styles.storeRating}>
+                            {store.rating?.toFixed(1) || "0.0"}
+                          </Text>
+                          <Text style={styles.storeReviews}>
+                            ({store.total_ratings || 0})
+                          </Text>
                         </View>
+                      </View>
+                      <View style={styles.storeArrow}>
                         <Ionicons
                           name="chevron-forward"
-                          size={20}
-                          color={colors.muted}
+                          size={18}
+                          color={colors.primary}
                         />
                       </View>
-                    </Pressable>
-                  ))}
+                    </View>
+                  </Pressable>
+                ))}
             </View>
           )}
 
@@ -519,7 +521,7 @@ export const SearchScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: "#F8FAFC",
   },
   header: {
     flexDirection: "row",
@@ -530,12 +532,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   trendingSection: {
     paddingHorizontal: 16,
@@ -544,15 +551,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   clearButton: {
-    padding: 4,
+    padding: 6,
+    backgroundColor: "#FEE2E2",
+    borderRadius: 8,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 10,
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: 12,
+    color: colors.dark,
+    letterSpacing: -0.3,
   },
   tags: {
     flexDirection: "row",
@@ -560,17 +571,22 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   tag: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
     backgroundColor: "#fff",
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
   },
   tagText: {
     color: colors.dark,
+    fontWeight: "500",
+    fontSize: 14,
   },
   list: {
     padding: 16,
@@ -580,19 +596,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    paddingHorizontal: 5,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   gridItem: {
     width: "49%",
+    marginBottom: 4,
   },
   empty: {
     alignItems: "center",
-    marginTop: 40,
+    marginTop: 50,
+    paddingHorizontal: 24,
   },
   emptyText: {
     fontSize: 18,
     fontWeight: "700",
+    color: colors.dark,
+    letterSpacing: -0.3,
   },
   emptySub: {
     marginTop: 8,
@@ -617,69 +637,78 @@ const styles = StyleSheet.create({
   clearTagText: {
     color: colors.primary,
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   tabsContainer: {
     flexDirection: "row",
     paddingHorizontal: 16,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    paddingBottom: 12,
+    paddingTop: 4,
+    backgroundColor: "#fff",
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 14,
     alignItems: "center",
-    borderRadius: 8,
-    marginHorizontal: 4,
+    borderRadius: 14,
+    marginHorizontal: 6,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
   },
   activeTab: {
-    backgroundColor: colors.primary + "10",
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   tabText: {
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 15,
+    fontWeight: "600",
     color: colors.muted,
+    letterSpacing: -0.2,
   },
   activeTabText: {
-    color: colors.primary,
+    color: "#fff",
   },
   storeList: {
     padding: 16,
-    gap: 12,
+    gap: 14,
   },
   storeHeader: {
     marginBottom: 8,
   },
   storeItem: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 20,
     padding: 16,
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
   },
   storeContent: {
     flexDirection: "row",
     alignItems: "center",
   },
   storeAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    marginRight: 14,
+    backgroundColor: "#F8FAFC",
+    overflow: "hidden",
   },
   storeAvatarImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
   },
   storeAvatarPlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: colors.light,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "#EEF2FF",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -688,27 +717,43 @@ const styles = StyleSheet.create({
   },
   storeName: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.dark,
-    marginBottom: 4,
+    marginBottom: 6,
+    letterSpacing: -0.3,
   },
   storeStats: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 6,
+    backgroundColor: "#FEF9C3",
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   storeRating: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: colors.dark,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#92400E",
   },
   storeReviews: {
-    fontSize: 14,
-    color: colors.muted,
+    fontSize: 12,
+    color: "#B45309",
+    fontWeight: "500",
   },
   storePlaceholder: {
-    height: 70,
-    backgroundColor: colors.light,
-    borderRadius: 8,
+    height: 80,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+  },
+  storeArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
   },
 });

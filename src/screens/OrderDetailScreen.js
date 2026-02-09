@@ -112,7 +112,7 @@ export const OrderDetailScreen = () => {
 
     const shippingAddr = order.shipping_address || {};
     const orderTotal = parseFloat(order.total) || 0;
-    const shippingFee = parseFloat(order.shipping_fee) || 0;
+    const shippingFee = parseFloat(order.service_fee) || 0;
     const subtotal = orderTotal - shippingFee;
 
     return (
@@ -284,7 +284,7 @@ export const OrderDetailScreen = () => {
 
                         {shippingFee > 0 && (
                             <View style={styles.paymentRow}>
-                                <Text style={styles.paymentLabel}>Shipping Fee</Text>
+                                <Text style={styles.paymentLabel}>Service Fee</Text>
                                 <Text style={styles.paymentValue}>
                                     GH₵{shippingFee.toLocaleString()}
                                 </Text>

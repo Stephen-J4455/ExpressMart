@@ -1,69 +1,103 @@
-import { useEffect, useState, useRef } from "react";
-import { supabase } from "../lib/supabase";
+import React, { useEffect, useState, useRef } from "react";
 import {
-  ScrollView,
   View,
   Text,
-  Image,
   StyleSheet,
+  Image,
   FlatList,
-  RefreshControl,
   Pressable,
+  ScrollView,
+  RefreshControl,
+  ActivityIndicator,
   Dimensions,
-  Linking,
+  TouchableOpacity,
+  Modal,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { supabase } from "../lib/supabase";
 import { useShop } from "../context/ShopContext";
 import { colors } from "../theme/colors";
+import { useToast } from "../context/ToastContext";
 import { ProductCard } from "../components/ProductCard";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
-import { SectionHeader } from "../components/SectionHeader";
+
+const screenWidth = Dimensions.get("window").width;
+const TABS = ["products", "profile", "reviews"];
 
 const BADGE_CONFIG = {
-  verified: { label: "Verified", icon: "checkmark-circle", color: "#10B981" },
-  top_seller: { label: "Top Seller", icon: "trophy", color: "#F59E0B" },
-  fast_shipping: { label: "Fast Shipping", icon: "flash", color: "#3B82F6" },
-  eco_friendly: { label: "Eco Friendly", icon: "leaf", color: "#22C55E" },
-  local: { label: "Local", icon: "location", color: "#8B5CF6" },
-  trending: { label: "Trending", icon: "trending-up", color: "#EC4899" },
-  premium: { label: "Premium", icon: "star", color: "#EAB308" },
+  verified: {
+    label: "Verified",
+    icon: "checkmark-circle",
+    color: "#10B981",
+  },
+  fast_shipping: {
+    label: "Fast Shipping",
+    icon: "flash",
+    color: "#F59E0B",
+  },
+  trusted_seller: {
+    label: "Trusted Seller",
+    icon: "shield-checkmark",
+    color: "#3B82F6",
+  },
+  eco_friendly: {
+    label: "Eco Friendly",
+    icon: "leaf",
+    color: "#059669",
+  },
 };
 
 export const StoreScreen = ({ route, navigation }) => {
-  const insets = useSafeAreaInsets();
-  const { products, loading, refresh } = useShop();
-  const seller = route?.params?.seller;
+  const { seller } = route.params || {};
   const sellerId = seller?.id;
+  const insets = useSafeAreaInsets();
+  const { products, refresh, loading, followSeller, unfollowSeller, isFollowing } = useShop();
+  const toast = useToast();
+  const tabScrollRef = useRef(null);
+
+  const [statuses, setStatuses] = useState([]);
   const [storeProducts, setStoreProducts] = useState([]);
   const [activeTab, setActiveTab] = useState("products");
-  const tabScrollRef = useRef(null);
-  const screenWidth = Dimensions.get("window").width;
-  const TABS = ["products", "profile", "reviews"];
   const [storeReviews, setStoreReviews] = useState([]);
-  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [userProfiles, setUserProfiles] = useState({});
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
 
-  // Calculate average rating from store reviews
   const averageRating =
     storeReviews.length > 0
       ? (
-          storeReviews.reduce((sum, review) => sum + review.rating, 0) /
-          storeReviews.length
-        ).toFixed(1)
+        storeReviews.reduce((sum, r) => sum + (r.rating || 0), 0) /
+        storeReviews.length
+      ).toFixed(1)
       : "0.0";
+
+  const handleFollowToggle = async () => {
+    if (!sellerId) return;
+    setFollowLoading(true);
+    try {
+      if (isFollowing(sellerId)) {
+        await unfollowSeller(sellerId);
+        toast.error("Unfollowed store");
+      } else {
+        await followSeller(sellerId);
+        toast.success("Following store");
+      }
+    } catch (err) {
+      console.error("Follow toggle error", err);
+      toast.error("Failed to update follow status");
+    } finally {
+      setFollowLoading(false);
+    }
+  };
+
   useEffect(() => {
     const fetchStoreReviews = async () => {
-      if (!supabase || !sellerId) {
-        setStoreReviews([]);
-        setUserProfiles({});
-        setReviewsLoading(false);
-        return;
-      }
+      if (!sellerId) return;
       setReviewsLoading(true);
       try {
-        // Fetch all products for this seller first
         const { data: sellerProducts, error: productsError } = await supabase
           .from("express_products")
           .select("id")
@@ -80,7 +114,6 @@ export const StoreScreen = ({ route, navigation }) => {
           return;
         }
 
-        // Fetch all reviews for these product IDs
         const { data: reviewsData, error: reviewsError } = await supabase
           .from("express_reviews")
           .select("*")
@@ -92,7 +125,6 @@ export const StoreScreen = ({ route, navigation }) => {
 
         setStoreReviews(reviewsData || []);
 
-        // Fetch user profiles for the reviewers
         const userIds = [...new Set((reviewsData || []).map((r) => r.user_id))];
         if (userIds.length > 0) {
           const { data: profilesData, error: profilesError } = await supabase
@@ -120,6 +152,47 @@ export const StoreScreen = ({ route, navigation }) => {
     fetchStoreReviews();
   }, [sellerId]);
 
+  useEffect(() => {
+    const fetchFollowerCount = async () => {
+      if (!sellerId) return;
+      try {
+        const { count, error } = await supabase
+          .from("express_follows")
+          .select("*", { count: "exact", head: true })
+          .eq("seller_id", sellerId);
+
+        if (error) throw error;
+        setFollowerCount(count || 0);
+      } catch (err) {
+        console.error("Error fetching follower count:", err);
+        setFollowerCount(0);
+      }
+    };
+    fetchFollowerCount();
+  }, [sellerId]);
+
+  useEffect(() => {
+    const fetchStatuses = async () => {
+      if (!supabase || !sellerId) return;
+      try {
+        const { data, error } = await supabase
+          .from("express_seller_statuses")
+          .select("*")
+          .eq("seller_id", sellerId)
+          .eq("is_active", true)
+          .gt("expires_at", new Date().toISOString())
+          .order("created_at", { ascending: true });
+
+        if (!error && data) {
+          setStatuses(data);
+        }
+      } catch (err) {
+        console.error("Error fetching statuses:", err);
+      }
+    };
+    fetchStatuses();
+  }, [sellerId]);
+
   const handleTabPress = (tab) => {
     setActiveTab(tab);
     const index = TABS.indexOf(tab);
@@ -137,12 +210,10 @@ export const StoreScreen = ({ route, navigation }) => {
   useEffect(() => {
     if (products && sellerId) {
       const filtered = products.filter((p) => {
-        // Support both object and string/uuid for seller
         if (!p.seller) return false;
         if (typeof p.seller === "object" && p.seller.id) {
           return p.seller.id === sellerId;
         }
-        // If seller is just an ID (string/uuid)
         return p.seller === sellerId;
       });
       setStoreProducts(filtered);
@@ -151,448 +222,496 @@ export const StoreScreen = ({ route, navigation }) => {
 
   const storeInfo = storeProducts.length > 0 ? storeProducts[0] : null;
 
-  // Show placeholders while loading
   const displayData =
     loading && storeProducts.length === 0 ? Array(4).fill(null) : storeProducts;
 
   return (
-    <FlatList
-      data={displayData}
-      keyExtractor={(item, index) => item?.id || `placeholder-${index}`}
-      bounces={true}
-      refreshControl={
-        <RefreshControl refreshing={loading} onRefresh={refresh} />
-      }
-      ListHeaderComponent={
-        <View>
-          {/* Store Hero Section - extends into status bar */}
-          <View style={[styles.hero, { marginTop: -insets.top }]}>
-            {seller?.avatar ? (
-              <Image
-                source={{ uri: seller.avatar }}
-                style={styles.heroBackground}
-                blurRadius={5}
-              />
-            ) : null}
-            <LinearGradient
-              colors={["rgba(0,0,0,0.4)", "rgba(0,0,0,0.6)"]}
-              style={styles.heroOverlay}
-            >
-              <View style={styles.storeHeader}>
-                {seller?.avatar ? (
-                  <Image
-                    source={{ uri: seller.avatar }}
-                    style={styles.storeAvatar}
-                  />
-                ) : (
-                  <View style={[styles.storeAvatar, styles.avatarPlaceholder]}>
-                    <Ionicons name="storefront" size={48} color="#fff" />
-                  </View>
-                )}
-                <View style={styles.storeInfo}>
-                  <Text style={styles.storeName}>{seller?.name}</Text>
-                  <View style={styles.ratingRow}>
-                    <Ionicons name="star" size={16} color="#FCD34D" />
-                    <Text style={styles.rating}>
-                      {averageRating} ({storeReviews.length})
+    <>
+      <FlatList
+        data={displayData}
+        keyExtractor={(item, index) => item?.id || `placeholder-${index}`}
+        bounces={true}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={refresh} />
+        }
+        ListHeaderComponent={
+          <View>
+            {/* Store Hero Section - extends into status bar */}
+            <View style={[styles.hero, { marginTop: -insets.top }]}>
+              {seller?.avatar ? (
+                <Image
+                  source={{ uri: seller.avatar }}
+                  style={styles.heroBackground}
+                  blurRadius={5}
+                />
+              ) : null}
+              <LinearGradient
+                colors={["rgba(0,0,0,0.4)", "rgba(0,0,0,0.6)"]}
+                style={styles.heroOverlay}
+              >
+                <View style={styles.storeHeader}>
+                  <Pressable
+                    style={[
+                      styles.storeAvatarContainer,
+                      statuses.length > 0 && styles.statusActive
+                    ]}
+                    onPress={() => {
+                      if (statuses.length > 0) {
+                        navigation.navigate("StatusViewer", { status: statuses[0] });
+                      }
+                    }}
+                  >
+                    {seller?.avatar ? (
+                      <Image
+                        source={{ uri: seller.avatar }}
+                        style={styles.storeAvatar}
+                      />
+                    ) : (
+                      <View style={[styles.storeAvatar, styles.avatarPlaceholder]}>
+                        <Ionicons name="storefront" size={48} color="#fff" />
+                      </View>
+                    )}
+                    {statuses.length > 0 && (
+                      <View style={styles.statusBadge}>
+                        <Text style={styles.statusBadgeText}>{statuses.length}</Text>
+                      </View>
+                    )}
+                  </Pressable>
+                  <View style={styles.storeInfo}>
+                    <Text style={styles.storeName}>{seller?.name}</Text>
+                    <View style={styles.ratingRow}>
+                      <Ionicons name="star" size={16} color="#FCD34D" />
+                      <Text style={styles.rating}>
+                        {averageRating} ({storeReviews.length})
+                      </Text>
+                      <Pressable
+                        style={[
+                          styles.followButton,
+                          isFollowing(sellerId) && styles.followButtonActive,
+                        ]}
+                        onPress={handleFollowToggle}
+                        disabled={followLoading}
+                      >
+                        {followLoading ? (
+                          <ActivityIndicator size="small" color={isFollowing(sellerId) ? "white" : "#ef4444"} />
+                        ) : (
+                          <>
+                            {!isFollowing(sellerId) && (
+                              <Ionicons
+                                name="add"
+                                size={16}
+                                color="#ef4444"
+                              />
+                            )}
+                            <Text style={[
+                              styles.followButtonText,
+                              isFollowing(sellerId) && styles.followButtonActiveText
+                            ]}>
+                              {isFollowing(sellerId) ? "Following" : "Follow"}
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                    </View>
+                    <Text style={styles.storeSubtitle}>
+                      {storeProducts.length} Products
                     </Text>
                   </View>
-                  <Text style={styles.storeSubtitle}>
-                    {storeProducts.length} Products
-                  </Text>
                 </View>
-              </View>
 
-              {/* Badges Section */}
-              {seller?.badges && seller.badges.length > 0 && (
-                <View style={styles.badgesRow}>
-                  {seller.badges.map((badgeId) => {
-                    const badgeConfig = BADGE_CONFIG[badgeId];
-                    if (!badgeConfig) return null;
-                    return (
-                      <View
-                        key={badgeId}
-                        style={[
-                          styles.badge,
-                          {
-                            backgroundColor: badgeConfig.color + "20",
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={badgeConfig.icon}
-                          size={14}
-                          color={badgeConfig.color}
-                        />
-                        <Text
+                {/* Badges Section */}
+                {seller?.badges && seller.badges.length > 0 && (
+                  <View style={styles.badgesRow}>
+                    {seller.badges.map((badgeId) => {
+                      const badgeConfig = BADGE_CONFIG[badgeId];
+                      if (!badgeConfig) return null;
+                      return (
+                        <View
+                          key={badgeId}
                           style={[
-                            styles.badgeText,
-                            { color: badgeConfig.color },
+                            styles.badge,
+                            {
+                              backgroundColor: badgeConfig.color + "20",
+                            },
                           ]}
                         >
-                          {badgeConfig.label}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-
-              {/* Store Stats */}
-              <View style={styles.statsContainer}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{storeProducts.length}</Text>
-                  <Text style={styles.statLabel}>Products</Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{storeReviews.length}</Text>
-                  <Text style={styles.statLabel}>Reviews</Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.statItem}>
-                  <Ionicons name="checkmark-circle" size={20} color="#FCD34D" />
-                  <Text style={styles.statLabel}>Verified</Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </View>
-
-          {/* Tab Navigation */}
-          <View style={styles.tabContainer}>
-            <Pressable
-              style={[styles.tab, activeTab === "products" && styles.tabActive]}
-              onPress={() => handleTabPress("products")}
-            >
-              <Ionicons
-                name="storefront-outline"
-                size={20}
-                color={activeTab === "products" ? colors.primary : colors.muted}
-              />
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "products" && styles.tabTextActive,
-                ]}
-              >
-                Products ({storeProducts.length})
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.tab, activeTab === "profile" && styles.tabActive]}
-              onPress={() => handleTabPress("profile")}
-            >
-              <Ionicons
-                name="person-outline"
-                size={20}
-                color={activeTab === "profile" ? colors.primary : colors.muted}
-              />
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "profile" && styles.tabTextActive,
-                ]}
-              >
-                Profile
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.tab, activeTab === "reviews" && styles.tabActive]}
-              onPress={() => handleTabPress("reviews")}
-            >
-              <Ionicons
-                name="star-outline"
-                size={20}
-                color={activeTab === "reviews" ? colors.primary : colors.muted}
-              />
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "reviews" && styles.tabTextActive,
-                ]}
-              >
-                Reviews ({storeReviews.length})
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* Swipeable Tab Content */}
-          <ScrollView
-            ref={tabScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={handleScroll}
-            scrollEventThrottle={16}
-            style={styles.tabScrollView}
-          >
-            {/* Products Tab */}
-            <View style={[styles.tabPage, { width: screenWidth }]}>
-              {displayData.length > 0 ? (
-                <View style={styles.productsGrid}>
-                  {displayData.map((item, index) => (
-                    <View
-                      key={item?.id || `placeholder-${index}`}
-                      style={styles.gridItem}
-                    >
-                      {item ? (
-                        <ProductCard
-                          product={item}
-                          onPress={() =>
-                            navigation.navigate("ProductDetail", {
-                              product: item,
-                            })
-                          }
-                        />
-                      ) : (
-                        <ProductCardPlaceholder />
-                      )}
-                    </View>
-                  ))}
-                </View>
-              ) : !loading ? (
-                <View style={styles.emptyState}>
-                  <Ionicons
-                    name="cube-outline"
-                    size={64}
-                    color={colors.muted}
-                  />
-                  <Text style={styles.emptyText}>No products</Text>
-                  <Text style={styles.emptySubtext}>
-                    This store has no products available
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            {/* Profile Tab */}
-            <View style={[styles.tabPage, { width: screenWidth }]}>
-              <View style={styles.tabContent}>
-                <View style={styles.profileSection}>
-                  <Text style={styles.sectionTitle}>About {seller?.name}</Text>
-                  <Text style={styles.profileText}>
-                    Welcome to {seller?.name}! We are committed to providing
-                    high-quality products and excellent customer service. Our
-                    store specializes in a wide range of products to meet your
-                    needs.
-                  </Text>
-                </View>
-
-                {/* Chat Button */}
-                <View style={styles.profileSection}>
-                  <Pressable
-                    style={styles.chatButton}
-                    onPress={() => navigation.navigate("Chat", { seller })}
-                  >
-                    <Ionicons
-                      name="chatbubble-outline"
-                      size={20}
-                      color="#fff"
-                    />
-                    <Text style={styles.chatButtonText}>Chat with Seller</Text>
-                  </Pressable>
-                </View>
-
-                {/* Social Media Links */}
-                {(seller?.social_facebook ||
-                  seller?.social_instagram ||
-                  seller?.social_twitter ||
-                  seller?.social_whatsapp ||
-                  seller?.social_website) && (
-                  <View style={styles.profileSection}>
-                    <Text style={styles.sectionTitle}>Connect with Us</Text>
-                    <View style={styles.socialLinks}>
-                      {seller?.social_facebook && (
-                        <Pressable
-                          style={styles.socialButton}
-                          onPress={() =>
-                            Linking.openURL(seller.social_facebook)
-                          }
-                        >
                           <Ionicons
-                            name="logo-facebook"
-                            size={20}
-                            color="#1877F2"
+                            name={badgeConfig.icon}
+                            size={14}
+                            color={badgeConfig.color}
                           />
-                          <Text style={styles.socialText}>Facebook</Text>
-                        </Pressable>
-                      )}
-                      {seller?.social_instagram && (
-                        <Pressable
-                          style={styles.socialButton}
-                          onPress={() =>
-                            Linking.openURL(seller.social_instagram)
-                          }
-                        >
-                          <Ionicons
-                            name="logo-instagram"
-                            size={20}
-                            color="#E4405F"
-                          />
-                          <Text style={styles.socialText}>Instagram</Text>
-                        </Pressable>
-                      )}
-                      {seller?.social_twitter && (
-                        <Pressable
-                          style={styles.socialButton}
-                          onPress={() => Linking.openURL(seller.social_twitter)}
-                        >
-                          <Ionicons
-                            name="logo-twitter"
-                            size={20}
-                            color="#1DA1F2"
-                          />
-                          <Text style={styles.socialText}>Twitter</Text>
-                        </Pressable>
-                      )}
-                      {seller?.social_whatsapp && (
-                        <Pressable
-                          style={styles.socialButton}
-                          onPress={() =>
-                            Linking.openURL(
-                              `https://wa.me/${seller.social_whatsapp.replace(/[^0-9]/g, "")}`,
-                            )
-                          }
-                        >
-                          <Ionicons
-                            name="logo-whatsapp"
-                            size={20}
-                            color="#25D366"
-                          />
-                          <Text style={styles.socialText}>WhatsApp</Text>
-                        </Pressable>
-                      )}
-                      {seller?.social_website && (
-                        <Pressable
-                          style={styles.socialButton}
-                          onPress={() => Linking.openURL(seller.social_website)}
-                        >
-                          <Ionicons
-                            name="globe-outline"
-                            size={20}
-                            color={colors.primary}
-                          />
-                          <Text style={styles.socialText}>Website</Text>
-                        </Pressable>
-                      )}
-                    </View>
-                  </View>
-                )}
-
-                <View style={styles.profileSection}>
-                  <Text style={styles.sectionTitle}>Store Statistics</Text>
-                  <View style={styles.statsGrid}>
-                    <View style={styles.statBox}>
-                      <Text style={styles.statNumber}>
-                        {storeProducts.length}
-                      </Text>
-                      <Text style={styles.statLabelSmall}>Products</Text>
-                    </View>
-                    <View style={styles.statBox}>
-                      <Text style={styles.statNumber}>
-                        {storeReviews.length}
-                      </Text>
-                      <Text style={styles.statLabelSmall}>Reviews</Text>
-                    </View>
-                    <View style={styles.statBox}>
-                      <Text style={styles.statNumber}>{averageRating}</Text>
-                      <Text style={styles.statLabelSmall}>Rating</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Reviews Tab */}
-            <View style={[styles.tabPage, { width: screenWidth }]}>
-              <View style={styles.tabContent}>
-                <View style={styles.reviewsHeader}>
-                  <Text style={styles.sectionTitle}>Customer Reviews</Text>
-                  <View style={styles.ratingSummary}>
-                    <Ionicons name="star" size={24} color="#F59E0B" />
-                    <Text style={styles.ratingNumber}>{averageRating}</Text>
-                    <Text style={styles.ratingCount}>
-                      ({storeReviews.length} reviews)
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.reviewsList}>
-                  {reviewsLoading ? (
-                    <View style={{ alignItems: "center", padding: 24 }}>
-                      <Text>Loading reviews...</Text>
-                    </View>
-                  ) : storeReviews.length > 0 ? (
-                    storeReviews.map((review) => {
-                      const product = storeProducts.find(
-                        (p) => p.id === review.product_id,
-                      );
-                      return (
-                        <View key={review.id} style={styles.reviewItem}>
-                          <View style={styles.reviewHeader}>
-                            <View style={styles.reviewerAvatar}>
-                              <Ionicons
-                                name="person"
-                                size={20}
-                                color={colors.muted}
-                              />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.reviewerName}>
-                                {userProfiles[review.user_id]?.full_name ||
-                                  "Customer"}
-                              </Text>
-                              <Text style={styles.productName}>
-                                on {product?.title || "Unknown Product"}
-                              </Text>
-                              <View style={styles.reviewStars}>
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                  <Ionicons
-                                    key={star}
-                                    name={
-                                      star <= review.rating
-                                        ? "star"
-                                        : "star-outline"
-                                    }
-                                    size={14}
-                                    color="#F59E0B"
-                                  />
-                                ))}
-                              </View>
-                            </View>
-                          </View>
-                          {review.comment && (
-                            <Text style={styles.reviewText}>
-                              {review.comment}
-                            </Text>
-                          )}
-                          <Text style={styles.reviewDate}>
-                            {new Date(review.created_at).toLocaleDateString()}
+                          <Text
+                            style={[
+                              styles.badgeText,
+                              { color: badgeConfig.color },
+                            ]}
+                          >
+                            {badgeConfig.label}
                           </Text>
                         </View>
                       );
-                    })
-                  ) : (
-                    <View style={{ alignItems: "center", padding: 24 }}>
+                    })}
+                  </View>
+                )}
+
+                {/* Store Stats */}
+                <View style={styles.statsContainer}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statValue}>{storeProducts.length}</Text>
+                    <Text style={styles.statLabel}>Products</Text>
+                  </View>
+                  <View style={styles.divider} />
+                  <View style={styles.statItem}>
+                    <Text style={styles.statValue}>{storeReviews.length}</Text>
+                    <Text style={styles.statLabel}>Reviews</Text>
+                  </View>
+                  <View style={styles.divider} />
+                  <View style={styles.statItem}>
+                    <Text style={styles.statValue}>{followerCount}</Text>
+                    <Text style={styles.statLabel}>Followers</Text>
+                  </View>
+                </View>
+              </LinearGradient>
+            </View>
+
+            {/* Tab Navigation */}
+            <View style={styles.tabContainer}>
+              <Pressable
+                style={[styles.tab, activeTab === "products" && styles.tabActive]}
+                onPress={() => handleTabPress("products")}
+              >
+                <Ionicons
+                  name="storefront-outline"
+                  size={20}
+                  color={activeTab === "products" ? colors.primary : colors.muted}
+                />
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === "products" && styles.tabTextActive,
+                  ]}
+                >
+                  Products ({storeProducts.length})
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tab, activeTab === "profile" && styles.tabActive]}
+                onPress={() => handleTabPress("profile")}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color={activeTab === "profile" ? colors.primary : colors.muted}
+                />
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === "profile" && styles.tabTextActive,
+                  ]}
+                >
+                  Profile
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tab, activeTab === "reviews" && styles.tabActive]}
+                onPress={() => handleTabPress("reviews")}
+              >
+                <Ionicons
+                  name="star-outline"
+                  size={20}
+                  color={activeTab === "reviews" ? colors.primary : colors.muted}
+                />
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === "reviews" && styles.tabTextActive,
+                  ]}
+                >
+                  Reviews ({storeReviews.length})
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Swipeable Tab Content */}
+            <ScrollView
+              ref={tabScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={handleScroll}
+              scrollEventThrottle={16}
+              style={styles.tabScrollView}
+            >
+              {/* Products Tab */}
+              <View style={[styles.tabPage, { width: screenWidth }]}>
+                {displayData.length > 0 ? (
+                  <View style={styles.productsGrid}>
+                    {displayData.map((item, index) => (
+                      <View
+                        key={item?.id || `placeholder-${index}`}
+                        style={styles.gridItem}
+                      >
+                        {item ? (
+                          <ProductCard
+                            product={item}
+                            onPress={() =>
+                              navigation.navigate("ProductDetail", {
+                                product: item,
+                              })
+                            }
+                          />
+                        ) : (
+                          <ProductCardPlaceholder />
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                ) : !loading ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons
+                      name="cube-outline"
+                      size={64}
+                      color={colors.muted}
+                    />
+                    <Text style={styles.emptyText}>No products</Text>
+                    <Text style={styles.emptySubtext}>
+                      This store has no products available
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Profile Tab */}
+              <View style={[styles.tabPage, { width: screenWidth }]}>
+                <View style={styles.tabContent}>
+                  <View style={styles.profileSection}>
+                    <Text style={styles.sectionTitle}>About {seller?.name}</Text>
+                    <Text style={styles.profileText}>
+                      Welcome to {seller?.name}! We are committed to providing
+                      high-quality products and excellent customer service. Our
+                      store specializes in a wide range of products to meet your
+                      needs.
+                    </Text>
+                  </View>
+
+                  {/* Chat Button */}
+                  <View style={styles.profileSection}>
+                    <Pressable
+                      style={styles.chatButton}
+                      onPress={() => navigation.navigate("Chat", { seller })}
+                    >
                       <Ionicons
                         name="chatbubble-outline"
-                        size={48}
-                        color={colors.muted}
+                        size={20}
+                        color="#fff"
                       />
-                      <Text style={styles.emptyText}>No reviews yet</Text>
+                      <Text style={styles.chatButtonText}>Chat with Seller</Text>
+                    </Pressable>
+                  </View>
+
+                  {/* Social Media Links */}
+                  {(seller?.social_facebook ||
+                    seller?.social_instagram ||
+                    seller?.social_twitter ||
+                    seller?.social_whatsapp ||
+                    seller?.social_website) && (
+                      <View style={styles.profileSection}>
+                        <Text style={styles.sectionTitle}>Connect with Us</Text>
+                        <View style={styles.socialLinks}>
+                          {seller?.social_facebook && (
+                            <Pressable
+                              style={styles.socialButton}
+                              onPress={() =>
+                                Linking.openURL(seller.social_facebook)
+                              }
+                            >
+                              <Ionicons
+                                name="logo-facebook"
+                                size={20}
+                                color="#1877F2"
+                              />
+                              <Text style={styles.socialText}>Facebook</Text>
+                            </Pressable>
+                          )}
+                          {seller?.social_instagram && (
+                            <Pressable
+                              style={styles.socialButton}
+                              onPress={() =>
+                                Linking.openURL(seller.social_instagram)
+                              }
+                            >
+                              <Ionicons
+                                name="logo-instagram"
+                                size={20}
+                                color="#E4405F"
+                              />
+                              <Text style={styles.socialText}>Instagram</Text>
+                            </Pressable>
+                          )}
+                          {seller?.social_twitter && (
+                            <Pressable
+                              style={styles.socialButton}
+                              onPress={() => Linking.openURL(seller.social_twitter)}
+                            >
+                              <Ionicons
+                                name="logo-twitter"
+                                size={20}
+                                color="#1DA1F2"
+                              />
+                              <Text style={styles.socialText}>Twitter</Text>
+                            </Pressable>
+                          )}
+                          {seller?.social_whatsapp && (
+                            <Pressable
+                              style={styles.socialButton}
+                              onPress={() =>
+                                Linking.openURL(
+                                  `https://wa.me/${seller.social_whatsapp.replace(/[^0-9]/g, "")}`,
+                                )
+                              }
+                            >
+                              <Ionicons
+                                name="logo-whatsapp"
+                                size={20}
+                                color="#25D366"
+                              />
+                              <Text style={styles.socialText}>WhatsApp</Text>
+                            </Pressable>
+                          )}
+                          {seller?.social_website && (
+                            <Pressable
+                              style={styles.socialButton}
+                              onPress={() => Linking.openURL(seller.social_website)}
+                            >
+                              <Ionicons
+                                name="globe-outline"
+                                size={20}
+                                color={colors.primary}
+                              />
+                              <Text style={styles.socialText}>Website</Text>
+                            </Pressable>
+                          )}
+                        </View>
+                      </View>
+                    )}
+
+                  <View style={styles.profileSection}>
+                    <Text style={styles.sectionTitle}>Store Statistics</Text>
+                    <View style={styles.statsGrid}>
+                      <View style={styles.statBox}>
+                        <Text style={styles.statNumber}>
+                          {storeProducts.length}
+                        </Text>
+                        <Text style={styles.statLabelSmall}>Products</Text>
+                      </View>
+                      <View style={styles.statBox}>
+                        <Text style={styles.statNumber}>
+                          {storeReviews.length}
+                        </Text>
+                        <Text style={styles.statLabelSmall}>Reviews</Text>
+                      </View>
+                      <View style={styles.statBox}>
+                        <Text style={styles.statNumber}>{averageRating}</Text>
+                        <Text style={styles.statLabelSmall}>Rating</Text>
+                      </View>
                     </View>
-                  )}
+                  </View>
                 </View>
               </View>
-            </View>
-          </ScrollView>
-        </View>
-      }
-      renderItem={() => null}
-      contentContainerStyle={styles.listContainer}
-      scrollEnabled={true}
-      scrollIndicatorInsets={{ top: 0 }}
-      overScrollMode="never"
-    />
+
+              {/* Reviews Tab */}
+              <View style={[styles.tabPage, { width: screenWidth }]}>
+                <View style={styles.tabContent}>
+                  <View style={styles.reviewsHeader}>
+                    <Text style={styles.sectionTitle}>Customer Reviews</Text>
+                    <View style={styles.ratingSummary}>
+                      <Ionicons name="star" size={24} color="#F59E0B" />
+                      <Text style={styles.ratingNumber}>{averageRating}</Text>
+                      <Text style={styles.ratingCount}>
+                        ({storeReviews.length} reviews)
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.reviewsList}>
+                    {reviewsLoading ? (
+                      <View style={{ alignItems: "center", padding: 24 }}>
+                        <Text>Loading reviews...</Text>
+                      </View>
+                    ) : storeReviews.length > 0 ? (
+                      storeReviews.map((review) => {
+                        const product = storeProducts.find(
+                          (p) => p.id === review.product_id,
+                        );
+                        return (
+                          <View key={review.id} style={styles.reviewItem}>
+                            <View style={styles.reviewHeader}>
+                              <View style={styles.reviewerAvatar}>
+                                <Ionicons
+                                  name="person"
+                                  size={20}
+                                  color={colors.muted}
+                                />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.reviewerName}>
+                                  {userProfiles[review.user_id]?.full_name ||
+                                    "Customer"}
+                                </Text>
+                                <Text style={styles.productName}>
+                                  on {product?.title || "Unknown Product"}
+                                </Text>
+                                <View style={styles.reviewStars}>
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <Ionicons
+                                      key={star}
+                                      name={
+                                        star <= review.rating
+                                          ? "star"
+                                          : "star-outline"
+                                      }
+                                      size={14}
+                                      color="#F59E0B"
+                                    />
+                                  ))}
+                                </View>
+                              </View>
+                            </View>
+                            {review.comment && (
+                              <Text style={styles.reviewText}>
+                                {review.comment}
+                              </Text>
+                            )}
+                            <Text style={styles.reviewDate}>
+                              {new Date(review.created_at).toLocaleDateString()}
+                            </Text>
+                          </View>
+                        );
+                      })
+                    ) : (
+                      <View style={{ alignItems: "center", padding: 24 }}>
+                        <Ionicons
+                          name="chatbubble-outline"
+                          size={48}
+                          color={colors.muted}
+                        />
+                        <Text style={styles.emptyText}>No reviews yet</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        }
+        renderItem={() => null}
+        contentContainerStyle={styles.listContainer}
+        scrollEnabled={true}
+        scrollIndicatorInsets={{ top: 0 }}
+        overScrollMode="never"
+      />
+
+      {/* Status viewing now handled by StatusViewer screen */}
+    </>
   );
 };
 
@@ -678,6 +797,29 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.9)",
     fontSize: 13,
     fontWeight: "500",
+  },
+  followButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderWidth: 1.5,
+    borderColor: "#ef4444",
+  },
+  followButtonActive: {
+    backgroundColor: "#ef4444",
+    borderColor: "#ef4444",
+  },
+  followButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ef4444",
+  },
+  followButtonActiveText: {
+    color: "white",
   },
   badgesRow: {
     flexDirection: "row",
@@ -953,5 +1095,132 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     color: colors.dark,
+  },
+  // Status Styles
+  storeAvatarContainer: {
+    position: "relative",
+    borderRadius: 50,
+    padding: 3,
+  },
+  statusActive: {
+    borderWidth: 3,
+    borderColor: colors.primary,
+  },
+  statusBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    minWidth: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  statusBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  fullStatusImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  modalHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    zIndex: 10,
+  },
+  progressBars: {
+    flexDirection: "row",
+    gap: 4,
+    marginBottom: 16,
+  },
+  progressBar: {
+    flex: 1,
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    borderRadius: 2,
+  },
+  progressBarActive: {
+    backgroundColor: "#fff",
+  },
+  modalUserInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  modalUserInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  modalAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  modalUserName: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+  modalTime: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 12,
+  },
+  closeButton: {
+    padding: 8,
+  },
+  statusTextContainer: {
+    position: "absolute",
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    padding: 16,
+    borderRadius: 12,
+  },
+  fullStatusText: {
+    color: "#fff",
+    fontSize: 16,
+    lineHeight: 22,
+    textAlign: "center",
+  },
+  statusFooter: {
+    position: "absolute",
+    bottom: 40,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+  },
+  replyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingVertical: 14,
+    borderRadius: 30,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  replyButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
   },
 });

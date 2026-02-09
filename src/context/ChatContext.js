@@ -76,8 +76,14 @@ export const ChatProvider = ({ children }) => {
         .from("express_chat_conversations")
         .select(
           `
-          *,
-          seller:express_sellers!seller_id(id, name, avatar)
+          id,
+          user_id,
+          seller_id,
+          last_message,
+          last_message_at,
+          created_at,
+          updated_at,
+          express_sellers!seller_id(id, name, avatar)
         `,
         )
         .eq("user_id", user.id)
@@ -85,7 +91,12 @@ export const ChatProvider = ({ children }) => {
 
       if (error) throw error;
 
-      const conversationsData = data || [];
+      // Map the data to have a 'seller' property for consistency
+      const conversationsData = (data || []).map(conv => ({
+        ...conv,
+        seller: conv.express_sellers
+      }));
+
       setConversations(conversationsData);
       await saveToCache(conversationsData);
       setIsOnline(true);

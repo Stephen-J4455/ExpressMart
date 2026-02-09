@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,12 +7,14 @@ import {
   Pressable,
   RefreshControl,
   Image,
-  TextInput,
-  Animated,
+  ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { supabase } from "../lib/supabase";
 import { useChat } from "../context/ChatContext";
+import { useShop } from "../context/ShopContext";
 import { colors } from "../theme/colors";
 
 export const ChatsScreen = ({ navigation }) => {
@@ -20,57 +22,57 @@ export const ChatsScreen = ({ navigation }) => {
   const {
     conversations,
     isOnline,
-    lastSyncTime,
     isLoading,
     refreshConversations,
   } = useChat();
-  const [filteredConversations, setFilteredConversations] = useState([]);
+  const { followedSellers } = useShop();
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(40)).current;
-
-  // Opening animation
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 450,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fadeAnim, slideAnim]);
-
-  useEffect(() => {
-    filterConversations();
-  }, [conversations, searchQuery]);
-
-  const filterConversations = useCallback(() => {
-    if (!searchQuery.trim()) {
-      setFilteredConversations(conversations);
-      return;
-    }
-
-    const filtered = conversations.filter((item) => {
-      const sellerName = item.seller?.name || "";
-      return sellerName.toLowerCase().includes(searchQuery.toLowerCase());
-    });
-
-    setFilteredConversations(filtered);
-  }, [conversations, searchQuery]);
+  const [followedStatuses, setFollowedStatuses] = useState([]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshConversations();
+    await fetchFollowedStatuses();
     setRefreshing(false);
   };
+
+  const fetchFollowedStatuses = async () => {
+    try {
+      if (!followedSellers || followedSellers.length === 0) {
+        setFollowedStatuses([]);
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("express_seller_statuses")
+        .select("*, seller:express_sellers(id, name, avatar)")
+        .in("seller_id", followedSellers)
+        .eq("is_active", true)
+        .gt("expires_at", now)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // de-duplicate by seller_id, keeping latest per seller
+      const unique = [];
+      const seen = new Set();
+      (data || []).forEach((row) => {
+        if (!seen.has(row.seller_id)) {
+          seen.add(row.seller_id);
+          unique.push(row);
+        }
+      });
+
+      setFollowedStatuses(unique);
+    } catch (err) {
+      console.error("Error fetching followed statuses:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchFollowedStatuses();
+  }, [followedSellers]);
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "";
@@ -103,19 +105,16 @@ export const ChatsScreen = ({ navigation }) => {
         style={styles.conversationItem}
         onPress={() => navigation.navigate("Chat", { seller: item.seller })}
       >
-        <View style={styles.avatarContainer}>
+        <View style={styles.avatar}>
           {sellerAvatar ? (
-            <Image source={{ uri: sellerAvatar }} style={styles.avatar} />
+            <Image source={{ uri: sellerAvatar }} style={styles.avatarImage} />
           ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Ionicons name="storefront" size={24} color="#666" />
-            </View>
+            <Ionicons name="storefront" size={24} color={colors.primary} />
           )}
         </View>
-
         <View style={styles.conversationContent}>
           <View style={styles.conversationHeader}>
-            <Text style={styles.sellerName} numberOfLines={1}>
+            <Text style={styles.userName} numberOfLines={1}>
               {sellerName}
             </Text>
             <Text style={styles.timestamp}>{timestamp}</Text>
@@ -124,233 +123,204 @@ export const ChatsScreen = ({ navigation }) => {
             {item.last_message || "No messages yet"}
           </Text>
         </View>
+        <View style={styles.rightAction}>
+          {item.unread_count > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>{item.unread_count}</Text>
+            </View>
+          )}
+          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+        </View>
       </Pressable>
     );
   };
 
-  if (isLoading && !conversations.length) {
+  if (isLoading && !refreshing) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Chats</Text>
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading conversations...</Text>
-        </View>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading conversations...</Text>
       </View>
     );
   }
 
   return (
-    <Animated.View
-      style={[
-        [styles.container, { paddingTop: insets.top }],
-        {
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        },
-      ]}
-    >
-      <View>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Chats</Text>
-            {!isOnline && (
-              <View style={styles.offlineIndicator}>
-                <Ionicons name="cloud-offline" size={16} color="#ff6b6b" />
-                <Text style={styles.offlineText}>Offline</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <View style={styles.searchBar}>
-              <Ionicons
-                name="search"
-                size={16}
-                color="#666"
-                style={styles.searchIcon}
-              />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search conversations..."
-                placeholderTextColor="#666"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searchQuery.length > 0 && (
-                <Pressable
-                  onPress={() => setSearchQuery("")}
-                  style={styles.clearButton}
-                >
-                  <Ionicons name="close-circle" size={16} color="#666" />
-                </Pressable>
-              )}
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.headerRow}>
+          <Text style={styles.headerTitle}>Messages</Text>
+          {!isOnline && (
+            <View style={styles.offlineBadge}>
+              <Ionicons name="cloud-offline" size={14} color="#ff6b6b" />
             </View>
-          </View>
+          )}
+        </View>
+        <View style={styles.headerSubtitleRow}>
+          <View style={styles.onlineDot} />
+          <Text style={styles.headerSubtitle}>Customer Support</Text>
         </View>
 
-        {/* Conversations List */}
-        <FlatList
-          data={filteredConversations}
-          keyExtractor={(item) => item.id}
-          renderItem={renderConversation}
-          contentContainerStyle={styles.listContainer}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              {searchQuery ? (
-                <>
-                  <View style={styles.emptyIconContainer}>
-                    <Ionicons name="search" size={48} color="#ccc" />
-                  </View>
-                  <Text style={styles.emptyText}>No results found</Text>
-                  <Text style={styles.emptySubtext}>
-                    Try searching with a different keyword
+        {/* Followed Sellers Status Section - in Header */}
+        {followedStatuses.length > 0 && (
+          <View style={styles.headerStatusSection}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.statusScrollContent}
+            >
+              {followedStatuses.map((status) => (
+                <Pressable
+                  key={status.id}
+                  style={styles.statusCircle}
+                  onPress={() => navigation.navigate("StatusViewer", { status })}
+                >
+                  <Image
+                    source={{ uri: status.seller.avatar }}
+                    style={styles.statusAvatar}
+                  />
+                  <View style={styles.statusIndicator} />
+                  <Text style={styles.statusSellerName} numberOfLines={1}>
+                    {status.seller.name}
                   </Text>
-                </>
-              ) : (
-                <>
-                  <View style={styles.emptyIconContainer}>
-                    <Ionicons
-                      name="chatbubble-outline"
-                      size={64}
-                      color="#ccc"
-                    />
-                  </View>
-                  <Text style={styles.emptyText}>No conversations yet</Text>
-                  <Text style={styles.emptySubtext}>
-                    Start chatting with sellers to see your messages here
-                  </Text>
-                  <Pressable
-                    style={styles.exploreButton}
-                    onPress={() => navigation.navigate("Home")}
-                  >
-                    <Text style={styles.exploreButtonText}>Explore Stores</Text>
-                  </Pressable>
-                </>
-              )}
-            </View>
-          }
-          ListFooterComponent={
-            lastSyncTime && (
-              <View style={styles.syncIndicator}>
-                <Text style={styles.syncText}>
-                  Last synced:{" "}
-                  {lastSyncTime.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </Text>
-              </View>
-            )
-          }
-        />
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </View>
-    </Animated.View>
+
+      <FlatList
+        data={conversations}
+        keyExtractor={(item) => item.id}
+        renderItem={renderConversation}
+        contentContainerStyle={styles.listContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconContainer}>
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={48}
+                color={colors.primary}
+              />
+            </View>
+            <Text style={styles.emptyText}>No conversations yet</Text>
+            <Text style={styles.emptySubtext}>
+              Start chatting with sellers{"\n"}to see your messages here.
+            </Text>
+            <Pressable
+              style={styles.exploreButton}
+              onPress={() => navigation.navigate("Home")}
+            >
+              <Text style={styles.exploreButtonText}>Explore Stores</Text>
+            </Pressable>
+          </View>
+        }
+      />
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-  },
-  header: {
-    backgroundColor: "#fff",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e0e0e0",
-  },
-  headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#000",
-    letterSpacing: -0.5,
-  },
-  offlineIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#ffeaea",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  offlineText: {
-    fontSize: 12,
-    color: "#ff6b6b",
-    marginLeft: 4,
-    fontWeight: "500",
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    height: 36,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: "#000",
-  },
-  clearButton: {
-    padding: 4,
+    backgroundColor: colors.light,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: colors.light,
+    gap: 12,
   },
   loadingText: {
-    color: "#666",
-    fontSize: 16,
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  header: {
+    backgroundColor: "#fff",
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: colors.dark,
+    letterSpacing: -0.5,
+  },
+  offlineBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#ffeaea",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerSubtitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+    gap: 6,
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#10B981",
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: colors.muted,
+    fontWeight: "500",
   },
   listContainer: {
-    paddingVertical: 8,
+    padding: 16,
+    paddingTop: 24,
   },
   conversationItem: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e0e0e0",
-  },
-  avatarContainer: {
-    marginRight: 12,
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   avatar: {
     width: 56,
     height: 56,
-    borderRadius: 28,
-  },
-  avatarPlaceholder: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#fff",
+    borderRadius: 18,
+    backgroundColor: colors.light,
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 16,
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
   },
   conversationContent: {
     flex: 1,
@@ -359,70 +329,138 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  sellerName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#000",
+  userName: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.dark,
     flex: 1,
   },
   timestamp: {
     fontSize: 12,
-    color: "#666",
-    marginLeft: 8,
+    color: colors.muted,
+    fontWeight: "500",
   },
   lastMessage: {
     fontSize: 14,
-    color: "#666",
-    lineHeight: 18,
+    color: colors.muted,
+    fontWeight: "400",
+  },
+  rightAction: {
+    alignItems: "flex-end",
+    gap: 8,
+    marginLeft: 8,
+  },
+  unreadBadge: {
+    backgroundColor: colors.primary,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  unreadText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  headerStatusSection: {
+    marginTop: 16,
+    paddingVertical: 12,
+  },
+  statusSection: {
+    backgroundColor: "#fff",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  statusSectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.dark,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  statusScrollContent: {
+    paddingHorizontal: 12,
+    gap: 12,
+  },
+  statusCircle: {
+    alignItems: "center",
+    width: 70,
+  },
+  statusAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2.5,
+    borderColor: colors.primary,
+    marginBottom: 6,
+  },
+  statusIndicator: {
+    position: "absolute",
+    bottom: 6,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  statusSellerName: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: colors.muted,
+    textAlign: "center",
   },
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 80,
-    paddingHorizontal: 32,
+    paddingVertical: 100,
   },
   emptyIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#f8f8f8",
+    width: 100,
+    height: 100,
+    borderRadius: 35,
+    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 20,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    elevation: 5,
   },
   emptyText: {
     fontSize: 20,
-    fontWeight: "600",
-    color: "#000",
-    textAlign: "center",
+    fontWeight: "800",
+    color: colors.dark,
     marginBottom: 8,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 15,
+    color: colors.muted,
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 22,
     marginBottom: 24,
   },
   exploreButton: {
     backgroundColor: colors.primary,
     paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
+    paddingVertical: 14,
+    borderRadius: 25,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   exploreButtonText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
-  },
-  syncIndicator: {
-    alignItems: "center",
-    paddingVertical: 16,
-  },
-  syncText: {
-    fontSize: 12,
-    color: "#666",
+    fontWeight: "700",
   },
 });

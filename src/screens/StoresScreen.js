@@ -5,23 +5,33 @@ import {
     StyleSheet,
     FlatList,
     Pressable,
-    SafeAreaView,
     ActivityIndicator,
+    TextInput,
+    RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShop } from "../context/ShopContext";
 import { colors } from "../theme/colors";
 import { SellerCard } from "../components/SellerCard";
 
 export const StoresScreen = () => {
     const navigation = useNavigation();
-    const { sellers, loading } = useShop();
+    const insets = useSafeAreaInsets();
+    const { sellers, loading, refreshSellers } = useShop();
     const [searchQuery, setSearchQuery] = useState("");
+    const [refreshing, setRefreshing] = useState(false);
 
     const filteredSellers = sellers.filter((seller) =>
         seller.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        if (refreshSellers) await refreshSellers();
+        setRefreshing(false);
+    };
 
     const renderStoreCard = ({ item }) => (
         <SellerCard
@@ -31,34 +41,52 @@ export const StoresScreen = () => {
     );
 
     return (
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
             {/* Header */}
-            <View style={styles.header}>
-                <Pressable
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Ionicons name="arrow-back" size={24} color={colors.dark} />
-                </Pressable>
-                <Text style={styles.headerTitle}>All Stores</Text>
-                <View style={{ width: 44 }} />
-            </View>
+            <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+                <View style={styles.headerTop}>
+                    <Pressable
+                        style={styles.backButton}
+                        onPress={() => navigation.goBack()}
+                    >
+                        <Ionicons name="arrow-back" size={22} color={colors.dark} />
+                    </Pressable>
+                    <View style={styles.headerTitleContainer}>
+                        <Text style={styles.headerTitle}>All Stores</Text>
+                        <View style={styles.storeCountBadge}>
+                            <Text style={styles.storeCountText}>{sellers.length}</Text>
+                        </View>
+                    </View>
+                    <Pressable style={styles.filterButton}>
+                        <Ionicons name="options-outline" size={20} color={colors.dark} />
+                    </Pressable>
+                </View>
 
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
-                <Ionicons name="search" size={20} color={colors.muted} />
-                <Text
-                    style={styles.searchPlaceholder}
-                    onPress={() => navigation.navigate("Search")}
-                >
-                    Search stores...
-                </Text>
+                {/* Search Bar */}
+                <View style={styles.searchContainer}>
+                    <View style={styles.searchBar}>
+                        <Ionicons name="search" size={18} color={colors.muted} />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search stores..."
+                            placeholderTextColor={colors.muted}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                        />
+                        {searchQuery.length > 0 && (
+                            <Pressable onPress={() => setSearchQuery("")}>
+                                <Ionicons name="close-circle" size={18} color={colors.muted} />
+                            </Pressable>
+                        )}
+                    </View>
+                </View>
             </View>
 
             {/* Store Grid */}
-            {loading ? (
+            {loading && !refreshing ? (
                 <View style={styles.centerContainer}>
                     <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={styles.loadingText}>Loading stores...</Text>
                 </View>
             ) : filteredSellers.length > 0 ? (
                 <FlatList
@@ -69,88 +97,172 @@ export const StoresScreen = () => {
                     columnWrapperStyle={styles.columnWrapper}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            tintColor={colors.primary}
+                        />
+                    }
                 />
             ) : (
                 <View style={styles.centerContainer}>
-                    <Ionicons name="storefront-outline" size={64} color={colors.muted} />
+                    <View style={styles.emptyIconContainer}>
+                        <Ionicons name="storefront-outline" size={48} color={colors.primary} />
+                    </View>
                     <Text style={styles.emptyTitle}>No stores found</Text>
                     <Text style={styles.emptySubtitle}>
-                        Try adjusting your search
+                        {searchQuery
+                            ? "Try a different search term"
+                            : "Check back later for new stores"}
                     </Text>
+                    {searchQuery && (
+                        <Pressable
+                            style={styles.clearSearchButton}
+                            onPress={() => setSearchQuery("")}
+                        >
+                            <Text style={styles.clearSearchText}>Clear Search</Text>
+                        </Pressable>
+                    )}
                 </View>
             )}
-        </SafeAreaView>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.light,
+        backgroundColor: "#F8FAFC",
     },
     header: {
+        backgroundColor: "#fff",
+        paddingHorizontal: 20,
+        paddingBottom: 20,
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
+        shadowColor: "#000",
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 5,
+    },
+    headerTop: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        paddingHorizontal: 8,
-        paddingVertical: 12,
-        paddingTop: 35,
-        backgroundColor: "#fff",
-        borderBottomWidth: 1,
-        borderBottomColor: colors.light,
+        marginBottom: 16,
     },
     backButton: {
-        padding: 8,
-        marginLeft: -8,
+        width: 40,
+        height: 40,
+        borderRadius: 14,
+        backgroundColor: "#F8FAFC",
+        alignItems: "center",
+        justifyContent: "center",
     },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: colors.dark,
-    },
-    searchContainer: {
+    headerTitleContainer: {
         flexDirection: "row",
         alignItems: "center",
-        marginHorizontal: 8,
-        marginVertical: 12,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        backgroundColor: "#fff",
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: colors.light,
+        gap: 10,
     },
-    searchPlaceholder: {
-        marginLeft: 10,
-        fontSize: 14,
-        color: colors.muted,
+    headerTitle: {
+        fontSize: 22,
+        fontWeight: "800",
+        color: colors.dark,
+        letterSpacing: -0.5,
+    },
+    storeCountBadge: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    storeCountText: {
+        fontSize: 12,
+        fontWeight: "700",
+        color: "#fff",
+    },
+    filterButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 14,
+        backgroundColor: "#F8FAFC",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    searchContainer: {
+        marginTop: 4,
+    },
+    searchBar: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#F8FAFC",
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 10,
+    },
+    searchInput: {
         flex: 1,
+        fontSize: 15,
+        color: colors.dark,
+        fontWeight: "500",
     },
     centerContainer: {
         flex: 1,
         alignItems: "center",
         justifyContent: "center",
+        paddingHorizontal: 32,
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 15,
+        color: colors.muted,
+        fontWeight: "500",
+    },
+    emptyIconContainer: {
+        width: 100,
+        height: 100,
+        borderRadius: 35,
+        backgroundColor: "#fff",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 20,
+        shadowColor: colors.primary,
+        shadowOpacity: 0.1,
+        shadowRadius: 15,
+        elevation: 5,
     },
     emptyTitle: {
-        fontSize: 16,
-        fontWeight: "600",
+        fontSize: 20,
+        fontWeight: "800",
         color: colors.dark,
-        marginTop: 12,
+        marginBottom: 8,
     },
     emptySubtitle: {
-        fontSize: 14,
+        fontSize: 15,
         color: colors.muted,
-        marginTop: 4,
+        textAlign: "center",
+        lineHeight: 22,
+    },
+    clearSearchButton: {
+        marginTop: 20,
+        backgroundColor: colors.primary,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 20,
+    },
+    clearSearchText: {
+        color: "#fff",
+        fontSize: 15,
+        fontWeight: "600",
     },
     listContent: {
-        paddingHorizontal: 2,
-        paddingVertical: 8,
+        padding: 16,
+        paddingTop: 24,
     },
     columnWrapper: {
-        gap: 8,
-        paddingHorizontal: 8,
-        marginBottom: 8,
-        flex: 1,
-        justifyContent: "space-between",
+        gap: 16,
+        marginBottom: 16,
     },
 });

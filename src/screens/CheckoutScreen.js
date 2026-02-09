@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import { useShop } from "../context/ShopContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
@@ -24,6 +25,7 @@ export const CheckoutScreen = ({ navigation }) => {
   const route = useRoute();
   const { user, profile, isAuthenticated } = useAuth();
   const { items, total, clearCart } = useCart();
+  const { settings } = useShop();
   const toast = useToast();
 
   const [addresses, setAddresses] = useState([]);
@@ -38,9 +40,10 @@ export const CheckoutScreen = ({ navigation }) => {
     state: "",
   });
 
-  // Shipping calculation
-  const shippingFee = total >= 10000 ? 0 : 500;
-  const grandTotal = total + shippingFee;
+  // Service fee calculation from settings
+  const defaultFee = parseInt(settings?.service_fee || "500");
+  const serviceFee = total >= 10000 ? 0 : defaultFee;
+  const grandTotal = total + serviceFee;
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -182,7 +185,7 @@ export const CheckoutScreen = ({ navigation }) => {
       orderData: {
         shippingAddress: selectedAddress,
         paymentMethod: "paystack",
-        shippingFee,
+        serviceFee,
       },
     });
   };
@@ -381,16 +384,16 @@ export const CheckoutScreen = ({ navigation }) => {
             <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Shipping</Text>
+            <Text style={styles.summaryLabel}>Service Fee</Text>
             <Text
               style={[
                 styles.summaryValue,
-                shippingFee === 0 && styles.freeShipping,
+                serviceFee === 0 && styles.freeShipping,
               ]}
             >
-              {shippingFee === 0
+              {serviceFee === 0
                 ? "FREE"
-                : `GH₵${shippingFee.toLocaleString()}`}
+                : `GH₵${serviceFee.toLocaleString()}`}
             </Text>
           </View>
           <View style={styles.divider} />

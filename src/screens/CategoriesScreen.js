@@ -73,9 +73,10 @@ export const CategoriesScreen = ({ navigation }) => {
     <View style={styles.productWrapper}>
       <ProductCard
         product={item}
-        onPress={() => navigation.navigate("ProductDetails", { product: item })}
+        onPress={() => navigation.navigate("ProductDetail", { product: item })}
         style={styles.productCard}
         hideCta={true}
+        compact={true}
       />
     </View>
   );
@@ -211,15 +212,21 @@ const styles = StyleSheet.create({
   },
   productsRow: {
     justifyContent: 'space-between',
+    gap: 12,
   },
   productWrapper: {
-    width: '48%',
-    marginBottom: 12,
+    width: '48.5%',
   },
   productCard: {
     width: '100%',
-    minWidth: 0, // Override default minWidth from ProductCard component
-    height: 220, // Decreased size and removed button
+    minWidth: 0,
+    height: 190,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
   emptyState: {
     alignItems: 'center',

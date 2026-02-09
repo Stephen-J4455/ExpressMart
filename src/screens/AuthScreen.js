@@ -15,6 +15,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme/colors";
 
+import * as WebBrowser from "expo-web-browser";
+import { supabase } from "../lib/supabase";
+import { useToast } from "../context/ToastContext";
+
+WebBrowser.maybeCompleteAuthSession();
+
 export const AuthScreen = ({ navigation }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -22,25 +28,61 @@ export const AuthScreen = ({ navigation }) => {
   const [fullName, setFullName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const { signIn, signUp } = useAuth();
+  const toast = useToast();
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'expressmart://',
+          skipBrowserRedirect: false,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        await WebBrowser.openAuthSessionAsync(
+          data.url,
+          "expressmart://"
+        );
+      }
+    } catch (error) {
+      toast.error(error.message || "Google Sign-In failed");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!email || !password) {
+      toast.error("Please fill in all fields");
       return;
     }
 
     setLoading(true);
     try {
       if (isLogin) {
-        await signIn(email, password);
+        const { error } = await signIn(email, password);
+        if (error) throw error;
       } else {
-        if (!fullName) return;
-        const { error } = await signUp(email, password, fullName);
-        if (!error) {
-          setIsLogin(true);
+        if (!fullName) {
+          toast.error("Please enter your full name");
+          setLoading(false);
+          return;
         }
+        const { error } = await signUp(email, password, fullName);
+        if (error) throw error;
+        setIsLogin(true);
+        toast.success("Account created! Please sign in.");
       }
+    } catch (error) {
+      toast.error(error.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -167,9 +209,19 @@ export const AuthScreen = ({ navigation }) => {
             <View style={styles.dividerLine} />
           </View>
 
-          <Pressable style={styles.socialButton} onPress={() => {}}>
-            <Ionicons name="logo-google" size={20} color={colors.dark} />
-            <Text style={styles.socialButtonText}>Continue with Google</Text>
+          <Pressable
+            style={[styles.socialButton, googleLoading && { opacity: 0.7 }]}
+            onPress={handleGoogleLogin}
+            disabled={googleLoading || loading}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color={colors.dark} />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={20} color={colors.dark} />
+                <Text style={styles.socialButtonText}>Continue with Google</Text>
+              </>
+            )}
           </Pressable>
 
           <Pressable

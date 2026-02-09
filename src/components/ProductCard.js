@@ -25,7 +25,7 @@ const SELLER_BADGE_CONFIG = {
   premium: { label: "Premium", icon: "star", color: "#EAB308" },
 };
 
-export const ProductCard = ({ product, style, variant = "grid", onPress, hideCta }) => {
+export const ProductCard = ({ product, style, variant = "grid", onPress, hideCta, compact }) => {
   const { addToCart } = useCart();
   const toast = useToast();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -384,7 +384,7 @@ export const ProductCard = ({ product, style, variant = "grid", onPress, hideCta
         </View>
         <View style={styles.content}>
           <View style={styles.vendorRow}>
-            <Text style={styles.vendor}>
+            <Text style={compact ? styles.vendorCompact : styles.vendor}>
               {product.seller?.name || product.vendor}
             </Text>
             {product.seller?.badges && product.seller.badges.length > 0 && (
@@ -392,31 +392,31 @@ export const ProductCard = ({ product, style, variant = "grid", onPress, hideCta
                 {(() => {
                   const badge = SELLER_BADGE_CONFIG[product.seller.badges[0]];
                   return badge ? (
-                    <Ionicons name={badge.icon} size={12} color={badge.color} />
+                    <Ionicons name={badge.icon} size={compact ? 10 : 12} color={badge.color} />
                   ) : null;
                 })()}
               </View>
             )}
           </View>
-          <Text numberOfLines={1} style={styles.title}>
+          <Text numberOfLines={1} style={compact ? styles.titleCompact : styles.title}>
             {product.title}
           </Text>
           <View style={styles.badgeRow}>
             {product.badges?.slice(0, 2).map((label) => (
               <View key={label} style={styles.badge}>
-                <Text numberOfLines={1} style={styles.badgeText}>
+                <Text numberOfLines={1} style={compact ? styles.badgeTextCompact : styles.badgeText}>
                   {label}
                 </Text>
               </View>
             ))}
           </View>
           <View style={styles.metaRow}>
-            <Text style={styles.price}>
+            <Text style={compact ? styles.priceCompact : styles.price}>
               {formatPrice(product.price, product.discount)}
             </Text>
             <View style={styles.ratingRow}>
-              <Ionicons name="star" size={14} color={colors.secondary} />
-              <Text style={styles.ratingText}>
+              <Ionicons name="star" size={compact ? 12 : 14} color={colors.secondary} />
+              <Text style={compact ? styles.ratingTextCompact : styles.ratingText}>
                 {product.rating && product.rating > 0
                   ? product.rating.toFixed(1)
                   : "New"}
@@ -558,35 +558,37 @@ export const ProductCard = ({ product, style, variant = "grid", onPress, hideCta
 
 const styles = StyleSheet.create({
   card: {
-    minWidth: 160,
-    height: 320,
+    minWidth: 165,
+    height: 300,
     backgroundColor: "#fff",
-    borderRadius: 16,
+    borderRadius: 24,
     marginBottom: 10,
     shadowColor: "#000",
     shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
     overflow: "hidden",
   },
   listCard: {
     flexDirection: "row",
-    height: 140,
+    height: 150,
     alignItems: "stretch",
+    borderRadius: 20,
   },
   imageContainer: {
     position: "relative",
     width: "100%",
-    height: 150,
+    height: 140,
+    backgroundColor: "#F8FAFC",
   },
   image: {
-    width: 160,
-    height: 150,
+    width: 165,
+    height: 140,
   },
   imageIndicators: {
     position: "absolute",
-    bottom: 8,
+    bottom: 10,
     left: 0,
     right: 0,
     flexDirection: "row",
@@ -594,19 +596,22 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   imageIndicator: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 5,
+    height: 5,
+    borderRadius: 3,
     backgroundColor: "rgba(255, 255, 255, 0.5)",
   },
   imageIndicatorActive: {
     backgroundColor: "#fff",
-    width: 12,
+    width: 16,
   },
   listImageContainer: {
     position: "relative",
     width: 130,
     marginRight: 12,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#F8FAFC",
   },
   listImage: {
     width: 130,
@@ -622,72 +627,120 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   content: {
-    padding: 12,
-    paddingTop: 10,
+    padding: 14,
+    paddingTop: 12,
     flex: 1,
   },
   vendorRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 6,
   },
   vendor: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.muted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    fontWeight: "600",
+  },
+  vendorCompact: {
+    fontSize: 9,
+    color: colors.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    fontWeight: "600",
+  },
+  sellerBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#F0FDF4",
+    alignItems: "center",
+    justifyContent: "center",
   },
   title: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: colors.dark,
     marginTop: 4,
+    letterSpacing: -0.2,
+  },
+  titleCompact: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.dark,
+    marginTop: 3,
+    letterSpacing: -0.2,
   },
   badgeRow: {
     flexDirection: "row",
     gap: 6,
     flexWrap: "nowrap",
-    marginTop: 8,
+    marginTop: 6,
     overflow: "hidden",
   },
   badge: {
-    backgroundColor: colors.light,
+    backgroundColor: "#EEF2FF",
     borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     flexShrink: 1,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.primary,
+    fontWeight: "600",
+    numberOfLines: 1,
+  },
+  badgeTextCompact: {
+    fontSize: 8,
+    color: colors.primary,
+    fontWeight: "600",
     numberOfLines: 1,
   },
   metaRow: {
-    marginTop: 12,
+    marginTop: 10,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   price: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 17,
+    fontWeight: "800",
     color: colors.dark,
+    letterSpacing: -0.3,
+  },
+  priceCompact: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.dark,
+    letterSpacing: -0.3,
   },
   ratingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
+    backgroundColor: "#FEF9C3",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   ratingText: {
-    fontWeight: "600",
-    color: colors.muted,
+    fontWeight: "700",
+    fontSize: 12,
+    color: "#92400E",
+  },
+  ratingTextCompact: {
+    fontWeight: "700",
+    fontSize: 10,
+    color: "#92400E",
   },
   cta: {
-    marginTop: 8,
+    marginTop: 10,
   },
   ctaGradient: {
-    height: 36,
-    borderRadius: 10,
+    height: 38,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -696,13 +749,13 @@ const styles = StyleSheet.create({
   ctaText: {
     color: "#fff",
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: 13,
   },
   listContent: {
     flex: 1,
     justifyContent: "space-between",
-    paddingVertical: 4,
-    paddingRight: 4,
+    paddingVertical: 8,
+    paddingRight: 8,
   },
   listTop: {
     flex: 1,
@@ -717,9 +770,9 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   listCtaGradient: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -730,115 +783,115 @@ const styles = StyleSheet.create({
   },
   variantModal: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 20,
-    maxHeight: "50%",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 28,
+    maxHeight: "55%",
   },
   variantHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   variantTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
     color: colors.dark,
   },
   variantSection: {
-    marginBottom: 14,
+    marginBottom: 18,
   },
   variantLabel: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: colors.dark,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   variantOptionsRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
     flexWrap: "wrap",
   },
   colorOption: {
-    padding: 2,
+    padding: 3,
   },
   colorOptionSelected: {
     opacity: 1,
   },
   smallColorDot: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 2,
-    borderColor: "#ddd",
+    borderColor: "#E5E7EB",
   },
   smallColorDotSelected: {
     borderColor: colors.primary,
     borderWidth: 3,
   },
   sizeOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: colors.light,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#E5E7EB",
     backgroundColor: "#fff",
-    minWidth: 40,
+    minWidth: 48,
     alignItems: "center",
     justifyContent: "center",
   },
   sizeOptionSelected: {
     borderColor: colors.primary,
-    backgroundColor: colors.primary + "10",
+    backgroundColor: "#EEF2FF",
   },
   sizeOptionText: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.dark,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   sizeOptionTextSelected: {
     color: colors.primary,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   variantAddButton: {
-    marginTop: 16,
-    borderRadius: 8,
+    marginTop: 20,
+    borderRadius: 14,
     overflow: "hidden",
   },
   variantAddGradient: {
-    paddingVertical: 12,
+    paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   variantAddText: {
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "700",
     color: "#fff",
   },
   discountBadge: {
     position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: colors.accent,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    top: 10,
+    left: 10,
+    backgroundColor: "#EF4444",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   discountBadgeList: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    backgroundColor: "#EF4444",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
     marginLeft: 8,
   },
   discountText: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#fff",
-    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   priceRow: {
     flexDirection: "row",

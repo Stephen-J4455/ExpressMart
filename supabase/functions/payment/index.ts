@@ -111,15 +111,19 @@ serve(async (req) => {
     const { shippingAddress, shippingFee } = orderData;
     const total = subtotal + (shippingFee || 0);
 
-    console.log("💰 Order totals:", { subtotal, shippingFee, total });
+    // Get seller_id from first item (assuming single seller per order for now)
+    const sellerId = cartItems[0].product.seller_id;
+
+    console.log("💰 Order totals:", { subtotal, shippingFee, total, sellerId });
 
     // Create order
     const orderPayload = {
       user_id: user.id,
-      vendor: "ExpressMart",
-      status: "confirmed",
+      seller_id: sellerId, // New field added
+      vendor: "ExpressMart", // Maintaining vendor name for legacy compatibility
+      status: "processing",
       subtotal,
-      shipping_fee: shippingFee || 0,
+      service_fee: shippingFee || 0,
       total,
       currency: "GHS",
       customer: {
@@ -151,6 +155,7 @@ serve(async (req) => {
     const orderItems = cartItems.map((item: any) => ({
       order_id: order.id,
       product_id: item.product.id,
+      seller_id: sellerId, // Added missing seller_id
       title: item.product.title,
       thumbnail: item.product.thumbnail || item.product.images?.[0],
       quantity: item.quantity,

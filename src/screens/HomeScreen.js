@@ -16,6 +16,7 @@ import { PromoBanner } from "../components/PromoBanner";
 import { SectionHeader } from "../components/SectionHeader";
 import { SellerScroller } from "../components/SellerScroller";
 import { AdRenderer } from "../components/AdBanner";
+import { StatusRow } from "../components/StatusRow";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
 import { colors } from "../theme/colors";
@@ -123,7 +124,7 @@ export const HomeScreen = ({ navigation }) => {
         />
 
         {homeAds.length > 0 && (
-          <View style={styles.sectionSpacer}>
+          <View style={styles.adContainer}>
             <FlatList
               ref={adScrollRef}
               horizontal
@@ -163,6 +164,14 @@ export const HomeScreen = ({ navigation }) => {
             />
           </View>
         )}
+
+        <StatusRow
+          onSelectStatus={(status) => {
+            if (status) {
+              navigation.navigate("StatusViewer", { status });
+            }
+          }}
+        />
 
         <SectionHeader
           title="Stores"
@@ -218,7 +227,7 @@ export const HomeScreen = ({ navigation }) => {
             ))}
         </View>
         {featuredAds.length > 0 && (
-          <View style={styles.sectionSpacer}>
+          <View style={styles.adContainer}>
             <AdRenderer ads={featuredAds} />
           </View>
         )}
@@ -235,6 +244,11 @@ const styles = StyleSheet.create({
   sectionSpacer: {
     gap: 8,
     marginTop: 8,
+  },
+  adContainer: {
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 12,
   },
   grid: {
     flexDirection: "row",

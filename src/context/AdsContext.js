@@ -26,7 +26,7 @@ export const AdsProvider = ({ children }) => {
             const { data, error } = await supabase
                 .from("express_ads")
                 .select("*")
-                .eq("placement", placement)
+                .ilike("placement", `%${placement}%`)
                 .eq("is_active", true)
                 .or(`start_date.is.null,start_date.lte.${now}`)
                 .or(`end_date.is.null,end_date.gte.${now}`)

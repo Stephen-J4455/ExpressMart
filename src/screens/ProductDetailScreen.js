@@ -800,17 +800,40 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                     reviewComments[review.id].length > 0 && (
                       <View style={styles.commentsSection}>
                         {reviewComments[review.id].map((comment) => (
-                          <View key={comment.id} style={styles.commentItem}>
-                            <Text style={styles.commentText}>
+                          <View
+                            key={comment.id}
+                            style={[
+                              styles.commentItem,
+                              comment.seller_id && styles.sellerReplyItem,
+                            ]}
+                          >
+                            <View style={styles.commentHeader}>
                               <Text style={styles.commentAuthor}>
-                                {comment.user_id === user?.id ? "You" : "User"}:
-                              </Text>{" "}
+                                {comment.seller_id ? (
+                                  <View style={styles.sellerReplyBadge}>
+                                    <Ionicons
+                                      name="storefront"
+                                      size={12}
+                                      color="#fff"
+                                    />
+                                    <Text style={styles.sellerReplyText}>
+                                      Seller Reply
+                                    </Text>
+                                  </View>
+                                ) : comment.user_id === user?.id ? (
+                                  "You"
+                                ) : (
+                                  "User"
+                                )}
+                              </Text>
+                              <Text style={styles.commentDate}>
+                                {new Date(
+                                  comment.created_at,
+                                ).toLocaleDateString()}
+                              </Text>
+                            </View>
+                            <Text style={styles.commentBody}>
                               {comment.comment}
-                            </Text>
-                            <Text style={styles.commentDate}>
-                              {new Date(
-                                comment.created_at,
-                              ).toLocaleDateString()}
                             </Text>
                           </View>
                         ))}
@@ -837,7 +860,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                         style={[
                           styles.commentButton,
                           submittingComment[review.id] &&
-                            styles.commentButtonDisabled,
+                          styles.commentButtonDisabled,
                         ]}
                         onPress={() => submitComment(review.id)}
                         disabled={submittingComment[review.id]}
@@ -1367,6 +1390,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.dark,
     lineHeight: 20,
+    marginBottom: 8,
+  },
+  commentsSection: {
+    marginTop: 12,
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.light,
+    gap: 12,
+  },
+  commentItem: {
+    backgroundColor: colors.light + "40",
+    padding: 10,
+    borderRadius: 10,
+  },
+  sellerReplyItem: {
+    backgroundColor: colors.primary + "10",
+    borderColor: colors.primary + "30",
+    borderWidth: 1,
+  },
+  commentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  commentAuthor: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.dark,
+  },
+  commentDate: {
+    fontSize: 10,
+    color: colors.muted,
+  },
+  commentBody: {
+    fontSize: 13,
+    color: colors.dark,
+    lineHeight: 18,
+  },
+  sellerReplyBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 4,
+  },
+  sellerReplyText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "800",
   },
   footer: {
     padding: 16,
