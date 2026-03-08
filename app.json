@@ -1,0 +1,73 @@
+{
+  "expo": {
+    "name": "ExpressMart",
+    "slug": "ExpressMart",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/express.png",
+    "userInterfaceStyle": "light",
+    "scheme": "expressmart",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/express.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.stephenj3.ExpressMart",
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      }
+    },
+    "android": {
+      "edgeToEdgeEnabled": true,
+      "package": "com.stephenj3.expressmart",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "com.google.android.c2dm.permission.RECEIVE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "expressmart"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/express.png"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/express.png",
+          "color": "#ffffff",
+          "androidMode": "default",
+          "androidCollapsedTitle": "ExpressMart"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {},
+      "firebaseApiKey": "AIzaSyBqrV1yGWsLj17JXFwfIWRP-sqX6hp8vLk",
+      "firebaseAuthDomain": "expressmart-7d550.firebaseapp.com",
+      "firebaseProjectId": "expressmart-7d550",
+      "firebaseStorageBucket": "expressmart-7d550.firebasestorage.app",
+      "firebaseMessagingSenderId": "499123636329",
+      "firebaseAppId": "1:499123636329:web:9a96c3d4b6ed11c3f57af8",
+      "firebaseVapidKey": "YOUR_VAPID_KEY",
+      "measurementId": "G-Q63D7TJQRK"
+    }
+  }
+}
