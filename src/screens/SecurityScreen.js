@@ -5,7 +5,6 @@ import {
   Text,
   View,
   Switch,
-  Alert,
 } from "react-native";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,47 +17,10 @@ import { useResponsive } from "../hooks/useResponsive";
 export const SecurityScreen = ({ navigation }) => {
   const { user } = useAuth();
   const toast = useToast();
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [loginAlerts, setLoginAlerts] = useState(true);
   const { isWide, horizontalPadding } = useResponsive();
 
   const securityItems = [
-    {
-      icon: "shield-checkmark-outline",
-      label: "Two-Factor Authentication",
-      description: "Add an extra layer of security to your account",
-      type: "switch",
-      value: twoFactorEnabled,
-      onValueChange: (value) => {
-        if (value) {
-          Alert.alert(
-            "Enable 2FA",
-            "Two-factor authentication will be enabled. You'll need to set up an authenticator app.",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Enable",
-                onPress: () => {
-                  setTwoFactorEnabled(true);
-                  toast.success("Two-factor authentication enabled!");
-                },
-              },
-            ],
-          );
-        } else {
-          setTwoFactorEnabled(false);
-        }
-      },
-    },
-    {
-      icon: "finger-print-outline",
-      label: "Biometric Login",
-      description: "Use fingerprint or face ID to sign in",
-      type: "switch",
-      value: biometricEnabled,
-      onValueChange: setBiometricEnabled,
-    },
     {
       icon: "notifications-outline",
       label: "Login Alerts",

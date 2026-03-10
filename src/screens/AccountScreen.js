@@ -43,9 +43,9 @@ const quickActions = [
     bg: "#F0FDF4",
   },
   {
-    icon: "card",
-    label: "Payments",
-    screen: "Payments",
+    icon: "people",
+    label: "Following",
+    screen: "Following",
     color: "#A855F7",
     bg: "#FAF5FF",
   },
@@ -198,41 +198,6 @@ export const AccountScreen = ({ navigation }) => {
                 color={colors.primary}
               />
             </Pressable>
-          </View>
-
-          {/* Membership Card */}
-          <View style={styles.memberCard}>
-            <View style={styles.memberCardTop}>
-              <View style={styles.memberBadge}>
-                <Ionicons name="diamond" size={14} color="#F59E0B" />
-                <Text style={styles.memberText}>Premium</Text>
-              </View>
-              <View style={styles.pointsBadge}>
-                <Ionicons name="star" size={12} color="#F59E0B" />
-                <Text style={styles.memberPoints}>2,450 pts</Text>
-              </View>
-            </View>
-            <View style={styles.memberCardBottom}>
-              <View style={styles.memberStat}>
-                <Text style={styles.memberStatValue}>{orders.length}</Text>
-                <Text style={styles.memberStatLabel}>Orders</Text>
-              </View>
-              <View style={styles.memberStatDivider} />
-              <View style={styles.memberStat}>
-                <Text style={styles.memberStatValue}>{activeOrders}</Text>
-                <Text style={styles.memberStatLabel}>Active</Text>
-              </View>
-              <View style={styles.memberStatDivider} />
-              <View style={styles.memberStat}>
-                <Text style={styles.memberStatValue}>
-                  GH₵
-                  {totalSpent >= 1000
-                    ? `${(totalSpent / 1000).toFixed(1)}k`
-                    : totalSpent}
-                </Text>
-                <Text style={styles.memberStatLabel}>Spent</Text>
-              </View>
-            </View>
           </View>
         </View>
 

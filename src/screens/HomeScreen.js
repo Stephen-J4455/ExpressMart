@@ -150,6 +150,7 @@ export const HomeScreen = ({ navigation }) => {
           onSearchPress={() => navigation.navigate("Search")}
           onStoresPress={() => navigation.navigate("Stores")}
           onChatPress={() => navigation.navigate("Chats")}
+          onNotificationsPress={() => navigation.navigate("Notifications")}
         />
 
         {loadingAds && homeAds.length === 0 ? (
@@ -233,6 +234,7 @@ export const HomeScreen = ({ navigation }) => {
           }}
           contentContainerStyle={{
             paddingTop: 8,
+            paddingBottom: 8,
             gap: 12,
           }}
           renderItem={({ item }) => (
@@ -266,6 +268,7 @@ export const HomeScreen = ({ navigation }) => {
           }}
           contentContainerStyle={{
             paddingTop: 8,
+            paddingBottom: 16,
             gap: 12,
           }}
           renderItem={({ item }) => (

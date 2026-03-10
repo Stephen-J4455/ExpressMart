@@ -6,11 +6,30 @@ import React, {
   useRef,
   useCallback,
 } from "react";
-import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
+import { isRunningInExpoGo } from "expo";
 import { Platform, AppState } from "react-native";
 import { supabase } from "../lib/supabase";
+
+// expo-notifications was removed from Expo Go (SDK 53+).
+// Dynamic require with a no-op stub prevents a crash at module load time.
+let Notifications;
+try {
+  Notifications = require("expo-notifications");
+} catch (_) {
+  Notifications = {
+    setNotificationHandler: () => {},
+    getPermissionsAsync: async () => ({ status: "denied" }),
+    requestPermissionsAsync: async () => ({ status: "denied" }),
+    getExpoPushTokenAsync: async () => ({ data: null }),
+    getDevicePushTokenAsync: async () => ({ data: null, type: null }),
+    setNotificationChannelAsync: async () => {},
+    addNotificationReceivedListener: () => ({ remove: () => {} }),
+    addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
+    AndroidImportance: { MAX: 5, HIGH: 4, DEFAULT: 3, LOW: 2, MIN: 1 },
+  };
+}
 
 const NotificationContext = createContext();
 
@@ -42,13 +61,21 @@ const FCM_CONFIG = {
 // App type identifier for this app
 const APP_TYPE = "customer";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// expo-notifications was removed from Expo Go entirely (SDK 53+)
+// Only set the handler when running in a real/dev build
+if (!isRunningInExpoGo()) {
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+  } catch (_) {
+    // Silently ignore
+  }
+}
 
 export const NotificationProvider = ({ children, userId }) => {
   const [fcmToken, setFcmToken] = useState("");
@@ -110,154 +137,195 @@ export const NotificationProvider = ({ children, userId }) => {
 
   // Register for FCM on native platforms (Android/iOS)
   const registerForFCMAsync = useCallback(async () => {
+    // expo-notifications was removed from Expo Go entirely (SDK 53+)
+    if (isRunningInExpoGo()) {
+      console.warn(
+        "⚠️ Push notifications are not supported in Expo Go (removed in SDK 53). " +
+          "Use a development build for push notification support.",
+      );
+      return { token: null, platform: Platform.OS };
+    }
+
     let token = null;
     let platform = Platform.OS;
 
-    if (Platform.OS === "web") {
-      token = await registerForWebFCMAsync();
-      platform = "web";
-    } else if (Device.isDevice) {
-      const { status: existingStatus } =
-        await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
+    try {
+      if (Platform.OS === "web") {
+        token = await registerForWebFCMAsync();
+        platform = "web";
+      } else if (Device.isDevice) {
+        const { status: existingStatus } =
+          await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
 
-      if (existingStatus !== "granted") {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
+        if (existingStatus !== "granted") {
+          const { status } = await Notifications.requestPermissionsAsync({
+            ios: {
+              allowAlert: true,
+              allowBadge: true,
+              allowSound: true,
+            },
+          });
+          finalStatus = status;
+        }
 
-      setNotificationPermission(finalStatus);
+        setNotificationPermission(finalStatus);
 
-      if (finalStatus !== "granted") {
-        console.log("Push notification permission denied");
-        return null;
-      }
+        if (finalStatus !== "granted") {
+          console.log("Push notification permission denied");
+          return null;
+        }
 
-      try {
-        const projectId =
-          Constants?.expoConfig?.extra?.eas?.projectId ||
-          Constants?.easConfig?.projectId;
+        try {
+          const projectId =
+            Constants?.expoConfig?.extra?.eas?.projectId ||
+            Constants?.easConfig?.projectId;
 
-        // For Android in standalone builds, try to get FCM token directly
-        if (Platform.OS === "android") {
-          try {
-            // Try getting device push token (native FCM token)
-            const deviceToken = await Notifications.getDevicePushTokenAsync();
-            if (deviceToken && deviceToken.data) {
-              token = deviceToken.data;
-              const tokenType = deviceToken.type || "unknown";
+          // For Android in standalone builds, try to get FCM token directly
+          if (Platform.OS === "android") {
+            try {
+              // Try getting device push token (native FCM token)
+              const deviceToken = await Notifications.getDevicePushTokenAsync();
+              if (deviceToken && deviceToken.data) {
+                token = deviceToken.data;
+                const tokenType = deviceToken.type || "unknown";
 
-              // Validate it's actually an FCM token
-              if (token.startsWith("ExponentPushToken[")) {
-                console.warn("⚠️ WARNING: Got Expo token instead of FCM token");
-                console.warn(
-                  "⚠️ This means you are likely running in Expo Go or FCM is not configured",
+                // Validate it's actually an FCM token
+                if (token.startsWith("ExponentPushToken[")) {
+                  console.warn(
+                    "⚠️ WARNING: Got Expo token instead of FCM token",
+                  );
+                  console.warn(
+                    "⚠️ This means you are likely running in Expo Go or FCM is not configured",
+                  );
+                  console.warn(
+                    "⚠️ Push notifications will NOT work with this Edge Function",
+                  );
+                } else {
+                  console.log("✅ Native Android FCM token obtained");
+                  console.log("   Token type:", tokenType);
+                  console.log(
+                    "   Token preview:",
+                    token.substring(0, 30) + "...",
+                  );
+                }
+              }
+            } catch (deviceTokenError) {
+              console.error(
+                "❌ Device token failed:",
+                deviceTokenError.message,
+              );
+              console.warn(
+                "⚠️ Falling back to Expo token - notifications may not work",
+              );
+              // Fallback to Expo push token
+              try {
+                const expoToken = await Notifications.getExpoPushTokenAsync({
+                  projectId,
+                });
+                token = expoToken.data;
+                setExpoPushToken(token);
+                console.log(
+                  "⚠️ Expo push token obtained (not compatible with FCM Edge Function)",
                 );
-                console.warn(
-                  "⚠️ Push notifications will NOT work with this Edge Function",
-                );
-              } else {
-                console.log("✅ Native Android FCM token obtained");
-                console.log("   Token type:", tokenType);
                 console.log(
                   "   Token preview:",
                   token.substring(0, 30) + "...",
                 );
+              } catch (expoError) {
+                console.error(
+                  "❌ Both token methods failed:",
+                  expoError.message,
+                );
               }
             }
-          } catch (deviceTokenError) {
-            console.error("❌ Device token failed:", deviceTokenError.message);
-            console.warn(
-              "⚠️ Falling back to Expo token - notifications may not work",
-            );
-            // Fallback to Expo push token
+          } else {
+            // For iOS, use device token (APNs) or Expo token
             try {
+              const deviceToken = await Notifications.getDevicePushTokenAsync();
+              token = deviceToken.data;
+              console.log("✅ Native iOS APNs token obtained");
+            } catch (deviceTokenError) {
+              console.log(
+                "Falling back to Expo push token:",
+                deviceTokenError.message,
+              );
               const expoToken = await Notifications.getExpoPushTokenAsync({
                 projectId,
               });
               token = expoToken.data;
               setExpoPushToken(token);
-              console.log(
-                "⚠️ Expo push token obtained (not compatible with FCM Edge Function)",
-              );
-              console.log("   Token preview:", token.substring(0, 30) + "...");
-            } catch (expoError) {
-              console.error("❌ Both token methods failed:", expoError.message);
             }
           }
-        } else {
-          // For iOS, use device token (APNs) or Expo token
+        } catch (error) {
+          console.error("❌ Error getting push token:", error);
+        }
+
+        // Set up Android notification channels
+        if (Platform.OS === "android") {
+          console.log("🔧 Setting up Android notification channels...");
+
           try {
-            const deviceToken = await Notifications.getDevicePushTokenAsync();
-            token = deviceToken.data;
-            console.log("✅ Native iOS APNs token obtained");
-          } catch (deviceTokenError) {
-            console.log(
-              "Falling back to Expo push token:",
-              deviceTokenError.message,
-            );
-            const expoToken = await Notifications.getExpoPushTokenAsync({
-              projectId,
+            await Notifications.setNotificationChannelAsync("default", {
+              name: "Default",
+              importance: Notifications.AndroidImportance.MAX,
+              vibrationPattern: [0, 250, 250, 250],
+              lightColor: "#FF231F7C",
+              sound: "default",
+              enableLights: true,
+              enableVibrate: true,
             });
-            token = expoToken.data;
-            setExpoPushToken(token);
+
+            await Notifications.setNotificationChannelAsync("orders", {
+              name: "Order Updates",
+              importance: Notifications.AndroidImportance.HIGH,
+              vibrationPattern: [0, 250, 250, 250],
+              sound: "default",
+              enableLights: true,
+              enableVibrate: true,
+            });
+
+            await Notifications.setNotificationChannelAsync("chat", {
+              name: "Chat Messages",
+              importance: Notifications.AndroidImportance.HIGH,
+              vibrationPattern: [0, 100, 100, 100],
+              sound: "default",
+              enableLights: true,
+              enableVibrate: true,
+            });
+
+            await Notifications.setNotificationChannelAsync("promotions", {
+              name: "Promotions",
+              importance: Notifications.AndroidImportance.DEFAULT,
+              sound: "default",
+              enableLights: true,
+              enableVibrate: true,
+            });
+
+            console.log("✅ Android notification channels set up successfully");
+          } catch (channelError) {
+            console.error(
+              "❌ Failed to set up notification channels:",
+              channelError,
+            );
           }
         }
-      } catch (error) {
-        console.error("❌ Error getting push token:", error);
+      } else {
+        console.log("Must use physical device for Push Notifications");
       }
-
-      // Set up Android notification channels
-      if (Platform.OS === "android") {
-        console.log("🔧 Setting up Android notification channels...");
-
-        try {
-          await Notifications.setNotificationChannelAsync("default", {
-            name: "Default",
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: "#FF231F7C",
-            sound: "default",
-            enableLights: true,
-            enableVibrate: true,
-          });
-
-          await Notifications.setNotificationChannelAsync("orders", {
-            name: "Order Updates",
-            importance: Notifications.AndroidImportance.HIGH,
-            vibrationPattern: [0, 250, 250, 250],
-            sound: "default",
-            enableLights: true,
-            enableVibrate: true,
-          });
-
-          await Notifications.setNotificationChannelAsync("chat", {
-            name: "Chat Messages",
-            importance: Notifications.AndroidImportance.HIGH,
-            vibrationPattern: [0, 100, 100, 100],
-            sound: "default",
-            enableLights: true,
-            enableVibrate: true,
-          });
-
-          await Notifications.setNotificationChannelAsync("promotions", {
-            name: "Promotions",
-            importance: Notifications.AndroidImportance.DEFAULT,
-            sound: "default",
-            enableLights: true,
-            enableVibrate: true,
-          });
-
-          console.log("✅ Android notification channels set up successfully");
-        } catch (channelError) {
-          console.error(
-            "❌ Failed to set up notification channels:",
-            channelError,
-          );
-        }
+    } catch (err) {
+      // Catch any unexpected notification errors (e.g. Expo Go restrictions)
+      if (
+        err?.message?.includes("Expo Go") ||
+        err?.message?.includes("removed from Expo Go")
+      ) {
+        console.warn(
+          "⚠️ Push notifications not supported in this environment:",
+          err.message,
+        );
+      } else {
+        console.error("❌ Unexpected error in registerForFCMAsync:", err);
       }
-    } else {
-      console.log("Must use physical device for Push Notifications");
     }
 
     return { token, platform };
@@ -302,18 +370,23 @@ export const NotificationProvider = ({ children, userId }) => {
       }
     };
 
-    initializeNotifications();
+    initializeNotifications().catch((err) =>
+      console.warn("⚠️ Notification init error:", err?.message),
+    );
 
-    notificationListener.current =
-      Notifications.addNotificationReceivedListener((notification) => {
-        setNotification(notification);
-      });
+    // Skip listeners in Expo Go — push is unsupported there
+    if (!isRunningInExpoGo()) {
+      notificationListener.current =
+        Notifications.addNotificationReceivedListener((notification) => {
+          setNotification(notification);
+        });
 
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        console.log("Notification tapped:", response);
-        // Handle navigation based on notification data
-      });
+      responseListener.current =
+        Notifications.addNotificationResponseReceivedListener((response) => {
+          console.log("Notification tapped:", response);
+          // Handle navigation based on notification data
+        });
+    }
 
     const subscription = AppState.addEventListener(
       "change",

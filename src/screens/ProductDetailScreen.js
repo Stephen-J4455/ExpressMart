@@ -399,6 +399,28 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     setShowReviewModal(true);
   };
 
+  const handleChatWithSeller = () => {
+    if (!user) {
+      toast.info("Sign in required", "Please sign in to chat with the seller");
+      navigation.navigate("Auth");
+      return;
+    }
+    if (!product.seller) {
+      toast.error("Unavailable", "Seller information not available");
+      return;
+    }
+    navigation.navigate("Chat", {
+      seller: product.seller,
+      product: {
+        id: product.id,
+        title: product.title,
+        price: product.price,
+        discount: product.discount,
+        image: product.thumbnails?.[0] || null,
+      },
+    });
+  };
+
   const handleAddToCart = () => {
     const hasMultipleColors = product.colors && product.colors.length > 1;
     const hasMultipleSizes = product.sizes && product.sizes.length > 1;
@@ -1126,6 +1148,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       </ScrollView>
 
       <View style={styles.footer}>
+        <Pressable style={styles.chatButton} onPress={handleChatWithSeller}>
+          <Ionicons
+            name="chatbubble-ellipses"
+            size={24}
+            color={colors.primary}
+          />
+        </Pressable>
         <Pressable
           style={[styles.ctaButton, product.stock === 0 && styles.ctaDisabled]}
           onPress={handleAddToCart}
@@ -1776,8 +1805,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: colors.light,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  chatButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: colors.light,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.primary + "40",
   },
   ctaButton: {
+    flex: 1,
     borderRadius: 16,
     overflow: "hidden",
   },

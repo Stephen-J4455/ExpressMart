@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,14 +11,32 @@ import {
   Image,
   ActivityIndicator,
   Keyboard,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+
+const CARD_WIDTH = Math.min(Dimensions.get("window").width * 0.65, 260);
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useChat } from "../context/ChatContext";
 import { useToast } from "../context/ToastContext";
 import { colors } from "../theme/colors";
+
+const getDateLabel = (dateStr) => {
+  const date = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return "Today";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() !== today.getFullYear() && { year: "numeric" }),
+  });
+};
 
 export const ChatScreen = ({ route, navigation, seller }) => {
   const insets = useSafeAreaInsets();
@@ -27,8 +45,10 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     useChat();
   const toast = useToast();
   const sellerData = route?.params?.seller || seller;
+  const routeProduct = route?.params?.product || null;
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
+  const [pendingProduct, setPendingProduct] = useState(routeProduct);
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [conversation, setConversation] = useState(null);
@@ -243,56 +263,166 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !conversation || sending) return;
+    const hasText = newMessage.trim();
+    if (!hasText && !pendingProduct) return;
+    if (!conversation || sending) return;
 
-    const messageText = newMessage.trim();
     setSending(true);
+    const messageText = hasText || "";
 
-    // Optimistically add message to local state
-    const tempMessage = {
-      id: `temp-${Date.now()}`,
+    const messagesToInsert = [];
+    if (pendingProduct) {
+      messagesToInsert.push(
+        `PRODUCT_CARD:${JSON.stringify({
+          id: pendingProduct.id,
+          title: pendingProduct.title,
+          price: pendingProduct.price,
+          discount: pendingProduct.discount,
+          image: pendingProduct.image,
+        })}`,
+      );
+    }
+    if (messageText) messagesToInsert.push(messageText);
+
+    // Optimistically add messages
+    const tempMessages = messagesToInsert.map((msg, idx) => ({
+      id: `temp-${Date.now()}-${idx}`,
       conversation_id: conversation.id,
       sender_id: user.id,
       sender_type: "user",
-      message: messageText,
+      message: msg,
       created_at: new Date().toISOString(),
       isTemporary: true,
-    };
+    }));
 
-    setMessages((prev) => [...prev, tempMessage]);
+    setMessages((prev) => [...prev, ...tempMessages]);
     setNewMessage("");
+    setPendingProduct(null);
 
     try {
-      const { error } = await supabase.from("express_chat_messages").insert({
-        conversation_id: conversation.id,
-        sender_id: user.id,
-        sender_type: "user",
-        message: messageText,
-      });
+      const { error } = await supabase.from("express_chat_messages").insert(
+        messagesToInsert.map((msg) => ({
+          conversation_id: conversation.id,
+          sender_id: user.id,
+          sender_type: "user",
+          message: msg,
+        })),
+      );
 
       if (error) throw error;
 
-      // Update conversation in context with new last message
-      const updatedConv = {
+      updateConversation({
         ...conversation,
-        last_message: messageText,
+        last_message: messageText || "Shared a product",
         last_message_at: new Date().toISOString(),
-      };
-      updateConversation(updatedConv);
+      });
     } catch (error) {
       console.error("Error sending message:", error);
       toast.error("Failed to send message");
-
-      // Remove the temporary message on error
-      setMessages((prev) => prev.filter((msg) => msg.id !== tempMessage.id));
+      setMessages((prev) =>
+        prev.filter((msg) => !tempMessages.some((t) => t.id === msg.id)),
+      );
       setNewMessage(messageText);
+      if (pendingProduct === null && routeProduct)
+        setPendingProduct(routeProduct);
     } finally {
       setSending(false);
     }
   };
 
+  const enrichedMessages = useMemo(() => {
+    const result = [];
+    let lastDate = null;
+    for (const msg of messages) {
+      const dateKey = new Date(msg.created_at).toDateString();
+      if (dateKey !== lastDate) {
+        result.push({
+          id: `divider-${dateKey}`,
+          type: "date_divider",
+          date: msg.created_at,
+        });
+        lastDate = dateKey;
+      }
+      result.push(msg);
+    }
+    return result;
+  }, [messages]);
+
   const renderMessage = ({ item }) => {
+    if (item.type === "date_divider") {
+      return (
+        <View style={styles.dateDivider}>
+          <View style={styles.dateDividerLine} />
+          <Text style={styles.dateDividerText}>{getDateLabel(item.date)}</Text>
+          <View style={styles.dateDividerLine} />
+        </View>
+      );
+    }
+
     const isUser = item.sender_type === "user";
+    const isProductCard = item.message?.startsWith("PRODUCT_CARD:");
+
+    if (isProductCard) {
+      let productData = null;
+      try {
+        productData = JSON.parse(item.message.slice("PRODUCT_CARD:".length));
+      } catch (e) {}
+      const finalPrice =
+        productData?.discount > 0
+          ? productData.price * (1 - productData.discount / 100)
+          : productData?.price || 0;
+
+      return (
+        <View
+          style={[
+            styles.messageWrapper,
+            isUser ? styles.userWrapper : styles.sellerWrapper,
+          ]}
+        >
+          <View
+            style={[
+              styles.productCardBubble,
+              isUser
+                ? styles.productCardBubbleUser
+                : styles.productCardBubbleSeller,
+            ]}
+          >
+            {productData?.image && (
+              <Image
+                source={{ uri: productData.image }}
+                style={styles.productCardImage}
+                resizeMode="cover"
+              />
+            )}
+            <View style={styles.productCardBody}>
+              <Text
+                style={[
+                  styles.productCardTitle,
+                  isUser && styles.productCardTitleUser,
+                ]}
+                numberOfLines={2}
+              >
+                {productData?.title || "Product"}
+              </Text>
+              <Text
+                style={[
+                  styles.productCardPrice,
+                  isUser && styles.productCardPriceUser,
+                ]}
+              >
+                GH₵{Number(finalPrice).toLocaleString()}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.messageTime}>
+            {new Date(item.created_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
+      );
+    }
 
     return (
       <View
@@ -381,7 +511,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
       <View style={styles.chatContainer}>
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={enrichedMessages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           showsVerticalScrollIndicator={false}
@@ -420,6 +550,36 @@ export const ChatScreen = ({ route, navigation, seller }) => {
           { marginBottom: keyboardHeight + insets.bottom },
         ]}
       >
+        {pendingProduct && (
+          <View style={styles.productAttachment}>
+            {pendingProduct.image ? (
+              <Image
+                source={{ uri: pendingProduct.image }}
+                style={styles.productAttachmentImage}
+              />
+            ) : (
+              <View style={styles.productAttachmentImagePlaceholder}>
+                <Ionicons
+                  name="cube-outline"
+                  size={22}
+                  color={colors.primary}
+                />
+              </View>
+            )}
+            <View style={styles.productAttachmentInfo}>
+              <Text style={styles.productAttachmentLabel}>Sharing product</Text>
+              <Text style={styles.productAttachmentTitle} numberOfLines={1}>
+                {pendingProduct.title}
+              </Text>
+            </View>
+            <Pressable
+              style={styles.productAttachmentRemove}
+              onPress={() => setPendingProduct(null)}
+            >
+              <Ionicons name="close" size={18} color={colors.muted} />
+            </Pressable>
+          </View>
+        )}
         <View style={styles.inputWrapper}>
           <TextInput
             style={styles.textInput}
@@ -436,7 +596,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
               (!newMessage.trim() || sending) && styles.sendButtonDisabled,
             ]}
             onPress={sendMessage}
-            disabled={!newMessage.trim() || sending}
+            disabled={(!newMessage.trim() && !pendingProduct) || sending}
           >
             {sending ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -650,5 +810,113 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: colors.muted,
     opacity: 0.5,
+  },
+  productAttachment: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.light,
+    borderRadius: 14,
+    marginBottom: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.primary + "30",
+  },
+  productAttachmentImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6",
+  },
+  productAttachmentImagePlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: colors.light,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.primary + "30",
+  },
+  productAttachmentInfo: {
+    flex: 1,
+  },
+  productAttachmentLabel: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  productAttachmentTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.dark,
+  },
+  productAttachmentRemove: {
+    padding: 4,
+  },
+  productCardBubble: {
+    borderRadius: 16,
+    overflow: "hidden",
+    width: CARD_WIDTH,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  productCardBubbleUser: {
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: 4,
+  },
+  productCardBubbleSeller: {
+    backgroundColor: "#fff",
+    borderBottomLeftRadius: 4,
+  },
+  productCardImage: {
+    width: CARD_WIDTH,
+    height: 160,
+    backgroundColor: "#F3F4F6",
+  },
+  productCardBody: {
+    padding: 12,
+  },
+  productCardTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.dark,
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  productCardTitleUser: {
+    color: "#fff",
+  },
+  productCardPrice: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  productCardPriceUser: {
+    color: "rgba(255,255,255,0.9)",
+  },
+  dateDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 12,
+    paddingHorizontal: 8,
+  },
+  dateDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#E5E9F0",
+  },
+  dateDividerText: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: "600",
+    marginHorizontal: 10,
+    letterSpacing: 0.3,
   },
 });

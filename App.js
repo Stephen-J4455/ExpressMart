@@ -41,6 +41,7 @@ import { WishlistScreen } from "./src/screens/WishlistScreen";
 import { NotificationsScreen } from "./src/screens/NotificationsScreen";
 import { AddressesScreen } from "./src/screens/AddressesScreen";
 import { PaymentsScreen } from "./src/screens/PaymentsScreen";
+import { FollowingScreen } from "./src/screens/FollowingScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { SecurityScreen } from "./src/screens/SecurityScreen";
 import { HelpSupportScreen } from "./src/screens/HelpSupportScreen";
@@ -117,7 +118,7 @@ const TabNavigator = () => {
             focused ? (
               <Image
                 source={require("./assets/express.png")}
-                style={{ width: size + 2, height: size + 2 }}
+                style={{ width: size + 10, height: size + 10 }}
                 resizeMode="contain"
               />
             ) : (
@@ -128,20 +129,50 @@ const TabNavigator = () => {
       <Tab.Screen
         name="Categories"
         component={CategoriesScreen}
-        options={{ tabBarIcon: tabIcon("grid-outline") }}
+        options={{
+          tabBarIcon: ({ color, size, focused }) =>
+            focused ? (
+              <Image
+                source={require("./assets/express.png")}
+                style={{ width: size + 10, height: size + 10 }}
+                resizeMode="contain"
+              />
+            ) : (
+              <Ionicons name="grid-outline" size={size} color={color} />
+            ),
+        }}
       />
       <Tab.Screen
         name="Feed"
         component={FeedScreen}
-        options={{ tabBarIcon: tabIcon("compass-outline") }}
+        options={{
+          tabBarIcon: ({ color, size, focused }) =>
+            focused ? (
+              <Image
+                source={require("./assets/express.png")}
+                style={{ width: size + 10, height: size + 10 }}
+                resizeMode="contain"
+              />
+            ) : (
+              <Ionicons name="compass-outline" size={size} color={color} />
+            ),
+        }}
       />
       <Tab.Screen
         name="Cart"
         component={CartScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ color, size, focused }) => (
             <View>
-              <Ionicons name="cart-outline" size={size} color={color} />
+              {focused ? (
+                <Image
+                  source={require("./assets/express.png")}
+                  style={{ width: size + 10, height: size + 10 }}
+                  resizeMode="contain"
+                />
+              ) : (
+                <Ionicons name="cart-outline" size={size} color={color} />
+              )}
               {cartCount > 0 && (
                 <View
                   style={[
@@ -159,7 +190,18 @@ const TabNavigator = () => {
       <Tab.Screen
         name="Account"
         component={AccountScreen}
-        options={{ tabBarIcon: tabIcon("person-outline") }}
+        options={{
+          tabBarIcon: ({ color, size, focused }) =>
+            focused ? (
+              <Image
+                source={require("./assets/express.png")}
+                style={{ width: size + 10, height: size + 10 }}
+                resizeMode="contain"
+              />
+            ) : (
+              <Ionicons name="person-outline" size={size} color={color} />
+            ),
+        }}
       />
     </Tab.Navigator>
   );
@@ -339,6 +381,7 @@ const AuthenticatedApp = () => {
             />
             <Stack.Screen name="Addresses" component={AddressesScreen} />
             <Stack.Screen name="Payments" component={PaymentsScreen} />
+            <Stack.Screen name="Following" component={FollowingScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="Security" component={SecurityScreen} />
             <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />

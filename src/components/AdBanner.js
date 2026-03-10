@@ -279,9 +279,18 @@ export const AdCarousel = ({ ads }) => {
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const { isWide } = useResponsive();
 
+  // Auto-scroll on mobile
+  useEffect(() => {
+    if (isWide || !ads || ads.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % ads.length);
+    }, 3500);
+    return () => clearInterval(timer);
+  }, [ads, isWide]);
+
+  // Track impressions
   useEffect(() => {
     if (isWide) {
-      // Track impressions for all ads shown in grid mode
       ads?.forEach((ad) => trackImpression(ad.id));
     } else if (ads && ads[currentIndex]) {
       trackImpression(ads[currentIndex].id);

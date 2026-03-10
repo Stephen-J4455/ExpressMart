@@ -1,16 +1,26 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../theme/colors";
 import { SearchBar } from "./SearchBar";
 import { useResponsive } from "../hooks/useResponsive";
 
-export const AppHeader = ({ onSearchPress, onChatPress, onStoresPress }) => {
+export const AppHeader = ({
+  onSearchPress,
+  onChatPress,
+  onStoresPress,
+  onNotificationsPress,
+}) => {
   const { isWide, horizontalPadding } = useResponsive();
+  const insets = useSafeAreaInsets();
   return (
     <View
       style={[
         styles.container,
-        { paddingHorizontal: isWide ? horizontalPadding : 16 },
+        {
+          paddingHorizontal: isWide ? horizontalPadding : 16,
+          paddingTop: insets.top + 8,
+        },
         isWide && styles.containerWide,
       ]}
     >
@@ -29,7 +39,7 @@ export const AppHeader = ({ onSearchPress, onChatPress, onStoresPress }) => {
           <Pressable style={styles.iconButton} onPress={onChatPress}>
             <Ionicons name="chatbubble-outline" size={20} color={colors.dark} />
           </Pressable>
-          <Pressable style={styles.iconButton}>
+          <Pressable style={styles.iconButton} onPress={onNotificationsPress}>
             <Ionicons
               name="notifications-outline"
               size={20}
@@ -55,14 +65,13 @@ export const AppHeader = ({ onSearchPress, onChatPress, onStoresPress }) => {
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 50,
     paddingBottom: 16,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#EEF2F8",
   },
   containerWide: {
-    paddingTop: 20,
+    // paddingTop handled dynamically via insets
   },
   topRow: {
     flexDirection: "row",

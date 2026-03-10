@@ -18,13 +18,46 @@ import { FlashSaleBadge } from "./FlashSaleBadge";
 import { FlashSaleCountdown } from "./FlashSaleCountdown";
 
 const SELLER_BADGE_CONFIG = {
-  verified: { label: "Verified", icon: "checkmark-circle", color: "#10B981" },
+  verified: {
+    label: "Verified Seller",
+    icon: "checkmark-circle",
+    color: "#10B981",
+  },
   top_seller: { label: "Top Seller", icon: "trophy", color: "#F59E0B" },
-  fast_shipping: { label: "Fast Ship", icon: "flash", color: "#3B82F6" },
-  eco_friendly: { label: "Eco", icon: "leaf", color: "#22C55E" },
-  local: { label: "Local", icon: "location", color: "#8B5CF6" },
+  fast_shipping: { label: "Fast Shipping", icon: "flash", color: "#3B82F6" },
+  eco_friendly: { label: "Eco Friendly", icon: "leaf", color: "#22C55E" },
+  local: { label: "Local Business", icon: "location", color: "#8B5CF6" },
   trending: { label: "Trending", icon: "trending-up", color: "#EC4899" },
   premium: { label: "Premium", icon: "star", color: "#EAB308" },
+};
+
+// Display order of seller badges — verified always first
+const SELLER_BADGE_PRIORITY = [
+  "verified",
+  "top_seller",
+  "premium",
+  "fast_shipping",
+  "trending",
+  "eco_friendly",
+  "local",
+];
+
+const PRODUCT_BADGE_CONFIG = {
+  free_shipping: { icon: "rocket", color: "#3B82F6", label: "Free Shipping" },
+  flash_deal: { icon: "flash", color: "#EF4444", label: "Flash Deal" },
+  new_arrival: {
+    icon: "sparkles-outline",
+    color: "#8B5CF6",
+    label: "New Arrival",
+  },
+  bestseller: { icon: "trophy", color: "#F59E0B", label: "Bestseller" },
+  limited_stock: {
+    icon: "alert-circle",
+    color: "#DC2626",
+    label: "Limited Stock",
+  },
+  top_rated: { icon: "star", color: "#EAB308", label: "Top Rated" },
+  featured: { icon: "star", color: "#22C55E", label: "Featured" },
 };
 
 export const ProductCard = ({
@@ -192,43 +225,75 @@ export const ProductCard = ({
             <View style={styles.listTop}>
               <View style={{ flex: 1 }}>
                 <View style={styles.vendorRow}>
-                  <Text style={styles.vendor}>
+                  <Text style={styles.vendor} numberOfLines={1}>
                     {product.seller?.name || product.vendor}
                   </Text>
-                  {product.seller?.badges &&
-                    product.seller.badges.length > 0 && (
-                      <View style={styles.sellerBadge}>
-                        {(() => {
-                          const badge =
-                            SELLER_BADGE_CONFIG[product.seller.badges[0]];
-                          return badge ? (
-                            <Ionicons
-                              name={badge.icon}
-                              size={12}
-                              color={badge.color}
-                            />
-                          ) : null;
-                        })()}
-                      </View>
-                    )}
+                  {SELLER_BADGE_PRIORITY.filter((id) =>
+                    product.seller?.badges?.includes(id),
+                  )
+                    .slice(0, 2)
+                    .map((id) => {
+                      const b = SELLER_BADGE_CONFIG[id];
+                      return (
+                        <Ionicons
+                          key={id}
+                          name={b.icon}
+                          size={12}
+                          color={b.color}
+                        />
+                      );
+                    })}
                 </View>
                 <Text numberOfLines={2} style={styles.title}>
                   {product.title}
                 </Text>
-                {product.badges && product.badges.length > 0 && (
-                  <View style={styles.badgeRow}>
-                    {product.badges.slice(0, 1).map((label) => (
-                      <View key={label} style={styles.badge}>
-                        <Text
-                          numberOfLines={1}
-                          style={[styles.badgeText, { color: accentColor }]}
-                        >
-                          {label}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
+                {(() => {
+                  const productBadges = product.badges || [];
+                  const sellerBadges = product.seller?.badges || [];
+                  const displayBadges =
+                    productBadges.length > 0 ? productBadges : sellerBadges;
+                  if (displayBadges.length === 0) return null;
+                  return (
+                    <View style={styles.badgeRow}>
+                      {displayBadges.slice(0, 2).map((label) => {
+                        const normalized = label.toLowerCase();
+                        const cfg =
+                          PRODUCT_BADGE_CONFIG[normalized] ||
+                          SELLER_BADGE_CONFIG[normalized];
+                        const displayLabel = cfg?.label || label;
+                        return (
+                          <View
+                            key={label}
+                            style={[
+                              styles.badge,
+                              {
+                                backgroundColor:
+                                  (cfg?.color || accentColor) + "20",
+                              },
+                            ]}
+                          >
+                            {cfg?.icon && (
+                              <Ionicons
+                                name={cfg.icon}
+                                size={10}
+                                color={cfg?.color || accentColor}
+                              />
+                            )}
+                            <Text
+                              numberOfLines={1}
+                              style={[
+                                styles.badgeText,
+                                { color: cfg?.color || accentColor },
+                              ]}
+                            >
+                              {displayLabel}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })()}
               </View>
             </View>
             <View style={styles.listBottom}>
@@ -471,23 +536,27 @@ export const ProductCard = ({
         </View>
         <View style={styles.content}>
           <View style={styles.vendorRow}>
-            <Text style={compact ? styles.vendorCompact : styles.vendor}>
+            <Text
+              style={compact ? styles.vendorCompact : styles.vendor}
+              numberOfLines={1}
+            >
               {product.seller?.name || product.vendor}
             </Text>
-            {product.seller?.badges && product.seller.badges.length > 0 && (
-              <View style={styles.sellerBadge}>
-                {(() => {
-                  const badge = SELLER_BADGE_CONFIG[product.seller.badges[0]];
-                  return badge ? (
-                    <Ionicons
-                      name={badge.icon}
-                      size={compact ? 10 : 12}
-                      color={badge.color}
-                    />
-                  ) : null;
-                })()}
-              </View>
-            )}
+            {SELLER_BADGE_PRIORITY.filter((id) =>
+              product.seller?.badges?.includes(id),
+            )
+              .slice(0, 2)
+              .map((id) => {
+                const b = SELLER_BADGE_CONFIG[id];
+                return (
+                  <Ionicons
+                    key={id}
+                    name={b.icon}
+                    size={compact ? 10 : 12}
+                    color={b.color}
+                  />
+                );
+              })}
           </View>
           <Text
             numberOfLines={1}
@@ -496,42 +565,44 @@ export const ProductCard = ({
             {product.title}
           </Text>
           {(() => {
-            const productBadges =
-              product.badges && product.badges.length > 0
-                ? product.badges
-                : null;
-            const sellerBadges =
-              !productBadges &&
-              product.seller?.badges &&
-              product.seller.badges.length > 0
-                ? product.seller.badges
-                : null;
-            const displayBadges = productBadges || sellerBadges || [];
-            if (displayBadges.length === 0)
-              return <View style={styles.badgeRow} />;
+            const productBadges = product.badges || [];
+            const sellerBadges = product.seller?.badges || [];
+            const displayBadges =
+              productBadges.length > 0 ? productBadges : sellerBadges;
+            if (displayBadges.length === 0) return null;
             return (
               <View style={styles.badgeRow}>
                 {displayBadges.slice(0, 2).map((label) => {
-                  const cfg = SELLER_BADGE_CONFIG[label] || null;
+                  const normalized = label.toLowerCase();
+                  const cfg =
+                    PRODUCT_BADGE_CONFIG[normalized] ||
+                    SELLER_BADGE_CONFIG[normalized];
+                  const displayLabel = cfg?.label || label;
                   return (
                     <View
                       key={label}
                       style={[
                         styles.badge,
-                        cfg && { backgroundColor: cfg.color + "18" },
+                        {
+                          backgroundColor: (cfg?.color || accentColor) + "20",
+                        },
                       ]}
                     >
-                      {cfg && (
-                        <Ionicons name={cfg.icon} size={10} color={cfg.color} />
+                      {cfg?.icon && (
+                        <Ionicons
+                          name={cfg.icon}
+                          size={compact ? 9 : 10}
+                          color={cfg?.color || accentColor}
+                        />
                       )}
                       <Text
                         numberOfLines={1}
                         style={[
                           compact ? styles.badgeTextCompact : styles.badgeText,
-                          { color: cfg ? cfg.color : accentColor },
+                          { color: cfg?.color || accentColor },
                         ]}
                       >
-                        {cfg ? cfg.label : label}
+                        {displayLabel}
                       </Text>
                     </View>
                   );
@@ -815,12 +886,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   sellerBadge: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#F0FDF4",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   title: {
     fontSize: 14,
@@ -847,23 +918,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#EEF2FF",
-    borderRadius: 8,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.08)",
     flexShrink: 1,
   },
   badgeText: {
     fontSize: 10,
-    color: colors.primary,
     fontWeight: "600",
-    numberOfLines: 1,
   },
   badgeTextCompact: {
-    fontSize: 8,
-    color: colors.primary,
+    fontSize: 9,
     fontWeight: "600",
-    numberOfLines: 1,
   },
   metaRow: {
     marginTop: 8,

@@ -160,6 +160,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     backgroundColor: colors.background,
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
   },
   sidebar: {
     width: 90,
@@ -242,7 +243,7 @@ const styles = StyleSheet.create({
   productCard: {
     width: "100%",
     minWidth: 0,
-    height: "100%",
+    height: 270,
     borderRadius: 20,
     shadowColor: "#000",
     shadowOpacity: 0.06,

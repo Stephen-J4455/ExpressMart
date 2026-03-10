@@ -596,10 +596,15 @@ export const StoreScreen = ({ route, navigation }) => {
                     contentContainerStyle={{
                       paddingTop: 8,
                       paddingBottom: 24,
-                      gap: 12,
                     }}
                     renderItem={({ item }) => (
-                      <View style={{ flex: 1, maxWidth: itemWidth }}>
+                      <View
+                        style={{
+                          flex: 1,
+                          maxWidth: itemWidth,
+                          marginBottom: 12,
+                        }}
+                      >
                         {item ? (
                           <ProductCard
                             product={item}

@@ -8,7 +8,7 @@ export const colors = {
   info: "#06B6D4",
   surface: "#F6F8FB",
   border: "#E6EEF8",
-  background: "#e8e8e9",
+  background: "#ffffff",
 };
 
 export const THEMES = {
