@@ -102,7 +102,6 @@ export const CheckoutScreen = ({ navigation }) => {
   useEffect(() => {
     const params = route.params;
     if (params?.payment === "success" && params?.reference) {
-      console.log("✅ Payment successful, verifying:", params.reference);
       handlePaymentVerification(params.reference, params.orderData);
     }
   }, [route.params]);
@@ -110,11 +109,8 @@ export const CheckoutScreen = ({ navigation }) => {
   const handlePaymentVerification = async (reference, orderData) => {
     try {
       setLoading(true);
-      console.log("🔄 Verifying payment...");
 
       const result = await verifyPaymentAndCreateOrder(reference, orderData);
-
-      console.log("✅ Payment verified:", result);
 
       clearCart();
       toast.success(
@@ -193,7 +189,6 @@ export const CheckoutScreen = ({ navigation }) => {
     }
 
     const reference = generatePaymentReference(user.id);
-    console.log("💳 Payment reference:", reference);
 
     try {
       setLoading(true);
@@ -239,11 +234,8 @@ export const CheckoutScreen = ({ navigation }) => {
               orderData,
             }),
           });
-
-          console.log("Direct fetch status:", directRes.status);
           try {
             const directBody = await directRes.json();
-            console.log("Direct fetch body:", directBody);
             init = directBody;
           } catch (parseErr) {
             console.warn("Direct fetch returned non-JSON response", parseErr);

@@ -38,6 +38,24 @@ const getDateLabel = (dateStr) => {
   });
 };
 
+const getPresenceSubtitle = (isOnline, lastSeenAt) => {
+  if (isOnline) return "Online";
+  if (!lastSeenAt) return "Offline";
+
+  const diffMs = Date.now() - new Date(lastSeenAt).getTime();
+  if (Number.isNaN(diffMs) || diffMs < 0) return "Offline";
+
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) return "Last seen just now";
+  if (diffMinutes < 60) return `Last seen ${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `Last seen ${diffHours}h ago`;
+  if (diffHours < 48) return "Last seen yesterday";
+
+  return `Last seen ${new Date(lastSeenAt).toLocaleDateString()}`;
+};
+
 export const ChatScreen = ({ route, navigation, seller }) => {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -52,10 +70,43 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [conversation, setConversation] = useState(null);
+  const [sellerOnline, setSellerOnline] = useState(false);
+  const [sellerLastSeenAt, setSellerLastSeenAt] = useState(
+    sellerData?.last_seen_at || null,
+  );
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [inputHeight, setInputHeight] = useState(72);
   // keyboardVisible state removed; not needed for padding logic
   const flatListRef = useRef(null);
+  const presenceChannelRef = useRef(null);
+  const sellerLastSeenChannelRef = useRef(null);
+  const isNearBottomRef = useRef(true);
+  const didInitialAutoScrollRef = useRef(false);
+
+  const BOTTOM_AUTO_SCROLL_THRESHOLD = 120;
+
+  const updateNearBottomState = (event) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    isNearBottomRef.current =
+      distanceFromBottom <= BOTTOM_AUTO_SCROLL_THRESHOLD;
+  };
+
+  const scrollToBottom = (animated = true, force = false) => {
+    if (!force && !isNearBottomRef.current) return;
+
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToEnd({ animated });
+    });
+  };
+
+  const handleMessageImageLoad = () => {
+    scrollToBottom(false);
+    setTimeout(() => {
+      scrollToBottom(false);
+    }, 60);
+  };
 
   // keyboard visibility listeners were removed; not required anymore
 
@@ -86,14 +137,26 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     }
 
     return () => {
-      supabase.removeAllChannels();
+      if (presenceChannelRef.current) {
+        supabase.removeChannel(presenceChannelRef.current);
+        presenceChannelRef.current = null;
+      }
     };
   }, [user, sellerData]);
 
   useEffect(() => {
     if (conversation) {
       const cleanup = setupRealtimeSubscription();
-      return cleanup;
+      fetchSellerLastSeen();
+      setupSellerLastSeenSubscription();
+      setupPresence();
+      return () => {
+        cleanup?.();
+        if (sellerLastSeenChannelRef.current) {
+          supabase.removeChannel(sellerLastSeenChannelRef.current);
+          sellerLastSeenChannelRef.current = null;
+        }
+      };
     }
   }, [conversation]);
 
@@ -121,6 +184,74 @@ export const ChatScreen = ({ route, navigation, seller }) => {
       hideSub.remove();
     };
   }, []);
+
+  const setupPresence = () => {
+    if (!sellerData?.id) return;
+
+    const channel = supabase.channel(`presence:seller:${sellerData.id}`);
+
+    const syncSellerPresence = () => {
+      const state = channel.presenceState();
+      const isSellerCurrentlyOnline = Object.values(state).some((presences) =>
+        presences.some((presence) => presence.actor_type === "seller"),
+      );
+      setSellerOnline(isSellerCurrentlyOnline);
+      if (!isSellerCurrentlyOnline) {
+        fetchSellerLastSeen();
+      }
+    };
+
+    channel
+      .on("presence", { event: "sync" }, syncSellerPresence)
+      .on("presence", { event: "join" }, syncSellerPresence)
+      .on("presence", { event: "leave" }, syncSellerPresence)
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          syncSellerPresence();
+        }
+      });
+
+    presenceChannelRef.current = channel;
+  };
+
+  const fetchSellerLastSeen = async () => {
+    if (!sellerData?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("express_sellers")
+        .select("last_seen_at")
+        .eq("id", sellerData.id)
+        .single();
+
+      if (error) throw error;
+      setSellerLastSeenAt(data?.last_seen_at || null);
+    } catch (error) {
+      console.error("Error fetching seller last seen:", error);
+    }
+  };
+
+  const setupSellerLastSeenSubscription = () => {
+    if (!sellerData?.id) return;
+
+    const channel = supabase
+      .channel(`seller-last-seen:${sellerData.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "express_sellers",
+          filter: `id=eq.${sellerData.id}`,
+        },
+        (payload) => {
+          setSellerLastSeenAt(payload.new.last_seen_at || null);
+        },
+      )
+      .subscribe();
+
+    sellerLastSeenChannelRef.current = channel;
+  };
 
   const fetchOrCreateConversation = async () => {
     try {
@@ -175,7 +306,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
 
       // Auto scroll to bottom after messages are loaded
       setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: false });
+        scrollToBottom(false, true);
       }, 100);
     } catch (error) {
       console.error("Error fetching messages:", error);
@@ -392,6 +523,8 @@ export const ChatScreen = ({ route, navigation, seller }) => {
                 source={{ uri: productData.image }}
                 style={styles.productCardImage}
                 resizeMode="cover"
+                onLoadEnd={handleMessageImageLoad}
+                onError={handleMessageImageLoad}
               />
             )}
             <View style={styles.productCardBody}>
@@ -497,8 +630,15 @@ export const ChatScreen = ({ route, navigation, seller }) => {
                 {sellerData?.name || "Seller"}
               </Text>
               <View style={styles.statusRow}>
-                <View style={styles.statusDot} />
-                <Text style={styles.headerSubtitle}>Store</Text>
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: sellerOnline ? "#10B981" : "#9CA3AF" },
+                  ]}
+                />
+                <Text style={styles.headerSubtitle}>
+                  {getPresenceSubtitle(sellerOnline, sellerLastSeenAt)}
+                </Text>
               </View>
             </View>
           </View>
@@ -521,10 +661,15 @@ export const ChatScreen = ({ route, navigation, seller }) => {
               paddingBottom: inputHeight + insets.bottom + keyboardHeight + 16,
             },
           ]}
-          onContentSizeChange={() =>
-            flatListRef.current?.scrollToEnd({ animated: true })
-          }
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          onContentSizeChange={() => scrollToBottom(true)}
+          onLayout={() => {
+            if (!didInitialAutoScrollRef.current) {
+              didInitialAutoScrollRef.current = true;
+              scrollToBottom(false, true);
+            }
+          }}
+          onScroll={updateNearBottomState}
+          scrollEventThrottle={16}
           ListEmptyComponent={
             <View style={styles.emptyChat}>
               <View style={styles.emptyChatIcon}>
@@ -665,7 +810,6 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#10B981",
   },
   headerSubtitle: {
     fontSize: 12,

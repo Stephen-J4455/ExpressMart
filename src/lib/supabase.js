@@ -8,7 +8,7 @@ const supabaseAnonKey =
 
 // Paystack configuration
 export const PAYSTACK_CONFIG = {
-  publicKey: "pk_test_7d6bef2c11764ac43547031baf2c197607286987", // Your Paystack public key
+  publicKey: "pk_live_0427f2f19342832a6c8a9e582c11751f83637e97", // Your Paystack public key
 };
 
 export { supabaseUrl, supabaseAnonKey };
@@ -40,13 +40,8 @@ export const EDGE_FUNCTIONS = {
   payment: `${supabaseUrl}/functions/v1/payment`,
 };
 
-console.log("🔧 Supabase URL:", supabaseUrl);
-console.log("🔧 Edge Function URL:", `${supabaseUrl}/functions/v1/payment`);
-
 // Helper to call edge functions
 export const callEdgeFunction = async (functionName, body) => {
-  console.log("🔄 callEdgeFunction called:", { functionName, body });
-
   if (!supabase) {
     console.error("❌ Supabase not configured");
     throw new Error("Supabase not configured");
@@ -55,7 +50,6 @@ export const callEdgeFunction = async (functionName, body) => {
   // ── Path 1: use supabase.functions.invoke (handles auth automatically) ──
   if (supabase.functions && typeof supabase.functions.invoke === "function") {
     try {
-      console.log("🔁 Using supabase.functions.invoke for:", functionName);
       const { data, error } = await supabase.functions.invoke(functionName, {
         body,
       });
@@ -78,7 +72,6 @@ export const callEdgeFunction = async (functionName, body) => {
           error,
         );
       } else {
-        console.log("✅ supabase.functions.invoke succeeded");
         return data;
       }
     } catch (invokeErr) {
@@ -93,7 +86,6 @@ export const callEdgeFunction = async (functionName, body) => {
   // Use getSession() — the supabase-js client handles token refresh internally
   // without a network round-trip. Calling refreshSession() is unnecessary and
   // causes timeouts on slow connections (especially for multi-seller orders).
-  console.log("🔄 Getting current session for manual fetch...");
   const {
     data: { session },
     error: sessionError,
@@ -104,13 +96,7 @@ export const callEdgeFunction = async (functionName, body) => {
     throw new Error("Authentication session expired. Please log in again.");
   }
 
-  console.log(
-    "✅ Session token obtained (first 20 chars):",
-    session.access_token.substring(0, 20) + "...",
-  );
-
   const url = `${supabaseUrl}/functions/v1/${functionName}`;
-  console.log("🌐 Making request to:", url);
 
   // 45-second timeout — multi-seller orders involve several sequential
   // Paystack API calls + one order record per seller.
@@ -130,10 +116,8 @@ export const callEdgeFunction = async (functionName, body) => {
     });
 
     clearTimeout(timeoutId);
-    console.log("📡 Response status:", response.status);
 
     const result = await response.json();
-    console.log("📦 Response data:", result);
 
     if (!response.ok) {
       console.error("❌ Edge function error:", response.status, result);
@@ -141,8 +125,6 @@ export const callEdgeFunction = async (functionName, body) => {
         result.error || `HTTP ${response.status}: ${response.statusText}`,
       );
     }
-
-    console.log("✅ Edge function call successful");
     return result;
   } catch (fetchError) {
     clearTimeout(timeoutId);

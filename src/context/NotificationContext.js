@@ -109,8 +109,6 @@ export const NotificationProvider = ({ children, userId }) => {
 
       if (error) {
         console.error("Error registering device token:", error);
-      } else {
-        console.log("FCM device token registered successfully");
       }
     } catch (err) {
       console.error("Failed to register device token:", err);
@@ -172,7 +170,6 @@ export const NotificationProvider = ({ children, userId }) => {
         setNotificationPermission(finalStatus);
 
         if (finalStatus !== "granted") {
-          console.log("Push notification permission denied");
           return null;
         }
 
@@ -202,12 +199,7 @@ export const NotificationProvider = ({ children, userId }) => {
                     "⚠️ Push notifications will NOT work with this Edge Function",
                   );
                 } else {
-                  console.log("✅ Native Android FCM token obtained");
-                  console.log("   Token type:", tokenType);
-                  console.log(
-                    "   Token preview:",
-                    token.substring(0, 30) + "...",
-                  );
+                  // Native Android FCM token acquired.
                 }
               }
             } catch (deviceTokenError) {
@@ -225,12 +217,8 @@ export const NotificationProvider = ({ children, userId }) => {
                 });
                 token = expoToken.data;
                 setExpoPushToken(token);
-                console.log(
+                console.warn(
                   "⚠️ Expo push token obtained (not compatible with FCM Edge Function)",
-                );
-                console.log(
-                  "   Token preview:",
-                  token.substring(0, 30) + "...",
                 );
               } catch (expoError) {
                 console.error(
@@ -244,9 +232,8 @@ export const NotificationProvider = ({ children, userId }) => {
             try {
               const deviceToken = await Notifications.getDevicePushTokenAsync();
               token = deviceToken.data;
-              console.log("✅ Native iOS APNs token obtained");
             } catch (deviceTokenError) {
-              console.log(
+              console.warn(
                 "Falling back to Expo push token:",
                 deviceTokenError.message,
               );
@@ -263,15 +250,12 @@ export const NotificationProvider = ({ children, userId }) => {
 
         // Set up Android notification channels
         if (Platform.OS === "android") {
-          console.log("🔧 Setting up Android notification channels...");
-
           try {
             await Notifications.setNotificationChannelAsync("default", {
               name: "Default",
               importance: Notifications.AndroidImportance.MAX,
               vibrationPattern: [0, 250, 250, 250],
               lightColor: "#FF231F7C",
-              sound: "default",
               enableLights: true,
               enableVibrate: true,
             });
@@ -280,7 +264,6 @@ export const NotificationProvider = ({ children, userId }) => {
               name: "Order Updates",
               importance: Notifications.AndroidImportance.HIGH,
               vibrationPattern: [0, 250, 250, 250],
-              sound: "default",
               enableLights: true,
               enableVibrate: true,
             });
@@ -289,7 +272,6 @@ export const NotificationProvider = ({ children, userId }) => {
               name: "Chat Messages",
               importance: Notifications.AndroidImportance.HIGH,
               vibrationPattern: [0, 100, 100, 100],
-              sound: "default",
               enableLights: true,
               enableVibrate: true,
             });
@@ -297,12 +279,9 @@ export const NotificationProvider = ({ children, userId }) => {
             await Notifications.setNotificationChannelAsync("promotions", {
               name: "Promotions",
               importance: Notifications.AndroidImportance.DEFAULT,
-              sound: "default",
               enableLights: true,
               enableVibrate: true,
             });
-
-            console.log("✅ Android notification channels set up successfully");
           } catch (channelError) {
             console.error(
               "❌ Failed to set up notification channels:",
@@ -311,7 +290,7 @@ export const NotificationProvider = ({ children, userId }) => {
           }
         }
       } else {
-        console.log("Must use physical device for Push Notifications");
+        console.warn("Must use physical device for Push Notifications");
       }
     } catch (err) {
       // Catch any unexpected notification errors (e.g. Expo Go restrictions)
@@ -383,7 +362,6 @@ export const NotificationProvider = ({ children, userId }) => {
 
       responseListener.current =
         Notifications.addNotificationResponseReceivedListener((response) => {
-          console.log("Notification tapped:", response);
           // Handle navigation based on notification data
         });
     }
@@ -426,7 +404,6 @@ export const NotificationProvider = ({ children, userId }) => {
   // Unregister token when user logs out
   useEffect(() => {
     if (!userId && fcmToken) {
-      console.log("🔐 User logged out, unregistering FCM token");
       unregisterDeviceToken(fcmToken);
       setFcmToken("");
       setExpoPushToken("");

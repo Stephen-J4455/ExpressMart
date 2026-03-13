@@ -13,6 +13,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { getPaystackPublicKey } from "../services/payment";
 
 // Only import WebView on native to avoid "does not support this platform" error
 const WebView =
@@ -35,6 +36,7 @@ export const PaymentWebViewScreen = () => {
     authorization_url,
     access_code,
   } = route.params;
+  const paystackPublicKey = getPaystackPublicKey();
 
   // Check authentication on mount
   React.useEffect(() => {
@@ -171,7 +173,7 @@ export const PaymentWebViewScreen = () => {
             document.querySelector('.btn').style.display = 'none';
             document.getElementById('loading').style.display = 'block';
             var handler = PaystackPop.setup({
-              key: 'pk_test_7d6bef2c11764ac43547031baf2c197607286987',
+              key: '${paystackPublicKey}',
               email: '${email}',
               amount: ${amountInPesewas},
               currency: 'GHS',
@@ -252,7 +254,7 @@ export const PaymentWebViewScreen = () => {
             document.querySelector('.btn').style.display = 'none';
             document.getElementById('loading').style.display = 'block';
             var opts = {
-              key: 'pk_test_7d6bef2c11764ac43547031baf2c197607286987',
+              key: '${paystackPublicKey}',
               email: '${email}',
               amount: ${amountInPesewas},
               currency: 'GHS',

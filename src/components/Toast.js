@@ -90,6 +90,8 @@ export const Toast = ({
   if (!visible) return null;
 
   const config = toastConfig[type] || toastConfig.info;
+  const safeTitle = typeof title === "string" ? title.trim() : "";
+  const safeMessage = typeof message === "string" ? message.trim() : "";
 
   return (
     <Animated.View
@@ -114,8 +116,12 @@ export const Toast = ({
           style={styles.icon}
         />
         <View style={styles.content}>
-          {title && <Text style={styles.title}>{title}</Text>}
-          {message && <Text style={styles.message}>{message}</Text>}
+          {safeTitle.length > 0 ? (
+            <Text style={styles.title}>{safeTitle}</Text>
+          ) : null}
+          {safeMessage.length > 0 ? (
+            <Text style={styles.message}>{safeMessage}</Text>
+          ) : null}
         </View>
         <TouchableOpacity onPress={handleDismiss} style={styles.closeBtn}>
           <Ionicons name="close" size={20} color="#fff" />
