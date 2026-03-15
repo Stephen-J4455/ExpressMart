@@ -16,8 +16,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 
+const isNewArchitectureEnabled = global?.nativeFabricUIManager != null;
+
 if (
   Platform.OS === "android" &&
+  !isNewArchitectureEnabled &&
   UIManager.setLayoutAnimationEnabledExperimental
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
