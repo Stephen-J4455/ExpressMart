@@ -60,6 +60,16 @@ const PRODUCT_BADGE_CONFIG = {
   featured: { icon: "star", color: "#22C55E", label: "Featured" },
 };
 
+const toBoolean = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+  return false;
+};
+
 export const ProductCard = ({
   product,
   style,
@@ -76,6 +86,16 @@ export const ProductCard = ({
   const [showVariantModal, setShowVariantModal] = useState(false);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
+  const hasInventoryValue =
+    product?.quantity != null ||
+    product?.stock != null ||
+    product?.stock_quantity != null;
+  const availableStock = Number(
+    product?.quantity ?? product?.stock ?? product?.stock_quantity ?? 0,
+  );
+  const allowsBackorder = toBoolean(product?.allow_backorder);
+  const isOutOfStock =
+    hasInventoryValue && availableStock <= 0 && !allowsBackorder;
 
   // Determine actual price (flash sale price takes priority)
   const actualPrice = flashSale?.flash_price || product.price;
@@ -95,6 +115,12 @@ export const ProductCard = ({
 
   const handleAdd = (e) => {
     e?.stopPropagation?.();
+
+    if (isOutOfStock) {
+      toast.error("Out of Stock", "This product is currently unavailable");
+      return;
+    }
+
     const hasColors = product.colors && product.colors.length > 0;
     const hasSizes = product.sizes && product.sizes.length > 0;
 
@@ -172,7 +198,12 @@ export const ProductCard = ({
     return (
       <>
         <Pressable
-          style={[styles.card, styles.listCard, style]}
+          style={[
+            styles.card,
+            styles.listCard,
+            isOutOfStock && styles.outOfStockCard,
+            style,
+          ]}
           onPress={onPress}
         >
           <View style={styles.listImageContainer}>
@@ -219,6 +250,11 @@ export const ProductCard = ({
               </>
             ) : (
               <Image source={{ uri: images[0] }} style={styles.listImage} />
+            )}
+            {isOutOfStock && (
+              <View style={styles.outOfStockOverlay}>
+                <Text style={styles.outOfStockOverlayText}>Out of Stock</Text>
+              </View>
             )}
           </View>
           <View style={styles.listContent}>
@@ -371,17 +407,26 @@ export const ProductCard = ({
               </View>
               {!hasFlashSale && (
                 <Pressable
-                  style={styles.listCta}
+                  style={[styles.listCta, isOutOfStock && styles.ctaDisabled]}
                   onPress={handleAdd}
+                  disabled={isOutOfStock}
                   accessibilityLabel="Add to cart"
                 >
                   <View
                     style={[
                       styles.listCtaGradient,
-                      { backgroundColor: themeObj.primary || accent },
+                      {
+                        backgroundColor: isOutOfStock
+                          ? "#9CA3AF"
+                          : themeObj.primary || accent,
+                      },
                     ]}
                   >
-                    <Ionicons name="cart" size={18} color="#fff" />
+                    <Ionicons
+                      name={isOutOfStock ? "close-circle" : "cart"}
+                      size={18}
+                      color="#fff"
+                    />
                   </View>
                 </Pressable>
               )}
@@ -518,7 +563,10 @@ export const ProductCard = ({
 
   return (
     <>
-      <Pressable style={[styles.card, style]} onPress={onPress}>
+      <Pressable
+        style={[styles.card, isOutOfStock && styles.outOfStockCard, style]}
+        onPress={onPress}
+      >
         <View style={styles.imageContainer}>
           <Image source={{ uri: images[0] }} style={styles.image} />
           {hasFlashSale ? (
@@ -532,6 +580,11 @@ export const ProductCard = ({
                 <Text style={styles.discountText}>{product.discount}% OFF</Text>
               </View>
             )
+          )}
+          {isOutOfStock && (
+            <View style={styles.outOfStockOverlay}>
+              <Text style={styles.outOfStockOverlayText}>Out of Stock</Text>
+            </View>
           )}
         </View>
         <View style={styles.content}>
@@ -661,18 +714,29 @@ export const ProductCard = ({
           )}
           {!hideCta && !hasFlashSale && (
             <Pressable
-              style={styles.cta}
+              style={[styles.cta, isOutOfStock && styles.ctaDisabled]}
               onPress={handleAdd}
+              disabled={isOutOfStock}
               accessibilityLabel="Add to cart"
             >
               <View
                 style={[
                   styles.ctaGradient,
-                  { backgroundColor: themeObj.primary || accent },
+                  {
+                    backgroundColor: isOutOfStock
+                      ? "#9CA3AF"
+                      : themeObj.primary || accent,
+                  },
                 ]}
               >
-                <Ionicons name="cart" size={16} color="#fff" />
-                <Text style={styles.ctaText}>Add to Cart</Text>
+                <Ionicons
+                  name={isOutOfStock ? "close-circle" : "cart"}
+                  size={16}
+                  color="#fff"
+                />
+                <Text style={styles.ctaText}>
+                  {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+                </Text>
               </View>
             </Pressable>
           )}
@@ -805,6 +869,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
+  outOfStockCard: {
+    opacity: 0.72,
+  },
   listCard: {
     flexDirection: "row",
     height: 150,
@@ -816,6 +883,22 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 170,
     backgroundColor: "#F8FAFC",
+  },
+  outOfStockOverlay: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "rgba(31,41,55,0.9)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  outOfStockOverlayText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   image: {
     width: "100%",
@@ -979,6 +1062,9 @@ const styles = StyleSheet.create({
   },
   cta: {
     marginTop: 8,
+  },
+  ctaDisabled: {
+    opacity: 1,
   },
   ctaGradient: {
     height: 38,

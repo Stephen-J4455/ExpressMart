@@ -130,6 +130,7 @@ export const ShopProvider = ({ children }) => {
             "*, seller_id(id,name,avatar,rating,total_ratings,badges,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
           )
           .eq("status", "active")
+          .gt("quantity", 0)
           .order("created_at", { ascending: false })
           .range(0, PAGE_SIZE - 1),
         supabase
@@ -246,6 +247,7 @@ export const ShopProvider = ({ children }) => {
           "*, seller_id(id,name,avatar,rating,total_ratings,badges,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
         )
         .eq("status", "active")
+        .gt("quantity", 0)
         .order("created_at", { ascending: false })
         .range(start, end);
 
@@ -328,9 +330,11 @@ export const ShopProvider = ({ children }) => {
           event: "INSERT",
           schema: "public",
           table: "express_products",
-          filter: "status=eq.active",
+          filter: "status=eq.active&quantity=gt.0",
         },
         (payload) => {
+          // Only insert if quantity > 0 (filter should already ensure this)
+          if (!payload.new || (payload.new.quantity || 0) <= 0) return;
           const newProduct = mapProduct(payload.new);
           setProducts((prev) => {
             if (prev.some((p) => p.id === newProduct.id)) return prev;
@@ -346,19 +350,22 @@ export const ShopProvider = ({ children }) => {
           table: "express_products",
         },
         (payload) => {
-          if (payload.new.status !== "active") {
-            // Product deactivated — remove from list
+          // If product deactivated or now out of stock, remove it
+          if (
+            payload.new.status !== "active" ||
+            (payload.new.quantity || 0) <= 0
+          ) {
             setProducts((prev) => prev.filter((p) => p.id !== payload.new.id));
-          } else {
-            const updated = mapProduct(payload.new);
-            setProducts((prev) => {
-              const exists = prev.some((p) => p.id === updated.id);
-              if (exists) {
-                return prev.map((p) => (p.id === updated.id ? updated : p));
-              }
-              return [updated, ...prev];
-            });
+            return;
           }
+          const updated = mapProduct(payload.new);
+          setProducts((prev) => {
+            const exists = prev.some((p) => p.id === updated.id);
+            if (exists) {
+              return prev.map((p) => (p.id === updated.id ? updated : p));
+            }
+            return [updated, ...prev];
+          });
         },
       )
       .on(

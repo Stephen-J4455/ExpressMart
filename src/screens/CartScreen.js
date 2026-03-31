@@ -72,8 +72,26 @@ export const CartScreen = ({ navigation }) => {
   const { items, total, updateQuantity, removeFromCart, clearCart } = useCart();
   const toast = useToast();
   const { isWide, contentMaxWidth } = useResponsive();
+  const getAvailableStock = (product) =>
+    Number(product?.quantity ?? product?.stock ?? 0);
+  const hasInventoryValue = (product) =>
+    product?.quantity != null || product?.stock != null;
+  const hasOutOfStockItems = items.some(
+    ({ product }) =>
+      hasInventoryValue(product) &&
+      getAvailableStock(product) <= 0 &&
+      !product?.allow_backorder,
+  );
 
   const handleCheckout = () => {
+    if (hasOutOfStockItems) {
+      toast.warning(
+        "Unavailable items",
+        "Remove out-of-stock items before checkout.",
+      );
+      return;
+    }
+
     if (!isAuthenticated) {
       navigation.navigate("Auth");
     } else {
@@ -121,6 +139,16 @@ export const CartScreen = ({ navigation }) => {
           showsVerticalScrollIndicator={false}
         >
           {items.map(({ id, product, quantity, size, color, price }) => {
+            const knownInventory = hasInventoryValue(product);
+            const maxStock = getAvailableStock(product);
+            const isOutOfStock =
+              knownInventory && maxStock <= 0 && !product?.allow_backorder;
+            const isMaxStockReached =
+              knownInventory &&
+              !product?.allow_backorder &&
+              maxStock > 0 &&
+              quantity >= maxStock;
+
             // Resolve effective unit price: stored price (may be flash-sale or discounted),
             // falling back to a discount-based calculation, or base price.
             const effectivePrice =
@@ -138,7 +166,13 @@ export const CartScreen = ({ navigation }) => {
               : 0;
 
             return (
-              <View key={id} style={styles.itemCard}>
+              <View
+                key={id}
+                style={[
+                  styles.itemCard,
+                  isOutOfStock && styles.itemCardOutOfStock,
+                ]}
+              >
                 <Pressable
                   style={styles.itemRow}
                   onPress={() =>
@@ -162,6 +196,13 @@ export const CartScreen = ({ navigation }) => {
                       >
                         <Text style={styles.discountText}>
                           {isFlashSaleItem ? "\u26a1" : ""}-{reductionPct}%
+                        </Text>
+                      </View>
+                    )}
+                    {isOutOfStock && (
+                      <View style={styles.outOfStockBadge}>
+                        <Text style={styles.outOfStockBadgeText}>
+                          Out of Stock
                         </Text>
                       </View>
                     )}
@@ -205,6 +246,11 @@ export const CartScreen = ({ navigation }) => {
                         </Text>
                       )}
                     </View>
+                    {isOutOfStock && (
+                      <Text style={styles.outOfStockText}>
+                        This item is currently unavailable
+                      </Text>
+                    )}
                   </View>
                 </Pressable>
                 <View style={styles.itemActions}>
@@ -222,7 +268,11 @@ export const CartScreen = ({ navigation }) => {
                         quantity <= 1 && styles.qtyButtonDisabled,
                       ]}
                       onPress={() =>
-                        updateQuantity(product.id, Math.max(1, quantity - 1))
+                        updateQuantity(
+                          product.id,
+                          Math.max(1, quantity - 1),
+                          id,
+                        )
                       }
                     >
                       <Ionicons
@@ -235,8 +285,16 @@ export const CartScreen = ({ navigation }) => {
                       <Text style={styles.qtyValue}>{quantity}</Text>
                     </View>
                     <Pressable
-                      style={[styles.qtyButton, styles.qtyButtonAdd]}
-                      onPress={() => updateQuantity(product.id, quantity + 1)}
+                      style={[
+                        styles.qtyButton,
+                        styles.qtyButtonAdd,
+                        (isOutOfStock || isMaxStockReached) &&
+                          styles.qtyButtonDisabledAdd,
+                      ]}
+                      onPress={() =>
+                        updateQuantity(product.id, quantity + 1, id)
+                      }
+                      disabled={isOutOfStock || isMaxStockReached}
                     >
                       <Ionicons name="add" size={18} color="#fff" />
                     </Pressable>
@@ -263,9 +321,21 @@ export const CartScreen = ({ navigation }) => {
               Shipping & service fees calculated at checkout
             </Text>
           </View>
+          {hasOutOfStockItems && (
+            <View style={styles.stockWarningContainer}>
+              <Ionicons name="alert-circle-outline" size={14} color="#B91C1C" />
+              <Text style={styles.stockWarningText}>
+                Some items are out of stock. Remove them before checkout.
+              </Text>
+            </View>
+          )}
           <Pressable style={styles.checkout} onPress={handleCheckout}>
             <LinearGradient
-              colors={[colors.primary, colors.accent]}
+              colors={
+                hasOutOfStockItems
+                  ? [colors.muted, colors.muted]
+                  : [colors.primary, colors.accent]
+              }
               style={styles.checkoutGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
@@ -388,6 +458,9 @@ const styles = StyleSheet.create({
     elevation: 3,
     overflow: "hidden",
   },
+  itemCardOutOfStock: {
+    opacity: 0.72,
+  },
   itemRow: {
     flexDirection: "row",
     padding: 12,
@@ -421,6 +494,22 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 10,
     fontWeight: "700",
+  },
+  outOfStockBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "rgba(31,41,55,0.9)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  outOfStockBadgeText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   itemContent: {
     flex: 1,
@@ -476,6 +565,12 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textDecorationLine: "line-through",
   },
+  outOfStockText: {
+    marginTop: 6,
+    color: "#B91C1C",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   itemActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -520,6 +615,9 @@ const styles = StyleSheet.create({
   },
   qtyButtonAdd: {
     backgroundColor: colors.primary,
+  },
+  qtyButtonDisabledAdd: {
+    backgroundColor: "#CBD5E1",
   },
   qtyValueContainer: {
     minWidth: 36,
@@ -573,6 +671,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.primary,
     fontWeight: "600",
+  },
+  stockWarningContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 14,
+  },
+  stockWarningText: {
+    fontSize: 12,
+    color: "#B91C1C",
+    fontWeight: "600",
+    flex: 1,
   },
   totalRow: {
     flexDirection: "row",

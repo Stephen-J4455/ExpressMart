@@ -1,7 +1,11 @@
 import {
+  Alert,
+  ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   Text,
   View,
   Switch,
@@ -10,13 +14,55 @@ import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../theme/colors";
+import { useAuth } from "../context/AuthContext";
 
 export const PrivacySettingsScreen = ({ navigation }) => {
+  const { deleteAccount } = useAuth();
   const [profileVisibility, setProfileVisibility] = useState(true);
   const [orderHistoryVisible, setOrderHistoryVisible] = useState(false);
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
   const [marketingEmails, setMarketingEmails] = useState(false);
   const [dataSharing, setDataSharing] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+
+  const handleConfirmDelete = async () => {
+    if (!deletePassword) {
+      Alert.alert("Password Required", "Enter your current password.");
+      return;
+    }
+
+    try {
+      setDeletingAccount(true);
+      const { error } = await deleteAccount(deletePassword);
+      if (error) {
+        Alert.alert(
+          "Unable to Delete",
+          error.message || "Please try again or contact support.",
+        );
+      }
+    } finally {
+      setDeletingAccount(false);
+      setDeletePassword("");
+      setShowDeleteModal(false);
+    }
+  };
+
+  const runDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This permanently deletes your account and cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: () => setShowDeleteModal(true),
+        },
+      ],
+    );
+  };
 
   const privacySections = [
     {
@@ -85,10 +131,7 @@ export const PrivacySettingsScreen = ({ navigation }) => {
           icon: "trash-outline",
           label: "Delete My Account",
           description: "Permanently delete your account and data",
-          action: () => {
-            // TODO: Implement account deletion
-            alert("Account deletion feature coming soon!");
-          },
+          action: runDeleteAccount,
           danger: true,
         },
       ],
@@ -125,12 +168,20 @@ export const PrivacySettingsScreen = ({ navigation }) => {
           thumbColor="#fff"
         />
       ) : (
-        <Pressable style={styles.actionButton} onPress={item.action}>
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color={item.danger ? colors.accent : colors.muted}
-          />
+        <Pressable
+          style={styles.actionButton}
+          onPress={item.action}
+          disabled={deletingAccount && item.label === "Delete My Account"}
+        >
+          {deletingAccount && item.label === "Delete My Account" ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={item.danger ? colors.accent : colors.muted}
+            />
+          )}
         </Pressable>
       )}
     </View>
@@ -188,6 +239,54 @@ export const PrivacySettingsScreen = ({ navigation }) => {
 
         <View style={styles.spacer} />
       </ScrollView>
+
+      <Modal
+        transparent
+        visible={showDeleteModal}
+        animationType="fade"
+        onRequestClose={() => setShowDeleteModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Confirm With Password</Text>
+            <Text style={styles.modalText}>
+              Enter your current password to permanently delete this account.
+            </Text>
+            <TextInput
+              style={styles.passwordInput}
+              secureTextEntry
+              autoCapitalize="none"
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              placeholder="Current password"
+              placeholderTextColor={colors.muted}
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.modalCancelBtn}
+                onPress={() => {
+                  setShowDeleteModal(false);
+                  setDeletePassword("");
+                }}
+                disabled={deletingAccount}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.modalDeleteBtn}
+                onPress={handleConfirmDelete}
+                disabled={deletingAccount}
+              >
+                {deletingAccount ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalDeleteText}>Delete</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -324,5 +423,61 @@ const styles = StyleSheet.create({
   },
   spacer: {
     height: 32,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.dark,
+    marginBottom: 8,
+  },
+  modalText: {
+    fontSize: 14,
+    color: colors.muted,
+    marginBottom: 12,
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderColor: colors.light,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.dark,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 14,
+    gap: 10,
+  },
+  modalCancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  modalCancelText: {
+    color: colors.muted,
+    fontWeight: "600",
+  },
+  modalDeleteBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minWidth: 88,
+    alignItems: "center",
+  },
+  modalDeleteText: {
+    color: "#fff",
+    fontWeight: "700",
   },
 });

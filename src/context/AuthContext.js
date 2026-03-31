@@ -7,7 +7,7 @@ import {
   useRef,
 } from "react";
 import { AppState } from "react-native";
-import { supabase } from "../lib/supabase";
+import { callEdgeFunction, supabase } from "../lib/supabase";
 
 const AuthContext = createContext();
 
@@ -264,6 +264,41 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const deleteAccount = async (password) => {
+    if (!supabase || !user?.id) {
+      return { error: new Error("Not authenticated") };
+    }
+    if (!password) {
+      return { error: new Error("Password is required") };
+    }
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password,
+      });
+
+      if (signInError) {
+        throw new Error("Incorrect password");
+      }
+
+      await stopPresence(user.id);
+      await callEdgeFunction("delete_account", { app: "customer" });
+      setUser(null);
+      setProfile(null);
+      setSession(null);
+      return { error: null };
+    } catch (error) {
+      console.error("Delete account error:", error);
+      return {
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to delete account"),
+      };
+    }
+  };
+
   // reset page is deployed on GitHub Pages. the password-reset.html file
   // lives in the root of the main branch of the `express-password-reset`
   // repository.
@@ -365,6 +400,7 @@ export const AuthProvider = ({ children }) => {
     signUp,
     signIn,
     signOut,
+    deleteAccount,
     resetPassword,
     updateProfile,
     updatePassword,

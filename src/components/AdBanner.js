@@ -277,16 +277,20 @@ export const AdCard = ({ ad }) => {
 export const AdCarousel = ({ ads }) => {
   const { trackImpression, trackClick } = useAds();
   const [currentIndex, setCurrentIndex] = React.useState(0);
+  const [userInteracted, setUserInteracted] = React.useState(false);
+  const interactionTimeoutRef = React.useRef(null);
+  const scrollRef = React.useRef(null);
   const { isWide } = useResponsive();
 
-  // Auto-scroll on mobile
+  // Auto-scroll on mobile (pauses briefly after user interaction)
   useEffect(() => {
     if (isWide || !ads || ads.length <= 1) return;
+    if (userInteracted) return;
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % ads.length);
     }, 3500);
     return () => clearInterval(timer);
-  }, [ads, isWide]);
+  }, [ads, isWide, userInteracted]);
 
   // Track impressions
   useEffect(() => {
@@ -451,118 +455,198 @@ export const AdCarousel = ({ ads }) => {
     }
   };
 
+  // For paging math
+  const containerPadding = 16;
+  const slideGap = 12; // gap between slides
+  const slideWidth = width - containerPadding * 2;
+  const itemWidth = slideWidth + slideGap; // full step when paging
+
+  // When currentIndex changes (programmatically), scroll the ScrollView
+  useEffect(() => {
+    if (scrollRef.current && !isWide) {
+      scrollRef.current.scrollTo({
+        x: currentIndex * itemWidth,
+        animated: true,
+      });
+    }
+  }, [currentIndex, slideWidth, isWide]);
+
+  // clear interaction timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (interactionTimeoutRef.current)
+        clearTimeout(interactionTimeoutRef.current);
+    };
+  }, []);
+
+  const handleScrollEnd = (e) => {
+    const offsetX = e.nativeEvent.contentOffset.x || 0;
+    const newIndex = Math.round(offsetX / itemWidth);
+    setCurrentIndex(newIndex);
+  };
+
+  const handleBeginDrag = () => {
+    setUserInteracted(true);
+    if (interactionTimeoutRef.current)
+      clearTimeout(interactionTimeoutRef.current);
+    interactionTimeoutRef.current = setTimeout(
+      () => setUserInteracted(false),
+      5000,
+    );
+  };
+
   return (
     <View style={styles.carouselContainer}>
-      {currentAd.use_image_as_bg ? (
-        <ImageBackground
-          source={{ uri: currentAd.image_url }}
-          style={[
-            styles.carouselSlide,
-            { borderRadius: currentAd.border_radius || 12, overflow: "hidden" },
-          ]}
-          imageStyle={{ borderRadius: currentAd.border_radius || 12 }}
-        >
-          <View style={styles.imageBgOverlay} />
-          <Pressable style={styles.carouselContent} onPress={handlePress}>
-            {currentAd.discount_badge && (
-              <View
-                style={[
-                  styles.carouselBadge,
-                  { backgroundColor: currentAd.discount_color || "#FF6B6B" },
-                ]}
-              >
-                <Text style={styles.carouselBadgeText}>
-                  {currentAd.discount_badge}
-                </Text>
-              </View>
-            )}
-            <Text style={[styles.carouselTitle, { color: "#fff" }]}>
-              {currentAd.title}
-            </Text>
-            {currentAd.description && (
-              <Text
-                style={[
-                  styles.carouselDescription,
-                  { color: "rgba(255,255,255,0.85)" },
-                ]}
-              >
-                {currentAd.description}
-              </Text>
-            )}
-            <Pressable
-              style={[
-                styles.carouselCta,
-                { backgroundColor: currentAd.accent_color || "#0B6EFE" },
-              ]}
-              onPress={handlePress}
-            >
-              <Text style={styles.carouselCtaText}>
-                {currentAd.cta_text || "Shop Now"}
-              </Text>
-            </Pressable>
-          </Pressable>
-        </ImageBackground>
-      ) : (
-        <Pressable
-          style={[
+      <ScrollView
+        horizontal
+        pagingEnabled
+        ref={scrollRef}
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleScrollEnd}
+        onScrollBeginDrag={handleBeginDrag}
+        contentContainerStyle={{ alignItems: "center" }}
+      >
+        {ads.map((ad, index) => {
+          const key = ad.id || index;
+          const slideStyle = [
             styles.carouselSlide,
             {
-              backgroundColor: currentAd.background_color || "#FFFFFF",
-              borderRadius: currentAd.border_radius || 12,
+              width: slideWidth,
+              marginRight: index === ads.length - 1 ? 0 : slideGap,
             },
-          ]}
-          onPress={handlePress}
-        >
-          <Image
-            source={{ uri: currentAd.image_url }}
-            style={styles.carouselImage}
-          />
+          ];
 
-          <View style={styles.carouselContent}>
-            {currentAd.discount_badge && (
-              <View
+          const handleAdPress = async () => {
+            trackClick(ad.id);
+            if (ad.cta_url) {
+              try {
+                await Linking.openURL(ad.cta_url);
+              } catch (error) {
+                console.error("Error opening URL:", error);
+              }
+            }
+          };
+
+          if (ad.use_image_as_bg) {
+            return (
+              <ImageBackground
+                key={key}
+                source={{ uri: ad.image_url }}
                 style={[
-                  styles.carouselBadge,
-                  { backgroundColor: currentAd.discount_color || "#FF6B6B" },
+                  ...slideStyle,
+                  { borderRadius: ad.border_radius || 12, overflow: "hidden" },
                 ]}
+                imageStyle={{ borderRadius: ad.border_radius || 12 }}
               >
-                <Text style={styles.carouselBadgeText}>
-                  {currentAd.discount_badge}
-                </Text>
-              </View>
-            )}
-            <Text
-              style={[
-                styles.carouselTitle,
-                { color: currentAd.text_color || "#000000" },
-              ]}
-            >
-              {currentAd.title}
-            </Text>
-            {currentAd.description && (
-              <Text
-                style={[
-                  styles.carouselDescription,
-                  { color: currentAd.text_color || "#000000" },
-                ]}
-              >
-                {currentAd.description}
-              </Text>
-            )}
+                <View style={styles.imageBgOverlay} />
+                <Pressable
+                  style={styles.carouselContent}
+                  onPress={handleAdPress}
+                >
+                  {ad.discount_badge && (
+                    <View
+                      style={[
+                        styles.carouselBadge,
+                        { backgroundColor: ad.discount_color || "#FF6B6B" },
+                      ]}
+                    >
+                      <Text style={styles.carouselBadgeText}>
+                        {ad.discount_badge}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={[styles.carouselTitle, { color: "#fff" }]}>
+                    {ad.title}
+                  </Text>
+                  {ad.description && (
+                    <Text
+                      style={[
+                        styles.carouselDescription,
+                        { color: "rgba(255,255,255,0.85)" },
+                      ]}
+                    >
+                      {ad.description}
+                    </Text>
+                  )}
+                  <Pressable
+                    style={[
+                      styles.carouselCta,
+                      { backgroundColor: ad.accent_color || "#0B6EFE" },
+                    ]}
+                    onPress={handleAdPress}
+                  >
+                    <Text style={styles.carouselCtaText}>
+                      {ad.cta_text || "Shop Now"}
+                    </Text>
+                  </Pressable>
+                </Pressable>
+              </ImageBackground>
+            );
+          }
+
+          return (
             <Pressable
+              key={key}
               style={[
-                styles.carouselCta,
-                { backgroundColor: currentAd.accent_color || "#0B6EFE" },
+                ...slideStyle,
+                {
+                  backgroundColor: ad.background_color || "#FFFFFF",
+                  borderRadius: ad.border_radius || 12,
+                },
               ]}
-              onPress={handlePress}
+              onPress={handleAdPress}
             >
-              <Text style={styles.carouselCtaText}>
-                {currentAd.cta_text || "Shop Now"}
-              </Text>
+              <Image
+                source={{ uri: ad.image_url }}
+                style={[styles.carouselImage, { width: "100%" }]}
+              />
+              <View style={styles.carouselContent}>
+                {ad.discount_badge && (
+                  <View
+                    style={[
+                      styles.carouselBadge,
+                      { backgroundColor: ad.discount_color || "#FF6B6B" },
+                    ]}
+                  >
+                    <Text style={styles.carouselBadgeText}>
+                      {ad.discount_badge}
+                    </Text>
+                  </View>
+                )}
+                <Text
+                  style={[
+                    styles.carouselTitle,
+                    { color: ad.text_color || "#000000" },
+                  ]}
+                >
+                  {ad.title}
+                </Text>
+                {ad.description && (
+                  <Text
+                    style={[
+                      styles.carouselDescription,
+                      { color: ad.text_color || "#000000" },
+                    ]}
+                  >
+                    {ad.description}
+                  </Text>
+                )}
+                <Pressable
+                  style={[
+                    styles.carouselCta,
+                    { backgroundColor: ad.accent_color || "#0B6EFE" },
+                  ]}
+                  onPress={handleAdPress}
+                >
+                  <Text style={styles.carouselCtaText}>
+                    {ad.cta_text || "Shop Now"}
+                  </Text>
+                </Pressable>
+              </View>
             </Pressable>
-          </View>
-        </Pressable>
-      )}
+          );
+        })}
+      </ScrollView>
 
       {ads.length > 1 && (
         <View style={styles.carouselDots}>
@@ -573,10 +657,19 @@ export const AdCarousel = ({ ads }) => {
                 styles.dot,
                 {
                   backgroundColor:
-                    index === currentIndex ? currentAd.accent_color : "#ccc",
+                    index === currentIndex
+                      ? ads[currentIndex]?.accent_color || "#0B6EFE"
+                      : "#ccc",
                 },
               ]}
-              onPress={() => setCurrentIndex(index)}
+              onPress={() => {
+                setCurrentIndex(index);
+                if (scrollRef.current)
+                  scrollRef.current.scrollTo({
+                    x: index * itemWidth,
+                    animated: true,
+                  });
+              }}
             />
           ))}
         </View>
@@ -1053,7 +1146,8 @@ const styles = StyleSheet.create({
 
   // Carousel styles
   carouselContainer: {
-    marginHorizontal: 16,
+    marginHorizontal: 0,
+    paddingHorizontal: 16,
     marginVertical: 12,
     gap: 12,
   },

@@ -86,7 +86,7 @@ Our total liability in any circumstances shall not exceed the amount you paid fo
   },
   {
     title: "9. Governing Law",
-    body: `These terms are governed by the laws of the Federal Republic of Nigeria. Any disputes arising from the use of ExpressMart that cannot be resolved through our support process will be subject to the exclusive jurisdiction of Nigerian courts.`,
+    body: `These terms are governed by the laws of the Federal Republic of Ghana. Any disputes arising from the use of ExpressMart that cannot be resolved through our support process will be subject to the exclusive jurisdiction of Ghanan courts.`,
   },
   {
     title: "10. Contact Us",

@@ -28,6 +28,8 @@ const BLOCKLIST_RE = [
   /node_modules[/\\]\.pnpm[/\\].*[/\\]node_modules[/\\].*[/\\](android|ios|\.gradle)[/\\]/,
   // Top-level android directory and gradle build outputs
   /ExpressMart[/\\]android[/\\]/,
+  // Supabase edge functions and migrations are Deno/SQL assets, not RN runtime code.
+  /ExpressMart[/\\]supabase[/\\](functions|migrations)[/\\]/,
 ];
 
 config.resolver.blockList = [

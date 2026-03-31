@@ -266,28 +266,42 @@ export const StoreScreen = ({ route, navigation }) => {
           .order("created_at", { ascending: false })
           .range(start, end);
         if (error) throw error;
-        const mapped = (data || []).map((p) => ({
-          id: p.id,
-          title: p.title,
-          vendor: p.vendor,
-          price: Number(p.price || 0),
-          rating: Number(p.rating || 0),
-          badges: p.badges || [],
-          thumbnail: p.thumbnail,
-          thumbnails: p.thumbnails || [],
-          category: p.category,
-          description: p.description,
-          discount: p.discount || 0,
-          colors: p.colors || [],
-          sizes: p.sizes || [],
-          specifications: p.specifications || null,
-          tags: p.tags || [],
-          weight: p.weight || null,
-          weight_unit: p.weight_unit || null,
-          sku: p.sku || null,
-          barcode: p.barcode || null,
-          seller: p.seller_id || null,
-        }));
+        const mapped = (data || []).map((p) => {
+          const normalizedQuantity = p.quantity ?? p.stock ?? p.stock_quantity;
+          const normalizedStock = p.stock ?? p.quantity ?? p.stock_quantity;
+          const normalizedBackorder =
+            p.allow_backorder === true ||
+            p.allow_backorder === 1 ||
+            String(p.allow_backorder || "")
+              .trim()
+              .toLowerCase() === "true";
+
+          return {
+            id: p.id,
+            title: p.title,
+            vendor: p.vendor,
+            price: Number(p.price || 0),
+            quantity: normalizedQuantity,
+            stock: normalizedStock,
+            allow_backorder: normalizedBackorder,
+            rating: Number(p.rating || 0),
+            badges: p.badges || [],
+            thumbnail: p.thumbnail,
+            thumbnails: p.thumbnails || [],
+            category: p.category,
+            description: p.description,
+            discount: p.discount || 0,
+            colors: p.colors || [],
+            sizes: p.sizes || [],
+            specifications: p.specifications || null,
+            tags: p.tags || [],
+            weight: p.weight || null,
+            weight_unit: p.weight_unit || null,
+            sku: p.sku || null,
+            barcode: p.barcode || null,
+            seller: p.seller_id || null,
+          };
+        });
         setStoreProducts(reset ? mapped : (prev) => [...prev, ...mapped]);
         setStoreHasMore(mapped.length === STORE_PAGE_SIZE);
       } catch (err) {

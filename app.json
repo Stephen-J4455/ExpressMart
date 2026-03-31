@@ -13,6 +13,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "expirements":{
+      "baseUrl": "https://stephen-j4455.github.io/expressmartweb/"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.stephenj3.ExpressMart",
@@ -44,6 +47,7 @@
       ]
     },
     "web": {
+      "output": "static",
       "favicon": "./assets/express.png"
     },
     "plugins": [

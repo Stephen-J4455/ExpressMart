@@ -65,6 +65,8 @@ import { colors, getTheme } from "./src/theme/colors";
 
 import { supabase } from "./src/lib/supabase";
 import React from "react";
+import UpdateModal from "./src/components/UpdateModal";
+import { checkForUpdate } from "./src/services/updateService";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -323,6 +325,28 @@ const linking = {
 
 const AuthenticatedApp = () => {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
+  const [updateInfo, setUpdateInfo] = React.useState(null);
+  const [updateVisible, setUpdateVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        const res = await checkForUpdate("customer");
+        if (!mounted || !res) return;
+        if (res.updateAvailable) {
+          setUpdateInfo(res.updateRow);
+          setUpdateVisible(true);
+        }
+      } catch (e) {
+        console.warn("update check failed", e);
+      }
+    };
+    run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   if (authLoading) {
     return <CustomerLoadingAnimation />;
@@ -330,6 +354,12 @@ const AuthenticatedApp = () => {
 
   return (
     <NotificationProvider userId={user?.id}>
+      <UpdateModal
+        visible={updateVisible}
+        update={updateInfo}
+        force={updateInfo?.force_update}
+        onClose={() => setUpdateVisible(false)}
+      />
       <Stack.Navigator
         screenOptions={{
           headerShown: false,

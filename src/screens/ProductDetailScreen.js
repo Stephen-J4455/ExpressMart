@@ -59,6 +59,16 @@ const PRODUCT_BADGE_CONFIG = {
   featured: { icon: "star", color: "#22C55E", label: "Featured" },
 };
 
+const toBoolean = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+  return false;
+};
+
 export const ProductDetailScreen = ({ route, navigation }) => {
   const { isWide, horizontalPadding } = useResponsive();
   const { product: initialProduct } = route.params;
@@ -96,6 +106,16 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
   // Check if product has active flash sale
   const hasFlashSale = !!flashSale && new Date(flashSale.end_time) > new Date();
+  const hasInventoryValue =
+    product?.quantity != null ||
+    product?.stock != null ||
+    product?.stock_quantity != null;
+  const availableStock = Number(
+    product?.quantity ?? product?.stock ?? product?.stock_quantity ?? 0,
+  );
+  const allowsBackorder = toBoolean(product?.allow_backorder);
+  const isOutOfStock =
+    hasInventoryValue && availableStock <= 0 && !allowsBackorder;
 
   // Format price as Ghana Cedis
   const formatPrice = (price, discount = 0) => {
@@ -120,10 +140,26 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       if (error) throw error;
       if (data) {
         // Map the seller_id to seller property
-        setProduct({
+        setProduct((prev) => ({
+          ...prev,
           ...data,
           seller: data.seller_id,
-        });
+          quantity:
+            data.quantity ??
+            data.stock ??
+            data.stock_quantity ??
+            prev?.quantity ??
+            prev?.stock ??
+            prev?.stock_quantity,
+          stock:
+            data.stock ??
+            data.quantity ??
+            data.stock_quantity ??
+            prev?.stock ??
+            prev?.quantity ??
+            prev?.stock_quantity,
+          allow_backorder: data.allow_backorder ?? prev?.allow_backorder,
+        }));
       }
     } catch (err) {
       console.error("Error refreshing product data:", err);
@@ -196,11 +232,6 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     };
     fetchReviews();
   }, [product.id, user]);
-
-  // Refresh product data on component mount
-  useEffect(() => {
-    refreshProductData();
-  }, []);
 
   // Fetch flash sale data for this product
   useEffect(() => {
@@ -422,6 +453,11 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const handleAddToCart = () => {
+    if (isOutOfStock) {
+      toast.error("Out of Stock", "This product is currently unavailable");
+      return;
+    }
+
     const hasMultipleColors = product.colors && product.colors.length > 1;
     const hasMultipleSizes = product.sizes && product.sizes.length > 1;
 
@@ -447,6 +483,12 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const handleConfirmAddToCart = () => {
+    if (isOutOfStock) {
+      toast.error("Out of Stock", "This product is currently unavailable");
+      setShowVariantModal(false);
+      return;
+    }
+
     if (
       (product.colors && product.colors.length > 1 && !selectedColor) ||
       (product.sizes && product.sizes.length > 1 && !selectedSize)
@@ -779,46 +821,43 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             </View>
 
             {/* Stock pill */}
-            {product.stock !== undefined && (
+            <View
+              style={[
+                styles.deliveryPill,
+                !isOutOfStock
+                  ? styles.deliveryPillInStock
+                  : styles.deliveryPillOutOfStock,
+              ]}
+            >
               <View
                 style={[
-                  styles.deliveryPill,
-                  product.stock > 0
-                    ? styles.deliveryPillInStock
-                    : styles.deliveryPillOutOfStock,
+                  styles.deliveryIconWrap,
+                  {
+                    backgroundColor: !isOutOfStock ? "#D1FAE5" : "#FEE2E2",
+                  },
                 ]}
               >
-                <View
-                  style={[
-                    styles.deliveryIconWrap,
-                    {
-                      backgroundColor:
-                        product.stock > 0 ? "#D1FAE5" : "#FEE2E2",
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name={
-                      product.stock > 0
-                        ? "checkmark-circle-outline"
-                        : "close-circle-outline"
-                    }
-                    size={18}
-                    color={product.stock > 0 ? "#059669" : "#DC2626"}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.deliveryLabel}>
-                    {product.stock > 0 ? "In Stock" : "Out of Stock"}
-                  </Text>
-                  {product.stock > 0 && (
-                    <Text style={[styles.deliveryValue, { color: "#059669" }]}>
-                      {product.stock} available
-                    </Text>
-                  )}
-                </View>
+                <Ionicons
+                  name={
+                    !isOutOfStock
+                      ? "checkmark-circle-outline"
+                      : "close-circle-outline"
+                  }
+                  size={18}
+                  color={!isOutOfStock ? "#059669" : "#DC2626"}
+                />
               </View>
-            )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.deliveryLabel}>
+                  {!isOutOfStock ? "In Stock" : "Out of Stock"}
+                </Text>
+                {!isOutOfStock && hasInventoryValue && (
+                  <Text style={[styles.deliveryValue, { color: "#059669" }]}>
+                    {availableStock} available
+                  </Text>
+                )}
+              </View>
+            </View>
           </View>
 
           <View style={styles.section}>
@@ -1156,13 +1195,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           />
         </Pressable>
         <Pressable
-          style={[styles.ctaButton, product.stock === 0 && styles.ctaDisabled]}
+          style={[styles.ctaButton, isOutOfStock && styles.ctaDisabled]}
           onPress={handleAddToCart}
-          disabled={product.stock === 0}
+          disabled={isOutOfStock}
         >
           <LinearGradient
             colors={
-              product.stock === 0
+              isOutOfStock
                 ? [colors.muted, colors.muted]
                 : [colors.primary, colors.accent]
             }
@@ -1172,7 +1211,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           >
             <Ionicons name="cart" size={20} color="#fff" />
             <Text style={styles.ctaText}>
-              {product.stock === 0
+              {isOutOfStock
                 ? "Out of Stock"
                 : `Add to Cart - ${formatPrice(product.price, product.discount)}`}
             </Text>
