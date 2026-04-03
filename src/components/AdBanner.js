@@ -5,6 +5,7 @@ import {
   Image,
   ImageBackground,
   Pressable,
+  Modal,
   StyleSheet,
   Dimensions,
   ScrollView,
@@ -12,31 +13,139 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
+import { useIsFocused } from "@react-navigation/native";
 import { useAds } from "../context/AdsContext";
 import { useResponsive } from "../hooks/useResponsive";
 
 const { width } = Dimensions.get("window");
 
+const ensureHttpProtocol = (value) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+};
+
+const sanitizeHandle = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/^\/+/, "")
+    .split(/[/?#]/)[0];
+
+const inferCtaPlatform = (value, savedPlatform) => {
+  const rawPlatform = String(savedPlatform || "")
+    .trim()
+    .toLowerCase();
+  if (rawPlatform) return rawPlatform;
+
+  const raw = String(value || "").toLowerCase();
+  if (!raw) return "website";
+  if (raw.includes("whatsapp") || raw.includes("wa.me")) return "whatsapp";
+  if (raw.includes("instagram")) return "instagram";
+  if (raw.includes("facebook") || raw.includes("fb.me")) return "facebook";
+  if (raw.includes("discord.gg") || raw.includes("discord.com")) {
+    return "discord";
+  }
+  if (raw.includes("tiktok")) return "tiktok";
+  if (raw.includes("twitch")) return "twitch";
+  if (raw.includes("x.com") || raw.includes("twitter.com")) return "x";
+  if (raw.includes("telegram") || raw.includes("t.me")) return "telegram";
+  return "website";
+};
+
+const buildDestinationUrl = (platform, rawValue) => {
+  const input = String(rawValue || "").trim();
+  if (!input) return "";
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(input)) return input;
+
+  switch (platform) {
+    case "website":
+      return ensureHttpProtocol(input);
+    case "whatsapp": {
+      if (/^(wa\.me|api\.whatsapp\.com)\//i.test(input)) {
+        return `https://${input}`;
+      }
+      const phone = input.replace(/[^0-9]/g, "");
+      return phone ? `https://wa.me/${phone}` : ensureHttpProtocol(input);
+    }
+    case "instagram": {
+      const handle = sanitizeHandle(input);
+      return handle
+        ? `https://instagram.com/${handle}`
+        : ensureHttpProtocol(input);
+    }
+    case "facebook": {
+      const handle = sanitizeHandle(input);
+      return handle
+        ? `https://facebook.com/${handle}`
+        : ensureHttpProtocol(input);
+    }
+    case "discord": {
+      const invite = sanitizeHandle(input).replace(/^invite\//i, "");
+      return invite
+        ? `https://discord.gg/${invite}`
+        : ensureHttpProtocol(input);
+    }
+    case "tiktok": {
+      const handle = sanitizeHandle(input);
+      return handle
+        ? `https://www.tiktok.com/@${handle}`
+        : ensureHttpProtocol(input);
+    }
+    case "twitch": {
+      const handle = sanitizeHandle(input);
+      return handle
+        ? `https://www.twitch.tv/${handle}`
+        : ensureHttpProtocol(input);
+    }
+    case "x": {
+      const handle = sanitizeHandle(input);
+      return handle ? `https://x.com/${handle}` : ensureHttpProtocol(input);
+    }
+    case "telegram": {
+      const handle = sanitizeHandle(input);
+      return handle ? `https://t.me/${handle}` : ensureHttpProtocol(input);
+    }
+    default:
+      return ensureHttpProtocol(input);
+  }
+};
+
+const openAdDestination = async (ad, trackClick) => {
+  if (!ad) return;
+
+  if (typeof trackClick === "function") {
+    await Promise.resolve(trackClick(ad.id));
+  }
+
+  const ctaValue = String(ad.cta_url || "").trim();
+  if (!ctaValue) return;
+
+  try {
+    const platform = inferCtaPlatform(ctaValue, ad.cta_platform);
+    const destination = buildDestinationUrl(platform, ctaValue);
+    if (!destination) return;
+    await Linking.openURL(destination);
+  } catch (error) {
+    console.error("Error opening ad destination:", error);
+  }
+};
+
 export const AdBanner = ({ ad, onClose }) => {
   const { trackImpression, trackClick } = useAds();
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    if (ad) {
+    if (ad && isFocused) {
       trackImpression(ad.id);
     }
-  }, [ad]);
+  }, [ad, isFocused, trackImpression]);
 
   if (!ad) return null;
 
   const handlePress = async () => {
-    trackClick(ad.id);
-    if (ad.cta_url) {
-      try {
-        await Linking.openURL(ad.cta_url);
-      } catch (error) {
-        console.error("Error opening URL:", error);
-      }
-    }
+    await openAdDestination(ad, trackClick);
   };
 
   const bannerStyle = {
@@ -141,24 +250,18 @@ export const AdBanner = ({ ad, onClose }) => {
 
 export const AdCard = ({ ad }) => {
   const { trackImpression, trackClick } = useAds();
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    if (ad) {
+    if (ad && isFocused) {
       trackImpression(ad.id);
     }
-  }, [ad]);
+  }, [ad, isFocused, trackImpression]);
 
   if (!ad) return null;
 
   const handlePress = async () => {
-    trackClick(ad.id);
-    if (ad.cta_url) {
-      try {
-        await Linking.openURL(ad.cta_url);
-      } catch (error) {
-        console.error("Error opening URL:", error);
-      }
-    }
+    await openAdDestination(ad, trackClick);
   };
 
   if (ad.use_image_as_bg) {
@@ -276,6 +379,7 @@ export const AdCard = ({ ad }) => {
 
 export const AdCarousel = ({ ads }) => {
   const { trackImpression, trackClick } = useAds();
+  const isFocused = useIsFocused();
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [userInteracted, setUserInteracted] = React.useState(false);
   const interactionTimeoutRef = React.useRef(null);
@@ -294,12 +398,14 @@ export const AdCarousel = ({ ads }) => {
 
   // Track impressions
   useEffect(() => {
+    if (!isFocused) return;
+
     if (isWide) {
       ads?.forEach((ad) => trackImpression(ad.id));
     } else if (ads && ads[currentIndex]) {
       trackImpression(ads[currentIndex].id);
     }
-  }, [currentIndex, ads, isWide]);
+  }, [currentIndex, ads, isWide, isFocused, trackImpression]);
 
   if (!ads || ads.length === 0) return null;
 
@@ -309,14 +415,7 @@ export const AdCarousel = ({ ads }) => {
       <View style={styles.carouselGridRow}>
         {ads.map((ad) => {
           const handleAdPress = async () => {
-            trackClick(ad.id);
-            if (ad.cta_url) {
-              try {
-                await Linking.openURL(ad.cta_url);
-              } catch (error) {
-                console.error("Error opening URL:", error);
-              }
-            }
+            await openAdDestination(ad, trackClick);
           };
 
           if (ad.use_image_as_bg) {
@@ -445,14 +544,7 @@ export const AdCarousel = ({ ads }) => {
   const currentAd = ads[currentIndex];
 
   const handlePress = async () => {
-    trackClick(currentAd.id);
-    if (currentAd.cta_url) {
-      try {
-        await Linking.openURL(currentAd.cta_url);
-      } catch (error) {
-        console.error("Error opening URL:", error);
-      }
-    }
+    await openAdDestination(currentAd, trackClick);
   };
 
   // For paging math
@@ -517,14 +609,7 @@ export const AdCarousel = ({ ads }) => {
           ];
 
           const handleAdPress = async () => {
-            trackClick(ad.id);
-            if (ad.cta_url) {
-              try {
-                await Linking.openURL(ad.cta_url);
-              } catch (error) {
-                console.error("Error opening URL:", error);
-              }
-            }
+            await openAdDestination(ad, trackClick);
           };
 
           if (ad.use_image_as_bg) {
@@ -681,111 +766,130 @@ export const AdCarousel = ({ ads }) => {
 // Popup Ad - Modal overlay style
 export const AdPopup = ({ ad, onClose, visible = true }) => {
   const { trackImpression, trackClick } = useAds();
+  const isFocused = useIsFocused();
+  const [dismissed, setDismissed] = React.useState(false);
 
   useEffect(() => {
-    if (ad && visible) {
+    if (ad && visible && isFocused) {
       trackImpression(ad.id);
     }
-  }, [ad, visible]);
+  }, [ad, visible, isFocused, trackImpression]);
 
-  if (!ad || !visible) return null;
+  useEffect(() => {
+    setDismissed(false);
+  }, [ad?.id, visible]);
+
+  const isVisible = visible && !dismissed;
+
+  if (!ad || !isVisible) return null;
+
+  const handleClose = () => {
+    if (typeof onClose === "function") {
+      onClose();
+      return;
+    }
+    setDismissed(true);
+  };
 
   const handlePress = async () => {
-    trackClick(ad.id);
-    if (ad.cta_url) {
-      try {
-        await Linking.openURL(ad.cta_url);
-      } catch (error) {
-        console.error("Error opening URL:", error);
-      }
-    }
+    await openAdDestination(ad, trackClick);
   };
 
   return (
-    <View style={styles.popupOverlay}>
-      <View
-        style={[
-          styles.popupContainer,
-          {
-            backgroundColor: ad.background_color || "#FFFFFF",
-            borderRadius: ad.border_radius || 16,
-          },
-        ]}
-      >
-        <Pressable style={styles.popupClose} onPress={onClose}>
-          <Ionicons
-            name="close-circle"
-            size={28}
-            color={ad.text_color || "#000"}
-          />
-        </Pressable>
-
-        <Image source={{ uri: ad.image_url }} style={styles.popupImage} />
-
-        <View style={styles.popupContent}>
-          {ad.discount_badge && (
-            <View
-              style={[
-                styles.popupBadge,
-                { backgroundColor: ad.discount_color || "#FF6B6B" },
-              ]}
-            >
-              <Text style={styles.popupBadgeText}>{ad.discount_badge}</Text>
-            </View>
-          )}
-
-          <Text style={[styles.popupTitle, { color: ad.text_color || "#000" }]}>
-            {ad.title}
-          </Text>
-
-          {ad.description && (
-            <Text
-              style={[
-                styles.popupDescription,
-                { color: ad.text_color || "#000" },
-              ]}
-            >
-              {ad.description}
-            </Text>
-          )}
-
-          <Pressable
-            style={[
-              styles.popupCta,
-              { backgroundColor: ad.accent_color || "#0B6EFE" },
-            ]}
-            onPress={handlePress}
-          >
-            <Text style={styles.popupCtaText}>{ad.cta_text || "Shop Now"}</Text>
-            <Ionicons name="arrow-forward" size={18} color="#fff" />
+    <Modal
+      visible={isVisible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={handleClose}
+    >
+      <View style={styles.popupOverlay}>
+        <View
+          style={[
+            styles.popupContainer,
+            {
+              backgroundColor: ad.background_color || "#FFFFFF",
+              borderRadius: ad.border_radius || 16,
+            },
+          ]}
+        >
+          <Pressable style={styles.popupClose} onPress={handleClose}>
+            <Ionicons
+              name="close-circle"
+              size={28}
+              color={ad.text_color || "#000"}
+            />
           </Pressable>
+
+          <Image
+            source={{ uri: ad.image_url }}
+            style={styles.popupImage}
+            resizeMode="cover"
+          />
+
+          <View style={styles.popupContent}>
+            {ad.discount_badge && (
+              <View
+                style={[
+                  styles.popupBadge,
+                  { backgroundColor: ad.discount_color || "#FF6B6B" },
+                ]}
+              >
+                <Text style={styles.popupBadgeText}>{ad.discount_badge}</Text>
+              </View>
+            )}
+
+            <Text
+              style={[styles.popupTitle, { color: ad.text_color || "#000" }]}
+            >
+              {ad.title}
+            </Text>
+
+            {ad.description && (
+              <Text
+                style={[
+                  styles.popupDescription,
+                  { color: ad.text_color || "#000" },
+                ]}
+              >
+                {ad.description}
+              </Text>
+            )}
+
+            <Pressable
+              style={[
+                styles.popupCta,
+                { backgroundColor: ad.accent_color || "#0B6EFE" },
+              ]}
+              onPress={handlePress}
+            >
+              <Text style={styles.popupCtaText}>
+                {ad.cta_text || "Shop Now"}
+              </Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </Pressable>
+          </View>
         </View>
       </View>
-    </View>
+    </Modal>
   );
 };
 
 // Story Ad - Full width vertical card
 export const AdStory = ({ ad, onClose }) => {
   const { trackImpression, trackClick } = useAds();
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    if (ad) {
+    if (ad && isFocused) {
       trackImpression(ad.id);
     }
-  }, [ad]);
+  }, [ad, isFocused, trackImpression]);
 
   if (!ad) return null;
 
   const handlePress = async () => {
-    trackClick(ad.id);
-    if (ad.cta_url) {
-      try {
-        await Linking.openURL(ad.cta_url);
-      } catch (error) {
-        console.error("Error opening URL:", error);
-      }
-    }
+    await openAdDestination(ad, trackClick);
   };
 
   return (
@@ -838,96 +942,124 @@ export const AdStory = ({ ad, onClose }) => {
 };
 
 // Fullscreen Ad - Takes entire screen
-export const AdFullscreen = ({ ad, onClose }) => {
+export const AdFullscreen = ({ ad, onClose, visible = true }) => {
   const { trackImpression, trackClick } = useAds();
+  const isFocused = useIsFocused();
+  const [dismissed, setDismissed] = React.useState(false);
 
   useEffect(() => {
-    if (ad) {
+    if (ad && visible && isFocused) {
       trackImpression(ad.id);
     }
-  }, [ad]);
+  }, [ad, visible, isFocused, trackImpression]);
 
-  if (!ad) return null;
+  useEffect(() => {
+    setDismissed(false);
+  }, [ad?.id, visible]);
+
+  const isVisible = visible && !dismissed;
+
+  if (!ad || !isVisible) return null;
+
+  const handleClose = () => {
+    if (typeof onClose === "function") {
+      onClose();
+      return;
+    }
+    setDismissed(true);
+  };
 
   const handlePress = async () => {
-    trackClick(ad.id);
-    if (ad.cta_url) {
-      try {
-        await Linking.openURL(ad.cta_url);
-      } catch (error) {
-        console.error("Error opening URL:", error);
-      }
-    }
+    await openAdDestination(ad, trackClick);
   };
 
   return (
-    <View style={styles.fullscreenContainer}>
-      <Image source={{ uri: ad.image_url }} style={styles.fullscreenImage} />
-      <LinearGradient
-        colors={["transparent", "rgba(0,0,0,0.8)"]}
-        style={styles.fullscreenGradient}
-      />
+    <Modal
+      visible={isVisible}
+      transparent={false}
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={handleClose}
+    >
+      <View style={styles.fullscreenContainer}>
+        <Image source={{ uri: ad.image_url }} style={styles.fullscreenImage} />
+        <LinearGradient
+          colors={["transparent", "rgba(0,0,0,0.8)"]}
+          style={styles.fullscreenGradient}
+        />
 
-      <Pressable style={styles.fullscreenClose} onPress={onClose}>
-        <Ionicons name="close-circle" size={32} color="#fff" />
-      </Pressable>
-
-      <View style={styles.fullscreenContent}>
-        {ad.discount_badge && (
-          <View
-            style={[
-              styles.fullscreenBadge,
-              { backgroundColor: ad.discount_color || "#FF6B6B" },
-            ]}
-          >
-            <Text style={styles.fullscreenBadgeText}>{ad.discount_badge}</Text>
-          </View>
-        )}
-
-        <Text style={styles.fullscreenTitle}>{ad.title}</Text>
-
-        {ad.description && (
-          <Text style={styles.fullscreenDescription}>{ad.description}</Text>
-        )}
-
-        <Pressable
-          style={[
-            styles.fullscreenCta,
-            { backgroundColor: ad.accent_color || "#0B6EFE" },
-          ]}
-          onPress={handlePress}
-        >
-          <Text style={styles.fullscreenCtaText}>
-            {ad.cta_text || "Shop Now"}
-          </Text>
-          <Ionicons name="arrow-forward" size={20} color="#fff" />
+        <Pressable style={styles.fullscreenClose} onPress={handleClose}>
+          <Ionicons name="close-circle" size={32} color="#fff" />
         </Pressable>
+
+        <View style={styles.fullscreenContent}>
+          {ad.discount_badge && (
+            <View
+              style={[
+                styles.fullscreenBadge,
+                { backgroundColor: ad.discount_color || "#FF6B6B" },
+              ]}
+            >
+              <Text style={styles.fullscreenBadgeText}>
+                {ad.discount_badge}
+              </Text>
+            </View>
+          )}
+
+          <Text style={styles.fullscreenTitle}>{ad.title}</Text>
+
+          {ad.description && (
+            <Text style={styles.fullscreenDescription}>{ad.description}</Text>
+          )}
+
+          <Pressable
+            style={[
+              styles.fullscreenCta,
+              { backgroundColor: ad.accent_color || "#0B6EFE" },
+            ]}
+            onPress={handlePress}
+          >
+            <Text style={styles.fullscreenCtaText}>
+              {ad.cta_text || "Shop Now"}
+            </Text>
+            <Ionicons name="arrow-forward" size={20} color="#fff" />
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </Modal>
   );
 };
 
 // Sticky Footer Ad - Fixed at bottom
-export const AdStickyFooter = ({ ad, onClose }) => {
+export const AdStickyFooter = ({ ad, onClose, visible = true }) => {
   const { trackImpression, trackClick } = useAds();
+  const isFocused = useIsFocused();
+  const [dismissed, setDismissed] = React.useState(false);
 
   useEffect(() => {
-    if (ad) {
+    if (ad && visible && isFocused) {
       trackImpression(ad.id);
     }
-  }, [ad]);
+  }, [ad, visible, isFocused, trackImpression]);
 
-  if (!ad) return null;
+  useEffect(() => {
+    setDismissed(false);
+  }, [ad?.id, visible]);
+
+  const isVisible = visible && !dismissed;
+
+  if (!ad || !isVisible) return null;
+
+  const handleClose = () => {
+    if (typeof onClose === "function") {
+      onClose();
+      return;
+    }
+    setDismissed(true);
+  };
 
   const handlePress = async () => {
-    trackClick(ad.id);
-    if (ad.cta_url) {
-      try {
-        await Linking.openURL(ad.cta_url);
-      } catch (error) {
-        console.error("Error opening URL:", error);
-      }
-    }
+    await openAdDestination(ad, trackClick);
   };
 
   return (
@@ -937,7 +1069,7 @@ export const AdStickyFooter = ({ ad, onClose }) => {
         { backgroundColor: ad.background_color || "#FFFFFF" },
       ]}
     >
-      <Pressable style={styles.stickyFooterClose} onPress={onClose}>
+      <Pressable style={styles.stickyFooterClose} onPress={handleClose}>
         <Ionicons name="close" size={18} color={ad.text_color || "#000"} />
       </Pressable>
 
@@ -986,18 +1118,52 @@ export const AdStickyFooter = ({ ad, onClose }) => {
 
 // Smart AdRenderer - Picks the right component based on ad.style
 export const AdRenderer = ({ ad, ads, onClose, visible = true }) => {
+  const { isWide } = useResponsive();
+
   if (!ad && (!ads || ads.length === 0)) return null;
 
-  // If multiple ads provided, use carousel or pick first
+  // If multiple ads provided, render inline styles and overlay/fixed styles adaptively.
   if (ads && ads.length > 0) {
-    const firstAd = ads[0];
-    const style = firstAd?.style || "carousel";
+    const overlayStyles = ["popup", "fullscreen", "sticky_footer"];
+    const inlineAds = ads.filter(
+      (item) => !overlayStyles.includes(item?.style || "banner"),
+    );
 
-    if (ads.length > 1 || style === "carousel") {
-      return <AdCarousel ads={ads} />;
+    const popupAd = ads.find((item) => (item?.style || "") === "popup");
+    const fullscreenAd = ads.find(
+      (item) => (item?.style || "") === "fullscreen",
+    );
+    const stickyFooterAd = ads.find(
+      (item) => (item?.style || "") === "sticky_footer",
+    );
+
+    let inlineNode = null;
+    if (inlineAds.length > 0) {
+      const firstInlineAd = inlineAds[0];
+      const inlineStyle = firstInlineAd?.style || "carousel";
+      if (inlineAds.length > 1 || inlineStyle === "carousel") {
+        inlineNode = <AdCarousel ads={inlineAds} />;
+      } else {
+        inlineNode = (
+          <AdRenderer ad={firstInlineAd} onClose={onClose} visible={visible} />
+        );
+      }
     }
-    // Single ad, use the style from that ad
-    return <AdRenderer ad={firstAd} onClose={onClose} visible={visible} />;
+
+    return (
+      <>
+        {inlineNode}
+        {popupAd && (
+          <AdRenderer ad={popupAd} onClose={onClose} visible={visible} />
+        )}
+        {fullscreenAd && (
+          <AdRenderer ad={fullscreenAd} onClose={onClose} visible={visible} />
+        )}
+        {stickyFooterAd && (
+          <AdRenderer ad={stickyFooterAd} onClose={onClose} visible={visible} />
+        )}
+      </>
+    );
   }
 
   // Single ad rendering based on style
@@ -1015,12 +1181,16 @@ export const AdRenderer = ({ ad, ads, onClose, visible = true }) => {
     case "story":
       return <AdStory ad={ad} onClose={onClose} />;
     case "fullscreen":
-      return <AdFullscreen ad={ad} onClose={onClose} />;
+      return <AdFullscreen ad={ad} onClose={onClose} visible={visible} />;
     case "sticky_footer":
-      return <AdStickyFooter ad={ad} onClose={onClose} />;
+      return <AdStickyFooter ad={ad} onClose={onClose} visible={visible} />;
     case "sidebar":
-      // Sidebar uses card style
-      return <AdCard ad={ad} />;
+      if (!isWide) return null;
+      return (
+        <View style={styles.sidebarAdSlot}>
+          <AdCard ad={ad} />
+        </View>
+      );
     default:
       return <AdBanner ad={ad} onClose={onClose} />;
   }
@@ -1033,6 +1203,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   // Banner styles
+  sidebarAdSlot: {
+    width: 320,
+    maxWidth: "100%",
+    alignSelf: "flex-end",
+    marginRight: 12,
+  },
   bannerContainer: {
     marginHorizontal: 16,
     marginVertical: 12,
@@ -1239,6 +1415,7 @@ const styles = StyleSheet.create({
   popupContainer: {
     width: width - 48,
     maxWidth: 360,
+    maxHeight: "86%",
     overflow: "hidden",
     shadowColor: "#000",
     shadowOpacity: 0.25,

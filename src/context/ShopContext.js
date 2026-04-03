@@ -127,7 +127,7 @@ export const ShopProvider = ({ children }) => {
         supabase
           .from("express_products")
           .select(
-            "*, seller_id(id,name,avatar,rating,total_ratings,badges,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+            "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
           )
           .eq("status", "active")
           .gt("quantity", 0)
@@ -141,7 +141,7 @@ export const ShopProvider = ({ children }) => {
         supabase
           .from("express_sellers")
           .select(
-            "id,name,avatar,rating,total_ratings,badges,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
+            "id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
           )
           .eq("is_active", true)
           .order("rating", { ascending: false })
@@ -244,7 +244,7 @@ export const ShopProvider = ({ children }) => {
       const { data, error: fetchError } = await supabase
         .from("express_products")
         .select(
-          "*, seller_id(id,name,avatar,rating,total_ratings,badges,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+          "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
         )
         .eq("status", "active")
         .gt("quantity", 0)

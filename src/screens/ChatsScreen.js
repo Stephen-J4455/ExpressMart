@@ -15,9 +15,29 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useChat } from "../context/ChatContext";
 import { useShop } from "../context/ShopContext";
+import { useAds } from "../context/AdsContext";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 import { ChatScreen } from "./ChatScreen";
+
+const mapStoryAdToStatus = (ad) => ({
+  id: `ad-story-${ad.id}`,
+  is_ad_story: true,
+  ad,
+  status_type: ad?.image_url ? "image" : "text",
+  media_url: ad?.image_url || null,
+  status_text: ad?.description || ad?.title || "",
+  background_color: ad?.background_color || "#0F172A",
+  text_color: ad?.text_color || "#FFFFFF",
+  seller: {
+    id: `ad-${ad.id}`,
+    name: ad?.title || "Sponsored",
+    avatar: ad?.image_url || null,
+  },
+  created_at: ad?.created_at || new Date().toISOString(),
+  cta_text: ad?.cta_text || "Open",
+  cta_url: ad?.cta_url || null,
+});
 
 export const ChatsScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -25,15 +45,31 @@ export const ChatsScreen = ({ navigation }) => {
   const { conversations, isOnline, isLoading, refreshConversations } =
     useChat();
   const { followedSellers } = useShop();
+  const { fetchAdsByPlacement } = useAds();
   const [refreshing, setRefreshing] = useState(false);
   const [followedStatuses, setFollowedStatuses] = useState([]);
+  const [messageStoryAds, setMessageStoryAds] = useState([]);
   const [selectedSeller, setSelectedSeller] = useState(null);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshConversations();
     await fetchFollowedStatuses();
+    await fetchMessageStoryAds();
     setRefreshing(false);
+  };
+
+  const fetchMessageStoryAds = async () => {
+    try {
+      const ads = await fetchAdsByPlacement("messages");
+      const mapped = (ads || [])
+        .filter((ad) => String(ad?.style || "").toLowerCase() === "story")
+        .map(mapStoryAdToStatus);
+      setMessageStoryAds(mapped);
+    } catch (err) {
+      console.error("Error fetching message story ads:", err);
+      setMessageStoryAds([]);
+    }
   };
 
   const fetchFollowedStatuses = async () => {
@@ -73,6 +109,12 @@ export const ChatsScreen = ({ navigation }) => {
   useEffect(() => {
     fetchFollowedStatuses();
   }, [followedSellers]);
+
+  useEffect(() => {
+    fetchMessageStoryAds();
+  }, [fetchAdsByPlacement]);
+
+  const statusItems = [...messageStoryAds, ...followedStatuses];
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "";
@@ -178,14 +220,14 @@ export const ChatsScreen = ({ navigation }) => {
           <Text style={styles.headerSubtitle}>Customer Support</Text>
         </View>
 
-        {followedStatuses.length > 0 && (
+        {statusItems.length > 0 && (
           <View style={styles.headerStatusSection}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.statusScrollContent}
             >
-              {followedStatuses.map((status) => (
+              {statusItems.map((status) => (
                 <Pressable
                   key={status.id}
                   style={styles.statusCircle}
@@ -193,10 +235,22 @@ export const ChatsScreen = ({ navigation }) => {
                     navigation.navigate("StatusViewer", { status })
                   }
                 >
-                  <Image
-                    source={{ uri: status.seller.avatar }}
-                    style={styles.statusAvatar}
-                  />
+                  {status.seller?.avatar ? (
+                    <Image
+                      source={{ uri: status.seller.avatar }}
+                      style={styles.statusAvatar}
+                    />
+                  ) : (
+                    <View
+                      style={[styles.statusAvatar, styles.statusAvatarFallback]}
+                    >
+                      <Ionicons
+                        name={status.is_ad_story ? "megaphone" : "storefront"}
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
                   <View style={styles.statusIndicator} />
                   <Text style={styles.statusSellerName} numberOfLines={1}>
                     {status.seller.name}
@@ -501,6 +555,11 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderColor: colors.primary,
     marginBottom: 6,
+  },
+  statusAvatarFallback: {
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
   },
   statusIndicator: {
     position: "absolute",

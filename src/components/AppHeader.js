@@ -28,7 +28,7 @@ export const AppHeader = ({
         <View>
           <Text style={styles.caption}>Ship to</Text>
           <View style={styles.locationRow}>
-            <Text style={styles.location}>Global Warehouse</Text>
+            <Text style={styles.location}>Shipping to Ghana</Text>
             <Ionicons name="chevron-down" size={16} color={colors.primary} />
           </View>
         </View>

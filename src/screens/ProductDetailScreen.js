@@ -13,7 +13,7 @@ import {
   StatusBar,
   Platform,
 } from "react-native";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCart } from "../context/CartContext";
@@ -22,7 +22,10 @@ import { useToast } from "../context/ToastContext";
 import { useShop } from "../context/ShopContext";
 import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
+import { AdRenderer } from "../components/AdBanner";
+import { InlineAdProductCard } from "../components/InlineAdProductCard";
 import { FlashSaleCountdown } from "../components/FlashSaleCountdown";
+import { useAds } from "../context/AdsContext";
 import { flashSaleService } from "../services/flashSaleService";
 import { useResponsive } from "../hooks/useResponsive";
 
@@ -76,7 +79,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const { user } = useAuth();
   const toast = useToast();
   const { refresh: refreshShop } = useShop();
+  const { fetchAdsByPlacement } = useAds();
   const [product, setProduct] = useState(initialProduct);
+  const [productAds, setProductAds] = useState([]);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [reviews, setReviews] = useState([]);
@@ -245,6 +250,78 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     };
     fetchFlashSale();
   }, [product.id]);
+
+  useEffect(() => {
+    fetchAdsByPlacement("product_detail").then((ads) =>
+      setProductAds(ads || []),
+    );
+  }, [fetchAdsByPlacement]);
+
+  const relatedTagAds = useMemo(() => {
+    const normalize = (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase();
+
+    const productTagSet = new Set(
+      (product?.tags || []).map(normalize).filter(Boolean),
+    );
+
+    if (productTagSet.size === 0) {
+      return (productAds || []).slice(0, 5);
+    }
+
+    const extractAdTags = (ad) => {
+      const fields = [
+        ad?.tags,
+        ad?.target_tags,
+        ad?.keywords,
+        ad?.target_keywords,
+        ad?.context_tags,
+        ad?.category,
+        ad?.target_category,
+      ];
+
+      const tokens = [];
+      fields.forEach((field) => {
+        if (!field) return;
+        if (Array.isArray(field)) {
+          tokens.push(...field);
+          return;
+        }
+        if (typeof field === "string") {
+          try {
+            const parsed = JSON.parse(field);
+            if (Array.isArray(parsed)) {
+              tokens.push(...parsed);
+              return;
+            }
+          } catch {
+            // Not JSON, continue with split
+          }
+          tokens.push(...field.split(","));
+        }
+      });
+
+      // Fallback to title/description words when explicit targeting is missing.
+      if (tokens.length === 0) {
+        const fallbackText = `${ad?.title || ""} ${ad?.description || ""}`;
+        tokens.push(...fallbackText.split(/\s+/));
+      }
+
+      return new Set(tokens.map(normalize).filter(Boolean));
+    };
+
+    const matched = (productAds || []).filter((ad) => {
+      const adTags = extractAdTags(ad);
+      for (const tag of productTagSet) {
+        if (adTags.has(tag)) return true;
+      }
+      return false;
+    });
+
+    return (matched.length > 0 ? matched : productAds || []).slice(0, 5);
+  }, [product?.tags, productAds]);
 
   const toggleWishlist = useCallback(async () => {
     if (!user) {
@@ -996,6 +1073,25 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             </View>
           )}
 
+          {relatedTagAds.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                Sponsored For Similar Tags
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.relatedAdsScroller}
+              >
+                {relatedTagAds.map((ad) => (
+                  <View key={ad.id} style={styles.relatedAdItem}>
+                    <InlineAdProductCard ad={ad} />
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           <View style={styles.section}>
             <View style={styles.reviewsHeader}>
               <Text style={styles.sectionTitle}>Reviews ({reviewCount})</Text>
@@ -1185,6 +1281,16 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
       </ScrollView>
+
+      {(() => {
+        const overlayAds = (productAds || []).filter((ad) =>
+          ["popup", "fullscreen", "sticky_footer"].includes(
+            String(ad?.style || "").toLowerCase(),
+          ),
+        );
+        if (overlayAds.length === 0) return null;
+        return <AdRenderer ads={overlayAds} />;
+      })()}
 
       <View style={styles.footer}>
         <Pressable style={styles.chatButton} onPress={handleChatWithSeller}>
@@ -1612,6 +1718,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.dark,
     marginBottom: 12,
+  },
+  relatedAdsScroller: {
+    gap: 12,
+    paddingVertical: 4,
+  },
+  relatedAdItem: {
+    width: 260,
   },
   badgeRow: {
     marginBottom: 16,

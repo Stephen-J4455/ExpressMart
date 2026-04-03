@@ -16,7 +16,9 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
+import { useAds } from "../context/AdsContext";
 import { supabase, supabaseUrl } from "../lib/supabase";
+import { AdRenderer } from "../components/AdBanner";
 import { colors } from "../theme/colors";
 import {
   verifyPaymentAndCreateOrder,
@@ -31,8 +33,10 @@ export const CheckoutScreen = ({ navigation }) => {
   const { user, profile, isAuthenticated } = useAuth();
   const { items, total, clearCart } = useCart();
   const toast = useToast();
+  const { fetchAdsByPlacement } = useAds();
 
   const [addresses, setAddresses] = useState([]);
+  const [checkoutAds, setCheckoutAds] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showAddAddress, setShowAddAddress] = useState(false);
@@ -43,6 +47,10 @@ export const CheckoutScreen = ({ navigation }) => {
     city: "",
     state: "",
   });
+
+  const checkoutDisplayAds = checkoutAds.filter(
+    (ad) => String(ad?.style || "").toLowerCase() !== "carousel",
+  );
 
   // Calculate total shipping fees from cart items (per-product shipping_fee set by sellers)
   // NOTE: Service fee is NOT added to the customer total. It is deducted from the seller's
@@ -67,6 +75,10 @@ export const CheckoutScreen = ({ navigation }) => {
       fetchAddresses();
     }
   }, [user]);
+
+  useEffect(() => {
+    fetchAdsByPlacement("checkout").then((ads) => setCheckoutAds(ads || []));
+  }, [fetchAdsByPlacement]);
 
   const fetchAddresses = async () => {
     try {
@@ -300,6 +312,12 @@ export const CheckoutScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 }}
       >
+        {checkoutDisplayAds.length > 0 && (
+          <View style={styles.adSection}>
+            <AdRenderer ads={checkoutDisplayAds} />
+          </View>
+        )}
+
         {/* Delivery Address Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -629,6 +647,10 @@ const styles = StyleSheet.create({
   },
   addressContent: {
     flex: 1,
+  },
+  adSection: {
+    paddingTop: 8,
+    paddingBottom: 2,
   },
   addressName: {
     fontSize: 16,

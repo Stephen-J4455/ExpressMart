@@ -3,7 +3,9 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { SearchBar } from "../components/SearchBar";
+import { AdRenderer } from "../components/AdBanner";
 import { useShop } from "../context/ShopContext";
+import { useAds } from "../context/AdsContext";
 import { colors } from "../theme/colors";
 
 const trending = [
@@ -15,11 +17,17 @@ const trending = [
 
 export const SearchScreen = ({ navigation, route }) => {
   const { products } = useShop();
+  const { fetchAdsByPlacement } = useAds();
   const [query, setQuery] = useState(route.params?.query || "");
   const [tag, setTag] = useState(route.params?.tag || "");
   const [recentSearches, setRecentSearches] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchAds, setSearchAds] = useState([]);
+
+  useEffect(() => {
+    fetchAdsByPlacement("search").then((ads) => setSearchAds(ads || []));
+  }, [fetchAdsByPlacement]);
 
   const localResults = useMemo(() => {
     if (!query && !tag) return [];
@@ -154,6 +162,12 @@ export const SearchScreen = ({ navigation, route }) => {
           placeholder={tag ? `Search in "${tag}"` : "Search everything"}
         />
       </View>
+
+      {searchAds.length > 0 && (
+        <View style={styles.adSection}>
+          <AdRenderer ads={searchAds} />
+        </View>
+      )}
 
       {showSuggestions && suggestions.length > 0 ? (
         <View style={styles.suggestionsContainer}>
@@ -295,6 +309,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+  },
+  adSection: {
+    marginTop: -4,
+    marginBottom: 8,
   },
   trendingSection: {
     paddingHorizontal: 16,

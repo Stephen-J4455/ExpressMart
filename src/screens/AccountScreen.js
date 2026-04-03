@@ -10,12 +10,14 @@ import {
   Modal,
   Alert,
 } from "react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../context/OrderContext";
+import { useAds } from "../context/AdsContext";
+import { AdRenderer } from "../components/AdBanner";
 import { colors } from "../theme/colors";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
 import { useResponsive } from "../hooks/useResponsive";
@@ -94,8 +96,14 @@ export const AccountScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { user, profile, isAuthenticated, loading, signOut } = useAuth();
   const { orders } = useOrder();
+  const { fetchAdsByPlacement } = useAds();
   const [showLoadingPreview, setShowLoadingPreview] = useState(false);
+  const [profileAds, setProfileAds] = useState([]);
   const { isWide, contentMaxWidth } = useResponsive();
+
+  useEffect(() => {
+    fetchAdsByPlacement("profile").then((ads) => setProfileAds(ads || []));
+  }, [fetchAdsByPlacement]);
 
   const activeOrders = orders.filter((o) =>
     ["processing", "packed", "shipped"].includes(o.status),
@@ -200,6 +208,12 @@ export const AccountScreen = ({ navigation }) => {
             </Pressable>
           </View>
         </View>
+
+        {profileAds.length > 0 && (
+          <View style={styles.adSection}>
+            <AdRenderer ads={profileAds} />
+          </View>
+        )}
 
         {/* Quick Actions */}
         <View style={styles.quickActionsSection}>
@@ -393,6 +407,10 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
+  },
+  adSection: {
+    paddingTop: 8,
+    paddingBottom: 6,
   },
   profileTopRow: {
     flexDirection: "row",

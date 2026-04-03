@@ -5,7 +5,6 @@ import {
   Text,
   View,
   ScrollView,
-  Dimensions,
   Modal,
 } from "react-native";
 import { useState } from "react";
@@ -42,24 +41,6 @@ const SELLER_BADGE_PRIORITY = [
   "local",
 ];
 
-const PRODUCT_BADGE_CONFIG = {
-  free_shipping: { icon: "rocket", color: "#3B82F6", label: "Free Shipping" },
-  flash_deal: { icon: "flash", color: "#EF4444", label: "Flash Deal" },
-  new_arrival: {
-    icon: "sparkles-outline",
-    color: "#8B5CF6",
-    label: "New Arrival",
-  },
-  bestseller: { icon: "trophy", color: "#F59E0B", label: "Bestseller" },
-  limited_stock: {
-    icon: "alert-circle",
-    color: "#DC2626",
-    label: "Limited Stock",
-  },
-  top_rated: { icon: "star", color: "#EAB308", label: "Top Rated" },
-  featured: { icon: "star", color: "#22C55E", label: "Featured" },
-};
-
 const toBoolean = (value) => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value === 1;
@@ -79,6 +60,7 @@ export const ProductCard = ({
   compact,
   flashSale,
   theme,
+  priceLabelOverride,
 }) => {
   const { addToCart } = useCart();
   const toast = useToast();
@@ -280,56 +262,9 @@ export const ProductCard = ({
                       );
                     })}
                 </View>
-                <Text numberOfLines={2} style={styles.title}>
+                <Text numberOfLines={1} style={styles.title}>
                   {product.title}
                 </Text>
-                {(() => {
-                  const productBadges = product.badges || [];
-                  const sellerBadges = product.seller?.badges || [];
-                  const displayBadges =
-                    productBadges.length > 0 ? productBadges : sellerBadges;
-                  if (displayBadges.length === 0) return null;
-                  return (
-                    <View style={styles.badgeRow}>
-                      {displayBadges.slice(0, 2).map((label) => {
-                        const normalized = label.toLowerCase();
-                        const cfg =
-                          PRODUCT_BADGE_CONFIG[normalized] ||
-                          SELLER_BADGE_CONFIG[normalized];
-                        const displayLabel = cfg?.label || label;
-                        return (
-                          <View
-                            key={label}
-                            style={[
-                              styles.badge,
-                              {
-                                backgroundColor:
-                                  (cfg?.color || accentColor) + "20",
-                              },
-                            ]}
-                          >
-                            {cfg?.icon && (
-                              <Ionicons
-                                name={cfg.icon}
-                                size={10}
-                                color={cfg?.color || accentColor}
-                              />
-                            )}
-                            <Text
-                              numberOfLines={1}
-                              style={[
-                                styles.badgeText,
-                                { color: cfg?.color || accentColor },
-                              ]}
-                            >
-                              {displayLabel}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  );
-                })()}
               </View>
             </View>
             <View style={styles.listBottom}>
@@ -359,9 +294,15 @@ export const ProductCard = ({
                       ).toLocaleString()}
                     </Text>
                   )}
-                  <Text style={styles.price}>
-                    {formatPrice(product.price, product.discount)}
-                  </Text>
+                  {priceLabelOverride ? (
+                    <Text numberOfLines={2} style={styles.metaDescriptionList}>
+                      {priceLabelOverride}
+                    </Text>
+                  ) : (
+                    <Text style={styles.price}>
+                      {formatPrice(product.price, product.discount)}
+                    </Text>
+                  )}
                   {hasFlashSale ? (
                     <View style={styles.discountBadgeList}>
                       <LinearGradient
@@ -412,22 +353,27 @@ export const ProductCard = ({
                   disabled={isOutOfStock}
                   accessibilityLabel="Add to cart"
                 >
-                  <View
-                    style={[
-                      styles.listCtaGradient,
-                      {
-                        backgroundColor: isOutOfStock
-                          ? "#9CA3AF"
-                          : themeObj.primary || accent,
-                      },
-                    ]}
+                  <LinearGradient
+                    colors={
+                      isOutOfStock
+                        ? ["#9CA3AF", "#9CA3AF"]
+                        : [
+                            themeObj.gradientStart ||
+                              themeObj.primary ||
+                              accent,
+                            themeObj.gradientEnd || themeObj.primary || accent,
+                          ]
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.listCtaGradient}
                   >
                     <Ionicons
                       name={isOutOfStock ? "close-circle" : "cart"}
                       size={18}
                       color="#fff"
                     />
-                  </View>
+                  </LinearGradient>
                 </Pressable>
               )}
             </View>
@@ -569,6 +515,10 @@ export const ProductCard = ({
       >
         <View style={styles.imageContainer}>
           <Image source={{ uri: images[0] }} style={styles.image} />
+          <LinearGradient
+            colors={["rgba(15, 23, 42, 0)", "rgba(15, 23, 42, 0.2)"]}
+            style={styles.imageFade}
+          />
           {hasFlashSale ? (
             <FlashSaleBadge
               discountPercentage={flashSale.discount_percentage}
@@ -581,6 +531,14 @@ export const ProductCard = ({
               </View>
             )
           )}
+          <View style={styles.ratingPill}>
+            <Ionicons name="star" size={11} color="#F59E0B" />
+            <Text style={styles.ratingPillText}>
+              {product.rating && product.rating > 0
+                ? product.rating.toFixed(1)
+                : "New"}
+            </Text>
+          </View>
           {isOutOfStock && (
             <View style={styles.outOfStockOverlay}>
               <Text style={styles.outOfStockOverlayText}>Out of Stock</Text>
@@ -617,52 +575,6 @@ export const ProductCard = ({
           >
             {product.title}
           </Text>
-          {(() => {
-            const productBadges = product.badges || [];
-            const sellerBadges = product.seller?.badges || [];
-            const displayBadges =
-              productBadges.length > 0 ? productBadges : sellerBadges;
-            if (displayBadges.length === 0) return null;
-            return (
-              <View style={styles.badgeRow}>
-                {displayBadges.slice(0, 2).map((label) => {
-                  const normalized = label.toLowerCase();
-                  const cfg =
-                    PRODUCT_BADGE_CONFIG[normalized] ||
-                    SELLER_BADGE_CONFIG[normalized];
-                  const displayLabel = cfg?.label || label;
-                  return (
-                    <View
-                      key={label}
-                      style={[
-                        styles.badge,
-                        {
-                          backgroundColor: (cfg?.color || accentColor) + "20",
-                        },
-                      ]}
-                    >
-                      {cfg?.icon && (
-                        <Ionicons
-                          name={cfg.icon}
-                          size={compact ? 9 : 10}
-                          color={cfg?.color || accentColor}
-                        />
-                      )}
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          compact ? styles.badgeTextCompact : styles.badgeText,
-                          { color: cfg?.color || accentColor },
-                        ]}
-                      >
-                        {displayLabel}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            );
-          })()}
           <View style={styles.metaRow}>
             <View style={{ flex: 1 }}>
               {hasFlashSale && (
@@ -673,26 +585,22 @@ export const ProductCard = ({
                   ).toLocaleString()}
                 </Text>
               )}
-              <Text style={compact ? styles.priceCompact : styles.price}>
-                {formatPrice(product.price, product.discount)}
-              </Text>
-            </View>
-            <View style={styles.ratingRow}>
-              <Ionicons
-                name="star"
-                size={compact ? 12 : 14}
-                color={accentColor}
-              />
-              <Text
-                style={[
-                  compact ? styles.ratingTextCompact : styles.ratingText,
-                  { color: accentColor },
-                ]}
-              >
-                {product.rating && product.rating > 0
-                  ? product.rating.toFixed(1)
-                  : "New"}
-              </Text>
+              {priceLabelOverride ? (
+                <Text
+                  numberOfLines={2}
+                  style={
+                    compact
+                      ? styles.metaDescriptionCompact
+                      : styles.metaDescription
+                  }
+                >
+                  {priceLabelOverride}
+                </Text>
+              ) : (
+                <Text style={compact ? styles.priceCompact : styles.price}>
+                  {formatPrice(product.price, product.discount)}
+                </Text>
+              )}
             </View>
           </View>
           {hasFlashSale && (
@@ -719,15 +627,18 @@ export const ProductCard = ({
               disabled={isOutOfStock}
               accessibilityLabel="Add to cart"
             >
-              <View
-                style={[
-                  styles.ctaGradient,
-                  {
-                    backgroundColor: isOutOfStock
-                      ? "#9CA3AF"
-                      : themeObj.primary || accent,
-                  },
-                ]}
+              <LinearGradient
+                colors={
+                  isOutOfStock
+                    ? ["#9CA3AF", "#9CA3AF"]
+                    : [
+                        themeObj.gradientStart || themeObj.primary || accent,
+                        themeObj.gradientEnd || themeObj.primary || accent,
+                      ]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.ctaGradient}
               >
                 <Ionicons
                   name={isOutOfStock ? "close-circle" : "cart"}
@@ -737,7 +648,7 @@ export const ProductCard = ({
                 <Text style={styles.ctaText}>
                   {isOutOfStock ? "Out of Stock" : "Add to Cart"}
                 </Text>
-              </View>
+              </LinearGradient>
             </Pressable>
           )}
         </View>
@@ -859,15 +770,15 @@ export const ProductCard = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: "#fff",
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "#EAF0F7",
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
   },
   outOfStockCard: {
     opacity: 0.72,
@@ -881,8 +792,11 @@ const styles = StyleSheet.create({
   imageContainer: {
     position: "relative",
     width: "100%",
-    height: 170,
-    backgroundColor: "#F8FAFC",
+    height: 140,
+    backgroundColor: "#F1F5F9",
+  },
+  imageFade: {
+    ...StyleSheet.absoluteFillObject,
   },
   outOfStockOverlay: {
     position: "absolute",
@@ -902,7 +816,7 @@ const styles = StyleSheet.create({
   },
   image: {
     width: "100%",
-    height: 170,
+    height: 140,
   },
   imageIndicators: {
     position: "absolute",
@@ -927,9 +841,9 @@ const styles = StyleSheet.create({
     position: "relative",
     width: 130,
     marginRight: 12,
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: "hidden",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F1F5F9",
   },
   listImage: {
     width: 130,
@@ -945,8 +859,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   content: {
-    padding: 12,
-    paddingTop: 10,
+    padding: 14,
+    paddingTop: 12,
     flex: 1,
   },
   vendorRow: {
@@ -955,11 +869,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   vendor: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.muted,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    fontWeight: "600",
+    letterSpacing: 0.6,
+    fontWeight: "700",
   },
   vendorCompact: {
     fontSize: 9,
@@ -978,58 +892,34 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
     color: colors.dark,
-    marginTop: 4,
-    letterSpacing: -0.2,
+    marginTop: 6,
+    lineHeight: 18,
+    letterSpacing: -0.25,
   },
   titleCompact: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "800",
     color: colors.dark,
-    marginTop: 3,
+    marginTop: 4,
+    lineHeight: 16,
     letterSpacing: -0.2,
   },
-  badgeRow: {
-    flexDirection: "row",
-    gap: 6,
-    flexWrap: "nowrap",
-    marginTop: 6,
-    overflow: "hidden",
-  },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.08)",
-    flexShrink: 1,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  badgeTextCompact: {
-    fontSize: 9,
-    fontWeight: "600",
-  },
   metaRow: {
-    marginTop: 8,
+    marginTop: 4,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   price: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "800",
     color: colors.dark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.35,
   },
   priceCompact: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "800",
     color: colors.dark,
     letterSpacing: -0.3,
@@ -1061,23 +951,24 @@ const styles = StyleSheet.create({
     color: "#92400E",
   },
   cta: {
-    marginTop: 8,
+    marginTop: 10,
   },
   ctaDisabled: {
     opacity: 1,
   },
   ctaGradient: {
-    height: 38,
-    borderRadius: 12,
+    height: 40,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 6,
+    gap: 7,
   },
   ctaText: {
     color: "#fff",
-    fontWeight: "700",
+    fontWeight: "800",
     fontSize: 13,
+    letterSpacing: 0.2,
   },
   listContent: {
     flex: 1,
@@ -1103,6 +994,23 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+  },
+  ratingPill: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  ratingPillText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#334155",
   },
   variantOverlay: {
     flex: 1,
@@ -1239,5 +1147,26 @@ const styles = StyleSheet.create({
   priceRow: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  metaDescription: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.muted,
+    lineHeight: 18,
+  },
+  metaDescriptionCompact: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.muted,
+    lineHeight: 16,
+  },
+  metaDescriptionList: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: "600",
+    lineHeight: 16,
+    maxWidth: 160,
   },
 });

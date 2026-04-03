@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
+import { Platform } from "react-native";
 import { supabase } from "../lib/supabase";
 
 const AdsContext = createContext();
@@ -15,98 +22,161 @@ export const AdsProvider = ({ children }) => {
   const [ads, setAds] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const normalizePlacement = (value) => {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_");
+  };
+
+  const parsePlacements = (placementValue) => {
+    if (Array.isArray(placementValue)) {
+      return placementValue.map(normalizePlacement).filter(Boolean);
+    }
+
+    if (typeof placementValue !== "string") return [];
+
+    const raw = placementValue.trim();
+    if (!raw) return [];
+
+    if (raw.startsWith("[") && raw.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.map(normalizePlacement).filter(Boolean);
+        }
+      } catch {
+        // Fall through to comma-split parser.
+      }
+    }
+
+    return raw.split(",").map(normalizePlacement).filter(Boolean);
+  };
+
+  const placementAliases = {
+    profile: ["account"],
+    account: ["profile"],
+    category: ["categories"],
+    categories: ["category"],
+    product_detail: ["product_details", "product"],
+    product_details: ["product_detail", "product"],
+    checkout: ["cart_checkout"],
+    search: ["search_results"],
+    search_results: ["search"],
+    feed: ["discover"],
+  };
+
   // Fetch ads by placement
-  const fetchAdsByPlacement = async (placement) => {
+  const fetchAdsByPlacement = useCallback(async (placement) => {
     if (!supabase) return [];
 
     try {
       setLoading(true);
 
-      // Fetch all active ads for this placement; date-range filtering done client-side
-      // to avoid PostgREST query-string encoding issues with ISO timestamps in .or()
+      // Fetch active ads and filter placement/date/platform client-side for reliability.
       const { data, error } = await supabase
         .from("express_ads")
         .select("*")
-        .ilike("placement", `%${placement}%`)
         .eq("is_active", true)
         .order("position", { ascending: true });
 
       if (error) throw error;
 
-      // Filter by start_date / end_date in JS (null means no bound)
       const now = Date.now();
+      const requestedPlacement = normalizePlacement(placement);
+      const aliasSet = new Set([
+        requestedPlacement,
+        ...(placementAliases[requestedPlacement] || []),
+      ]);
+      const onWeb = Platform.OS === "web";
+
       const valid = (data || []).filter((ad) => {
+        const adPlacements = parsePlacements(ad.placement);
+        const hasPlacement = adPlacements.some((p) => aliasSet.has(p));
+        if (!hasPlacement) return false;
+
+        const allowOnPlatform = onWeb
+          ? ad.show_on_web !== false
+          : ad.show_on_mobile !== false;
+        if (!allowOnPlatform) return false;
+
+        const startTs = ad.start_date
+          ? new Date(ad.start_date).getTime()
+          : null;
+        const endTs = ad.end_date ? new Date(ad.end_date).getTime() : null;
+
         const afterStart =
-          !ad.start_date || new Date(ad.start_date).getTime() <= now;
-        const beforeEnd =
-          !ad.end_date || new Date(ad.end_date).getTime() >= now;
+          startTs == null || Number.isNaN(startTs) || startTs <= now;
+        const beforeEnd = endTs == null || Number.isNaN(endTs) || endTs >= now;
+
         return afterStart && beforeEnd;
       });
 
+      setAds(valid);
       return valid;
     } catch (error) {
       console.error("Error fetching ads:", error);
+      setAds([]);
       return [];
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const trackAdEngagement = useCallback(async (adId, eventType) => {
+    if (!supabase || !adId) return;
+
+    const column = eventType === "click" ? "clicks" : "impressions";
+
+    try {
+      const { data: row, error: readError } = await supabase
+        .from("express_ads")
+        .select(`id,${column}`)
+        .eq("id", adId)
+        .maybeSingle();
+
+      if (readError) throw readError;
+      if (!row) throw new Error("Ad record not found");
+
+      const nextValue = (Number(row[column]) || 0) + 1;
+
+      const { error: updateError } = await supabase
+        .from("express_ads")
+        .update({ [column]: nextValue })
+        .eq("id", adId);
+
+      if (updateError) throw updateError;
+    } catch (error) {
+      console.error(`Error tracking ad ${eventType}:`, error);
+    }
+  }, []);
 
   // Track ad impression
-  const trackImpression = async (adId) => {
-    if (!supabase) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("express_ads")
-        .select("impressions")
-        .eq("id", adId)
-        .single();
-
-      if (error) throw error;
-
-      const newImpressions = (data?.impressions || 0) + 1;
-
-      await supabase
-        .from("express_ads")
-        .update({ impressions: newImpressions })
-        .eq("id", adId);
-    } catch (error) {
-      console.error("Error tracking impression:", error);
-    }
-  };
+  const trackImpression = useCallback(
+    async (adId) => {
+      await trackAdEngagement(adId, "impression");
+    },
+    [trackAdEngagement],
+  );
 
   // Track ad click
-  const trackClick = async (adId) => {
-    if (!supabase) return;
+  const trackClick = useCallback(
+    async (adId) => {
+      await trackAdEngagement(adId, "click");
+    },
+    [trackAdEngagement],
+  );
 
-    try {
-      const { data, error } = await supabase
-        .from("express_ads")
-        .select("clicks")
-        .eq("id", adId)
-        .single();
-
-      if (error) throw error;
-
-      const newClicks = (data?.clicks || 0) + 1;
-
-      await supabase
-        .from("express_ads")
-        .update({ clicks: newClicks })
-        .eq("id", adId);
-    } catch (error) {
-      console.error("Error tracking click:", error);
-    }
-  };
-
-  const value = {
-    ads,
-    loading,
-    fetchAdsByPlacement,
-    trackImpression,
-    trackClick,
-  };
+  const value = useMemo(
+    () => ({
+      ads,
+      loading,
+      fetchAdsByPlacement,
+      trackImpression,
+      trackClick,
+    }),
+    [ads, loading, fetchAdsByPlacement, trackImpression, trackClick],
+  );
 
   return <AdsContext.Provider value={value}>{children}</AdsContext.Provider>;
 };

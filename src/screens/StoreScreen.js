@@ -127,7 +127,7 @@ export const StoreScreen = ({ route, navigation }) => {
         const { data, error } = await supabase
           .from("express_sellers")
           .select(
-            "id,name,avatar,badges,rating,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
+            "id,name,avatar,badges,rating,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
           )
           .eq("id", id)
           .single();
@@ -452,12 +452,12 @@ export const StoreScreen = ({ route, navigation }) => {
                 {/* Badges Section */}
                 {sellerDetail?.badges && sellerDetail.badges.length > 0 && (
                   <View style={styles.badgesRow}>
-                    {sellerDetail.badges.map((badgeId) => {
+                    {[...new Set(sellerDetail.badges)].map((badgeId, index) => {
                       const badgeConfig = BADGE_CONFIG[badgeId];
                       if (!badgeConfig) return null;
                       return (
                         <View
-                          key={badgeId}
+                          key={`${badgeId}-${index}`}
                           style={[
                             styles.badge,
                             {
@@ -659,10 +659,9 @@ export const StoreScreen = ({ route, navigation }) => {
                       About {sellerDetail?.name}
                     </Text>
                     <Text style={styles.profileText}>
-                      Welcome to {sellerDetail?.name}! We are committed to
-                      providing high-quality products and excellent customer
-                      service. Our store specializes in a wide range of products
-                      to meet your needs.
+                      {sellerDetail?.store_description?.trim()
+                        ? sellerDetail.store_description.trim()
+                        : `Welcome to ${sellerDetail?.name}! We are committed to providing high-quality products and excellent customer service.`}
                     </Text>
                   </View>
 
@@ -829,12 +828,15 @@ export const StoreScreen = ({ route, navigation }) => {
                         <Text>Loading reviews...</Text>
                       </View>
                     ) : storeReviews.length > 0 ? (
-                      storeReviews.map((review) => {
+                      storeReviews.map((review, reviewIndex) => {
                         const product = storeProducts.find(
                           (p) => p.id === review.product_id,
                         );
                         return (
-                          <View key={review.id} style={styles.reviewItem}>
+                          <View
+                            key={`${review.id}-${review.created_at || reviewIndex}`}
+                            style={styles.reviewItem}
+                          >
                             <View style={styles.reviewHeader}>
                               <View style={styles.reviewerAvatar}>
                                 <Ionicons
@@ -854,7 +856,7 @@ export const StoreScreen = ({ route, navigation }) => {
                                 <View style={styles.reviewStars}>
                                   {[1, 2, 3, 4, 5].map((star) => (
                                     <Ionicons
-                                      key={star}
+                                      key={`${review.id}-star-${star}`}
                                       name={
                                         star <= review.rating
                                           ? "star"

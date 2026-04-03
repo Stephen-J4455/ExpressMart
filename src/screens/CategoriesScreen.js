@@ -19,7 +19,18 @@ import { useResponsive } from "../hooks/useResponsive";
 export const CategoriesScreen = ({ navigation }) => {
   const { categories, products, loading, refresh } = useShop();
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
-  const { isWide, gridColumns } = useResponsive();
+  const { isWide, width, getItemWidth } = useResponsive();
+
+  const hPad = 12;
+  const gap = 8;
+  const categorySidebarWidth = isWide ? 140 : 90;
+  const contentWidth = Math.max(width - categorySidebarWidth, 220);
+  const targetMinCardWidth = isWide ? 160 : 146;
+  const categoryGridColumns = Math.max(
+    2,
+    Math.floor((contentWidth - hPad * 2 + gap) / (targetMinCardWidth + gap)),
+  );
+  const cardWidth = getItemWidth(categoryGridColumns, hPad, gap, contentWidth);
 
   // Initialize selection
   useEffect(() => {
@@ -80,13 +91,11 @@ export const CategoriesScreen = ({ navigation }) => {
     );
   };
 
+  const selectedCategory =
+    categories.find((c) => c.id === selectedCategoryId) || null;
+
   const renderProductItem = ({ item }) => (
-    <View
-      style={{
-        width: `${Math.floor(100 / gridColumns) - 1}%`,
-        marginBottom: 12,
-      }}
-    >
+    <View style={{ flex: 1, maxWidth: cardWidth, marginBottom: 10 }}>
       <ProductCard
         product={item}
         onPress={() => navigation.navigate("ProductDetail", { product: item })}
@@ -96,8 +105,6 @@ export const CategoriesScreen = ({ navigation }) => {
       />
     </View>
   );
-
-  const categorySidebarWidth = isWide ? 140 : 90;
 
   return (
     <View style={styles.container}>
@@ -117,20 +124,38 @@ export const CategoriesScreen = ({ navigation }) => {
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>
-            {categories.find((c) => c.id === selectedCategoryId)?.name ||
-              "Category"}
+            {selectedCategory?.name || "Category"}
           </Text>
-          <Text style={styles.headerSubtitle}>
-            {filteredProducts.length} items
-          </Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.headerSubtitle}>
+              {filteredProducts.length} items
+            </Text>
+            {!!selectedCategory && (
+              <Pressable
+                style={styles.moreButton}
+                onPress={() =>
+                  navigation.navigate("CategoryProducts", {
+                    category: selectedCategory,
+                  })
+                }
+              >
+                <Text style={styles.moreText}>More</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={14}
+                  color={colors.primary}
+                />
+              </Pressable>
+            )}
+          </View>
         </View>
 
         <FlatList
           data={filteredProducts}
           renderItem={renderProductItem}
           keyExtractor={(item) => item.id.toString()}
-          key={`grid-${gridColumns}`}
-          numColumns={gridColumns}
+          key={`grid-${categoryGridColumns}`}
+          numColumns={categoryGridColumns}
           columnWrapperStyle={styles.productsRow}
           contentContainerStyle={styles.productsGrid}
           showsVerticalScrollIndicator={false}
@@ -230,12 +255,34 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 4,
   },
+  headerRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  moreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: colors.primary + "14",
+  },
+  moreText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
   productsGrid: {
     paddingHorizontal: 12,
     paddingBottom: 80,
   },
   productsRow: {
-    gap: 6,
+    gap: 8,
+    justifyContent: "flex-start",
   },
   productWrapper: {
     width: "48.5%",
@@ -243,7 +290,6 @@ const styles = StyleSheet.create({
   productCard: {
     width: "100%",
     minWidth: 0,
-    height: 270,
     borderRadius: 20,
     shadowColor: "#000",
     shadowOpacity: 0.06,

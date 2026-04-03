@@ -16,8 +16,12 @@ import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
 import { ProductCard } from "../components/ProductCard";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
+import { AdRenderer } from "../components/AdBanner";
+import { InlineAdProductCard } from "../components/InlineAdProductCard";
+import { useAds } from "../context/AdsContext";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
+import { injectAdsIntoProducts } from "../utils/adPlacement";
 
 const SORT_OPTIONS = [
   { key: "newest", label: "Newest", icon: "time-outline" },
@@ -31,12 +35,15 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
   const { category } = route.params;
   const { addToCart } = useCart();
   const toast = useToast();
+  const { fetchAdsByPlacement } = useAds();
   const [products, setProducts] = useState([]);
+  const [categoryAds, setCategoryAds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [sortKey, setSortKey] = useState("newest");
+  const daySeed = useMemo(() => new Date().toDateString(), []);
   const PAGE_SIZE = 20;
   const {
     gridColumns,
@@ -127,6 +134,10 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
     fetchCategoryProducts(true);
   }, [category, sortKey]);
 
+  useEffect(() => {
+    fetchAdsByPlacement("category").then((ads) => setCategoryAds(ads || []));
+  }, [fetchAdsByPlacement]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchCategoryProducts(true);
@@ -146,6 +157,15 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
   const categoryName = typeof category === "string" ? category : category.name;
   const categoryIcon = category?.icon || "apps-outline";
   const categoryColor = category?.color || colors.primary;
+  const overlayAds = useMemo(
+    () =>
+      (categoryAds || []).filter((ad) =>
+        ["popup", "fullscreen", "sticky_footer"].includes(
+          String(ad?.style || "").toLowerCase(),
+        ),
+      ),
+    [categoryAds],
+  );
 
   const columnWrapperStyle = useMemo(
     () => ({
@@ -156,27 +176,47 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
     [gap, hPad],
   );
 
-  const renderItem = ({ item }) => (
-    <View style={{ flex: 1, maxWidth: itemWidth }}>
-      {item ? (
-        <ProductCard
-          product={item}
-          compact={useCompact}
-          onPress={() => handleProductPress(item)}
-        />
-      ) : (
-        <ProductCardPlaceholder />
-      )}
-    </View>
-  );
+  const renderItem = ({ item }) => {
+    if (item?.__type === "injected_ad") {
+      return (
+        <View style={{ flex: 1, maxWidth: itemWidth }}>
+          <InlineAdProductCard ad={item.ad} />
+        </View>
+      );
+    }
+
+    return (
+      <View style={{ flex: 1, maxWidth: itemWidth }}>
+        {item ? (
+          <ProductCard
+            product={item}
+            compact={useCompact}
+            onPress={() => handleProductPress(item)}
+          />
+        ) : (
+          <ProductCardPlaceholder />
+        )}
+      </View>
+    );
+  };
 
   const listData =
     loading && products.length === 0
       ? Array(gridColumns * 3).fill(null)
-      : products;
+      : injectAdsIntoProducts({
+          products,
+          ads: categoryAds,
+          seed: `category-${categoryName}-${sortKey}-${daySeed}-${products.length}`,
+          minInterval: 5,
+          maxInterval: 8,
+          maxAds: 3,
+        });
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: categoryColor }]}
+      edges={["top"]}
+    >
       {/* Hero Header */}
       <View style={[styles.header, { backgroundColor: categoryColor }]}>
         <Pressable
@@ -205,99 +245,106 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Sort Bar */}
-      <View style={styles.sortBarWrapper}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.sortBar}
-        >
-          {SORT_OPTIONS.map((opt) => {
-            const isActive = sortKey === opt.key;
-            return (
-              <Pressable
-                key={opt.key}
-                onPress={() => {
-                  setSortKey(opt.key);
-                  setProducts([]);
-                }}
-                style={[styles.sortPill, isActive && styles.sortPillActive]}
-              >
-                <Ionicons
-                  name={opt.icon}
-                  size={13}
-                  color={isActive ? "#fff" : colors.muted}
-                />
-                <Text
-                  style={[styles.sortLabel, isActive && styles.sortLabelActive]}
+      <View style={styles.contentArea}>
+        {/* Sort Bar */}
+        <View style={styles.sortBarWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.sortBar}
+          >
+            {SORT_OPTIONS.map((opt) => {
+              const isActive = sortKey === opt.key;
+              return (
+                <Pressable
+                  key={opt.key}
+                  onPress={() => {
+                    setSortKey(opt.key);
+                    setProducts([]);
+                  }}
+                  style={[styles.sortPill, isActive && styles.sortPillActive]}
                 >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                  <Ionicons
+                    name={opt.icon}
+                    size={13}
+                    color={isActive ? "#fff" : colors.muted}
+                  />
+                  <Text
+                    style={[
+                      styles.sortLabel,
+                      isActive && styles.sortLabelActive,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {/* Products Grid */}
+        {products.length === 0 && !loading ? (
+          <View style={styles.emptyContainer}>
+            <View
+              style={[
+                styles.emptyIconWrap,
+                { backgroundColor: categoryColor + "18" },
+              ]}
+            >
+              <Ionicons name={categoryIcon} size={44} color={categoryColor} />
+            </View>
+            <Text style={styles.emptyTitle}>No products found</Text>
+            <Text style={styles.emptySubtitle}>
+              This category doesn't have any products yet
+            </Text>
+            <Pressable
+              style={[styles.browseButton, { backgroundColor: categoryColor }]}
+              onPress={() => navigation.navigate("Main")}
+            >
+              <Ionicons name="storefront-outline" size={16} color="#fff" />
+              <Text style={styles.browseText}>Browse All Products</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <FlatList
+            key={`${gridColumns}-${sortKey}`}
+            data={listData}
+            keyExtractor={(item, index) =>
+              item?.id ? String(item.id) : `ph-${index}`
+            }
+            numColumns={gridColumns}
+            columnWrapperStyle={columnWrapperStyle}
+            contentContainerStyle={[
+              styles.gridContent,
+              isDesktop && styles.gridContentDesktop,
+            ]}
+            showsVerticalScrollIndicator={false}
+            onEndReached={onLoadMore}
+            onEndReachedThreshold={0.4}
+            renderItem={renderItem}
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={styles.loadMoreRow}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : hasMore && !loading ? (
+                <View style={{ height: 40 }} />
+              ) : null
+            }
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={categoryColor}
+                colors={[categoryColor]}
+              />
+            }
+          />
+        )}
       </View>
 
-      {/* Products Grid */}
-      {products.length === 0 && !loading ? (
-        <View style={styles.emptyContainer}>
-          <View
-            style={[
-              styles.emptyIconWrap,
-              { backgroundColor: categoryColor + "18" },
-            ]}
-          >
-            <Ionicons name={categoryIcon} size={44} color={categoryColor} />
-          </View>
-          <Text style={styles.emptyTitle}>No products found</Text>
-          <Text style={styles.emptySubtitle}>
-            This category doesn't have any products yet
-          </Text>
-          <Pressable
-            style={[styles.browseButton, { backgroundColor: categoryColor }]}
-            onPress={() => navigation.navigate("Main")}
-          >
-            <Ionicons name="storefront-outline" size={16} color="#fff" />
-            <Text style={styles.browseText}>Browse All Products</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <FlatList
-          key={`${gridColumns}-${sortKey}`}
-          data={listData}
-          keyExtractor={(item, index) =>
-            item?.id ? String(item.id) : `ph-${index}`
-          }
-          numColumns={gridColumns}
-          columnWrapperStyle={columnWrapperStyle}
-          contentContainerStyle={[
-            styles.gridContent,
-            isDesktop && styles.gridContentDesktop,
-          ]}
-          showsVerticalScrollIndicator={false}
-          onEndReached={onLoadMore}
-          onEndReachedThreshold={0.4}
-          renderItem={renderItem}
-          ListFooterComponent={
-            loadingMore ? (
-              <View style={styles.loadMoreRow}>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-            ) : hasMore && !loading ? (
-              <View style={{ height: 40 }} />
-            ) : null
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={categoryColor}
-              colors={[categoryColor]}
-            />
-          }
-        />
-      )}
+      {overlayAds.length > 0 && <AdRenderer ads={overlayAds} />}
     </SafeAreaView>
   );
 };
@@ -305,8 +352,10 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  contentArea: {
+    flex: 1,
     backgroundColor: colors.background,
-    
   },
 
   header: {

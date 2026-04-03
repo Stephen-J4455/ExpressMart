@@ -18,15 +18,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { SearchBar } from "../components/SearchBar";
 import { ProductCard } from "../components/ProductCard";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
+import { InlineAdProductCard } from "../components/InlineAdProductCard";
+import { AdRenderer } from "../components/AdBanner";
 import { useShop } from "../context/ShopContext";
+import { useAds } from "../context/AdsContext";
 import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
+import { injectAdsIntoProducts } from "../utils/adPlacement";
 
 const { width: screenWidth } = Dimensions.get("window");
 
 export const SearchResultsScreen = ({ navigation, route }) => {
   const { products } = useShop();
+  const { fetchAdsByPlacement } = useAds();
   const initialQuery = route.params?.query || "";
   const initialTag = route.params?.tag || "";
   const [query, setQuery] = useState(initialQuery);
@@ -49,6 +54,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
     "Headphones",
   ]);
   const searchTimerRef = useRef(null);
+  const [searchResultAds, setSearchResultAds] = useState([]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -72,6 +78,10 @@ export const SearchResultsScreen = ({ navigation, route }) => {
       }),
     ]).start();
   }, []);
+
+  useEffect(() => {
+    fetchAdsByPlacement("search").then((ads) => setSearchResultAds(ads || []));
+  }, [fetchAdsByPlacement]);
 
   const loadRecentSearches = async () => {
     try {
@@ -275,6 +285,44 @@ export const SearchResultsScreen = ({ navigation, route }) => {
   const productsToShow = productResults.length
     ? productResults
     : localProductResults;
+
+  const searchResultInlineAds = useMemo(
+    () =>
+      (searchResultAds || []).filter((ad) => {
+        const style = String(ad?.style || "").toLowerCase();
+        return style === "card" || style === "sidebar";
+      }),
+    [searchResultAds],
+  );
+
+  const searchResultOverlayAds = useMemo(
+    () =>
+      (searchResultAds || []).filter((ad) => {
+        const style = String(ad?.style || "").toLowerCase();
+        return ["popup", "fullscreen", "sticky_footer"].includes(style);
+      }),
+    [searchResultAds],
+  );
+
+  const productsWithInlineAds = useMemo(() => {
+    if (loading && productsToShow.length === 0) {
+      return Array(6).fill(null);
+    }
+
+    if (!query && !tag) {
+      return productsToShow;
+    }
+
+    return injectAdsIntoProducts({
+      products: productsToShow,
+      ads: searchResultInlineAds,
+      seed: `search-results-${query || "all"}-${tag || "none"}-${productsToShow.length}`,
+      minInterval: 5,
+      maxInterval: 8,
+      maxAds: 2,
+    });
+  }, [loading, productsToShow, query, tag, searchResultInlineAds]);
+
   const results = activeTab === "products" ? productsToShow : storeResults;
 
   const handleSearchSubmit = (searchTerm) => {
@@ -473,11 +521,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
             {query || tag ? (
               <FlatList
                 key={String(gridColumns)}
-                data={
-                  loading && results.length === 0
-                    ? Array(6).fill(null)
-                    : results
-                }
+                data={productsWithInlineAds}
                 keyExtractor={(item, index) =>
                   item?.id || `placeholder-${index}`
                 }
@@ -493,7 +537,9 @@ export const SearchResultsScreen = ({ navigation, route }) => {
                 }}
                 renderItem={({ item }) => (
                   <View style={{ flex: 1, maxWidth: itemWidth }}>
-                    {item ? (
+                    {item?.__type === "injected_ad" ? (
+                      <InlineAdProductCard ad={item.ad} />
+                    ) : item ? (
                       <ProductCard
                         product={item}
                         onPress={() =>
@@ -643,6 +689,10 @@ export const SearchResultsScreen = ({ navigation, route }) => {
           </>
         )}
       </ScrollView>
+
+      {searchResultOverlayAds.length > 0 && activeTab === "products" && (
+        <AdRenderer ads={searchResultOverlayAds} />
+      )}
     </View>
   );
 };

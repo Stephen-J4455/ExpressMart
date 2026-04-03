@@ -15,12 +15,14 @@ import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
 import { SectionHeader } from "../components/SectionHeader";
 import { SellerScroller } from "../components/SellerScroller";
 import { AdRenderer } from "../components/AdBanner";
+import { InlineAdProductCard } from "../components/InlineAdProductCard";
 import { StatusRow } from "../components/StatusRow";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
 import { flashSaleService } from "../services/flashSaleService";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
+import { injectAdsIntoProducts } from "../utils/adPlacement";
 
 export const HomeScreen = ({ navigation }) => {
   const {
@@ -38,9 +40,9 @@ export const HomeScreen = ({ navigation }) => {
   const itemWidth = getItemWidth(gridColumns, 12, 12);
   const [homeAds, setHomeAds] = useState([]);
   const [featuredAds, setFeaturedAds] = useState([]);
-  const [loadingAds, setLoadingAds] = useState(true);
   const [flashSales, setFlashSales] = useState([]);
   const [loadingFlashSales, setLoadingFlashSales] = useState(true);
+  const daySeed = useMemo(() => new Date().toDateString(), []);
 
   // Detect scroll near bottom to trigger load-more
   const handleScroll = useCallback(
@@ -78,13 +80,11 @@ export const HomeScreen = ({ navigation }) => {
   // Load ads
   useEffect(() => {
     const loadAds = async () => {
-      setLoadingAds(true);
       const homeAdsData = await fetchAdsByPlacement("home");
       setHomeAds(homeAdsData);
 
       const featuredAdsData = await fetchAdsByPlacement("feed");
       setFeaturedAds(featuredAdsData);
-      setLoadingAds(false);
     };
 
     loadAds();
@@ -126,6 +126,72 @@ export const HomeScreen = ({ navigation }) => {
     [products],
   );
 
+  const forYouData = useMemo(() => {
+    const baseData = loading ? Array(gridColumns * 2).fill(null) : featured;
+    if (loading) return baseData;
+
+    return injectAdsIntoProducts({
+      products: baseData,
+      ads: homeAds,
+      seed: `home-foryou-${daySeed}-${featured.length}`,
+      minInterval: 4,
+      maxInterval: 7,
+      maxAds: 2,
+    });
+  }, [loading, gridColumns, featured, homeAds, daySeed]);
+
+  const popularData = useMemo(() => {
+    const baseData = loading ? Array(gridColumns * 2).fill(null) : mostPopular;
+    if (loading) return baseData;
+
+    return injectAdsIntoProducts({
+      products: baseData,
+      ads: featuredAds,
+      seed: `home-popular-${daySeed}-${mostPopular.length}`,
+      minInterval: 4,
+      maxInterval: 7,
+      maxAds: 2,
+    });
+  }, [loading, gridColumns, mostPopular, featuredAds, daySeed]);
+
+  const topCarouselAds = useMemo(
+    () =>
+      (homeAds || []).filter(
+        (ad) => String(ad?.style || "").toLowerCase() === "carousel",
+      ),
+    [homeAds],
+  );
+
+  const homeOverlayAds = useMemo(
+    () =>
+      (homeAds || []).filter((ad) =>
+        ["popup", "fullscreen", "sticky_footer"].includes(
+          String(ad?.style || "").toLowerCase(),
+        ),
+      ),
+    [homeAds],
+  );
+
+  const renderGridItem = useCallback(
+    ({ item }) => (
+      <View style={{ flex: 1, maxWidth: itemWidth }}>
+        {item?.__type === "injected_ad" ? (
+          <InlineAdProductCard ad={item.ad} />
+        ) : item ? (
+          <ProductCard
+            product={item}
+            onPress={() =>
+              navigation.navigate("ProductDetail", { product: item })
+            }
+          />
+        ) : (
+          <ProductCardPlaceholder />
+        )}
+      </View>
+    ),
+    [itemWidth, navigation],
+  );
+
   return (
     <Animated.View
       style={[
@@ -153,21 +219,15 @@ export const HomeScreen = ({ navigation }) => {
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
 
-        {loadingAds && homeAds.length === 0 ? (
-          <View style={styles.adContainer}>
-            <View
-              style={{ flexDirection: "row", paddingHorizontal: 16, gap: 16 }}
-            >
-              {[1, 2].map((i) => (
-                <AdBannerPlaceholder key={i} />
-              ))}
+        <View style={styles.topAdWrap}>
+          {topCarouselAds.length > 0 ? (
+            <AdRenderer ads={topCarouselAds} />
+          ) : (
+            <View style={styles.topAdPlaceholderWrap}>
+              <AdBannerPlaceholder />
             </View>
-          </View>
-        ) : homeAds.length > 0 ? (
-          <View style={styles.adContainer}>
-            <AdRenderer ads={homeAds} />
-          </View>
-        ) : null}
+          )}
+        </View>
 
         <StatusRow
           onSelectStatus={(status) => {
@@ -222,7 +282,7 @@ export const HomeScreen = ({ navigation }) => {
         <SectionHeader title="ForYou" />
         <FlatList
           key={String(gridColumns)}
-          data={loading ? Array(gridColumns * 2).fill(null) : featured}
+          data={forYouData}
           keyExtractor={(item, index) =>
             item?.id || `placeholder-foryou-${index}`
           }
@@ -237,26 +297,13 @@ export const HomeScreen = ({ navigation }) => {
             paddingBottom: 8,
             gap: 12,
           }}
-          renderItem={({ item }) => (
-            <View style={{ flex: 1, maxWidth: itemWidth }}>
-              {item ? (
-                <ProductCard
-                  product={item}
-                  onPress={() =>
-                    navigation.navigate("ProductDetail", { product: item })
-                  }
-                />
-              ) : (
-                <ProductCardPlaceholder />
-              )}
-            </View>
-          )}
+          renderItem={renderGridItem}
           scrollEnabled={false}
         />
         <SectionHeader title="Most Popular" />
         <FlatList
           key={`popular-${String(gridColumns)}`}
-          data={loading ? Array(gridColumns * 2).fill(null) : mostPopular}
+          data={popularData}
           keyExtractor={(item, index) =>
             item?.id || `placeholder-popular-${index}`
           }
@@ -271,33 +318,17 @@ export const HomeScreen = ({ navigation }) => {
             paddingBottom: 16,
             gap: 12,
           }}
-          renderItem={({ item }) => (
-            <View style={{ flex: 1, maxWidth: itemWidth }}>
-              {item ? (
-                <ProductCard
-                  product={item}
-                  onPress={() =>
-                    navigation.navigate("ProductDetail", { product: item })
-                  }
-                />
-              ) : (
-                <ProductCardPlaceholder />
-              )}
-            </View>
-          )}
+          renderItem={renderGridItem}
           scrollEnabled={false}
         />
-        {featuredAds.length > 0 && (
-          <View style={styles.adContainer}>
-            <AdRenderer ads={featuredAds} />
-          </View>
-        )}
         {loadingMore && (
           <View style={styles.loadMoreIndicator}>
             <ActivityIndicator size="small" color={colors.primary} />
           </View>
         )}
       </ScrollView>
+
+      {homeOverlayAds.length > 0 && <AdRenderer ads={homeOverlayAds} />}
     </Animated.View>
   );
 };
@@ -311,10 +342,12 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
   },
-  adContainer: {
-    gap: 8,
-    marginTop: 8,
-    paddingVertical: 12,
+  topAdWrap: {
+    paddingTop: 8,
+    paddingBottom: 6,
+  },
+  topAdPlaceholderWrap: {
+    paddingHorizontal: 16,
   },
 
   flashSalesContainer: {
