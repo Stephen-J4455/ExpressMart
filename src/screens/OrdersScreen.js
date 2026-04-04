@@ -12,15 +12,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../context/OrderContext";
 import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
 
 const statusColors = {
-  pending_payment: "#FFA500",
-  processing: "#007BFF",
-  packed: "#17A2B8",
-  shipped: "#6F42C1",
-  delivered: "#28A745",
-  canceled: "#DC3545",
-  refunded: "#6C757D",
+  pending_payment: "#F59E0B",
+  processing: "#3B82F6",
+  packed: "#06B6D4",
+  shipped: "#8B5CF6",
+  delivered: "#10B981",
+  canceled: "#EF4444",
+  refunded: "#64748B",
 };
 
 const statusIcons = {
@@ -33,37 +34,51 @@ const statusIcons = {
   refunded: "return-down-back",
 };
 
-const OrderCard = ({ order, onPress }) => {
+const OrderCard = ({ order, onPress, cardWidth }) => {
   const statusColor = statusColors[order.status] || colors.muted;
   const statusIcon = statusIcons[order.status] || "ellipse";
+  const statusLabel = order.status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
-    <Pressable style={styles.orderCard} onPress={onPress}>
+    <Pressable
+      style={[styles.orderCard, cardWidth && { width: cardWidth }]}
+      onPress={onPress}
+    >
+      {/* Top: order number + status */}
       <View style={styles.orderHeader}>
-        <Text style={styles.orderNumber}>#{order.order_number}</Text>
+        <View>
+          <Text style={styles.orderNumber}>Order #{order.order_number}</Text>
+          <Text style={styles.orderDate}>
+            {new Date(order.created_at).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
+          </Text>
+        </View>
         <View
-          style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}
+          style={[styles.statusBadge, { backgroundColor: `${statusColor}18` }]}
         >
           <Ionicons name={statusIcon} size={14} color={statusColor} />
           <Text style={[styles.statusText, { color: statusColor }]}>
-            {order.status.replace("_", " ").toUpperCase()}
+            {statusLabel}
           </Text>
         </View>
       </View>
 
-      <View style={styles.orderInfo}>
-        <Text style={styles.orderDate}>
-          {new Date(order.created_at).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          })}
-        </Text>
-        <Text style={styles.orderVendor}>{order.vendor}</Text>
-      </View>
+      {/* Divider */}
+      <View style={styles.divider} />
 
+      {/* Footer: items + total */}
       <View style={styles.orderFooter}>
-        <Text style={styles.itemCount}>{order.items?.length || 0} item(s)</Text>
+        <View style={styles.itemCountWrap}>
+          <Ionicons name="cube-outline" size={15} color={colors.muted} />
+          <Text style={styles.itemCount}>
+            {order.items?.length || 0} item(s)
+          </Text>
+        </View>
         <Text style={styles.orderTotal}>
           GH₵{Number(order.total).toLocaleString()}
         </Text>
@@ -75,6 +90,8 @@ const OrderCard = ({ order, onPress }) => {
 export const OrdersScreen = ({ navigation }) => {
   const { isAuthenticated } = useAuth();
   const { orders, loading, fetchOrders } = useOrder();
+  const { cardColumns, horizontalPadding, getItemWidth } = useResponsive();
+  const cardItemWidth = getItemWidth(cardColumns);
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
@@ -85,23 +102,29 @@ export const OrdersScreen = ({ navigation }) => {
 
   const filteredOrders = orders.filter((order) => {
     if (filter === "all") return true;
-    if (filter === "active") {
+    if (filter === "active")
       return ["processing", "packed", "shipped"].includes(order.status);
-    }
-    if (filter === "completed") {
-      return order.status === "delivered";
-    }
+    if (filter === "completed") return order.status === "delivered";
     return true;
   });
+
+  const filterCounts = {
+    all: orders.length,
+    active: orders.filter((o) =>
+      ["processing", "packed", "shipped"].includes(o.status),
+    ).length,
+    completed: orders.filter((o) => o.status === "delivered").length,
+  };
 
   const renderOrder = useCallback(
     ({ item }) => (
       <OrderCard
         order={item}
+        cardWidth={cardColumns > 1 ? cardItemWidth : undefined}
         onPress={() => navigation.navigate("OrderDetail", { order: item })}
       />
     ),
-    [navigation]
+    [navigation, cardColumns, cardItemWidth],
   );
 
   if (!isAuthenticated) {
@@ -114,18 +137,34 @@ export const OrdersScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      {/* Header */}
+      <View
+        style={[
+          styles.header,
+          { paddingHorizontal: cardColumns > 1 ? horizontalPadding : 16 },
+        ]}
+      >
         <Pressable
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
           <Ionicons name="arrow-back" size={24} color={colors.dark} />
         </Pressable>
-        <Text style={styles.headerTitle}>My Orders</Text>
-        <View style={{ width: 44 }} />
+        <View>
+          <Text style={styles.headerTitle}>My Orders</Text>
+          <Text style={styles.headerSubtitle}>
+            {orders.length} order{orders.length !== 1 ? "s" : ""} total
+          </Text>
+        </View>
       </View>
 
-      <View style={styles.filters}>
+      {/* Filter tabs */}
+      <View
+        style={[
+          styles.filters,
+          { paddingHorizontal: cardColumns > 1 ? horizontalPadding : 16 },
+        ]}
+      >
         {["all", "active", "completed"].map((f) => (
           <Pressable
             key={f}
@@ -140,6 +179,21 @@ export const OrdersScreen = ({ navigation }) => {
             >
               {f.charAt(0).toUpperCase() + f.slice(1)}
             </Text>
+            <View
+              style={[
+                styles.filterCount,
+                filter === f && styles.filterCountActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.filterCountText,
+                  filter === f && styles.filterCountTextActive,
+                ]}
+              >
+                {filterCounts[f]}
+              </Text>
+            </View>
           </Pressable>
         ))}
       </View>
@@ -148,7 +202,13 @@ export const OrdersScreen = ({ navigation }) => {
         data={filteredOrders}
         keyExtractor={(item) => item.id}
         renderItem={renderOrder}
-        contentContainerStyle={styles.list}
+        key={`orders-${cardColumns}`}
+        numColumns={cardColumns}
+        contentContainerStyle={[
+          styles.list,
+          { paddingHorizontal: cardColumns > 1 ? horizontalPadding : 16 },
+        ]}
+        columnWrapperStyle={cardColumns > 1 ? styles.columnWrapper : undefined}
         refreshControl={
           <RefreshControl
             refreshing={loading}
@@ -158,17 +218,23 @@ export const OrdersScreen = ({ navigation }) => {
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="cube-outline" size={64} color={colors.muted} />
+            <View style={styles.emptyIconWrap}>
+              <Ionicons name="cube-outline" size={48} color={colors.primary} />
+            </View>
             <Text style={styles.emptyTitle}>No orders yet</Text>
             <Text style={styles.emptySubtitle}>
-              Your orders will appear here once you make a purchase.
+              {filter === "all"
+                ? "Your orders will appear here once you make a purchase."
+                : `No ${filter} orders found.`}
             </Text>
-            <Pressable
-              style={styles.shopButton}
-              onPress={() => navigation.navigate("Main")}
-            >
-              <Text style={styles.shopButtonText}>Start Shopping</Text>
-            </Pressable>
+            {filter === "all" && (
+              <Pressable
+                style={styles.shopButton}
+                onPress={() => navigation.navigate("Main")}
+              >
+                <Text style={styles.shopButtonText}>Start Shopping</Text>
+              </Pressable>
+            )}
           </View>
         }
       />
@@ -179,7 +245,7 @@ export const OrdersScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   centerContainer: {
     flex: 1,
@@ -189,39 +255,49 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingTop: 50,
-    paddingHorizontal: 16,
     paddingBottom: 16,
     backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEF2F8",
+    gap: 16,
   },
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.light,
+    borderRadius: 14,
+    backgroundColor: "#F8FAFC",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#EEF2F8",
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 22,
+    fontWeight: "800",
     color: colors.dark,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: colors.muted,
+    marginTop: 1,
   },
   filters: {
     flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: "#E4E8F0",
+    borderBottomColor: "#EEF2F8",
     gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: colors.light,
+    backgroundColor: "#F1F5F9",
   },
   filterChipActive: {
     backgroundColor: colors.primary,
@@ -229,105 +305,145 @@ const styles = StyleSheet.create({
   filterText: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: colors.muted,
   },
   filterTextActive: {
     color: "#fff",
   },
+  filterCount: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  filterCountActive: {
+    backgroundColor: "rgba(255,255,255,0.3)",
+  },
+  filterCountText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.muted,
+  },
+  filterCountTextActive: {
+    color: "#fff",
+  },
   list: {
-    padding: 16,
+    paddingTop: 20,
     paddingBottom: 100,
+  },
+  columnWrapper: {
+    gap: 16,
   },
   orderCard: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#EEF2F8",
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+
   orderHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 12,
   },
   orderNumber: {
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "800",
     color: colors.dark,
+  },
+  orderDate: {
+    fontSize: 13,
+    color: colors.muted,
+    marginTop: 3,
   },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 12,
-    gap: 4,
+    gap: 5,
   },
   statusText: {
     fontSize: 11,
     fontWeight: "700",
   },
-  orderInfo: {
+  divider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
     marginBottom: 12,
-  },
-  orderDate: {
-    fontSize: 14,
-    color: colors.muted,
-  },
-  orderVendor: {
-    fontSize: 14,
-    color: colors.dark,
-    marginTop: 2,
   },
   orderFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#E4E8F0",
+  },
+  itemCountWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   itemCount: {
     fontSize: 14,
     color: colors.muted,
   },
   orderTotal: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 19,
+    fontWeight: "800",
     color: colors.primary,
   },
   emptyState: {
-    flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.dark,
-    marginTop: 16,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: colors.muted,
-    textAlign: "center",
-    marginTop: 8,
+    paddingVertical: 80,
     paddingHorizontal: 40,
   },
+  emptyIconWrap: {
+    width: 100,
+    height: 100,
+    borderRadius: 30,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: colors.dark,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 15,
+    color: colors.muted,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
   shopButton: {
-    marginTop: 24,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 25,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   shopButtonText: {
     color: "#fff",
-    fontWeight: "600",
+    fontWeight: "700",
+    fontSize: 16,
   },
 });

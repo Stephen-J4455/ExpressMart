@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "499123636329",
+    "project_id": "expressmart-7d550",
+    "storage_bucket": "expressmart-7d550.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:499123636329:android:e2b19f4b17fbfb5df57af8",
+        "android_client_info": {
+          "package_name": "com.stephenj3.ExpressMart"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBpstGU_OQb2nnKWmGcf7KJQfABylOkYL0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

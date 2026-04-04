@@ -52,13 +52,17 @@ export const ChangeEmailScreen = ({ navigation }) => {
     try {
       const success = await updateEmail(newEmail, password);
       if (success) {
-        toast.success("Email change initiated. Please check both your old and new email addresses for verification links.");
+        toast.success(
+          "Email change initiated. Please check both your old and new email addresses for verification links.",
+        );
         // Clear form
         setNewEmail("");
         setPassword("");
         navigation.goBack();
       } else {
-        toast.error("Failed to initiate email change. Please check your password and try again.");
+        toast.error(
+          "Failed to initiate email change. Please check your password and try again.",
+        );
       }
     } catch (error) {
       toast.error("Failed to change email. Please try again.");
@@ -174,7 +178,7 @@ export const ChangeEmailScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: "row",

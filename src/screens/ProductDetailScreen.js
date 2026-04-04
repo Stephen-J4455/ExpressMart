@@ -10,8 +10,10 @@ import {
   Dimensions,
   Modal,
   TextInput,
+  StatusBar,
+  Platform,
 } from "react-native";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCart } from "../context/CartContext";
@@ -20,6 +22,12 @@ import { useToast } from "../context/ToastContext";
 import { useShop } from "../context/ShopContext";
 import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
+import { AdRenderer } from "../components/AdBanner";
+import { InlineAdProductCard } from "../components/InlineAdProductCard";
+import { FlashSaleCountdown } from "../components/FlashSaleCountdown";
+import { useAds } from "../context/AdsContext";
+import { flashSaleService } from "../services/flashSaleService";
+import { useResponsive } from "../hooks/useResponsive";
 
 const SELLER_BADGE_CONFIG = {
   verified: {
@@ -54,13 +62,26 @@ const PRODUCT_BADGE_CONFIG = {
   featured: { icon: "star", color: "#22C55E", label: "Featured" },
 };
 
+const toBoolean = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+  return false;
+};
+
 export const ProductDetailScreen = ({ route, navigation }) => {
+  const { isWide, horizontalPadding } = useResponsive();
   const { product: initialProduct } = route.params;
   const { addToCart } = useCart();
   const { user } = useAuth();
   const toast = useToast();
   const { refresh: refreshShop } = useShop();
+  const { fetchAdsByPlacement } = useAds();
   const [product, setProduct] = useState(initialProduct);
+  const [productAds, setProductAds] = useState([]);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [reviews, setReviews] = useState([]);
@@ -79,11 +100,34 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const [showVariantModal, setShowVariantModal] = useState(false);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
+  const [flashSale, setFlashSale] = useState(null);
+  const [loadingFlashSale, setLoadingFlashSale] = useState(true);
+  const [showImagePreview, setShowImagePreview] = useState(false);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
+  const [expandedReviews, setExpandedReviews] = useState({});
+  const previewScrollRef = useRef(null);
 
   const screenWidth = Dimensions.get("window").width;
 
+  // Check if product has active flash sale
+  const hasFlashSale = !!flashSale && new Date(flashSale.end_time) > new Date();
+  const hasInventoryValue =
+    product?.quantity != null ||
+    product?.stock != null ||
+    product?.stock_quantity != null;
+  const availableStock = Number(
+    product?.quantity ?? product?.stock ?? product?.stock_quantity ?? 0,
+  );
+  const allowsBackorder = toBoolean(product?.allow_backorder);
+  const isOutOfStock =
+    hasInventoryValue && availableStock <= 0 && !allowsBackorder;
+
   // Format price as Ghana Cedis
   const formatPrice = (price, discount = 0) => {
+    // If there's an active flash sale, use flash sale price
+    if (hasFlashSale) {
+      return `GH₵${Number(flashSale.flash_price || 0).toLocaleString()}`;
+    }
     const discountedPrice = discount > 0 ? price * (1 - discount / 100) : price;
     return `GH₵${Number(discountedPrice || 0).toLocaleString()}`;
   };
@@ -101,10 +145,26 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       if (error) throw error;
       if (data) {
         // Map the seller_id to seller property
-        setProduct({
+        setProduct((prev) => ({
+          ...prev,
           ...data,
           seller: data.seller_id,
-        });
+          quantity:
+            data.quantity ??
+            data.stock ??
+            data.stock_quantity ??
+            prev?.quantity ??
+            prev?.stock ??
+            prev?.stock_quantity,
+          stock:
+            data.stock ??
+            data.quantity ??
+            data.stock_quantity ??
+            prev?.stock ??
+            prev?.quantity ??
+            prev?.stock_quantity,
+          allow_backorder: data.allow_backorder ?? prev?.allow_backorder,
+        }));
       }
     } catch (err) {
       console.error("Error refreshing product data:", err);
@@ -178,10 +238,90 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     fetchReviews();
   }, [product.id, user]);
 
-  // Refresh product data on component mount
+  // Fetch flash sale data for this product
   useEffect(() => {
-    refreshProductData();
-  }, []);
+    const fetchFlashSale = async () => {
+      setLoadingFlashSale(true);
+      const result = await flashSaleService.getProductFlashSale(product.id);
+      if (result.success && result.data) {
+        setFlashSale(result.data);
+      }
+      setLoadingFlashSale(false);
+    };
+    fetchFlashSale();
+  }, [product.id]);
+
+  useEffect(() => {
+    fetchAdsByPlacement("product_detail").then((ads) =>
+      setProductAds(ads || []),
+    );
+  }, [fetchAdsByPlacement]);
+
+  const relatedTagAds = useMemo(() => {
+    const normalize = (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase();
+
+    const productTagSet = new Set(
+      (product?.tags || []).map(normalize).filter(Boolean),
+    );
+
+    if (productTagSet.size === 0) {
+      return (productAds || []).slice(0, 5);
+    }
+
+    const extractAdTags = (ad) => {
+      const fields = [
+        ad?.tags,
+        ad?.target_tags,
+        ad?.keywords,
+        ad?.target_keywords,
+        ad?.context_tags,
+        ad?.category,
+        ad?.target_category,
+      ];
+
+      const tokens = [];
+      fields.forEach((field) => {
+        if (!field) return;
+        if (Array.isArray(field)) {
+          tokens.push(...field);
+          return;
+        }
+        if (typeof field === "string") {
+          try {
+            const parsed = JSON.parse(field);
+            if (Array.isArray(parsed)) {
+              tokens.push(...parsed);
+              return;
+            }
+          } catch {
+            // Not JSON, continue with split
+          }
+          tokens.push(...field.split(","));
+        }
+      });
+
+      // Fallback to title/description words when explicit targeting is missing.
+      if (tokens.length === 0) {
+        const fallbackText = `${ad?.title || ""} ${ad?.description || ""}`;
+        tokens.push(...fallbackText.split(/\s+/));
+      }
+
+      return new Set(tokens.map(normalize).filter(Boolean));
+    };
+
+    const matched = (productAds || []).filter((ad) => {
+      const adTags = extractAdTags(ad);
+      for (const tag of productTagSet) {
+        if (adTags.has(tag)) return true;
+      }
+      return false;
+    });
+
+    return (matched.length > 0 ? matched : productAds || []).slice(0, 5);
+  }, [product?.tags, productAds]);
 
   const toggleWishlist = useCallback(async () => {
     if (!user) {
@@ -367,7 +507,34 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     setShowReviewModal(true);
   };
 
+  const handleChatWithSeller = () => {
+    if (!user) {
+      toast.info("Sign in required", "Please sign in to chat with the seller");
+      navigation.navigate("Auth");
+      return;
+    }
+    if (!product.seller) {
+      toast.error("Unavailable", "Seller information not available");
+      return;
+    }
+    navigation.navigate("Chat", {
+      seller: product.seller,
+      product: {
+        id: product.id,
+        title: product.title,
+        price: product.price,
+        discount: product.discount,
+        image: product.thumbnails?.[0] || null,
+      },
+    });
+  };
+
   const handleAddToCart = () => {
+    if (isOutOfStock) {
+      toast.error("Out of Stock", "This product is currently unavailable");
+      return;
+    }
+
     const hasMultipleColors = product.colors && product.colors.length > 1;
     const hasMultipleSizes = product.sizes && product.sizes.length > 1;
 
@@ -383,6 +550,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         1,
         product.sizes?.[0] || null,
         product.colors?.[0] || null,
+        hasFlashSale ? flashSale.flash_price : null,
       );
       toast.success(
         "Added to Cart",
@@ -392,6 +560,12 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const handleConfirmAddToCart = () => {
+    if (isOutOfStock) {
+      toast.error("Out of Stock", "This product is currently unavailable");
+      setShowVariantModal(false);
+      return;
+    }
+
     if (
       (product.colors && product.colors.length > 1 && !selectedColor) ||
       (product.sizes && product.sizes.length > 1 && !selectedSize)
@@ -400,13 +574,37 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       return;
     }
 
-    addToCart(product, 1, selectedSize, selectedColor);
+    addToCart(
+      product,
+      1,
+      selectedSize,
+      selectedColor,
+      hasFlashSale ? flashSale.flash_price : null,
+    );
     setShowVariantModal(false);
     toast.success(
       "Added to Cart",
       `${product.title} has been added to your cart`,
     );
   };
+
+  const toggleReviewExpanded = (reviewId) => {
+    setExpandedReviews((prev) => ({ ...prev, [reviewId]: !prev[reviewId] }));
+  };
+
+  // Scroll fullscreen preview to the correct image when opened
+  useEffect(() => {
+    if (showImagePreview && previewScrollRef.current) {
+      const timer = setTimeout(() => {
+        previewScrollRef.current?.scrollTo({
+          x: previewImageIndex * screenWidth,
+          y: 0,
+          animated: false,
+        });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [showImagePreview]);
 
   return (
     <View style={styles.container}>
@@ -434,11 +632,18 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               ? product.thumbnails
               : [product.thumbnail]
             ).map((imageUri, index) => (
-              <Image
+              <Pressable
                 key={index}
-                source={{ uri: imageUri }}
-                style={[styles.image, { width: screenWidth }]}
-              />
+                onPress={() => {
+                  setPreviewImageIndex(index);
+                  setShowImagePreview(true);
+                }}
+              >
+                <Image
+                  source={{ uri: imageUri }}
+                  style={[styles.image, { width: screenWidth }]}
+                />
+              </Pressable>
             ))}
           </ScrollView>
 
@@ -515,51 +720,27 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           </View>
           <Text style={styles.title}>{product.title}</Text>
 
-          {product.badges && product.badges.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.badgeRow}
-              contentContainerStyle={styles.badgeRowContent}
-            >
-              {product.badges.map((label) => {
-                // Normalize the badge label to lowercase for lookup
-                const normalizedLabel = label.toLowerCase();
-                const badgeConfig = PRODUCT_BADGE_CONFIG[normalizedLabel];
-
-                // Use the config label if available, otherwise use the original label
-                const displayLabel = badgeConfig?.label || label;
-
-                return (
-                  <View
-                    key={label}
-                    style={[
-                      styles.productBadge,
-                      {
-                        backgroundColor:
-                          (badgeConfig?.color || colors.primary) + "20",
-                      },
-                    ]}
-                  >
-                    {badgeConfig?.icon && (
-                      <Ionicons
-                        name={badgeConfig.icon}
-                        size={12}
-                        color={badgeConfig.color || colors.primary}
-                      />
-                    )}
-                    <Text
-                      style={[
-                        styles.productBadgeText,
-                        { color: badgeConfig?.color || colors.primary },
-                      ]}
-                    >
-                      {displayLabel}
-                    </Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
+          {hasFlashSale && (
+            <View style={styles.flashSaleSection}>
+              <FlashSaleCountdown
+                endTime={flashSale.end_time}
+                startTime={flashSale.start_time}
+                withProgressBar
+                onExpire={() => {
+                  setFlashSale(null);
+                  refreshProductData();
+                }}
+                availableQty={
+                  flashSale.max_quantity != null
+                    ? Math.max(
+                        0,
+                        (flashSale.max_quantity || 0) -
+                          (flashSale.sold_quantity || 0),
+                      )
+                    : null
+                }
+              />
+            </View>
           )}
 
           <View style={styles.priceSection}>
@@ -568,17 +749,41 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 <Text style={styles.price}>
                   {formatPrice(product.price, product.discount)}
                 </Text>
-                {product.discount > 0 && (
+                {hasFlashSale ? (
                   <>
                     <Text style={styles.originalPrice}>
-                      GH₵{Number(product.price).toLocaleString()}
+                      GH₵
+                      {Number(
+                        flashSale.original_price || product.price,
+                      ).toLocaleString()}
                     </Text>
-                    <View style={styles.discountBadge}>
-                      <Text style={styles.discountText}>
-                        {product.discount}% OFF
-                      </Text>
+                    <View style={styles.flashDiscountBadge}>
+                      <LinearGradient
+                        colors={["#EF4444", "#DC2626"]}
+                        style={styles.flashBadgeGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        <Ionicons name="flash" size={12} color="#fff" />
+                        <Text style={styles.flashDiscountText}>
+                          {Math.round(flashSale.discount_percentage)}% OFF
+                        </Text>
+                      </LinearGradient>
                     </View>
                   </>
+                ) : (
+                  product.discount > 0 && (
+                    <>
+                      <Text style={styles.originalPrice}>
+                        GH₵{Number(product.price).toLocaleString()}
+                      </Text>
+                      <View style={styles.discountBadge}>
+                        <Text style={styles.discountText}>
+                          {product.discount}% OFF
+                        </Text>
+                      </View>
+                    </>
+                  )
                 )}
               </View>
             </View>
@@ -595,25 +800,142 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             </View>
           </View>
 
-          {product.stock !== undefined && (
-            <View style={styles.stockRow}>
-              <Ionicons
-                name={product.stock > 0 ? "checkmark-circle" : "close-circle"}
-                size={18}
-                color={product.stock > 0 ? colors.success : colors.accent}
-              />
-              <Text
+          {/* Product Badges — fall back to seller badges when product has none */}
+          {(() => {
+            const productBadges = product.badges || [];
+            const sellerBadges = product.seller?.badges || [];
+            const displayBadges =
+              productBadges.length > 0 ? productBadges : sellerBadges;
+            if (displayBadges.length === 0) return null;
+            return (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.badgeRow}
+                contentContainerStyle={styles.badgeRowContent}
+              >
+                {displayBadges.map((label) => {
+                  const normalizedLabel = label.toLowerCase();
+                  const badgeConfig =
+                    PRODUCT_BADGE_CONFIG[normalizedLabel] ||
+                    SELLER_BADGE_CONFIG[normalizedLabel];
+                  const displayLabel = badgeConfig?.label || label;
+                  return (
+                    <View
+                      key={label}
+                      style={[
+                        styles.productBadge,
+                        {
+                          backgroundColor:
+                            (badgeConfig?.color || colors.primary) + "20",
+                        },
+                      ]}
+                    >
+                      {badgeConfig?.icon && (
+                        <Ionicons
+                          name={badgeConfig.icon}
+                          size={12}
+                          color={badgeConfig.color || colors.primary}
+                        />
+                      )}
+                      <Text
+                        style={[
+                          styles.productBadgeText,
+                          { color: badgeConfig?.color || colors.primary },
+                        ]}
+                      >
+                        {displayLabel}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            );
+          })()}
+
+          {/* Shipping & Stock Info Row */}
+          <View style={styles.deliveryRow}>
+            {/* Shipping pill */}
+            <View
+              style={[
+                styles.deliveryPill,
+                product.shipping_fee > 0
+                  ? styles.deliveryPillPaid
+                  : styles.deliveryPillFree,
+              ]}
+            >
+              <View
                 style={[
-                  styles.stockText,
-                  { color: product.stock > 0 ? colors.success : colors.accent },
+                  styles.deliveryIconWrap,
+                  {
+                    backgroundColor:
+                      product.shipping_fee > 0
+                        ? colors.primary + "22"
+                        : "#D1FAE5",
+                  },
                 ]}
               >
-                {product.stock > 0
-                  ? `${product.stock} in stock`
-                  : "Out of stock"}
-              </Text>
+                <Ionicons
+                  name={
+                    product.shipping_fee > 0
+                      ? "bicycle-outline"
+                      : "rocket-outline"
+                  }
+                  size={18}
+                  color={product.shipping_fee > 0 ? colors.primary : "#059669"}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.deliveryLabel}>
+                  {product.shipping_fee > 0 ? "Delivery" : "Free Delivery"}
+                </Text>
+                {product.shipping_fee > 0 && (
+                  <Text style={styles.deliveryValue}>
+                    GH₵{Number(product.shipping_fee).toLocaleString()}
+                  </Text>
+                )}
+              </View>
             </View>
-          )}
+
+            {/* Stock pill */}
+            <View
+              style={[
+                styles.deliveryPill,
+                !isOutOfStock
+                  ? styles.deliveryPillInStock
+                  : styles.deliveryPillOutOfStock,
+              ]}
+            >
+              <View
+                style={[
+                  styles.deliveryIconWrap,
+                  {
+                    backgroundColor: !isOutOfStock ? "#D1FAE5" : "#FEE2E2",
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={
+                    !isOutOfStock
+                      ? "checkmark-circle-outline"
+                      : "close-circle-outline"
+                  }
+                  size={18}
+                  color={!isOutOfStock ? "#059669" : "#DC2626"}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.deliveryLabel}>
+                  {!isOutOfStock ? "In Stock" : "Out of Stock"}
+                </Text>
+                {!isOutOfStock && hasInventoryValue && (
+                  <Text style={[styles.deliveryValue, { color: "#059669" }]}>
+                    {availableStock} available
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Product Details</Text>
@@ -689,7 +1011,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                         <View
                           style={[
                             styles.colorDot,
-                            { backgroundColor: COLOR_MAP[colorName] || "#CCC" },
+                            {
+                              backgroundColor: COLOR_MAP[colorName] || "#CCC",
+                            },
                           ]}
                         />
                         <Text style={styles.colorName}>{colorName}</Text>
@@ -738,12 +1062,33 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                   <Pressable
                     key={index}
                     style={styles.tagChip}
-                    onPress={() => navigation.navigate("Search", { tag })}
+                    onPress={() =>
+                      navigation.navigate("SearchResults", { tag, query: "" })
+                    }
                   >
                     <Text style={styles.tagText}>{tag}</Text>
                   </Pressable>
                 ))}
               </View>
+            </View>
+          )}
+
+          {relatedTagAds.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                Sponsored For Similar Tags
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.relatedAdsScroller}
+              >
+                {relatedTagAds.map((ad) => (
+                  <View key={ad.id} style={styles.relatedAdItem}>
+                    <InlineAdProductCard ad={ad} />
+                  </View>
+                ))}
+              </ScrollView>
             </View>
           )}
 
@@ -774,107 +1119,145 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               ) : null}
             </View>
             {reviews.length > 0 ? (
-              reviews.map((review) => (
-                <View key={review.id} style={styles.reviewItem}>
-                  <View style={styles.reviewHeader}>
-                    <View style={styles.reviewStars}>
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <Ionicons
-                          key={star}
-                          name={star <= review.rating ? "star" : "star-outline"}
-                          size={14}
-                          color={colors.secondary}
-                        />
-                      ))}
-                    </View>
-                    <Text style={styles.reviewDate}>
-                      {new Date(review.created_at).toLocaleDateString()}
-                    </Text>
-                  </View>
-                  {review.comment && (
-                    <Text style={styles.reviewText}>{review.comment}</Text>
-                  )}
-
-                  {/* Comments section */}
-                  {reviewComments[review.id] &&
-                    reviewComments[review.id].length > 0 && (
-                      <View style={styles.commentsSection}>
-                        {reviewComments[review.id].map((comment) => (
-                          <View
-                            key={comment.id}
-                            style={[
-                              styles.commentItem,
-                              comment.seller_id && styles.sellerReplyItem,
-                            ]}
-                          >
-                            <View style={styles.commentHeader}>
-                              <Text style={styles.commentAuthor}>
-                                {comment.seller_id ? (
-                                  <View style={styles.sellerReplyBadge}>
-                                    <Ionicons
-                                      name="storefront"
-                                      size={12}
-                                      color="#fff"
-                                    />
-                                    <Text style={styles.sellerReplyText}>
-                                      Seller Reply
-                                    </Text>
-                                  </View>
-                                ) : comment.user_id === user?.id ? (
-                                  "You"
-                                ) : (
-                                  "User"
-                                )}
-                              </Text>
-                              <Text style={styles.commentDate}>
-                                {new Date(
-                                  comment.created_at,
-                                ).toLocaleDateString()}
-                              </Text>
-                            </View>
-                            <Text style={styles.commentBody}>
-                              {comment.comment}
+              reviews.map((review) => {
+                const commentList = reviewComments[review.id] || [];
+                const isExpanded = !!expandedReviews[review.id];
+                return (
+                  <View key={review.id} style={styles.reviewItem}>
+                    {/* Tappable header: stars + date + comment count + chevron */}
+                    <Pressable
+                      style={styles.reviewHeader}
+                      onPress={() => toggleReviewExpanded(review.id)}
+                    >
+                      <View style={styles.reviewHeaderLeft}>
+                        <View style={styles.reviewStars}>
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Ionicons
+                              key={star}
+                              name={
+                                star <= review.rating ? "star" : "star-outline"
+                              }
+                              size={14}
+                              color={colors.secondary}
+                            />
+                          ))}
+                        </View>
+                        <Text style={styles.reviewDate}>
+                          {new Date(review.created_at).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      <View style={styles.reviewHeaderRight}>
+                        {commentList.length > 0 && (
+                          <View style={styles.commentCountBadge}>
+                            <Ionicons
+                              name="chatbubbles"
+                              size={11}
+                              color={colors.primary}
+                            />
+                            <Text style={styles.commentCountText}>
+                              {commentList.length}
                             </Text>
                           </View>
-                        ))}
+                        )}
+                        <Ionicons
+                          name={isExpanded ? "chevron-up" : "chevron-down"}
+                          size={16}
+                          color={colors.muted}
+                        />
                       </View>
+                    </Pressable>
+
+                    {review.comment && (
+                      <Text style={styles.reviewText}>{review.comment}</Text>
                     )}
 
-                  {/* Add comment input */}
-                  {user && (
-                    <View style={styles.addCommentSection}>
-                      <TextInput
-                        style={styles.commentInput}
-                        placeholder="Add a comment..."
-                        value={commentInputs[review.id] || ""}
-                        onChangeText={(text) =>
-                          setCommentInputs((prev) => ({
-                            ...prev,
-                            [review.id]: text,
-                          }))
-                        }
-                        multiline
-                        numberOfLines={2}
-                      />
-                      <Pressable
-                        style={[
-                          styles.commentButton,
-                          submittingComment[review.id] &&
-                          styles.commentButtonDisabled,
-                        ]}
-                        onPress={() => submitComment(review.id)}
-                        disabled={submittingComment[review.id]}
-                      >
-                        {submittingComment[review.id] ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={styles.commentButtonText}>Comment</Text>
+                    {/* Collapsible: comments + reply input */}
+                    {isExpanded && (
+                      <>
+                        {commentList.length > 0 && (
+                          <View style={styles.commentsSection}>
+                            {commentList.map((comment) => (
+                              <View
+                                key={comment.id}
+                                style={[
+                                  styles.commentItem,
+                                  comment.seller_id && styles.sellerReplyItem,
+                                ]}
+                              >
+                                <View style={styles.commentHeader}>
+                                  <View>
+                                    {comment.seller_id ? (
+                                      <View style={styles.sellerReplyBadge}>
+                                        <Ionicons
+                                          name="storefront"
+                                          size={12}
+                                          color="#fff"
+                                        />
+                                        <Text style={styles.sellerReplyText}>
+                                          Seller Reply
+                                        </Text>
+                                      </View>
+                                    ) : (
+                                      <Text style={styles.commentAuthor}>
+                                        {comment.user_id === user?.id
+                                          ? "You"
+                                          : "User"}
+                                      </Text>
+                                    )}
+                                  </View>
+                                  <Text style={styles.commentDate}>
+                                    {new Date(
+                                      comment.created_at,
+                                    ).toLocaleDateString()}
+                                  </Text>
+                                </View>
+                                <Text style={styles.commentBody}>
+                                  {comment.comment}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
                         )}
-                      </Pressable>
-                    </View>
-                  )}
-                </View>
-              ))
+
+                        {user && (
+                          <View style={styles.addCommentSection}>
+                            <TextInput
+                              style={styles.commentInput}
+                              placeholder="Add a comment..."
+                              value={commentInputs[review.id] || ""}
+                              onChangeText={(text) =>
+                                setCommentInputs((prev) => ({
+                                  ...prev,
+                                  [review.id]: text,
+                                }))
+                              }
+                              multiline
+                              numberOfLines={2}
+                            />
+                            <Pressable
+                              style={[
+                                styles.commentButton,
+                                submittingComment[review.id] &&
+                                  styles.commentButtonDisabled,
+                              ]}
+                              onPress={() => submitComment(review.id)}
+                              disabled={submittingComment[review.id]}
+                            >
+                              {submittingComment[review.id] ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                              ) : (
+                                <Text style={styles.commentButtonText}>
+                                  Comment
+                                </Text>
+                              )}
+                            </Pressable>
+                          </View>
+                        )}
+                      </>
+                    )}
+                  </View>
+                );
+              })
             ) : (
               <View style={styles.noReviews}>
                 <Ionicons
@@ -899,15 +1282,32 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         </View>
       </ScrollView>
 
+      {(() => {
+        const overlayAds = (productAds || []).filter((ad) =>
+          ["popup", "fullscreen", "sticky_footer"].includes(
+            String(ad?.style || "").toLowerCase(),
+          ),
+        );
+        if (overlayAds.length === 0) return null;
+        return <AdRenderer ads={overlayAds} />;
+      })()}
+
       <View style={styles.footer}>
+        <Pressable style={styles.chatButton} onPress={handleChatWithSeller}>
+          <Ionicons
+            name="chatbubble-ellipses"
+            size={24}
+            color={colors.primary}
+          />
+        </Pressable>
         <Pressable
-          style={[styles.ctaButton, product.stock === 0 && styles.ctaDisabled]}
+          style={[styles.ctaButton, isOutOfStock && styles.ctaDisabled]}
           onPress={handleAddToCart}
-          disabled={product.stock === 0}
+          disabled={isOutOfStock}
         >
           <LinearGradient
             colors={
-              product.stock === 0
+              isOutOfStock
                 ? [colors.muted, colors.muted]
                 : [colors.primary, colors.accent]
             }
@@ -917,13 +1317,86 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           >
             <Ionicons name="cart" size={20} color="#fff" />
             <Text style={styles.ctaText}>
-              {product.stock === 0
+              {isOutOfStock
                 ? "Out of Stock"
                 : `Add to Cart - ${formatPrice(product.price, product.discount)}`}
             </Text>
           </LinearGradient>
         </Pressable>
       </View>
+
+      {/* Fullscreen Image Preview */}
+      <Modal
+        visible={showImagePreview}
+        transparent={false}
+        animationType="fade"
+        statusBarTranslucent
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowImagePreview(false)}
+      >
+        <StatusBar
+          backgroundColor="#000"
+          barStyle="light-content"
+          translucent
+        />
+        <View style={styles.previewOverlay}>
+          {/* Close button — sits above everything */}
+          <Pressable
+            style={styles.previewClose}
+            onPress={() => setShowImagePreview(false)}
+          >
+            <Ionicons name="close" size={24} color="#fff" />
+          </Pressable>
+
+          {/* Horizontally paginated image strip, each page is full screen */}
+          <ScrollView
+            ref={previewScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={(e) => {
+              const idx = Math.round(
+                e.nativeEvent.contentOffset.x / screenWidth,
+              );
+              setPreviewImageIndex(idx);
+            }}
+            scrollEventThrottle={16}
+            contentContainerStyle={{ alignItems: "center" }}
+            style={{ flex: 1 }}
+          >
+            {(product.thumbnails && product.thumbnails.length > 0
+              ? product.thumbnails
+              : [product.thumbnail]
+            ).map((imageUri, index) => (
+              <View key={index} style={styles.previewPage}>
+                <Image
+                  source={{ uri: imageUri }}
+                  style={styles.previewImage}
+                  resizeMode="contain"
+                />
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Bottom: page indicator dots + counter */}
+          {(product.thumbnails?.length || 1) > 1 && (
+            <View style={styles.previewDotsRow}>
+              {(product.thumbnails || [product.thumbnail]).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.previewDot,
+                    i === previewImageIndex && styles.previewDotActive,
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+          <Text style={styles.previewCounter}>
+            {previewImageIndex + 1} / {product.thumbnails?.length || 1}
+          </Text>
+        </View>
+      </Modal>
 
       {/* Review Modal */}
       <Modal
@@ -1076,7 +1549,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                         <View
                           style={[
                             styles.smallColorDot,
-                            { backgroundColor: COLOR_MAP[colorName] || "#CCC" },
+                            {
+                              backgroundColor: COLOR_MAP[colorName] || "#CCC",
+                            },
                             isSelected && styles.smallColorDotSelected,
                           ]}
                         />
@@ -1140,7 +1615,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   scrollView: {
     flex: 1,
@@ -1244,6 +1719,13 @@ const styles = StyleSheet.create({
     color: colors.dark,
     marginBottom: 12,
   },
+  relatedAdsScroller: {
+    gap: 12,
+    paddingVertical: 4,
+  },
+  relatedAdItem: {
+    width: 260,
+  },
   badgeRow: {
     marginBottom: 16,
   },
@@ -1305,6 +1787,32 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   discountText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
+    textTransform: "uppercase",
+  },
+  flashSaleSection: {
+    marginBottom: 16,
+  },
+  availableTextDetail: {
+    marginTop: 6,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#DC2626",
+  },
+  flashDiscountBadge: {
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  flashBadgeGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  flashDiscountText: {
     fontSize: 12,
     fontWeight: "700",
     color: "#fff",
@@ -1449,8 +1957,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: colors.light,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  chatButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: colors.light,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.primary + "40",
   },
   ctaButton: {
+    flex: 1,
     borderRadius: 16,
     overflow: "hidden",
   },
@@ -1861,5 +2383,142 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.primary,
     marginTop: 4,
+  },
+  // Review dropdown header
+  reviewHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  reviewHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  commentCountBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: colors.primary + "15",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  commentCountText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  // Shipping & stock redesign
+  deliveryRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginHorizontal: 20,
+    marginBottom: 20,
+  },
+  deliveryPill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+  },
+  deliveryPillFree: {
+    backgroundColor: "#F0FDF4",
+    borderColor: "#BBF7D0",
+  },
+  deliveryPillPaid: {
+    backgroundColor: colors.primary + "08",
+    borderColor: colors.primary + "28",
+  },
+  deliveryPillInStock: {
+    backgroundColor: "#F0FDF4",
+    borderColor: "#BBF7D0",
+  },
+  deliveryPillOutOfStock: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+  },
+  deliveryIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deliveryLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    lineHeight: 16,
+  },
+  deliveryValue: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.primary,
+    lineHeight: 20,
+  },
+  // Fullscreen image preview
+  previewOverlay: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  previewClose: {
+    position: "absolute",
+    top: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + 12 : 60,
+    right: 18,
+    zIndex: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewPage: {
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewImage: {
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height * 0.8,
+  },
+  previewDotsRow: {
+    position: "absolute",
+    bottom: 52,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+  },
+  previewDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.35)",
+  },
+  previewDotActive: {
+    width: 20,
+    backgroundColor: "#fff",
+  },
+  previewCounter: {
+    position: "absolute",
+    bottom: 24,
+    left: 0,
+    right: 0,
+    textAlign: "center",
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

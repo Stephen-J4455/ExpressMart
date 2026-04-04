@@ -4,25 +4,34 @@
     "slug": "ExpressMart",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/express.png",
     "userInterfaceStyle": "light",
     "scheme": "expressmart",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/express.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "experiments": {
+      "baseUrl": "/"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.stephenj3.ExpressMart",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      }
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
       "package": "com.stephenj3.ExpressMart",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "com.google.android.c2dm.permission.RECEIVE"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -36,7 +45,34 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "output": "single",
+      "favicon": "./assets/express.png"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/express.png",
+          "color": "#ffffff",
+          "androidMode": "default",
+          "androidCollapsedTitle": "ExpressMart"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "bf1e4bb1-228e-4e48-a56b-748b7f32980c"
+      },
+      "firebaseApiKey": "AIzaSyBqrV1yGWsLj17JXFwfIWRP-sqX6hp8vLk",
+      "firebaseAuthDomain": "expressmart-7d550.firebaseapp.com",
+      "firebaseProjectId": "expressmart-7d550",
+      "firebaseStorageBucket": "expressmart-7d550.firebasestorage.app",
+      "firebaseMessagingSenderId": "499123636329",
+      "firebaseAppId": "1:499123636329:web:9a96c3d4b6ed11c3f57af8",
+      "firebaseVapidKey": "YOUR_VAPID_KEY",
+      "measurementId": "G-Q63D7TJQRK"
     }
   }
 }

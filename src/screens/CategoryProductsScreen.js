@@ -1,13 +1,14 @@
 import {
   FlatList,
-  Image,
   Pressable,
   RefreshControl,
+  ActivityIndicator,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
@@ -15,29 +16,85 @@ import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
 import { ProductCard } from "../components/ProductCard";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
+import { AdRenderer } from "../components/AdBanner";
+import { InlineAdProductCard } from "../components/InlineAdProductCard";
+import { useAds } from "../context/AdsContext";
 import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
+import { injectAdsIntoProducts } from "../utils/adPlacement";
+
+const SORT_OPTIONS = [
+  { key: "newest", label: "Newest", icon: "time-outline" },
+  { key: "price_asc", label: "Price ↑", icon: "trending-up-outline" },
+  { key: "price_desc", label: "Price ↓", icon: "trending-down-outline" },
+  { key: "popular", label: "Popular", icon: "flame-outline" },
+  { key: "rating", label: "Top Rated", icon: "star-outline" },
+];
 
 export const CategoryProductsScreen = ({ navigation, route }) => {
   const { category } = route.params;
   const { addToCart } = useCart();
   const toast = useToast();
+  const { fetchAdsByPlacement } = useAds();
   const [products, setProducts] = useState([]);
+  const [categoryAds, setCategoryAds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [sortKey, setSortKey] = useState("newest");
+  const daySeed = useMemo(() => new Date().toDateString(), []);
+  const PAGE_SIZE = 20;
+  const {
+    gridColumns,
+    getItemWidth,
+    sidebarWidth,
+    width,
+    isMobile,
+    isDesktop,
+    horizontalPadding,
+  } = useResponsive();
+  const contentWidth = width - sidebarWidth;
+  const hPad = isMobile ? 12 : 16;
+  const gap = isMobile ? 10 : 12;
+  const itemWidth = getItemWidth(gridColumns, hPad, gap, contentWidth);
+  const useCompact = gridColumns >= 4;
 
-  const fetchCategoryProducts = useCallback(async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("express_products")
-        .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
-        .eq("category", category.name || category)
-        .eq("status", "active")
-        .order("created_at", { ascending: false });
+  const fetchCategoryProducts = useCallback(
+    async (reset = true) => {
+      try {
+        if (reset) setLoading(true);
+        const start = reset ? 0 : products.length;
+        const end = start + PAGE_SIZE - 1;
 
-      if (error) throw error;
-      setProducts(
-        (data || []).map((product) => ({
+        let query = supabase
+          .from("express_products")
+          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+          .eq("category", category.name || category)
+          .eq("status", "active")
+          .range(start, end);
+
+        switch (sortKey) {
+          case "price_asc":
+            query = query.order("price", { ascending: true });
+            break;
+          case "price_desc":
+            query = query.order("price", { ascending: false });
+            break;
+          case "popular":
+            query = query.order("total_ratings", { ascending: false });
+            break;
+          case "rating":
+            query = query.order("rating", { ascending: false });
+            break;
+          default:
+            query = query.order("created_at", { ascending: false });
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+        const mapped = (data || []).map((product) => ({
           id: product.id,
           title: product.title,
           vendor: product.vendor,
@@ -58,92 +115,236 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
           sku: product.sku || null,
           barcode: product.barcode || null,
           seller: product.seller_id || null,
-        })),
-      );
-    } catch (err) {
-      console.error("Category products fetch error:", err);
-      toast.error("Error", "Failed to load products");
-      setProducts([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [category, toast]);
+        }));
+        setProducts(reset ? mapped : (prev) => [...prev, ...mapped]);
+        setHasMore(mapped.length === PAGE_SIZE);
+      } catch (err) {
+        console.error("Category products fetch error:", err);
+        toast.error("Error", "Failed to load products");
+        if (reset) setProducts([]);
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [category, toast, products.length, sortKey],
+  );
 
   useEffect(() => {
-    fetchCategoryProducts();
-  }, [fetchCategoryProducts]);
+    fetchCategoryProducts(true);
+  }, [category, sortKey]);
+
+  useEffect(() => {
+    fetchAdsByPlacement("category").then((ads) => setCategoryAds(ads || []));
+  }, [fetchAdsByPlacement]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchCategoryProducts();
+    await fetchCategoryProducts(true);
     setRefreshing(false);
   }, [fetchCategoryProducts]);
+
+  const onLoadMore = useCallback(async () => {
+    if (!hasMore || loadingMore || loading) return;
+    setLoadingMore(true);
+    await fetchCategoryProducts(false);
+  }, [hasMore, loadingMore, loading, fetchCategoryProducts]);
 
   const handleProductPress = (product) => {
     navigation.navigate("ProductDetail", { product });
   };
 
   const categoryName = typeof category === "string" ? category : category.name;
+  const categoryIcon = category?.icon || "apps-outline";
+  const categoryColor = category?.color || colors.primary;
+  const overlayAds = useMemo(
+    () =>
+      (categoryAds || []).filter((ad) =>
+        ["popup", "fullscreen", "sticky_footer"].includes(
+          String(ad?.style || "").toLowerCase(),
+        ),
+      ),
+    [categoryAds],
+  );
+
+  const columnWrapperStyle = useMemo(
+    () => ({
+      gap,
+      paddingHorizontal: hPad,
+      justifyContent: "flex-start",
+    }),
+    [gap, hPad],
+  );
+
+  const renderItem = ({ item }) => {
+    if (item?.__type === "injected_ad") {
+      return (
+        <View style={{ flex: 1, maxWidth: itemWidth }}>
+          <InlineAdProductCard ad={item.ad} />
+        </View>
+      );
+    }
+
+    return (
+      <View style={{ flex: 1, maxWidth: itemWidth }}>
+        {item ? (
+          <ProductCard
+            product={item}
+            compact={useCompact}
+            onPress={() => handleProductPress(item)}
+          />
+        ) : (
+          <ProductCardPlaceholder />
+        )}
+      </View>
+    );
+  };
+
+  const listData =
+    loading && products.length === 0
+      ? Array(gridColumns * 3).fill(null)
+      : injectAdsIntoProducts({
+          products,
+          ads: categoryAds,
+          seed: `category-${categoryName}-${sortKey}-${daySeed}-${products.length}`,
+          minInterval: 5,
+          maxInterval: 8,
+          maxAds: 3,
+        });
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: categoryColor }]}
+      edges={["top"]}
+    >
+      {/* Hero Header */}
+      <View style={[styles.header, { backgroundColor: categoryColor }]}>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <View style={styles.backButtonInner}>
+            <Ionicons name="arrow-back" size={20} color="#fff" />
+          </View>
         </Pressable>
-        <Text style={styles.headerTitle}>{categoryName}</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.headerCenter}>
+          <View style={styles.headerIconWrap}>
+            <Ionicons name={categoryIcon} size={22} color="#fff" />
+          </View>
+          <View>
+            <Text style={styles.headerTitle}>{categoryName}</Text>
+            {!loading && (
+              <Text style={styles.headerCount}>
+                {products.length}
+                {hasMore ? "+" : ""} product{products.length !== 1 ? "s" : ""}
+              </Text>
+            )}
+          </View>
+        </View>
+        {/* right spacer to balance the back button */}
+        <View style={{ width: 40 }} />
       </View>
 
-      {loading && products.length === 0 ? (
-        <FlatList
-          data={[1, 2, 3, 4]}
-          renderItem={() => (
-            <View style={styles.gridItem}>
-              <ProductCardPlaceholder />
-            </View>
-          )}
-          keyExtractor={(_, index) => `placeholder-${index}`}
-          contentContainerStyle={styles.list}
-          numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
-          scrollEnabled={false}
-        />
-      ) : products.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="bag-outline" size={80} color={colors.muted} />
-          <Text style={styles.emptyTitle}>No products found</Text>
-          <Text style={styles.emptySubtitle}>
-            This category doesn't have any products yet
-          </Text>
-          <Pressable
-            style={styles.browseButton}
-            onPress={() => navigation.navigate("Main")}
+      <View style={styles.contentArea}>
+        {/* Sort Bar */}
+        <View style={styles.sortBarWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.sortBar}
           >
-            <Text style={styles.browseText}>Browse All Products</Text>
-          </Pressable>
+            {SORT_OPTIONS.map((opt) => {
+              const isActive = sortKey === opt.key;
+              return (
+                <Pressable
+                  key={opt.key}
+                  onPress={() => {
+                    setSortKey(opt.key);
+                    setProducts([]);
+                  }}
+                  style={[styles.sortPill, isActive && styles.sortPillActive]}
+                >
+                  <Ionicons
+                    name={opt.icon}
+                    size={13}
+                    color={isActive ? "#fff" : colors.muted}
+                  />
+                  <Text
+                    style={[
+                      styles.sortLabel,
+                      isActive && styles.sortLabelActive,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         </View>
-      ) : (
-        <FlatList
-          data={products}
-          renderItem={({ item }) => (
-            <View style={styles.gridItem}>
-              <ProductCard
-                product={item}
-                onPress={() => handleProductPress(item)}
-              />
+
+        {/* Products Grid */}
+        {products.length === 0 && !loading ? (
+          <View style={styles.emptyContainer}>
+            <View
+              style={[
+                styles.emptyIconWrap,
+                { backgroundColor: categoryColor + "18" },
+              ]}
+            >
+              <Ionicons name={categoryIcon} size={44} color={categoryColor} />
             </View>
-          )}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        />
-      )}
+            <Text style={styles.emptyTitle}>No products found</Text>
+            <Text style={styles.emptySubtitle}>
+              This category doesn't have any products yet
+            </Text>
+            <Pressable
+              style={[styles.browseButton, { backgroundColor: categoryColor }]}
+              onPress={() => navigation.navigate("Main")}
+            >
+              <Ionicons name="storefront-outline" size={16} color="#fff" />
+              <Text style={styles.browseText}>Browse All Products</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <FlatList
+            key={`${gridColumns}-${sortKey}`}
+            data={listData}
+            keyExtractor={(item, index) =>
+              item?.id ? String(item.id) : `ph-${index}`
+            }
+            numColumns={gridColumns}
+            columnWrapperStyle={columnWrapperStyle}
+            contentContainerStyle={[
+              styles.gridContent,
+              isDesktop && styles.gridContentDesktop,
+            ]}
+            showsVerticalScrollIndicator={false}
+            onEndReached={onLoadMore}
+            onEndReachedThreshold={0.4}
+            renderItem={renderItem}
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={styles.loadMoreRow}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : hasMore && !loading ? (
+                <View style={{ height: 40 }} />
+              ) : null
+            }
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={categoryColor}
+                colors={[categoryColor]}
+              />
+            }
+          />
+        )}
+      </View>
+
+      {overlayAds.length > 0 && <AdRenderer ads={overlayAds} />}
     </SafeAreaView>
   );
 };
@@ -151,66 +352,147 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
   },
+  contentArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 18,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.dark,
+  backButton: {
+    width: 40,
+    alignItems: "flex-start",
   },
-  loadingContainer: {
-    flex: 1,
+  backButtonInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
   },
+  headerCenter: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  headerIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#fff",
+    letterSpacing: -0.3,
+  },
+  headerCount: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.82)",
+    fontWeight: "500",
+    marginTop: 1,
+  },
+  /* ── Sort Bar ── */
+  sortBarWrapper: {
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sortBar: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  sortPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sortPillActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  sortLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  sortLabelActive: {
+    color: "#fff",
+  },
+  /* ── Grid ── */
+  gridContent: {
+    paddingTop: 14,
+    paddingBottom: 32,
+    gap: 10,
+  },
+  gridContentDesktop: {
+    gap: 12,
+  },
+  loadMoreRow: {
+    paddingVertical: 20,
+    alignItems: "center",
+  },
+  /* ── Empty State ── */
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 40,
+    gap: 12,
+  },
+  emptyIconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "800",
     color: colors.dark,
-    marginTop: 20,
-    marginBottom: 8,
+    letterSpacing: -0.3,
   },
   emptySubtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.muted,
     textAlign: "center",
-    marginBottom: 24,
+    lineHeight: 22,
   },
   browseButton: {
-    paddingHorizontal: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 28,
     paddingVertical: 14,
-    backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 14,
   },
   browseText: {
     color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  list: {
-    paddingHorizontal: 5,
-    paddingVertical: 8,
-  },
-  columnWrapper: {
-    justifyContent: "space-between",
-    paddingHorizontal: 0,
-  },
-  gridItem: {
-    width: "49%",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });

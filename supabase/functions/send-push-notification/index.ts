@@ -306,6 +306,39 @@ serve(async (req) => {
       throw new Error("FCM_PROJECT_ID not configured");
     }
 
+    // Validate FCM configuration
+    const serviceAccountKey = Deno.env.get("FCM_SERVICE_ACCOUNT_KEY");
+    if (!serviceAccountKey) {
+      throw new Error("FCM_SERVICE_ACCOUNT_KEY not configured");
+    }
+
+    let serviceAccountProjectId: string | undefined;
+    try {
+      const serviceAccount = JSON.parse(serviceAccountKey);
+      serviceAccountProjectId = serviceAccount.project_id;
+      
+      console.log("🔧 FCM Configuration:", {
+        fcmProjectIdEnv: fcmProjectId,
+        serviceAccountProjectId: serviceAccountProjectId,
+        serviceAccountEmail: serviceAccount.client_email,
+        configMatch: fcmProjectId === serviceAccountProjectId,
+      });
+
+      if (fcmProjectId !== serviceAccountProjectId) {
+        console.error("❌ CONFIGURATION ERROR: FCM_PROJECT_ID does not match service account project_id");
+        console.error(`   FCM_PROJECT_ID env var: "${fcmProjectId}"`);
+        console.error(`   Service account project: "${serviceAccountProjectId}"`);
+        throw new Error(
+          `FCM_PROJECT_ID mismatch: env="${fcmProjectId}" but service account is for "${serviceAccountProjectId}". Update your FCM_PROJECT_ID secret to match the service account.`
+        );
+      }
+    } catch (parseError) {
+      if (parseError.message?.includes("mismatch")) {
+        throw parseError;
+      }
+      console.error("Failed to parse service account:", parseError);
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const payload: NotificationPayload = await req.json();
@@ -385,15 +418,14 @@ serve(async (req) => {
         accessToken,
       );
 
-      // Log the notification
-      await supabase.from("express_notification_logs").insert({
+      // Log the notification to console
+      console.log("📢 Topic Notification:", {
+        topic: payload.topic,
         title: payload.title,
         body: payload.body,
-        data: payload.data,
-        notification_type: payload.notificationType,
         status: result.success ? "sent" : "failed",
-        error_message: result.error,
-        fcm_response: result,
+        error: result.error,
+        messageId: result.messageId,
       });
 
       return new Response(JSON.stringify(result), {
@@ -418,6 +450,22 @@ serve(async (req) => {
     // Send to each token
     const results = await Promise.all(
       tokens.map(async (token) => {
+        // Detect if this is an Expo push token (not native FCM)
+        const isExpoToken = token.startsWith("ExponentPushToken[");
+        
+        if (isExpoToken) {
+          console.warn("⚠️ Expo token detected (not FCM):", {
+            token: token.substring(0, 30) + "...",
+            message: "This is an Expo push token, not a native FCM token. The app needs to use getDevicePushTokenAsync() instead of getExpoPushTokenAsync().",
+          });
+          
+          return {
+            token,
+            success: false,
+            error: "Invalid token type: Expo push token detected. Native FCM token required for this Edge Function.",
+          };
+        }
+
         const message = buildFCMMessage(token, payload);
         const result = await sendFCMNotification(
           message,
@@ -434,17 +482,14 @@ serve(async (req) => {
           }
         }
 
-        // Log the notification
-        await supabase.from("express_notification_logs").insert({
-          recipient_user_id: recipientUserId,
-          recipient_token: token,
+        // Log the notification to console
+        console.log("📧 Notification sent:", {
+          userId: recipientUserId,
+          token: token.substring(0, 20) + "...",
           title: payload.title,
-          body: payload.body,
-          data: payload.data,
-          notification_type: payload.notificationType,
-          status: result.success ? "sent" : "failed",
-          error_message: result.error,
-          fcm_response: result,
+          status: result.success ? "✅ sent" : "❌ failed",
+          error: result.error,
+          messageId: result.messageId,
         });
 
         // If token is invalid, deactivate it

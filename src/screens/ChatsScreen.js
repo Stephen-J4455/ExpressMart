@@ -15,25 +15,61 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useChat } from "../context/ChatContext";
 import { useShop } from "../context/ShopContext";
+import { useAds } from "../context/AdsContext";
 import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
+import { ChatScreen } from "./ChatScreen";
+
+const mapStoryAdToStatus = (ad) => ({
+  id: `ad-story-${ad.id}`,
+  is_ad_story: true,
+  ad,
+  status_type: ad?.image_url ? "image" : "text",
+  media_url: ad?.image_url || null,
+  status_text: ad?.description || ad?.title || "",
+  background_color: ad?.background_color || "#0F172A",
+  text_color: ad?.text_color || "#FFFFFF",
+  seller: {
+    id: `ad-${ad.id}`,
+    name: ad?.title || "Sponsored",
+    avatar: ad?.image_url || null,
+  },
+  created_at: ad?.created_at || new Date().toISOString(),
+  cta_text: ad?.cta_text || "Open",
+  cta_url: ad?.cta_url || null,
+});
 
 export const ChatsScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const {
-    conversations,
-    isOnline,
-    isLoading,
-    refreshConversations,
-  } = useChat();
+  const { isWide } = useResponsive();
+  const { conversations, isOnline, isLoading, refreshConversations } =
+    useChat();
   const { followedSellers } = useShop();
+  const { fetchAdsByPlacement } = useAds();
   const [refreshing, setRefreshing] = useState(false);
   const [followedStatuses, setFollowedStatuses] = useState([]);
+  const [messageStoryAds, setMessageStoryAds] = useState([]);
+  const [selectedSeller, setSelectedSeller] = useState(null);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshConversations();
     await fetchFollowedStatuses();
+    await fetchMessageStoryAds();
     setRefreshing(false);
+  };
+
+  const fetchMessageStoryAds = async () => {
+    try {
+      const ads = await fetchAdsByPlacement("messages");
+      const mapped = (ads || [])
+        .filter((ad) => String(ad?.style || "").toLowerCase() === "story")
+        .map(mapStoryAdToStatus);
+      setMessageStoryAds(mapped);
+    } catch (err) {
+      console.error("Error fetching message story ads:", err);
+      setMessageStoryAds([]);
+    }
   };
 
   const fetchFollowedStatuses = async () => {
@@ -74,6 +110,12 @@ export const ChatsScreen = ({ navigation }) => {
     fetchFollowedStatuses();
   }, [followedSellers]);
 
+  useEffect(() => {
+    fetchMessageStoryAds();
+  }, [fetchAdsByPlacement]);
+
+  const statusItems = [...messageStoryAds, ...followedStatuses];
+
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return "";
 
@@ -99,11 +141,21 @@ export const ChatsScreen = ({ navigation }) => {
     const sellerName = item.seller?.name || "Seller";
     const sellerAvatar = item.seller?.avatar;
     const timestamp = formatTimestamp(item.last_message_at || item.created_at);
+    const isSelected = isWide && selectedSeller?.id === item.seller?.id;
 
     return (
       <Pressable
-        style={styles.conversationItem}
-        onPress={() => navigation.navigate("Chat", { seller: item.seller })}
+        style={[
+          styles.conversationItem,
+          isSelected && styles.conversationItemActive,
+        ]}
+        onPress={() => {
+          if (isWide) {
+            setSelectedSeller(item.seller);
+          } else {
+            navigation.navigate("Chat", { seller: item.seller });
+          }
+        }}
       >
         <View style={styles.avatar}>
           {sellerAvatar ? (
@@ -114,12 +166,18 @@ export const ChatsScreen = ({ navigation }) => {
         </View>
         <View style={styles.conversationContent}>
           <View style={styles.conversationHeader}>
-            <Text style={styles.userName} numberOfLines={1}>
+            <Text
+              style={[styles.userName, isSelected && styles.userNameActive]}
+              numberOfLines={1}
+            >
               {sellerName}
             </Text>
             <Text style={styles.timestamp}>{timestamp}</Text>
           </View>
-          <Text style={styles.lastMessage} numberOfLines={1}>
+          <Text
+            style={[styles.lastMessage, isSelected && styles.lastMessageActive]}
+            numberOfLines={1}
+          >
             {item.last_message || "No messages yet"}
           </Text>
         </View>
@@ -129,7 +187,9 @@ export const ChatsScreen = ({ navigation }) => {
               <Text style={styles.unreadText}>{item.unread_count}</Text>
             </View>
           )}
-          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          {!isWide && (
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          )}
         </View>
       </Pressable>
     );
@@ -144,8 +204,8 @@ export const ChatsScreen = ({ navigation }) => {
     );
   }
 
-  return (
-    <View style={styles.container}>
+  const ConversationList = () => (
+    <View style={[styles.container, isWide && styles.panelLeft]}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerRow}>
           <Text style={styles.headerTitle}>Messages</Text>
@@ -160,24 +220,37 @@ export const ChatsScreen = ({ navigation }) => {
           <Text style={styles.headerSubtitle}>Customer Support</Text>
         </View>
 
-        {/* Followed Sellers Status Section - in Header */}
-        {followedStatuses.length > 0 && (
+        {statusItems.length > 0 && (
           <View style={styles.headerStatusSection}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.statusScrollContent}
             >
-              {followedStatuses.map((status) => (
+              {statusItems.map((status) => (
                 <Pressable
                   key={status.id}
                   style={styles.statusCircle}
-                  onPress={() => navigation.navigate("StatusViewer", { status })}
+                  onPress={() =>
+                    navigation.navigate("StatusViewer", { status })
+                  }
                 >
-                  <Image
-                    source={{ uri: status.seller.avatar }}
-                    style={styles.statusAvatar}
-                  />
+                  {status.seller?.avatar ? (
+                    <Image
+                      source={{ uri: status.seller.avatar }}
+                      style={styles.statusAvatar}
+                    />
+                  ) : (
+                    <View
+                      style={[styles.statusAvatar, styles.statusAvatarFallback]}
+                    >
+                      <Ionicons
+                        name={status.is_ad_story ? "megaphone" : "storefront"}
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
                   <View style={styles.statusIndicator} />
                   <Text style={styles.statusSellerName} numberOfLines={1}>
                     {status.seller.name}
@@ -216,7 +289,7 @@ export const ChatsScreen = ({ navigation }) => {
             </Text>
             <Pressable
               style={styles.exploreButton}
-              onPress={() => navigation.navigate("Home")}
+              onPress={() => navigation.navigate("Main", { screen: "Home" })}
             >
               <Text style={styles.exploreButtonText}>Explore Stores</Text>
             </Pressable>
@@ -225,12 +298,83 @@ export const ChatsScreen = ({ navigation }) => {
       />
     </View>
   );
+
+  if (isWide) {
+    return (
+      <View style={styles.wideLayout}>
+        <ConversationList />
+        <View style={styles.panelRight}>
+          {selectedSeller ? (
+            <ChatScreen seller={selectedSeller} />
+          ) : (
+            <View style={styles.noChatSelected}>
+              <View style={styles.noChatIcon}>
+                <Ionicons
+                  name="chatbubbles-outline"
+                  size={56}
+                  color={colors.primary}
+                />
+              </View>
+              <Text style={styles.noChatTitle}>Select a conversation</Text>
+              <Text style={styles.noChatSubtext}>
+                Choose a conversation from the list{"\n"}to start messaging.
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  return <ConversationList />;
 };
 
 const styles = StyleSheet.create({
-  container: {
+  wideLayout: {
+    flex: 1,
+    flexDirection: "row",
+    backgroundColor: colors.light,
+  },
+  panelLeft: {
+    width: 360,
+    borderRightWidth: 1,
+    borderRightColor: "#EEF2F8",
+    backgroundColor: "#fff",
+  },
+  panelRight: {
     flex: 1,
     backgroundColor: colors.light,
+  },
+  noChatSelected: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+    padding: 40,
+  },
+  noChatIcon: {
+    width: 110,
+    height: 110,
+    borderRadius: 35,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  noChatTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: colors.dark,
+  },
+  noChatSubtext: {
+    fontSize: 15,
+    color: colors.muted,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
@@ -307,6 +451,19 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
+  },
+  conversationItemActive: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.1,
+  },
+  userNameActive: {
+    color: colors.primary,
+  },
+  lastMessageActive: {
+    color: colors.dark,
   },
   avatar: {
     width: 56,
@@ -398,6 +555,11 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderColor: colors.primary,
     marginBottom: 6,
+  },
+  statusAvatarFallback: {
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
   },
   statusIndicator: {
     position: "absolute",

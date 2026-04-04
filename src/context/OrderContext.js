@@ -117,7 +117,6 @@ export const OrderProvider = ({ children }) => {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log("Order change:", payload);
           if (payload.eventType === "INSERT") {
             setOrders((prev) => [payload.new, ...prev]);
           } else if (payload.eventType === "UPDATE") {
@@ -145,17 +144,8 @@ export const OrderProvider = ({ children }) => {
   // Verify payment
   const verifyPayment = useCallback(
     async (reference, orderData = null) => {
-      console.log(
-        "🚀 OrderContext.verifyPayment called with reference:",
-        reference,
-        "orderData:",
-        orderData,
-      );
       try {
         // Refresh session to ensure token is valid
-        console.log(
-          "OrderContext: Refreshing session for payment verification...",
-        );
         const { data: sessionData, error: refreshError } =
           await supabase.auth.refreshSession();
 
@@ -177,16 +167,8 @@ export const OrderProvider = ({ children }) => {
           throw new Error("No access token available. Please log in again.");
         }
 
-        console.log("✅ Session token obtained:", session.access_token.substring(0, 20) + "...");
-        console.log("OrderContext: Verifying payment...");
-
         // Call Edge Function directly
         const edgeFunctionUrl = `${supabaseUrl}/functions/v1/payment`;
-        console.log("🔗 Edge Function URL:", edgeFunctionUrl);
-        console.log("📤 Sending POST request with:");
-        console.log("   - Authorization: Bearer " + session.access_token.substring(0, 20) + "...");
-        console.log("   - Content-Type: application/json");
-        console.log("   - Body:", JSON.stringify({ reference, orderData: orderData ? "provided" : "null" }));
 
         const response = await fetch(edgeFunctionUrl, {
           method: "POST",
@@ -200,18 +182,11 @@ export const OrderProvider = ({ children }) => {
           }),
         });
 
-        console.log(
-          "📥 Response status:",
-          response.status
-        );
-
         let result;
         try {
           result = await response.json();
-          console.log("📥 Response body:", result);
         } catch (parseError) {
           console.error("❌ Failed to parse response as JSON:", parseError);
-          console.log("📥 Response text:", await response.text());
           throw new Error("Invalid response from edge function");
         }
 
@@ -220,23 +195,27 @@ export const OrderProvider = ({ children }) => {
           if (response.status === 404) {
             throw new Error(
               "❌ Payment edge function not found (404). Please ensure the function is deployed to Supabase. " +
-              "Run: supabase functions deploy payment"
+                "Run: supabase functions deploy payment",
             );
           }
           if (response.status === 401) {
             throw new Error(
               "❌ Authorization failed (401). Your session may have expired. " +
-              "Error: " + (result.message || result.error || "Invalid credentials")
+                "Error: " +
+                (result.message || result.error || "Invalid credentials"),
             );
           }
           if (response.status === 500) {
             throw new Error(
               "❌ Server error (500). Edge function encountered an error. " +
-              "Error: " + (result.message || result.error || "Unknown server error")
+                "Error: " +
+                (result.message || result.error || "Unknown server error"),
             );
           }
           throw new Error(
-            result.error || result.message || `HTTP ${response.status}: ${response.statusText}`,
+            result.error ||
+              result.message ||
+              `HTTP ${response.status}: ${response.statusText}`,
           );
         }
 
@@ -259,10 +238,6 @@ export const OrderProvider = ({ children }) => {
           err.message?.includes("token") ||
           err.message?.includes("session")
         ) {
-          console.log(
-            "Auth error detected, attempting to refresh session and retry...",
-          );
-
           try {
             // Force a session refresh
             const { data, error } = await supabase.auth.refreshSession();
@@ -292,21 +267,12 @@ export const OrderProvider = ({ children }) => {
                 }),
               },
             );
-
-            console.log(
-              "OrderContext: Retry verify payment response status:",
-              retryResponse.status,
-            );
             const retryResult = await retryResponse.json();
-            console.log(
-              "OrderContext: Retry verify payment result:",
-              retryResult,
-            );
 
             if (!retryResponse.ok) {
               throw new Error(
                 retryResult.error ||
-                `HTTP ${retryResponse.status}: ${retryResponse.statusText}`,
+                  `HTTP ${retryResponse.status}: ${retryResponse.statusText}`,
               );
             }
 

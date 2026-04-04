@@ -4,8 +4,10 @@ import {
   useEffect,
   useState,
   useCallback,
+  useRef,
 } from "react";
-import { supabase } from "../lib/supabase";
+import { AppState } from "react-native";
+import { callEdgeFunction, supabase } from "../lib/supabase";
 
 const AuthContext = createContext();
 
@@ -14,6 +16,74 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
+  const appStateRef = useRef(AppState.currentState);
+  const presenceChannelRef = useRef(null);
+
+  const updateLastSeen = useCallback(async (userId) => {
+    if (!supabase || !userId) return;
+
+    try {
+      await supabase
+        .from("express_profiles")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", userId);
+    } catch (error) {
+      console.warn("User last-seen update failed:", error);
+    }
+  }, []);
+
+  const stopPresence = useCallback(
+    async (userId, recordLastSeen = true) => {
+      if (recordLastSeen) {
+        await updateLastSeen(userId);
+      }
+
+      if (!presenceChannelRef.current) return;
+
+      try {
+        await presenceChannelRef.current.untrack();
+      } catch (error) {
+        console.warn("User presence untrack failed:", error);
+      }
+
+      supabase.removeChannel(presenceChannelRef.current);
+      presenceChannelRef.current = null;
+    },
+    [updateLastSeen],
+  );
+
+  const startPresence = useCallback(
+    async (userId) => {
+      if (!supabase || !userId) return;
+
+      const currentTopic = `presence:user:${userId}`;
+      if (presenceChannelRef.current?.topic === currentTopic) return;
+
+      await stopPresence(userId, false);
+
+      const channel = supabase.channel(currentTopic, {
+        config: { presence: { key: String(userId) } },
+      });
+
+      channel.subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          try {
+            await channel.track({
+              actor_id: userId,
+              actor_type: "user",
+              app_state: "active",
+              online_at: new Date().toISOString(),
+            });
+          } catch (error) {
+            console.error("User presence track failed:", error);
+          }
+        }
+      });
+
+      presenceChannelRef.current = channel;
+    },
+    [stopPresence],
+  );
 
   const fetchProfile = useCallback(async (userId) => {
     if (!supabase || !userId) return null;
@@ -63,7 +133,6 @@ export const AuthProvider = ({ children }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("Auth state changed:", event);
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -77,6 +146,34 @@ export const AuthProvider = ({ children }) => {
 
     return () => subscription.unsubscribe();
   }, [fetchProfile]);
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    const syncPresence = async (nextAppState = appStateRef.current) => {
+      if (user?.id && nextAppState === "active") {
+        await startPresence(user.id);
+        return;
+      }
+
+      await stopPresence(user?.id);
+    };
+
+    syncPresence();
+
+    const subscription = AppState.addEventListener(
+      "change",
+      async (nextAppState) => {
+        appStateRef.current = nextAppState;
+        await syncPresence(nextAppState);
+      },
+    );
+
+    return () => {
+      subscription.remove();
+      stopPresence(user?.id);
+    };
+  }, [user?.id, startPresence, stopPresence]);
 
   const signUp = async (email, password, fullName) => {
     if (!supabase) {
@@ -157,6 +254,7 @@ export const AuthProvider = ({ children }) => {
     if (!supabase) return;
 
     try {
+      await stopPresence(user?.id);
       await supabase.auth.signOut();
       setUser(null);
       setProfile(null);
@@ -166,6 +264,47 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const deleteAccount = async (password) => {
+    if (!supabase || !user?.id) {
+      return { error: new Error("Not authenticated") };
+    }
+    if (!password) {
+      return { error: new Error("Password is required") };
+    }
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password,
+      });
+
+      if (signInError) {
+        throw new Error("Incorrect password");
+      }
+
+      await stopPresence(user.id);
+      await callEdgeFunction("delete_account", { app: "customer" });
+      setUser(null);
+      setProfile(null);
+      setSession(null);
+      return { error: null };
+    } catch (error) {
+      console.error("Delete account error:", error);
+      return {
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to delete account"),
+      };
+    }
+  };
+
+  // reset page is deployed on GitHub Pages. the password-reset.html file
+  // lives in the root of the main branch of the `express-password-reset`
+  // repository.
+  const RESET_PAGE =
+    "https://stephen-j4455.github.io/express-password-reset/password-reset.html";
+
   const resetPassword = async (email) => {
     if (!supabase) {
       console.error("Supabase not configured");
@@ -174,7 +313,8 @@ export const AuthProvider = ({ children }) => {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: "expressmart://reset-password",
+        // include scheme query so the web page knows which app to deep link back to
+        redirectTo: `${RESET_PAGE}?scheme=expressmart`,
       });
 
       if (error) throw error;
@@ -260,6 +400,7 @@ export const AuthProvider = ({ children }) => {
     signUp,
     signIn,
     signOut,
+    deleteAccount,
     resetPassword,
     updateProfile,
     updatePassword,

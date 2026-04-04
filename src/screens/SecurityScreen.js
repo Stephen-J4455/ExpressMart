@@ -5,7 +5,6 @@ import {
   Text,
   View,
   Switch,
-  Alert,
 } from "react-native";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,50 +12,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
 
 export const SecurityScreen = ({ navigation }) => {
   const { user } = useAuth();
   const toast = useToast();
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [loginAlerts, setLoginAlerts] = useState(true);
+  const { isWide, horizontalPadding } = useResponsive();
 
   const securityItems = [
-    {
-      icon: "shield-checkmark-outline",
-      label: "Two-Factor Authentication",
-      description: "Add an extra layer of security to your account",
-      type: "switch",
-      value: twoFactorEnabled,
-      onValueChange: (value) => {
-        if (value) {
-          Alert.alert(
-            "Enable 2FA",
-            "Two-factor authentication will be enabled. You'll need to set up an authenticator app.",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Enable",
-                onPress: () => {
-                  setTwoFactorEnabled(true);
-                  toast.success("Two-factor authentication enabled!");
-                },
-              },
-            ],
-          );
-        } else {
-          setTwoFactorEnabled(false);
-        }
-      },
-    },
-    {
-      icon: "finger-print-outline",
-      label: "Biometric Login",
-      description: "Use fingerprint or face ID to sign in",
-      type: "switch",
-      value: biometricEnabled,
-      onValueChange: setBiometricEnabled,
-    },
     {
       icon: "notifications-outline",
       label: "Login Alerts",
@@ -73,20 +37,6 @@ export const SecurityScreen = ({ navigation }) => {
       label: "Change Password",
       description: "Update your account password",
       action: () => navigation.navigate("ChangePassword"),
-    },
-    {
-      icon: "phone-portrait-outline",
-      label: "Active Sessions",
-      description: "Manage devices signed into your account",
-      action: () =>
-        toast.info("Session management will be available soon!"),
-    },
-    {
-      icon: "document-text-outline",
-      label: "Login History",
-      description: "View recent account activity",
-      action: () =>
-        toast.info("Login history will be available soon!"),
     },
     {
       icon: "shield-outline",
@@ -133,7 +83,12 @@ export const SecurityScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          { paddingHorizontal: isWide ? horizontalPadding : 16 },
+        ]}
+      >
         <Pressable
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -148,29 +103,37 @@ export const SecurityScreen = ({ navigation }) => {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Security Features</Text>
-          {securityItems.map(renderSecurityItem)}
-        </View>
+        <View
+          style={{
+            maxWidth: isWide ? 800 : undefined,
+            alignSelf: isWide ? "center" : undefined,
+            width: "100%",
+          }}
+        >
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Security Features</Text>
+            {securityItems.map(renderSecurityItem)}
+          </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account Security</Text>
-          {actionItems.map(renderActionItem)}
-        </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account Security</Text>
+            {actionItems.map(renderActionItem)}
+          </View>
 
-        <View style={styles.infoSection}>
-          <Ionicons
-            name="information-circle-outline"
-            size={20}
-            color={colors.primary}
-          />
-          <Text style={styles.infoText}>
-            Your account security is our top priority. Enable additional
-            security features to protect your data.
-          </Text>
-        </View>
+          <View style={styles.infoSection}>
+            <Ionicons
+              name="information-circle-outline"
+              size={20}
+              color={colors.primary}
+            />
+            <Text style={styles.infoText}>
+              Your account security is our top priority. Enable additional
+              security features to protect your data.
+            </Text>
+          </View>
 
-        <View style={styles.spacer} />
+          <View style={styles.spacer} />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -179,7 +142,7 @@ export const SecurityScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: "row",

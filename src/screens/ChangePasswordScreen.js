@@ -63,7 +63,9 @@ export const ChangePasswordScreen = ({ navigation }) => {
         setConfirmPassword("");
         navigation.goBack();
       } else {
-        toast.error("Failed to change password. Please check your current password.");
+        toast.error(
+          "Failed to change password. Please check your current password.",
+        );
       }
     } catch (error) {
       toast.error("Failed to change password. Please try again.");
@@ -211,7 +213,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: "row",

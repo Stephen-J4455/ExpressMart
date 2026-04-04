@@ -52,6 +52,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 8,
     maxWidth: 280,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   input: {
     flex: 1,

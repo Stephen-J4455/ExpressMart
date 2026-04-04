@@ -16,6 +16,7 @@ import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
 
 export const WishlistScreen = ({ navigation }) => {
   const { user } = useAuth();
@@ -23,6 +24,8 @@ export const WishlistScreen = ({ navigation }) => {
   const toast = useToast();
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { gridColumns, getItemWidth } = useResponsive();
+  const itemWidth = getItemWidth(gridColumns, 16);
 
   const formatPrice = (price) => `GH₵${Number(price || 0).toLocaleString()}`;
 
@@ -72,6 +75,30 @@ export const WishlistScreen = ({ navigation }) => {
     fetchWishlist();
   }, [fetchWishlist]);
 
+  // Realtime subscription for wishlist changes
+  useEffect(() => {
+    if (!user || !supabase) return;
+
+    const channel = supabase
+      .channel(`wishlist-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "express_wishlists",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Re-fetch to get full product data
+          fetchWishlist();
+        },
+      )
+      .subscribe();
+
+    return () => channel.unsubscribe();
+  }, [user, fetchWishlist]);
+
   const removeFromWishlist = async (wishlistId) => {
     if (!supabase) return;
     try {
@@ -96,37 +123,39 @@ export const WishlistScreen = ({ navigation }) => {
     if (!product) return null;
 
     return (
-      <View style={styles.card}>
+      <View style={[styles.card, { width: itemWidth }]}>
         <Pressable
-          style={styles.cardContent}
           onPress={() => navigation.navigate("ProductDetail", { product })}
         >
           <Image source={{ uri: product.thumbnail }} style={styles.image} />
-          <View style={styles.info}>
-            <Text style={styles.vendor}>{product.vendor || "Unknown"}</Text>
-            <Text style={styles.title} numberOfLines={2}>
-              {product.title || "Product"}
-            </Text>
-            <View style={styles.priceRow}>
-              <Text style={styles.price}>{formatPrice(product.price)}</Text>
-              {product.rating && (
-                <View style={styles.ratingRow}>
-                  <Ionicons name="star" size={14} color={colors.secondary} />
-                  <Text style={styles.rating}>{product.rating.toFixed(1)}</Text>
-                </View>
-              )}
-            </View>
-            <Text
-              style={[
-                styles.stock,
-                {
-                  color: product.quantity > 0 ? colors.success : colors.accent,
-                },
-              ]}
-            >
-              {product.quantity > 0 ? "In Stock" : "Out of Stock"}
-            </Text>
+        </Pressable>
+        <Pressable
+          style={styles.info}
+          onPress={() => navigation.navigate("ProductDetail", { product })}
+        >
+          <Text style={styles.vendor}>{product.vendor || "Unknown"}</Text>
+          <Text style={styles.title} numberOfLines={2}>
+            {product.title || "Product"}
+          </Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.price}>{formatPrice(product.price)}</Text>
+            {!!product.rating && (
+              <View style={styles.ratingRow}>
+                <Ionicons name="star" size={14} color={colors.secondary} />
+                <Text style={styles.rating}>{product.rating.toFixed(1)}</Text>
+              </View>
+            )}
           </View>
+          <Text
+            style={[
+              styles.stock,
+              {
+                color: product.quantity > 0 ? colors.success : colors.accent,
+              },
+            ]}
+          >
+            {product.quantity > 0 ? "In Stock" : "Out of Stock"}
+          </Text>
         </Pressable>
         <View style={styles.actions}>
           <Pressable
@@ -134,13 +163,13 @@ export const WishlistScreen = ({ navigation }) => {
             onPress={() => handleAddToCart(item)}
             disabled={product.quantity === 0}
           >
-            <Ionicons name="cart-outline" size={20} color={colors.primary} />
+            <Ionicons name="cart-outline" size={18} color={colors.primary} />
           </Pressable>
           <Pressable
             style={styles.removeButton}
             onPress={() => removeFromWishlist(item.id)}
           >
-            <Ionicons name="trash-outline" size={20} color={colors.accent} />
+            <Ionicons name="trash-outline" size={18} color={colors.accent} />
           </Pressable>
         </View>
       </View>
@@ -211,7 +240,16 @@ export const WishlistScreen = ({ navigation }) => {
           data={wishlist}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
+          numColumns={gridColumns}
+          key={`wishlist-${gridColumns}`}
+          columnWrapperStyle={
+            gridColumns > 1
+              ? { gap: 12, paddingHorizontal: 16, marginBottom: 12 }
+              : undefined
+          }
+          contentContainerStyle={
+            gridColumns > 1 ? { paddingVertical: 16 } : styles.list
+          }
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -222,7 +260,7 @@ export const WishlistScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: "row",
@@ -295,25 +333,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     overflow: "hidden",
-    flexDirection: "row",
     shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  cardContent: {
-    flex: 1,
-    flexDirection: "row",
-  },
   image: {
-    width: 100,
-    height: 100,
+    width: "100%",
+    height: 150,
     backgroundColor: colors.light,
+    resizeMode: "cover",
   },
   info: {
-    flex: 1,
-    padding: 12,
+    padding: 10,
+  },
+  actions: {
+    flexDirection: "row",
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+    gap: 8,
   },
   vendor: {
     fontSize: 11,
@@ -353,11 +392,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
-  actions: {
-    padding: 8,
-    gap: 8,
-    justifyContent: "center",
-  },
+
   addButton: {
     width: 40,
     height: 40,

@@ -8,21 +8,49 @@ import {
   RefreshControl,
   Image,
   Modal,
+  Alert,
 } from "react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../context/OrderContext";
+import { useAds } from "../context/AdsContext";
+import { AdRenderer } from "../components/AdBanner";
 import { colors } from "../theme/colors";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
+import { useResponsive } from "../hooks/useResponsive";
 
 const quickActions = [
-  { icon: "cube", label: "Orders", screen: "Orders", color: "#3B82F6", bg: "#EFF6FF" },
-  { icon: "heart", label: "Wishlist", screen: "Wishlist", color: "#EF4444", bg: "#FEF2F2" },
-  { icon: "location", label: "Addresses", screen: "Addresses", color: "#22C55E", bg: "#F0FDF4" },
-  { icon: "card", label: "Payments", screen: "Payments", color: "#A855F7", bg: "#FAF5FF" },
+  {
+    icon: "cube",
+    label: "Orders",
+    screen: "Orders",
+    color: "#3B82F6",
+    bg: "#EFF6FF",
+  },
+  {
+    icon: "heart",
+    label: "Wishlist",
+    screen: "Wishlist",
+    color: "#EF4444",
+    bg: "#FEF2F2",
+  },
+  {
+    icon: "location",
+    label: "Addresses",
+    screen: "Addresses",
+    color: "#22C55E",
+    bg: "#F0FDF4",
+  },
+  {
+    icon: "people",
+    label: "Following",
+    screen: "Following",
+    color: "#A855F7",
+    bg: "#FAF5FF",
+  },
 ];
 
 const menuSections = [
@@ -30,16 +58,36 @@ const menuSections = [
     title: "Account Settings",
     items: [
       { icon: "person-outline", label: "Edit Profile", screen: "ProfileEdit" },
-      { icon: "notifications-outline", label: "Notifications", screen: "Notifications" },
-      { icon: "shield-checkmark-outline", label: "Privacy & Security", screen: "Security" },
+      {
+        icon: "notifications-outline",
+        label: "Notifications",
+        screen: "Notifications",
+      },
+      {
+        icon: "shield-checkmark-outline",
+        label: "Privacy & Security",
+        screen: "Security",
+      },
     ],
   },
   {
     title: "Support",
     items: [
-      { icon: "chatbubble-ellipses-outline", label: "Chat with Us", screen: "Chat" },
-      { icon: "help-circle-outline", label: "Help Center", screen: "HelpSupport" },
-      { icon: "document-text-outline", label: "Terms & Policies", screen: "Terms" },
+      {
+        icon: "chatbubble-ellipses-outline",
+        label: "Chat with Us",
+        screen: "Chat",
+      },
+      {
+        icon: "help-circle-outline",
+        label: "Help Center",
+        screen: "HelpSupport",
+      },
+      {
+        icon: "document-text-outline",
+        label: "Terms & Policies",
+        screen: "Terms",
+      },
     ],
   },
 ];
@@ -48,7 +96,14 @@ export const AccountScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { user, profile, isAuthenticated, loading, signOut } = useAuth();
   const { orders } = useOrder();
+  const { fetchAdsByPlacement } = useAds();
   const [showLoadingPreview, setShowLoadingPreview] = useState(false);
+  const [profileAds, setProfileAds] = useState([]);
+  const { isWide, contentMaxWidth } = useResponsive();
+
+  useEffect(() => {
+    fetchAdsByPlacement("profile").then((ads) => setProfileAds(ads || []));
+  }, [fetchAdsByPlacement]);
 
   const activeOrders = orders.filter((o) =>
     ["processing", "packed", "shipped"].includes(o.status),
@@ -79,7 +134,8 @@ export const AccountScreen = ({ navigation }) => {
           </View>
           <Text style={styles.guestTitle}>Welcome to ExpressMart</Text>
           <Text style={styles.guestSubtitle}>
-            Sign in to track orders, save favorites,{"\n"}and enjoy personalized shopping.
+            Sign in to track orders, save favorites,{"\n"}and enjoy personalized
+            shopping.
           </Text>
           <Pressable
             style={styles.signInButton}
@@ -109,10 +165,13 @@ export const AccountScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isWide && { maxWidth: 700, alignSelf: "center", width: "100%" },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={false} onRefresh={() => { }} />
+          <RefreshControl refreshing={false} onRefresh={() => {}} />
         }
       >
         {/* Profile Header */}
@@ -141,42 +200,20 @@ export const AccountScreen = ({ navigation }) => {
               style={styles.editButton}
               onPress={() => navigation.navigate("ProfileEdit")}
             >
-              <Ionicons name="create-outline" size={18} color={colors.primary} />
+              <Ionicons
+                name="create-outline"
+                size={18}
+                color={colors.primary}
+              />
             </Pressable>
           </View>
-
-          {/* Membership Card */}
-          <View style={styles.memberCard}>
-            <View style={styles.memberCardTop}>
-              <View style={styles.memberBadge}>
-                <Ionicons name="diamond" size={14} color="#F59E0B" />
-                <Text style={styles.memberText}>Premium</Text>
-              </View>
-              <View style={styles.pointsBadge}>
-                <Ionicons name="star" size={12} color="#F59E0B" />
-                <Text style={styles.memberPoints}>2,450 pts</Text>
-              </View>
-            </View>
-            <View style={styles.memberCardBottom}>
-              <View style={styles.memberStat}>
-                <Text style={styles.memberStatValue}>{orders.length}</Text>
-                <Text style={styles.memberStatLabel}>Orders</Text>
-              </View>
-              <View style={styles.memberStatDivider} />
-              <View style={styles.memberStat}>
-                <Text style={styles.memberStatValue}>{activeOrders}</Text>
-                <Text style={styles.memberStatLabel}>Active</Text>
-              </View>
-              <View style={styles.memberStatDivider} />
-              <View style={styles.memberStat}>
-                <Text style={styles.memberStatValue}>
-                  GH₵{totalSpent >= 1000 ? `${(totalSpent / 1000).toFixed(1)}k` : totalSpent}
-                </Text>
-                <Text style={styles.memberStatLabel}>Spent</Text>
-              </View>
-            </View>
-          </View>
         </View>
+
+        {profileAds.length > 0 && (
+          <View style={styles.adSection}>
+            <AdRenderer ads={profileAds} />
+          </View>
+        )}
 
         {/* Quick Actions */}
         <View style={styles.quickActionsSection}>
@@ -188,7 +225,12 @@ export const AccountScreen = ({ navigation }) => {
                 style={styles.quickActionCard}
                 onPress={() => navigation.navigate(action.screen)}
               >
-                <View style={[styles.quickActionIcon, { backgroundColor: action.bg }]}>
+                <View
+                  style={[
+                    styles.quickActionIcon,
+                    { backgroundColor: action.bg },
+                  ]}
+                >
                   <Ionicons name={action.icon} size={22} color={action.color} />
                 </View>
                 <Text style={styles.quickActionLabel}>{action.label}</Text>
@@ -209,16 +251,26 @@ export const AccountScreen = ({ navigation }) => {
                     styles.menuItem,
                     index < section.items.length - 1 && styles.menuItemBorder,
                   ]}
-                  onPress={() => item.screen && navigation.navigate(item.screen)}
+                  onPress={() =>
+                    item.screen && navigation.navigate(item.screen)
+                  }
                 >
                   <View style={styles.menuItemLeft}>
                     <View style={styles.menuIconContainer}>
-                      <Ionicons name={item.icon} size={20} color={colors.primary} />
+                      <Ionicons
+                        name={item.icon}
+                        size={20}
+                        color={colors.primary}
+                      />
                     </View>
                     <Text style={styles.menuItemLabel}>{item.label}</Text>
                   </View>
                   <View style={styles.menuItemRight}>
-                    <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color="#CBD5E1"
+                    />
                   </View>
                 </Pressable>
               ))}
@@ -267,7 +319,7 @@ export const AccountScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -355,6 +407,10 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
+  },
+  adSection: {
+    paddingTop: 8,
+    paddingBottom: 6,
   },
   profileTopRow: {
     flexDirection: "row",
@@ -602,7 +658,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.light,
   },
   closeButton: {
-    position: 'absolute',
+    position: "absolute",
     top: 60,
     right: 20,
     zIndex: 10,
@@ -611,9 +667,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
     shadowColor: colors.dark,
     shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },

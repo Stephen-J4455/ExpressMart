@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  Dimensions,
   TouchableOpacity,
   Modal,
 } from "react-native";
@@ -18,12 +17,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useShop } from "../context/ShopContext";
-import { colors } from "../theme/colors";
+import { colors, getTheme } from "../theme/colors";
 import { useToast } from "../context/ToastContext";
+import { useResponsive } from "../hooks/useResponsive";
 import { ProductCard } from "../components/ProductCard";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
 
-const screenWidth = Dimensions.get("window").width;
 const TABS = ["products", "profile", "reviews"];
 
 const BADGE_CONFIG = {
@@ -50,15 +49,37 @@ const BADGE_CONFIG = {
 };
 
 export const StoreScreen = ({ route, navigation }) => {
-  const { seller } = route.params || {};
-  const sellerId = seller?.id;
+  const rawSeller =
+    (route.params &&
+      (route.params.seller || route.params.sellerId || route.params.id)) ||
+    null;
+  const [sellerDetail, setSellerDetail] = useState(
+    typeof rawSeller === "object" ? rawSeller : null,
+  );
+  const sellerId = typeof rawSeller === "string" ? rawSeller : sellerDetail?.id;
   const insets = useSafeAreaInsets();
-  const { products, refresh, loading, followSeller, unfollowSeller, isFollowing } = useShop();
+  const { width: screenWidth, gridColumns, getItemWidth } = useResponsive();
+  const itemWidth = getItemWidth(gridColumns, 12, 12);
+
+  // Resolve a theme object from seller.theme_color only if seller allows it for customers
+  const theme = sellerDetail?.theme_apply_customer
+    ? getTheme(
+        sellerDetail?.theme_color || sellerDetail?.theme || colors.primary,
+      )
+    : getTheme(colors.primary);
+  const accent = theme.primary;
+  const accentGradient = [theme.gradientStart, theme.gradientEnd];
+  const { refresh, loading, followSeller, unfollowSeller, isFollowing } =
+    useShop();
   const toast = useToast();
   const tabScrollRef = useRef(null);
 
   const [statuses, setStatuses] = useState([]);
   const [storeProducts, setStoreProducts] = useState([]);
+  const [storeLoading, setStoreLoading] = useState(true);
+  const [storeLoadingMore, setStoreLoadingMore] = useState(false);
+  const [storeHasMore, setStoreHasMore] = useState(true);
+  const STORE_PAGE_SIZE = 20;
   const [activeTab, setActiveTab] = useState("products");
   const [storeReviews, setStoreReviews] = useState([]);
   const [userProfiles, setUserProfiles] = useState({});
@@ -69,9 +90,9 @@ export const StoreScreen = ({ route, navigation }) => {
   const averageRating =
     storeReviews.length > 0
       ? (
-        storeReviews.reduce((sum, r) => sum + (r.rating || 0), 0) /
-        storeReviews.length
-      ).toFixed(1)
+          storeReviews.reduce((sum, r) => sum + (r.rating || 0), 0) /
+          storeReviews.length
+        ).toFixed(1)
       : "0.0";
 
   const handleFollowToggle = async () => {
@@ -94,6 +115,29 @@ export const StoreScreen = ({ route, navigation }) => {
   };
 
   useEffect(() => {
+    // If we were passed only a seller id (string), fetch full seller row
+    const fetchSeller = async () => {
+      // Always fetch the latest seller row from the DB by id so flags like
+      // `theme_apply_store` are up-to-date even when a seller object was
+      // passed through navigation params.
+      const id =
+        sellerId || (typeof rawSeller === "string" ? rawSeller : rawSeller?.id);
+      if (!id) return;
+      try {
+        const { data, error } = await supabase
+          .from("express_sellers")
+          .select(
+            "id,name,avatar,badges,rating,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
+          )
+          .eq("id", id)
+          .single();
+        if (!error && data) setSellerDetail(data);
+      } catch (err) {
+        console.error("Error fetching seller detail:", err);
+      }
+    };
+    fetchSeller();
+
     const fetchStoreReviews = async () => {
       if (!sellerId) return;
       setReviewsLoading(true);
@@ -207,30 +251,102 @@ export const StoreScreen = ({ route, navigation }) => {
     }
   };
 
+  // Replace ShopContext filter with direct paginated fetch
+  const fetchStoreProducts = useCallback(
+    async (reset = true) => {
+      if (!supabase || !sellerId) return;
+      const start = reset ? 0 : storeProducts.length;
+      const end = start + STORE_PAGE_SIZE - 1;
+      try {
+        const { data, error } = await supabase
+          .from("express_products")
+          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+          .eq("seller_id", sellerId)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .range(start, end);
+        if (error) throw error;
+        const mapped = (data || []).map((p) => {
+          const normalizedQuantity = p.quantity ?? p.stock ?? p.stock_quantity;
+          const normalizedStock = p.stock ?? p.quantity ?? p.stock_quantity;
+          const normalizedBackorder =
+            p.allow_backorder === true ||
+            p.allow_backorder === 1 ||
+            String(p.allow_backorder || "")
+              .trim()
+              .toLowerCase() === "true";
+
+          return {
+            id: p.id,
+            title: p.title,
+            vendor: p.vendor,
+            price: Number(p.price || 0),
+            quantity: normalizedQuantity,
+            stock: normalizedStock,
+            allow_backorder: normalizedBackorder,
+            rating: Number(p.rating || 0),
+            badges: p.badges || [],
+            thumbnail: p.thumbnail,
+            thumbnails: p.thumbnails || [],
+            category: p.category,
+            description: p.description,
+            discount: p.discount || 0,
+            colors: p.colors || [],
+            sizes: p.sizes || [],
+            specifications: p.specifications || null,
+            tags: p.tags || [],
+            weight: p.weight || null,
+            weight_unit: p.weight_unit || null,
+            sku: p.sku || null,
+            barcode: p.barcode || null,
+            seller: p.seller_id || null,
+          };
+        });
+        setStoreProducts(reset ? mapped : (prev) => [...prev, ...mapped]);
+        setStoreHasMore(mapped.length === STORE_PAGE_SIZE);
+      } catch (err) {
+        console.error("fetchStoreProducts error", err);
+      } finally {
+        setStoreLoadingMore(false);
+        setStoreLoading(false);
+      }
+    },
+    [sellerId, storeProducts.length],
+  );
+
+  const handleLoadMoreStoreProducts = useCallback(async () => {
+    if (!storeHasMore || storeLoadingMore || loading) return;
+    setStoreLoadingMore(true);
+    await fetchStoreProducts(false);
+  }, [storeHasMore, storeLoadingMore, loading, fetchStoreProducts]);
+
   useEffect(() => {
-    if (products && sellerId) {
-      const filtered = products.filter((p) => {
-        if (!p.seller) return false;
-        if (typeof p.seller === "object" && p.seller.id) {
-          return p.seller.id === sellerId;
-        }
-        return p.seller === sellerId;
-      });
-      setStoreProducts(filtered);
-    }
-  }, [products, sellerId]);
+    if (sellerId) fetchStoreProducts(true);
+  }, [sellerId]);
 
   const storeInfo = storeProducts.length > 0 ? storeProducts[0] : null;
 
   const displayData =
-    loading && storeProducts.length === 0 ? Array(4).fill(null) : storeProducts;
+    storeLoading && storeProducts.length === 0
+      ? Array(4).fill(null)
+      : storeProducts;
 
   return (
     <>
       <FlatList
         data={displayData}
-        keyExtractor={(item, index) => item?.id || `placeholder-${index}`}
+        keyExtractor={(item, index) => `outer-${item?.id || index}`}
         bounces={true}
+        showsVerticalScrollIndicator={false}
+        onEndReached={handleLoadMoreStoreProducts}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={
+          storeLoadingMore ? (
+            <View style={{ paddingVertical: 20, alignItems: "center" }}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null
+        }
         refreshControl={
           <RefreshControl refreshing={loading} onRefresh={refresh} />
         }
@@ -238,9 +354,9 @@ export const StoreScreen = ({ route, navigation }) => {
           <View>
             {/* Store Hero Section - extends into status bar */}
             <View style={[styles.hero, { marginTop: -insets.top }]}>
-              {seller?.avatar ? (
+              {sellerDetail?.avatar ? (
                 <Image
-                  source={{ uri: seller.avatar }}
+                  source={{ uri: sellerDetail.avatar }}
                   style={styles.heroBackground}
                   blurRadius={5}
                 />
@@ -253,32 +369,38 @@ export const StoreScreen = ({ route, navigation }) => {
                   <Pressable
                     style={[
                       styles.storeAvatarContainer,
-                      statuses.length > 0 && styles.statusActive
+                      statuses.length > 0 && styles.statusActive,
                     ]}
                     onPress={() => {
                       if (statuses.length > 0) {
-                        navigation.navigate("StatusViewer", { status: statuses[0] });
+                        navigation.navigate("StatusViewer", {
+                          status: statuses[0],
+                        });
                       }
                     }}
                   >
-                    {seller?.avatar ? (
+                    {sellerDetail?.avatar ? (
                       <Image
-                        source={{ uri: seller.avatar }}
+                        source={{ uri: sellerDetail.avatar }}
                         style={styles.storeAvatar}
                       />
                     ) : (
-                      <View style={[styles.storeAvatar, styles.avatarPlaceholder]}>
+                      <View
+                        style={[styles.storeAvatar, styles.avatarPlaceholder]}
+                      >
                         <Ionicons name="storefront" size={48} color="#fff" />
                       </View>
                     )}
                     {statuses.length > 0 && (
                       <View style={styles.statusBadge}>
-                        <Text style={styles.statusBadgeText}>{statuses.length}</Text>
+                        <Text style={styles.statusBadgeText}>
+                          {statuses.length}
+                        </Text>
                       </View>
                     )}
                   </Pressable>
                   <View style={styles.storeInfo}>
-                    <Text style={styles.storeName}>{seller?.name}</Text>
+                    <Text style={styles.storeName}>{sellerDetail?.name}</Text>
                     <View style={styles.ratingRow}>
                       <Ionicons name="star" size={16} color="#FCD34D" />
                       <Text style={styles.rating}>
@@ -287,26 +409,34 @@ export const StoreScreen = ({ route, navigation }) => {
                       <Pressable
                         style={[
                           styles.followButton,
-                          isFollowing(sellerId) && styles.followButtonActive,
+                          isFollowing(sellerId) && {
+                            backgroundColor: accent,
+                            borderColor: accent,
+                          },
                         ]}
                         onPress={handleFollowToggle}
                         disabled={followLoading}
                       >
                         {followLoading ? (
-                          <ActivityIndicator size="small" color={isFollowing(sellerId) ? "white" : "#ef4444"} />
+                          <ActivityIndicator
+                            size="small"
+                            color={isFollowing(sellerId) ? "white" : accent}
+                          />
                         ) : (
                           <>
                             {!isFollowing(sellerId) && (
                               <Ionicons
                                 name="add"
                                 size={16}
-                                color="#ef4444"
+                                color={isFollowing(sellerId) ? "white" : accent}
                               />
                             )}
-                            <Text style={[
-                              styles.followButtonText,
-                              isFollowing(sellerId) && styles.followButtonActiveText
-                            ]}>
+                            <Text
+                              style={[
+                                styles.followButtonText,
+                                isFollowing(sellerId) && { color: "#fff" },
+                              ]}
+                            >
                               {isFollowing(sellerId) ? "Following" : "Follow"}
                             </Text>
                           </>
@@ -320,14 +450,14 @@ export const StoreScreen = ({ route, navigation }) => {
                 </View>
 
                 {/* Badges Section */}
-                {seller?.badges && seller.badges.length > 0 && (
+                {sellerDetail?.badges && sellerDetail.badges.length > 0 && (
                   <View style={styles.badgesRow}>
-                    {seller.badges.map((badgeId) => {
+                    {[...new Set(sellerDetail.badges)].map((badgeId, index) => {
                       const badgeConfig = BADGE_CONFIG[badgeId];
                       if (!badgeConfig) return null;
                       return (
                         <View
-                          key={badgeId}
+                          key={`${badgeId}-${index}`}
                           style={[
                             styles.badge,
                             {
@@ -377,54 +507,72 @@ export const StoreScreen = ({ route, navigation }) => {
             {/* Tab Navigation */}
             <View style={styles.tabContainer}>
               <Pressable
-                style={[styles.tab, activeTab === "products" && styles.tabActive]}
+                style={[
+                  styles.tab,
+                  activeTab === "products" && styles.tabActive,
+                ]}
                 onPress={() => handleTabPress("products")}
               >
                 <Ionicons
                   name="storefront-outline"
                   size={20}
-                  color={activeTab === "products" ? colors.primary : colors.muted}
+                  color={activeTab === "products" ? accent : colors.muted}
                 />
                 <Text
                   style={[
                     styles.tabText,
-                    activeTab === "products" && styles.tabTextActive,
+                    activeTab === "products" && {
+                      color: accent,
+                      fontWeight: "800",
+                    },
                   ]}
                 >
                   Products ({storeProducts.length})
                 </Text>
               </Pressable>
               <Pressable
-                style={[styles.tab, activeTab === "profile" && styles.tabActive]}
+                style={[
+                  styles.tab,
+                  activeTab === "profile" && styles.tabActive,
+                ]}
                 onPress={() => handleTabPress("profile")}
               >
                 <Ionicons
                   name="person-outline"
                   size={20}
-                  color={activeTab === "profile" ? colors.primary : colors.muted}
+                  color={activeTab === "profile" ? accent : colors.muted}
                 />
                 <Text
                   style={[
                     styles.tabText,
-                    activeTab === "profile" && styles.tabTextActive,
+                    activeTab === "profile" && {
+                      color: accent,
+                      fontWeight: "800",
+                    },
                   ]}
                 >
                   Profile
                 </Text>
               </Pressable>
               <Pressable
-                style={[styles.tab, activeTab === "reviews" && styles.tabActive]}
+                style={[
+                  styles.tab,
+                  activeTab === "reviews" && styles.tabActive,
+                ]}
                 onPress={() => handleTabPress("reviews")}
               >
                 <Ionicons
                   name="star-outline"
                   size={20}
-                  color={activeTab === "reviews" ? colors.primary : colors.muted}
+                  color={activeTab === "reviews" ? accent : colors.muted}
                 />
                 <Text
                   style={[
                     styles.tabText,
-                    activeTab === "reviews" && styles.tabTextActive,
+                    activeTab === "reviews" && {
+                      color: accent,
+                      fontWeight: "800",
+                    },
                   ]}
                 >
                   Reviews ({storeReviews.length})
@@ -443,17 +591,38 @@ export const StoreScreen = ({ route, navigation }) => {
               style={styles.tabScrollView}
             >
               {/* Products Tab */}
-              <View style={[styles.tabPage, { width: screenWidth }]}>
+              <View
+                style={[styles.tabPage, { width: screenWidth, marginTop: 12 }]}
+              >
                 {displayData.length > 0 ? (
-                  <View style={styles.productsGrid}>
-                    {displayData.map((item, index) => (
+                  <FlatList
+                    key={String(gridColumns)}
+                    data={displayData}
+                    keyExtractor={(item, index) =>
+                      item?.id || `placeholder-${index}`
+                    }
+                    numColumns={gridColumns}
+                    columnWrapperStyle={{
+                      gap: 12,
+                      paddingHorizontal: 12,
+                      justifyContent: "flex-start",
+                    }}
+                    contentContainerStyle={{
+                      paddingTop: 8,
+                      paddingBottom: 24,
+                    }}
+                    renderItem={({ item }) => (
                       <View
-                        key={item?.id || `placeholder-${index}`}
-                        style={styles.gridItem}
+                        style={{
+                          flex: 1,
+                          maxWidth: itemWidth,
+                          marginBottom: 12,
+                        }}
                       >
                         {item ? (
                           <ProductCard
                             product={item}
+                            theme={theme}
                             onPress={() =>
                               navigation.navigate("ProductDetail", {
                                 product: item,
@@ -464,8 +633,9 @@ export const StoreScreen = ({ route, navigation }) => {
                           <ProductCardPlaceholder />
                         )}
                       </View>
-                    ))}
-                  </View>
+                    )}
+                    scrollEnabled={false}
+                  />
                 ) : !loading ? (
                   <View style={styles.emptyState}>
                     <Ionicons
@@ -485,133 +655,149 @@ export const StoreScreen = ({ route, navigation }) => {
               <View style={[styles.tabPage, { width: screenWidth }]}>
                 <View style={styles.tabContent}>
                   <View style={styles.profileSection}>
-                    <Text style={styles.sectionTitle}>About {seller?.name}</Text>
+                    <Text style={[styles.sectionTitle, { color: accent }]}>
+                      About {sellerDetail?.name}
+                    </Text>
                     <Text style={styles.profileText}>
-                      Welcome to {seller?.name}! We are committed to providing
-                      high-quality products and excellent customer service. Our
-                      store specializes in a wide range of products to meet your
-                      needs.
+                      {sellerDetail?.store_description?.trim()
+                        ? sellerDetail.store_description.trim()
+                        : `Welcome to ${sellerDetail?.name}! We are committed to providing high-quality products and excellent customer service.`}
                     </Text>
                   </View>
 
                   {/* Chat Button */}
                   <View style={styles.profileSection}>
                     <Pressable
-                      style={styles.chatButton}
-                      onPress={() => navigation.navigate("Chat", { seller })}
+                      style={[
+                        styles.chatButton,
+                        { backgroundColor: accent, borderColor: accent },
+                      ]}
+                      onPress={() =>
+                        navigation.navigate("Chat", { seller: sellerDetail })
+                      }
                     >
                       <Ionicons
                         name="chatbubble-outline"
                         size={20}
                         color="#fff"
                       />
-                      <Text style={styles.chatButtonText}>Chat with Seller</Text>
+                      <Text style={styles.chatButtonText}>
+                        Chat with Seller
+                      </Text>
                     </Pressable>
                   </View>
 
                   {/* Social Media Links */}
-                  {(seller?.social_facebook ||
-                    seller?.social_instagram ||
-                    seller?.social_twitter ||
-                    seller?.social_whatsapp ||
-                    seller?.social_website) && (
-                      <View style={styles.profileSection}>
-                        <Text style={styles.sectionTitle}>Connect with Us</Text>
-                        <View style={styles.socialLinks}>
-                          {seller?.social_facebook && (
-                            <Pressable
-                              style={styles.socialButton}
-                              onPress={() =>
-                                Linking.openURL(seller.social_facebook)
-                              }
-                            >
-                              <Ionicons
-                                name="logo-facebook"
-                                size={20}
-                                color="#1877F2"
-                              />
-                              <Text style={styles.socialText}>Facebook</Text>
-                            </Pressable>
-                          )}
-                          {seller?.social_instagram && (
-                            <Pressable
-                              style={styles.socialButton}
-                              onPress={() =>
-                                Linking.openURL(seller.social_instagram)
-                              }
-                            >
-                              <Ionicons
-                                name="logo-instagram"
-                                size={20}
-                                color="#E4405F"
-                              />
-                              <Text style={styles.socialText}>Instagram</Text>
-                            </Pressable>
-                          )}
-                          {seller?.social_twitter && (
-                            <Pressable
-                              style={styles.socialButton}
-                              onPress={() => Linking.openURL(seller.social_twitter)}
-                            >
-                              <Ionicons
-                                name="logo-twitter"
-                                size={20}
-                                color="#1DA1F2"
-                              />
-                              <Text style={styles.socialText}>Twitter</Text>
-                            </Pressable>
-                          )}
-                          {seller?.social_whatsapp && (
-                            <Pressable
-                              style={styles.socialButton}
-                              onPress={() =>
-                                Linking.openURL(
-                                  `https://wa.me/${seller.social_whatsapp.replace(/[^0-9]/g, "")}`,
-                                )
-                              }
-                            >
-                              <Ionicons
-                                name="logo-whatsapp"
-                                size={20}
-                                color="#25D366"
-                              />
-                              <Text style={styles.socialText}>WhatsApp</Text>
-                            </Pressable>
-                          )}
-                          {seller?.social_website && (
-                            <Pressable
-                              style={styles.socialButton}
-                              onPress={() => Linking.openURL(seller.social_website)}
-                            >
-                              <Ionicons
-                                name="globe-outline"
-                                size={20}
-                                color={colors.primary}
-                              />
-                              <Text style={styles.socialText}>Website</Text>
-                            </Pressable>
-                          )}
-                        </View>
+                  {(sellerDetail?.social_facebook ||
+                    sellerDetail?.social_instagram ||
+                    sellerDetail?.social_twitter ||
+                    sellerDetail?.social_whatsapp ||
+                    sellerDetail?.social_website) && (
+                    <View style={styles.profileSection}>
+                      <Text style={styles.sectionTitle}>Connect with Us</Text>
+                      <View style={styles.socialLinks}>
+                        {sellerDetail?.social_facebook && (
+                          <Pressable
+                            style={styles.socialButton}
+                            onPress={() =>
+                              Linking.openURL(sellerDetail.social_facebook)
+                            }
+                          >
+                            <Ionicons
+                              name="logo-facebook"
+                              size={20}
+                              color="#1877F2"
+                            />
+                            <Text style={styles.socialText}>Facebook</Text>
+                          </Pressable>
+                        )}
+                        {sellerDetail?.social_instagram && (
+                          <Pressable
+                            style={styles.socialButton}
+                            onPress={() =>
+                              Linking.openURL(sellerDetail.social_instagram)
+                            }
+                          >
+                            <Ionicons
+                              name="logo-instagram"
+                              size={20}
+                              color="#E4405F"
+                            />
+                            <Text style={styles.socialText}>Instagram</Text>
+                          </Pressable>
+                        )}
+                        {sellerDetail?.social_twitter && (
+                          <Pressable
+                            style={styles.socialButton}
+                            onPress={() =>
+                              Linking.openURL(sellerDetail.social_twitter)
+                            }
+                          >
+                            <Ionicons
+                              name="logo-twitter"
+                              size={20}
+                              color="#1DA1F2"
+                            />
+                            <Text style={styles.socialText}>Twitter</Text>
+                          </Pressable>
+                        )}
+                        {sellerDetail?.social_whatsapp && (
+                          <Pressable
+                            style={styles.socialButton}
+                            onPress={() =>
+                              Linking.openURL(
+                                `https://wa.me/${sellerDetail.social_whatsapp.replace(/[^0-9]/g, "")}`,
+                              )
+                            }
+                          >
+                            <Ionicons
+                              name="logo-whatsapp"
+                              size={20}
+                              color="#25D366"
+                            />
+                            <Text style={styles.socialText}>WhatsApp</Text>
+                          </Pressable>
+                        )}
+                        {sellerDetail?.social_website && (
+                          <Pressable
+                            style={styles.socialButton}
+                            onPress={() =>
+                              Linking.openURL(sellerDetail.social_website)
+                            }
+                          >
+                            <Ionicons
+                              name="globe-outline"
+                              size={20}
+                              color={colors.primary}
+                            />
+                            <Text style={styles.socialText}>Website</Text>
+                          </Pressable>
+                        )}
                       </View>
-                    )}
+                    </View>
+                  )}
 
                   <View style={styles.profileSection}>
-                    <Text style={styles.sectionTitle}>Store Statistics</Text>
+                    <Text style={[styles.sectionTitle, { color: accent }]}>
+                      Store Statistics
+                    </Text>
                     <View style={styles.statsGrid}>
                       <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>
+                        <Text style={[styles.statNumber, { color: accent }]}>
                           {storeProducts.length}
                         </Text>
                         <Text style={styles.statLabelSmall}>Products</Text>
                       </View>
                       <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>
+                        <Text style={[styles.statNumber, { color: accent }]}>
                           {storeReviews.length}
                         </Text>
                         <Text style={styles.statLabelSmall}>Reviews</Text>
                       </View>
                       <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>{averageRating}</Text>
+                        <Text style={[styles.statNumber, { color: accent }]}>
+                          {averageRating}
+                        </Text>
                         <Text style={styles.statLabelSmall}>Rating</Text>
                       </View>
                     </View>
@@ -623,11 +809,15 @@ export const StoreScreen = ({ route, navigation }) => {
               <View style={[styles.tabPage, { width: screenWidth }]}>
                 <View style={styles.tabContent}>
                   <View style={styles.reviewsHeader}>
-                    <Text style={styles.sectionTitle}>Customer Reviews</Text>
+                    <Text style={[styles.sectionTitle, { color: accent }]}>
+                      Customer Reviews
+                    </Text>
                     <View style={styles.ratingSummary}>
-                      <Ionicons name="star" size={24} color="#F59E0B" />
-                      <Text style={styles.ratingNumber}>{averageRating}</Text>
-                      <Text style={styles.ratingCount}>
+                      <Ionicons name="star" size={24} color={accent} />
+                      <Text style={[styles.ratingNumber, { color: accent }]}>
+                        {averageRating}
+                      </Text>
+                      <Text style={[styles.ratingCount, { color: accent }]}>
                         ({storeReviews.length} reviews)
                       </Text>
                     </View>
@@ -638,18 +828,21 @@ export const StoreScreen = ({ route, navigation }) => {
                         <Text>Loading reviews...</Text>
                       </View>
                     ) : storeReviews.length > 0 ? (
-                      storeReviews.map((review) => {
+                      storeReviews.map((review, reviewIndex) => {
                         const product = storeProducts.find(
                           (p) => p.id === review.product_id,
                         );
                         return (
-                          <View key={review.id} style={styles.reviewItem}>
+                          <View
+                            key={`${review.id}-${review.created_at || reviewIndex}`}
+                            style={styles.reviewItem}
+                          >
                             <View style={styles.reviewHeader}>
                               <View style={styles.reviewerAvatar}>
                                 <Ionicons
                                   name="person"
                                   size={20}
-                                  color={colors.muted}
+                                  color={accent}
                                 />
                               </View>
                               <View style={{ flex: 1 }}>
@@ -663,14 +856,14 @@ export const StoreScreen = ({ route, navigation }) => {
                                 <View style={styles.reviewStars}>
                                   {[1, 2, 3, 4, 5].map((star) => (
                                     <Ionicons
-                                      key={star}
+                                      key={`${review.id}-star-${star}`}
                                       name={
                                         star <= review.rating
                                           ? "star"
                                           : "star-outline"
                                       }
                                       size={14}
-                                      color="#F59E0B"
+                                      color={accent}
                                     />
                                   ))}
                                 </View>
@@ -734,7 +927,6 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     flexGrow: 1,
-    paddingBottom: 140,
   },
   hero: {
     minHeight: 400,
@@ -873,7 +1065,6 @@ const styles = StyleSheet.create({
   },
   productItem: {
     paddingHorizontal: 8,
-    marginBottom: 8,
   },
   columnWrapper: {
     justifyContent: "space-between",
@@ -902,13 +1093,6 @@ const styles = StyleSheet.create({
   },
   tabPage: {
     minHeight: 300,
-  },
-  productsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    paddingHorizontal: 5,
-    paddingTop: 8,
   },
   tabContainer: {
     flexDirection: "row",

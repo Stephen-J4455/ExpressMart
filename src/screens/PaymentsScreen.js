@@ -14,10 +14,13 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
 
 export const PaymentsScreen = ({ navigation }) => {
   const { user } = useAuth();
   const toast = useToast();
+  const { cardColumns, horizontalPadding, getItemWidth } = useResponsive();
+  const cardItemWidth = getItemWidth(cardColumns);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -87,7 +90,9 @@ export const PaymentsScreen = ({ navigation }) => {
   };
 
   const renderPaymentMethod = ({ item }) => (
-    <View style={styles.paymentCard}>
+    <View
+      style={[styles.paymentCard, cardColumns > 1 && { width: cardItemWidth }]}
+    >
       <View style={styles.paymentHeader}>
         <View style={styles.paymentType}>
           <Ionicons
@@ -130,7 +135,12 @@ export const PaymentsScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          { paddingHorizontal: cardColumns > 1 ? horizontalPadding : 16 },
+        ]}
+      >
         <Pressable
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -162,7 +172,13 @@ export const PaymentsScreen = ({ navigation }) => {
           data={paymentMethods}
           keyExtractor={(item) => item.id}
           renderItem={renderPaymentMethod}
-          contentContainerStyle={styles.listContainer}
+          key={`payments-${cardColumns}`}
+          numColumns={cardColumns}
+          columnWrapperStyle={cardColumns > 1 ? { gap: 16 } : undefined}
+          contentContainerStyle={[
+            styles.listContainer,
+            { paddingHorizontal: cardColumns > 1 ? horizontalPadding : 16 },
+          ]}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -184,7 +200,7 @@ export const PaymentsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   centerContainer: {
     flex: 1,

@@ -11,9 +11,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
-import { useShop } from "../context/ShopContext";
 import { useToast } from "../context/ToastContext";
 import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
 
 // Map color names to hex values
 const colorMap = {
@@ -55,7 +55,8 @@ const colorMap = {
   wine: "#7F1D1D",
   tan: "#D2B48C",
   nude: "#E8C4A2",
-  multicolor: "linear-gradient(90deg, #EF4444, #F97316, #EAB308, #22C55E, #3B82F6, #A855F7)",
+  multicolor:
+    "linear-gradient(90deg, #EF4444, #F97316, #EAB308, #22C55E, #3B82F6, #A855F7)",
   multi: "#CBD5E1",
 };
 
@@ -69,10 +70,28 @@ export const CartScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { user, isAuthenticated } = useAuth();
   const { items, total, updateQuantity, removeFromCart, clearCart } = useCart();
-  const { settings } = useShop();
   const toast = useToast();
+  const { isWide, contentMaxWidth } = useResponsive();
+  const getAvailableStock = (product) =>
+    Number(product?.quantity ?? product?.stock ?? 0);
+  const hasInventoryValue = (product) =>
+    product?.quantity != null || product?.stock != null;
+  const hasOutOfStockItems = items.some(
+    ({ product }) =>
+      hasInventoryValue(product) &&
+      getAvailableStock(product) <= 0 &&
+      !product?.allow_backorder,
+  );
 
   const handleCheckout = () => {
+    if (hasOutOfStockItems) {
+      toast.warning(
+        "Unavailable items",
+        "Remove out-of-stock items before checkout.",
+      );
+      return;
+    }
+
     if (!isAuthenticated) {
       navigation.navigate("Auth");
     } else {
@@ -92,18 +111,13 @@ export const CartScreen = ({ navigation }) => {
         </Text>
         <Pressable
           style={styles.shopButton}
-          onPress={() => navigation.navigate("Home")}
+          onPress={() => navigation.navigate("Main", { screen: "Home" })}
         >
           <Text style={styles.shopButtonText}>Start Shopping</Text>
         </Pressable>
       </View>
     );
   }
-
-  // Service fee calculation from settings
-  const defaultFee = parseInt(settings?.service_fee || "500");
-  const serviceFee = total >= 10000 ? 0 : defaultFee;
-  const grandTotal = total + serviceFee;
 
   return (
     <View style={styles.container}>
@@ -114,136 +128,223 @@ export const CartScreen = ({ navigation }) => {
             <Text style={styles.itemCountText}>{items.length}</Text>
           </View>
         </View>
-        <Text style={styles.headerSubtitle}>Review your items before checkout</Text>
+        <Text style={styles.headerSubtitle}>
+          Review your items before checkout
+        </Text>
       </View>
 
-      <ScrollView style={styles.itemList} showsVerticalScrollIndicator={false}>
-        {items.map(({ id, product, quantity, size, color, price }) => (
-          <View key={id} style={styles.itemCard}>
-            <Pressable
-              style={styles.itemRow}
-              onPress={() => navigation.navigate("ProductDetail", { product })}
-            >
-              <View style={styles.thumbnailContainer}>
-                <Image
-                  source={{ uri: product.thumbnail || product.thumbnails?.[0] }}
-                  style={styles.thumbnail}
-                  resizeMode="cover"
-                />
-                {product.discount > 0 && (
-                  <View style={styles.discountBadge}>
-                    <Text style={styles.discountText}>-{product.discount}%</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.itemContent}>
-                <Text style={styles.title} numberOfLines={2}>
-                  {product.title}
-                </Text>
-                {(size || color) && (
-                  <View style={styles.specsRow}>
-                    {size && (
-                      <View style={styles.specBadge}>
-                        <Ionicons name="resize" size={10} color={colors.primary} />
-                        <Text style={styles.specText}>{size}</Text>
-                      </View>
-                    )}
-                    {color && (
-                      <View style={styles.specBadge}>
-                        <View style={[styles.colorDot, { backgroundColor: getColorHex(color) }]} />
-                        <Text style={styles.specText}>{color}</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-                <View style={styles.priceRow}>
-                  <Text style={styles.price}>
-                    GH₵{Number(price || product.price).toLocaleString()}
-                  </Text>
-                  {product.original_price && product.original_price > (price || product.price) && (
-                    <Text style={styles.originalPrice}>
-                      GH₵{Number(product.original_price).toLocaleString()}
-                    </Text>
-                  )}
-                </View>
-              </View>
-            </Pressable>
-            <View style={styles.itemActions}>
-              <Pressable
-                style={styles.removeButton}
-                onPress={() => removeFromCart(product.id, size, color, id)}
+      <View style={isWide ? styles.wideBody : styles.mobileBody}>
+        <ScrollView
+          style={isWide ? styles.itemListWide : styles.itemList}
+          showsVerticalScrollIndicator={false}
+        >
+          {items.map(({ id, product, quantity, size, color, price }) => {
+            const knownInventory = hasInventoryValue(product);
+            const maxStock = getAvailableStock(product);
+            const isOutOfStock =
+              knownInventory && maxStock <= 0 && !product?.allow_backorder;
+            const isMaxStockReached =
+              knownInventory &&
+              !product?.allow_backorder &&
+              maxStock > 0 &&
+              quantity >= maxStock;
+
+            // Resolve effective unit price: stored price (may be flash-sale or discounted),
+            // falling back to a discount-based calculation, or base price.
+            const effectivePrice =
+              price != null && price > 0
+                ? price
+                : product.discount > 0
+                  ? product.price * (1 - product.discount / 100)
+                  : product.price;
+
+            // Determine whether any price reduction was applied vs the base product price.
+            const hasReduction = effectivePrice < product.price - 0.001; // small epsilon for float safety
+            const isFlashSaleItem = hasReduction && !(product.discount > 0);
+            const reductionPct = hasReduction
+              ? Math.round((1 - effectivePrice / product.price) * 100)
+              : 0;
+
+            return (
+              <View
+                key={id}
+                style={[
+                  styles.itemCard,
+                  isOutOfStock && styles.itemCardOutOfStock,
+                ]}
               >
-                <Ionicons name="trash-outline" size={16} color="#EF4444" />
-                <Text style={styles.removeText}>Remove</Text>
-              </Pressable>
-              <View style={styles.quantityRow}>
                 <Pressable
-                  style={[styles.qtyButton, quantity <= 1 && styles.qtyButtonDisabled]}
+                  style={styles.itemRow}
                   onPress={() =>
-                    updateQuantity(product.id, Math.max(1, quantity - 1))
+                    navigation.navigate("ProductDetail", { product })
                   }
                 >
-                  <Ionicons name="remove" size={18} color={quantity <= 1 ? '#CBD5E1' : colors.dark} />
+                  <View style={styles.thumbnailContainer}>
+                    <Image
+                      source={{
+                        uri: product.thumbnail || product.thumbnails?.[0],
+                      }}
+                      style={styles.thumbnail}
+                      resizeMode="cover"
+                    />
+                    {hasReduction && (
+                      <View
+                        style={[
+                          styles.discountBadge,
+                          isFlashSaleItem && styles.flashBadge,
+                        ]}
+                      >
+                        <Text style={styles.discountText}>
+                          {isFlashSaleItem ? "\u26a1" : ""}-{reductionPct}%
+                        </Text>
+                      </View>
+                    )}
+                    {isOutOfStock && (
+                      <View style={styles.outOfStockBadge}>
+                        <Text style={styles.outOfStockBadgeText}>
+                          Out of Stock
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.itemContent}>
+                    <Text style={styles.title} numberOfLines={2}>
+                      {product.title}
+                    </Text>
+                    {(size || color) && (
+                      <View style={styles.specsRow}>
+                        {size && (
+                          <View style={styles.specBadge}>
+                            <Ionicons
+                              name="resize"
+                              size={10}
+                              color={colors.primary}
+                            />
+                            <Text style={styles.specText}>{size}</Text>
+                          </View>
+                        )}
+                        {color && (
+                          <View style={styles.specBadge}>
+                            <View
+                              style={[
+                                styles.colorDot,
+                                { backgroundColor: getColorHex(color) },
+                              ]}
+                            />
+                            <Text style={styles.specText}>{color}</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                    <View style={styles.priceRow}>
+                      <Text style={styles.price}>
+                        GH₵{Number(effectivePrice).toLocaleString()}
+                      </Text>
+                      {hasReduction && (
+                        <Text style={styles.originalPrice}>
+                          GH₵{Number(product.price).toLocaleString()}
+                        </Text>
+                      )}
+                    </View>
+                    {isOutOfStock && (
+                      <Text style={styles.outOfStockText}>
+                        This item is currently unavailable
+                      </Text>
+                    )}
+                  </View>
                 </Pressable>
-                <View style={styles.qtyValueContainer}>
-                  <Text style={styles.qtyValue}>{quantity}</Text>
+                <View style={styles.itemActions}>
+                  <Pressable
+                    style={styles.removeButton}
+                    onPress={() => removeFromCart(product.id, size, color, id)}
+                  >
+                    <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                    <Text style={styles.removeText}>Remove</Text>
+                  </Pressable>
+                  <View style={styles.quantityRow}>
+                    <Pressable
+                      style={[
+                        styles.qtyButton,
+                        quantity <= 1 && styles.qtyButtonDisabled,
+                      ]}
+                      onPress={() =>
+                        updateQuantity(
+                          product.id,
+                          Math.max(1, quantity - 1),
+                          id,
+                        )
+                      }
+                    >
+                      <Ionicons
+                        name="remove"
+                        size={18}
+                        color={quantity <= 1 ? "#CBD5E1" : colors.dark}
+                      />
+                    </Pressable>
+                    <View style={styles.qtyValueContainer}>
+                      <Text style={styles.qtyValue}>{quantity}</Text>
+                    </View>
+                    <Pressable
+                      style={[
+                        styles.qtyButton,
+                        styles.qtyButtonAdd,
+                        (isOutOfStock || isMaxStockReached) &&
+                          styles.qtyButtonDisabledAdd,
+                      ]}
+                      onPress={() =>
+                        updateQuantity(product.id, quantity + 1, id)
+                      }
+                      disabled={isOutOfStock || isMaxStockReached}
+                    >
+                      <Ionicons name="add" size={18} color="#fff" />
+                    </Pressable>
+                  </View>
                 </View>
-                <Pressable
-                  style={[styles.qtyButton, styles.qtyButtonAdd]}
-                  onPress={() => updateQuantity(product.id, quantity + 1)}
-                >
-                  <Ionicons name="add" size={18} color="#fff" />
-                </Pressable>
               </View>
-            </View>
-          </View>
-        ))}
-        <View style={{ height: 20 }} />
-      </ScrollView>
+            );
+          })}
+          <View style={{ height: 20 }} />
+        </ScrollView>
 
-      <View style={styles.summary}>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Subtotal</Text>
-          <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Service Fee</Text>
-          <Text
-            style={[
-              styles.summaryValue,
-              serviceFee === 0 && styles.freeShipping,
-            ]}
-          >
-            {serviceFee === 0
-              ? "FREE"
-              : `GH₵${serviceFee.toLocaleString()}`}
-          </Text>
-        </View>
-        {serviceFee > 0 && (
+        <View style={isWide ? styles.summaryWide : styles.summary}>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Subtotal</Text>
+            <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>
+          </View>
           <View style={styles.shippingHintContainer}>
-            <Ionicons name="gift-outline" size={14} color={colors.primary} />
+            <Ionicons
+              name="information-circle-outline"
+              size={14}
+              color={colors.primary}
+            />
             <Text style={styles.shippingHint}>
-              Add GH₵{(10000 - total).toLocaleString()} more for free shipping
+              Shipping & service fees calculated at checkout
             </Text>
           </View>
-        )}
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>
-            GH₵{grandTotal.toLocaleString()}
-          </Text>
+          {hasOutOfStockItems && (
+            <View style={styles.stockWarningContainer}>
+              <Ionicons name="alert-circle-outline" size={14} color="#B91C1C" />
+              <Text style={styles.stockWarningText}>
+                Some items are out of stock. Remove them before checkout.
+              </Text>
+            </View>
+          )}
+          <Pressable style={styles.checkout} onPress={handleCheckout}>
+            <LinearGradient
+              colors={
+                hasOutOfStockItems
+                  ? [colors.muted, colors.muted]
+                  : [colors.primary, colors.accent]
+              }
+              style={styles.checkoutGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Ionicons name="lock-closed" size={18} color="#fff" />
+              <Text style={styles.checkoutText}>Proceed to Checkout</Text>
+            </LinearGradient>
+          </Pressable>
         </View>
-        <Pressable style={styles.checkout} onPress={handleCheckout}>
-          <LinearGradient
-            colors={[colors.primary, colors.accent]}
-            style={styles.checkoutGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          >
-            <Ionicons name="lock-closed" size={18} color="#fff" />
-            <Text style={styles.checkoutText}>Proceed to Checkout</Text>
-          </LinearGradient>
-        </Pressable>
       </View>
     </View>
   );
@@ -252,7 +353,7 @@ export const CartScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.background,
   },
   header: {
     paddingHorizontal: 20,
@@ -357,6 +458,9 @@ const styles = StyleSheet.create({
     elevation: 3,
     overflow: "hidden",
   },
+  itemCardOutOfStock: {
+    opacity: 0.72,
+  },
   itemRow: {
     flexDirection: "row",
     padding: 12,
@@ -383,10 +487,29 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
   },
+  flashBadge: {
+    backgroundColor: "#F97316",
+  },
   discountText: {
     color: "#fff",
     fontSize: 10,
     fontWeight: "700",
+  },
+  outOfStockBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "rgba(31,41,55,0.9)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  outOfStockBadgeText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
   },
   itemContent: {
     flex: 1,
@@ -442,6 +565,12 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textDecorationLine: "line-through",
   },
+  outOfStockText: {
+    marginTop: 6,
+    color: "#B91C1C",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   itemActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -486,6 +615,9 @@ const styles = StyleSheet.create({
   },
   qtyButtonAdd: {
     backgroundColor: colors.primary,
+  },
+  qtyButtonDisabledAdd: {
+    backgroundColor: "#CBD5E1",
   },
   qtyValueContainer: {
     minWidth: 36,
@@ -540,6 +672,23 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: "600",
   },
+  stockWarningContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 14,
+  },
+  stockWarningText: {
+    fontSize: 12,
+    color: "#B91C1C",
+    fontWeight: "600",
+    flex: 1,
+  },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -574,5 +723,33 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
     fontSize: 17,
+  },
+
+  // Wide-screen (tablet/desktop) - side-by-side layout
+  wideBody: {
+    flex: 1,
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    gap: 24,
+  },
+  mobileBody: {
+    flex: 1,
+  },
+  itemListWide: {
+    flex: 1,
+  },
+  summaryWide: {
+    width: 360,
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    padding: 24,
+    alignSelf: "flex-start",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 16,
+    elevation: 6,
+    marginBottom: 20,
   },
 });

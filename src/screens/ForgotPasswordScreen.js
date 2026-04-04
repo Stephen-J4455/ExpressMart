@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -94,6 +95,14 @@ export const ForgotPasswordScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Subtle background circles */}
+      <View style={styles.bgCircle1} />
+      <View style={styles.bgCircle2} />
+      <View style={styles.bgCircle3} />
+      <View style={styles.bgCircle4} />
+      <View style={styles.bgCircle5} />
+      <View style={styles.bgCircle6} />
+
       <KeyboardAvoidingView
         style={styles.content}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -107,7 +116,11 @@ export const ForgotPasswordScreen = ({ navigation }) => {
 
         <View style={styles.header}>
           <View style={styles.iconContainer}>
-            <Ionicons name="lock-open" size={50} color={colors.primary} />
+            <Image
+              source={require("../../assets/express.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.title}>Forgot Password?</Text>
           <Text style={styles.subtitle}>
@@ -173,7 +186,62 @@ export const ForgotPasswordScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
+  },
+  // Subtle background circles
+  bgCircle1: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: `${colors.primary}35`,
+    top: -50,
+    right: -50,
+  },
+  bgCircle2: {
+    position: "absolute",
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: `${colors.accent}30`,
+    top: 200,
+    left: -40,
+  },
+  bgCircle3: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: `${colors.primary}28`,
+    bottom: 100,
+    right: -30,
+  },
+  bgCircle4: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: `${colors.accent}25`,
+    bottom: 50,
+    left: -60,
+  },
+  bgCircle5: {
+    position: "absolute",
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: `${colors.primary}22`,
+    top: 400,
+    right: 30,
+  },
+  bgCircle6: {
+    position: "absolute",
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: `${colors.accent}32`,
+    bottom: 200,
+    right: 50,
   },
   content: {
     flex: 1,
@@ -186,10 +254,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
     marginBottom: 24,
   },
   header: {
@@ -204,6 +273,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
+  },
+  logoImage: {
+    width: 95,
+    height: 95,
+    borderRadius: 50,
   },
   title: {
     fontSize: 28,
@@ -229,6 +303,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: "#E4E8F0",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
   },
   inputIcon: {
     marginRight: 12,
@@ -242,6 +321,11 @@ const styles = StyleSheet.create({
   submitButton: {
     borderRadius: 16,
     overflow: "hidden",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -321,6 +405,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     width: "100%",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
   },
   resendButton: {
     marginTop: 20,

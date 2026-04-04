@@ -7,49 +7,56 @@ import {
   Switch,
   Alert,
 } from "react-native";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
 
 export const SettingsScreen = ({ navigation }) => {
   const { user, profile } = useAuth();
   const toast = useToast();
+  const { isWide, horizontalPadding } = useResponsive();
   const [notifications, setNotifications] = useState(true);
   const [emailUpdates, setEmailUpdates] = useState(true);
-  const [locationServices, setLocationServices] = useState(false);
-  const [biometricAuth, setBiometricAuth] = useState(false);
+  const [activeSection, setActiveSection] = useState(0);
 
   const settingsSections = [
     {
       title: "Account",
+      icon: "person-circle-outline",
       items: [
         {
           icon: "person-outline",
           label: "Personal Information",
+          description: "Update your name and contact details",
           action: () => navigation.navigate("ProfileEdit"),
         },
         {
           icon: "mail-outline",
-          label: "Email",
+          label: "Email Address",
+          description: "Change your login email",
           value: user?.email,
           action: () => navigation.navigate("ChangeEmail"),
         },
         {
           icon: "key-outline",
           label: "Change Password",
+          description: "Update your password",
           action: () => navigation.navigate("ChangePassword"),
         },
       ],
     },
     {
       title: "Preferences",
+      icon: "options-outline",
       items: [
         {
           icon: "notifications-outline",
           label: "Push Notifications",
+          description: "Receive order and promo alerts",
           type: "switch",
           value: notifications,
           onValueChange: setNotifications,
@@ -57,46 +64,27 @@ export const SettingsScreen = ({ navigation }) => {
         {
           icon: "mail-unread-outline",
           label: "Email Updates",
+          description: "Weekly deals and newsletter",
           type: "switch",
           value: emailUpdates,
           onValueChange: setEmailUpdates,
-        },
-        {
-          icon: "location-outline",
-          label: "Location Services",
-          type: "switch",
-          value: locationServices,
-          onValueChange: setLocationServices,
-        },
-        {
-          icon: "finger-print-outline",
-          label: "Biometric Authentication",
-          type: "switch",
-          value: biometricAuth,
-          onValueChange: setBiometricAuth,
         },
       ],
     },
     {
       title: "App",
+      icon: "information-circle-outline",
       items: [
         {
-          icon: "language-outline",
-          label: "Language",
-          value: "English",
-          action: () =>
-            toast.info("Language selection will be available soon!"),
+          icon: "shield-checkmark-outline",
+          label: "Privacy Policy",
+          description: "How we handle your data",
+          action: () => navigation.navigate("PrivacyPolicy"),
         },
         {
-          icon: "moon-outline",
-          label: "Dark Mode",
-          value: "Off",
-          action: () =>
-            toast.info("Dark mode will be available soon!"),
-        },
-        {
-          icon: "information-circle-outline",
+          icon: "code-slash-outline",
           label: "App Version",
+          description: "ExpressMart v1.0.0",
           value: "1.0.0",
         },
       ],
@@ -110,49 +98,139 @@ export const SettingsScreen = ({ navigation }) => {
         text: "Sign Out",
         style: "destructive",
         onPress: () => {
-          // This will be handled by the AuthContext
           navigation.goBack();
         },
       },
     ]);
   };
 
-  const renderSettingItem = (item, index, sectionIndex) => (
+  const renderSettingItem = (item, index, isLast) => (
     <Pressable
-      key={`${sectionIndex}-${index}`}
-      style={[
-        styles.settingItem,
-        index === settingsSections[sectionIndex].items.length - 1 &&
-        styles.settingItemLast,
-      ]}
-      onPress={item.action || (() => { })}
+      key={index}
+      style={[styles.settingItem, isLast && styles.settingItemLast]}
+      onPress={item.action || (() => {})}
       disabled={item.type === "switch" || !item.action}
     >
-      <View style={styles.settingItemLeft}>
+      <View style={styles.settingItemIconWrap}>
         <Ionicons name={item.icon} size={20} color={colors.primary} />
+      </View>
+      <View style={styles.settingItemBody}>
         <Text style={styles.settingLabel}>{item.label}</Text>
+        {item.description && (
+          <Text style={styles.settingDescription}>{item.description}</Text>
+        )}
+        {item.value && item.type !== "switch" && (
+          <Text style={styles.settingValue}>{item.value}</Text>
+        )}
       </View>
       <View style={styles.settingItemRight}>
         {item.type === "switch" ? (
           <Switch
             value={item.value}
             onValueChange={item.onValueChange}
-            trackColor={{ false: colors.light, true: colors.primary }}
+            trackColor={{ false: "#E2E8F0", true: colors.primary }}
             thumbColor="#fff"
           />
         ) : (
-          <>
-            {item.value && (
-              <Text style={styles.settingValue}>{item.value}</Text>
-            )}
-            {item.action && (
-              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-            )}
-          </>
+          item.action && (
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          )
         )}
       </View>
     </Pressable>
   );
+
+  if (isWide) {
+    const section = settingsSections[activeSection];
+    return (
+      <SafeAreaView style={styles.container}>
+        {/* Full-width header */}
+        <View
+          style={[styles.headerWide, { paddingHorizontal: horizontalPadding }]}
+        >
+          <Pressable
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Settings</Text>
+        </View>
+
+        <View style={styles.wideBody}>
+          {/* Left sidebar */}
+          <View style={styles.sidebar}>
+            {/* Profile card */}
+            <View style={styles.profileCard}>
+              <View style={styles.profileAvatar}>
+                <Ionicons name="person" size={28} color={colors.primary} />
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName} numberOfLines={1}>
+                  {profile?.full_name || "User"}
+                </Text>
+                <Text style={styles.profileEmail} numberOfLines={1}>
+                  {user?.email}
+                </Text>
+              </View>
+            </View>
+
+            {/* Section nav */}
+            {settingsSections.map((sec, i) => (
+              <Pressable
+                key={i}
+                style={[
+                  styles.sideNavItem,
+                  activeSection === i && styles.sideNavItemActive,
+                ]}
+                onPress={() => setActiveSection(i)}
+              >
+                <View
+                  style={[
+                    styles.sideNavIcon,
+                    activeSection === i && styles.sideNavIconActive,
+                  ]}
+                >
+                  <Ionicons
+                    name={sec.icon}
+                    size={18}
+                    color={activeSection === i ? "#fff" : colors.muted}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.sideNavLabel,
+                    activeSection === i && styles.sideNavLabelActive,
+                  ]}
+                >
+                  {sec.title}
+                </Text>
+              </Pressable>
+            ))}
+
+            <Pressable style={styles.signOutBtn} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+              <Text style={styles.signOutText}>Sign Out</Text>
+            </Pressable>
+          </View>
+
+          {/* Right content */}
+          <View style={styles.contentPanel}>
+            <Text style={styles.contentPanelTitle}>{section.title}</Text>
+            <View style={styles.settingCard}>
+              {section.items.map((item, index) =>
+                renderSettingItem(
+                  item,
+                  index,
+                  index === section.items.length - 1,
+                ),
+              )}
+            </View>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -175,7 +253,11 @@ export const SettingsScreen = ({ navigation }) => {
           <View key={sectionIndex} style={styles.section}>
             <Text style={styles.sectionTitle}>{section.title}</Text>
             {section.items.map((item, itemIndex) =>
-              renderSettingItem(item, itemIndex, sectionIndex),
+              renderSettingItem(
+                item,
+                itemIndex,
+                itemIndex === section.items.length - 1,
+              ),
             )}
           </View>
         ))}
@@ -183,22 +265,22 @@ export const SettingsScreen = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Actions</Text>
           <Pressable
-            style={[styles.settingItem, styles.dangerItem]}
+            style={[styles.settingItem, styles.settingItemLast]}
             onPress={handleLogout}
           >
-            <View style={styles.settingItemLeft}>
-              <Ionicons
-                name="log-out-outline"
-                size={20}
-                color={colors.accent}
-              />
-              <Text style={styles.dangerText}>Sign Out</Text>
+            <View style={styles.settingItemIconWrap}>
+              <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+            </View>
+            <View style={styles.settingItemBody}>
+              <Text style={[styles.settingLabel, { color: "#EF4444" }]}>
+                Sign Out
+              </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </Pressable>
         </View>
 
-        <View style={styles.spacer} />
+        <View style={{ height: 32 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -207,25 +289,138 @@ export const SettingsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: "#EEF2F8",
+  },
+  headerWide: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    paddingVertical: 16,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEF2F8",
   },
   backButton: {
     padding: 8,
+    borderRadius: 12,
+    backgroundColor: "#F8FAFC",
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
+    fontWeight: "800",
+    color: colors.dark,
+  },
+  wideBody: {
+    flex: 1,
+    flexDirection: "row",
+  },
+  sidebar: {
+    width: 260,
+    backgroundColor: "#fff",
+    borderRightWidth: 1,
+    borderRightColor: "#EEF2F8",
+    padding: 20,
+    gap: 6,
+  },
+  profileCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0F9FF",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    gap: 12,
+  },
+  profileAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#DBEAFE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 15,
     fontWeight: "700",
     color: colors.dark,
+  },
+  profileEmail: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  sideNavItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+  },
+  sideNavItemActive: {
+    backgroundColor: "#EFF6FF",
+  },
+  sideNavIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sideNavIconActive: {
+    backgroundColor: colors.primary,
+  },
+  sideNavLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: colors.muted,
+  },
+  sideNavLabelActive: {
+    color: colors.primary,
+    fontWeight: "700",
+  },
+  signOutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    marginTop: "auto",
+  },
+  signOutText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#EF4444",
+  },
+  contentPanel: {
+    flex: 1,
+    padding: 32,
+  },
+  contentPanelTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: colors.dark,
+    marginBottom: 20,
+  },
+  settingCard: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#EEF2F8",
   },
   scrollView: {
     flex: 1,
@@ -233,11 +428,16 @@ const styles = StyleSheet.create({
   section: {
     backgroundColor: "#fff",
     marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 16,
     paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#EEF2F8",
+    overflow: "hidden",
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
     color: colors.muted,
     textTransform: "uppercase",
     letterSpacing: 1,
@@ -246,42 +446,42 @@ const styles = StyleSheet.create({
   settingItem: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: "#F1F5F9",
+    gap: 12,
   },
   settingItemLast: {
     borderBottomWidth: 0,
   },
-  settingItemLeft: {
-    flexDirection: "row",
+  settingItemIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#EFF6FF",
     alignItems: "center",
+    justifyContent: "center",
+  },
+  settingItemBody: {
     flex: 1,
   },
   settingLabel: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.dark,
-    marginLeft: 12,
+    fontWeight: "600",
+  },
+  settingDescription: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
   },
   settingItemRight: {
     flexDirection: "row",
     alignItems: "center",
   },
   settingValue: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted,
-    marginRight: 8,
-  },
-  dangerItem: {
-    borderBottomWidth: 0,
-  },
-  dangerText: {
-    fontSize: 16,
-    color: colors.accent,
-    marginLeft: 12,
-  },
-  spacer: {
-    height: 32,
+    marginRight: 4,
   },
 });

@@ -14,6 +14,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
 
 const NOTIFICATION_ICONS = {
   order_placed: "cart",
@@ -44,6 +45,8 @@ const NOTIFICATION_COLORS = {
 export const NotificationsScreen = ({ navigation }) => {
   const { user } = useAuth();
   const toast = useToast();
+  const { cardColumns, horizontalPadding, getItemWidth } = useResponsive();
+  const cardItemWidth = getItemWidth(cardColumns);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -89,7 +92,7 @@ export const NotificationsScreen = ({ navigation }) => {
           },
           (payload) => {
             setNotifications((prev) => [payload.new, ...prev]);
-          }
+          },
         )
         .subscribe();
     }
@@ -109,7 +112,9 @@ export const NotificationsScreen = ({ navigation }) => {
         .update({ is_read: true })
         .eq("id", notificationId);
       setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n))
+        prev.map((n) =>
+          n.id === notificationId ? { ...n, is_read: true } : n,
+        ),
       );
     } catch (err) {
       console.error("Error marking notification as read:", err);
@@ -171,7 +176,11 @@ export const NotificationsScreen = ({ navigation }) => {
 
     return (
       <Pressable
-        style={[styles.card, !item.is_read && styles.unreadCard]}
+        style={[
+          styles.card,
+          !item.is_read && styles.unreadCard,
+          cardColumns > 1 && { width: cardItemWidth },
+        ]}
         onPress={() => handleNotificationPress(item)}
       >
         <View
@@ -233,7 +242,12 @@ export const NotificationsScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          { paddingHorizontal: cardColumns > 1 ? horizontalPadding : 16 },
+        ]}
+      >
         <Pressable onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.dark} />
         </Pressable>
@@ -268,7 +282,17 @@ export const NotificationsScreen = ({ navigation }) => {
           data={notifications}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
+          key={`notifs-${cardColumns}`}
+          numColumns={cardColumns}
+          columnWrapperStyle={
+            cardColumns > 1
+              ? { gap: 16, paddingHorizontal: horizontalPadding }
+              : undefined
+          }
+          contentContainerStyle={[
+            styles.list,
+            cardColumns <= 1 && { paddingHorizontal: 16 },
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -289,7 +313,7 @@ export const NotificationsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: "row",

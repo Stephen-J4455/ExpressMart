@@ -126,15 +126,20 @@ export const CartProvider = ({ children }) => {
       setSyncing(true);
       try {
         for (const item of localItems) {
+          // Prefer the stored item.price (may be a flash-sale price) over recalculating;
+          // fall back to discount-based calculation only when no stored price exists.
+          const syncPrice =
+            item.price != null && item.price > 0
+              ? item.price
+              : item.product.discount > 0
+                ? item.product.price * (1 - item.product.discount / 100)
+                : item.product.price;
           await supabase.from("express_cart_items").upsert(
             {
               cart_id: cartId,
               product_id: item.product.id,
               quantity: item.quantity,
-              price:
-                item.product.discount > 0
-                  ? item.product.price * (1 - item.product.discount / 100)
-                  : item.product.price,
+              price: syncPrice,
               size: item.size || null,
               color: item.color || null,
               variant_id: item.variant_id || null,
@@ -163,18 +168,58 @@ export const CartProvider = ({ children }) => {
     quantity = 1,
     size = null,
     color = null,
+    flashSalePrice = null,
   ) => {
+    const effectivePrice =
+      flashSalePrice !== null
+        ? flashSalePrice
+        : product.discount > 0
+          ? product.price * (1 - product.discount / 100)
+          : product.price;
+
+    // Optimistic update — update UI immediately for snappy feel
+    setItems((prev) => {
+      const existing = prev.find(
+        (item) =>
+          item.product.id === product.id &&
+          item.size === size &&
+          item.color === color,
+      );
+      if (existing) {
+        return prev.map((item) =>
+          item.product.id === product.id &&
+          item.size === size &&
+          item.color === color
+            ? {
+                ...item,
+                quantity: item.quantity + quantity,
+                price: effectivePrice,
+              }
+            : item,
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: `temp-${product.id}-${size ?? "x"}-${color ?? "x"}-${Date.now()}`,
+          product,
+          quantity,
+          size,
+          color,
+          price: effectivePrice,
+        },
+      ];
+    });
+
     if (user && cartId && supabase) {
-      // Add to database
+      // Persist to database in background
       try {
-        // Build query to check for existing item
         let query = supabase
           .from("express_cart_items")
           .select("id, quantity")
           .eq("cart_id", cartId)
           .eq("product_id", product.id);
 
-        // Handle null values properly
         if (size === null) {
           query = query.is("size", null);
         } else {
@@ -195,27 +240,25 @@ export const CartProvider = ({ children }) => {
         }
 
         if (existing) {
-          // Update quantity
           const { error: updateError } = await supabase
             .from("express_cart_items")
-            .update({ quantity: existing.quantity + quantity })
+            .update({
+              quantity: existing.quantity + quantity,
+              price: effectivePrice,
+            })
             .eq("id", existing.id);
 
           if (updateError) {
             console.warn("Error updating cart item:", updateError);
           }
         } else {
-          // Insert new item
           const { error: insertError } = await supabase
             .from("express_cart_items")
             .insert({
               cart_id: cartId,
               product_id: product.id,
               quantity,
-              price:
-                product.discount > 0
-                  ? product.price * (1 - product.discount / 100)
-                  : product.price,
+              price: effectivePrice,
               size,
               color,
             });
@@ -224,47 +267,28 @@ export const CartProvider = ({ children }) => {
             console.warn("Error inserting cart item:", insertError);
           }
         }
-        // Reload cart
-        await loadCart();
+        // Sync DB state back (silently, no loading state)
+        loadCart();
       } catch (error) {
         console.warn("Failed to add to cart:", error);
+        // Revert optimistic update on failure
+        loadCart();
       }
-    } else {
-      // Add to local state for guests
-      setItems((prev) => {
-        const existing = prev.find(
-          (item) =>
-            item.product.id === product.id &&
-            item.size === size &&
-            item.color === color,
-        );
-        if (existing) {
-          return prev.map((item) =>
-            item.product.id === product.id &&
-            item.size === size &&
-            item.color === color
-              ? { ...item, quantity: item.quantity + quantity }
-              : item,
-          );
-        }
-        return [
-          ...prev,
-          {
-            product,
-            quantity,
-            size,
-            color,
-            price:
-              product.discount > 0
-                ? product.price * (1 - product.discount / 100)
-                : product.price,
-          },
-        ];
-      });
     }
   };
 
   const updateQuantity = async (productId, quantity, itemId = null) => {
+    // Optimistic update — immediate UI response for snappy feel
+    setItems((prev) =>
+      prev
+        .map((item) =>
+          (itemId ? item.id === itemId : item.product.id === productId)
+            ? { ...item, quantity }
+            : item,
+        )
+        .filter((item) => item.quantity > 0),
+    );
+
     if (user && cartId && supabase) {
       try {
         if (quantity <= 0) {
@@ -296,15 +320,9 @@ export const CartProvider = ({ children }) => {
         await loadCart();
       } catch (error) {
         console.warn("Failed to update quantity:", error);
+        // Revert optimistic update on failure
+        loadCart();
       }
-    } else {
-      setItems((prev) =>
-        prev
-          .map((item) =>
-            item.product.id === productId ? { ...item, quantity } : item,
-          )
-          .filter((item) => item.quantity > 0),
-      );
     }
   };
 

@@ -15,20 +15,28 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
-import { useShop } from "../context/ShopContext";
 import { useToast } from "../context/ToastContext";
-import { supabase } from "../lib/supabase";
+import { useAds } from "../context/AdsContext";
+import { supabase, supabaseUrl } from "../lib/supabase";
+import { AdRenderer } from "../components/AdBanner";
 import { colors } from "../theme/colors";
-import { verifyPaymentAndCreateOrder, generatePaymentReference } from "../services/payment";
+import {
+  verifyPaymentAndCreateOrder,
+  generatePaymentReference,
+} from "../services/payment";
+import { callEdgeFunction } from "../lib/supabase";
+import { useResponsive } from "../hooks/useResponsive";
 
 export const CheckoutScreen = ({ navigation }) => {
+  const { isWide, horizontalPadding } = useResponsive();
   const route = useRoute();
   const { user, profile, isAuthenticated } = useAuth();
   const { items, total, clearCart } = useCart();
-  const { settings } = useShop();
   const toast = useToast();
+  const { fetchAdsByPlacement } = useAds();
 
   const [addresses, setAddresses] = useState([]);
+  const [checkoutAds, setCheckoutAds] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showAddAddress, setShowAddAddress] = useState(false);
@@ -40,10 +48,20 @@ export const CheckoutScreen = ({ navigation }) => {
     state: "",
   });
 
-  // Service fee calculation from settings
-  const defaultFee = parseInt(settings?.service_fee || "500");
-  const serviceFee = total >= 10000 ? 0 : defaultFee;
-  const grandTotal = total + serviceFee;
+  const checkoutDisplayAds = checkoutAds.filter(
+    (ad) => String(ad?.style || "").toLowerCase() !== "carousel",
+  );
+
+  // Calculate total shipping fees from cart items (per-product shipping_fee set by sellers)
+  // NOTE: Service fee is NOT added to the customer total. It is deducted from the seller's
+  // subaccount share internally by Paystack. Customer only pays product subtotal + shipping.
+  const totalShippingFee = items.reduce((sum, item) => {
+    const productShippingFee = parseFloat(item.product?.shipping_fee || 0);
+    return sum + productShippingFee * item.quantity;
+  }, 0);
+
+  // Customer-facing total: subtotal + shipping fees only
+  const grandTotal = total + totalShippingFee;
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -57,6 +75,10 @@ export const CheckoutScreen = ({ navigation }) => {
       fetchAddresses();
     }
   }, [user]);
+
+  useEffect(() => {
+    fetchAdsByPlacement("checkout").then((ads) => setCheckoutAds(ads || []));
+  }, [fetchAdsByPlacement]);
 
   const fetchAddresses = async () => {
     try {
@@ -92,7 +114,6 @@ export const CheckoutScreen = ({ navigation }) => {
   useEffect(() => {
     const params = route.params;
     if (params?.payment === "success" && params?.reference) {
-      console.log("✅ Payment successful, verifying:", params.reference);
       handlePaymentVerification(params.reference, params.orderData);
     }
   }, [route.params]);
@@ -100,16 +121,20 @@ export const CheckoutScreen = ({ navigation }) => {
   const handlePaymentVerification = async (reference, orderData) => {
     try {
       setLoading(true);
-      console.log("🔄 Verifying payment...");
 
       const result = await verifyPaymentAndCreateOrder(reference, orderData);
 
-      console.log("✅ Payment verified:", result);
-
       clearCart();
-      toast.success("Order Placed!", "Your order has been successfully placed.");
+      toast.success(
+        "Order Placed!",
+        "Your order has been successfully placed.",
+      );
       setTimeout(() => {
-        navigation.navigate("Orders");
+        // Reset navigation stack so checkout is fully removed
+        navigation.reset({
+          index: 1,
+          routes: [{ name: "Main" }, { name: "Orders" }],
+        });
       }, 1500);
     } catch (error) {
       console.error("❌ Verification error:", error);
@@ -176,18 +201,89 @@ export const CheckoutScreen = ({ navigation }) => {
     }
 
     const reference = generatePaymentReference(user.id);
-    console.log("💳 Payment reference:", reference);
 
-    navigation.navigate("PaymentWebView", {
-      amount: grandTotal,
-      email: user.email,
-      reference: reference,
-      orderData: {
+    try {
+      setLoading(true);
+
+      // Order data — split & service fee computation handled entirely server-side.
+      // The edge function fetches service_fee_percentage from express_settings and
+      // deducts the fee from each seller's subaccount share. Customer pays subtotal + shipping only.
+      const orderData = {
         shippingAddress: selectedAddress,
         paymentMethod: "paystack",
-        serviceFee,
-      },
-    });
+        shippingFee: totalShippingFee,
+      };
+
+      // Initialize payment via edge function (handles multi-vendor split)
+      let init;
+      try {
+        init = await callEdgeFunction("payment", {
+          action: "initialize-payment",
+          amount: grandTotal,
+          reference,
+          orderData,
+        });
+      } catch (primaryErr) {
+        console.error(
+          "callEdgeFunction failed, attempting direct fetch:",
+          primaryErr,
+        );
+
+        // Retry via direct fetch (same edge function, different transport)
+        try {
+          const { data: { session } = {} } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          const directRes = await fetch(`${supabaseUrl}/functions/v1/payment`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              action: "initialize-payment",
+              amount: grandTotal,
+              reference,
+              orderData,
+            }),
+          });
+          try {
+            const directBody = await directRes.json();
+            init = directBody;
+          } catch (parseErr) {
+            console.warn("Direct fetch returned non-JSON response", parseErr);
+            init = null;
+          }
+        } catch (directErr) {
+          console.error("Direct fetch attempt failed:", directErr);
+          init = null;
+        }
+      }
+
+      if (init && init.success && init.data && init.data.authorization_url) {
+        navigation.navigate("PaymentWebView", {
+          authorization_url: init.data.authorization_url,
+          access_code: init.data.access_code,
+          amount: grandTotal,
+          email: user.email,
+          reference,
+          orderData,
+        });
+      } else {
+        // Do NOT fall back to inline Paystack — it would skip the multi-vendor
+        // split and send all funds to the platform account only.
+        const errorMsg =
+          init?.error || "Could not initialize payment. Please try again.";
+        toast.error("Payment Error", errorMsg);
+      }
+    } catch (err) {
+      console.error("Payment initialization failed:", err);
+      toast.error(
+        "Payment Error",
+        err.message || "Could not initialize payment. Please try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!isAuthenticated) {
@@ -216,6 +312,12 @@ export const CheckoutScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 }}
       >
+        {checkoutDisplayAds.length > 0 && (
+          <View style={styles.adSection}>
+            <AdRenderer ads={checkoutDisplayAds} />
+          </View>
+        )}
+
         {/* Delivery Address Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -261,7 +363,7 @@ export const CheckoutScreen = ({ navigation }) => {
                   style={[
                     styles.addressOption,
                     selectedAddress?.id === addr.id &&
-                    styles.addressOptionSelected,
+                      styles.addressOptionSelected,
                   ]}
                   onPress={() => setSelectedAddress(addr)}
                 >
@@ -365,17 +467,25 @@ export const CheckoutScreen = ({ navigation }) => {
             <Text style={styles.sectionTitle}>Order Summary</Text>
           </View>
 
-          {items.map(({ product, quantity }) => (
-            <View key={product.id} style={styles.orderItem}>
-              <Text style={styles.orderItemTitle} numberOfLines={1}>
-                {product.title}
-              </Text>
-              <Text style={styles.orderItemQty}>x{quantity}</Text>
-              <Text style={styles.orderItemPrice}>
-                GH₵{(product.price * quantity).toLocaleString()}
-              </Text>
-            </View>
-          ))}
+          {items.map((item) => {
+            const { product, quantity, price } = item;
+            const effectivePrice =
+              price ||
+              (product.discount > 0
+                ? product.price * (1 - product.discount / 100)
+                : product.price);
+            return (
+              <View key={product.id} style={styles.orderItem}>
+                <Text style={styles.orderItemTitle} numberOfLines={1}>
+                  {product.title}
+                </Text>
+                <Text style={styles.orderItemQty}>x{quantity}</Text>
+                <Text style={styles.orderItemPrice}>
+                  GH₵{(effectivePrice * quantity).toLocaleString()}
+                </Text>
+              </View>
+            );
+          })}
 
           <View style={styles.divider} />
 
@@ -384,18 +494,20 @@ export const CheckoutScreen = ({ navigation }) => {
             <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Service Fee</Text>
+            <Text style={styles.summaryLabel}>Shipping Fee</Text>
             <Text
               style={[
                 styles.summaryValue,
-                serviceFee === 0 && styles.freeShipping,
+                totalShippingFee === 0 && styles.freeShippingText,
               ]}
             >
-              {serviceFee === 0
-                ? "FREE"
-                : `GH₵${serviceFee.toLocaleString()}`}
+              {totalShippingFee > 0
+                ? `GH₵${totalShippingFee.toLocaleString()}`
+                : "Free"}
             </Text>
           </View>
+          {/* Service fee is deducted internally from seller subaccount shares.
+              It is NOT added to the customer total. */}
           <View style={styles.divider} />
           <View style={styles.summaryRow}>
             <Text style={styles.totalLabel}>Total</Text>
@@ -470,7 +582,7 @@ export const CheckoutScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   centerContainer: {
     flex: 1,
@@ -535,6 +647,10 @@ const styles = StyleSheet.create({
   },
   addressContent: {
     flex: 1,
+  },
+  adSection: {
+    paddingTop: 8,
+    paddingBottom: 2,
   },
   addressName: {
     fontSize: 16,
@@ -686,6 +802,10 @@ const styles = StyleSheet.create({
   },
   freeShipping: {
     color: colors.primary,
+  },
+  freeShippingText: {
+    color: "#10B981",
+    fontWeight: "700",
   },
   totalLabel: {
     fontSize: 16,

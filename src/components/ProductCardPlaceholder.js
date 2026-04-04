@@ -62,9 +62,6 @@ export const ProductCardPlaceholder = () => {
         <Skeleton style={[styles.title, { marginTop: 8 }]} />
         <Skeleton style={[styles.title, { marginTop: 6, width: "80%" }]} />
 
-        {/* Badge */}
-        <Skeleton style={styles.badge} />
-
         {/* Price and rating row */}
         <View style={styles.metaRow}>
           <Skeleton style={styles.price} />
@@ -81,36 +78,37 @@ export const ProductCardPlaceholder = () => {
 const styles = StyleSheet.create({
   card: {
     minWidth: 160,
-    height: 320,
+    height: 296,
     backgroundColor: "#fff",
-    borderRadius: 16,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#EAF0F7",
     marginBottom: 16,
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
   },
   image: {
     width: "100%",
-    height: 160,
+    height: 140,
   },
   content: {
-    padding: 12,
-    paddingTop: 10,
+    padding: 14,
+    paddingTop: 12,
     flex: 1,
     justifyContent: "space-between",
   },
   vendor: {
-    height: 10,
-    width: 60,
-    borderRadius: 4,
+    height: 9,
+    width: 68,
+    borderRadius: 999,
   },
   title: {
     height: 14,
-    borderRadius: 4,
-  },
-  badge: {
-    height: 18,
-    width: 70,
-    borderRadius: 4,
-    marginTop: 8,
+    borderRadius: 8,
   },
   metaRow: {
     flexDirection: "row",
@@ -119,19 +117,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   price: {
-    height: 18,
-    width: 60,
-    borderRadius: 4,
+    height: 20,
+    width: 76,
+    borderRadius: 8,
   },
   rating: {
-    height: 12,
-    width: 50,
-    borderRadius: 4,
+    height: 22,
+    width: 70,
+    borderRadius: 999,
   },
   button: {
-    height: 36,
+    height: 40,
     width: "100%",
-    borderRadius: 10,
-    marginTop: 8,
+    borderRadius: 14,
+    marginTop: 10,
   },
 });
