@@ -1,6 +1,5 @@
 {
   "name": "expressmart",
-  "homepage": "https://stephen-j4455.github.io/expressmartweb/",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -10,7 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@expo/metro-runtime": "^55.0.6",
+    "@expo/metro-runtime": "^55.0.9",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/bottom-tabs": "^7.8.11",
@@ -18,21 +17,21 @@
     "@react-navigation/native-stack": "^7.8.5",
     "@supabase/supabase-js": "^2.86.0",
     "assert": "^2.1.0",
-    "expo": "^55.0.0",
-    "expo-constants": "~55.0.7",
-    "expo-dev-client": "~55.0.11",
-    "expo-device": "~55.0.9",
-    "expo-font": "~55.0.4",
-    "expo-linear-gradient": "~55.0.8",
-    "expo-linking": "~55.0.7",
-    "expo-notifications": "^55.0.11",
-    "expo-splash-screen": "~55.0.10",
-    "expo-status-bar": "~55.0.4",
-    "expo-web-browser": "~55.0.9",
+    "expo": "^55.0.11",
+    "expo-constants": "~55.0.11",
+    "expo-dev-client": "~55.0.22",
+    "expo-device": "~55.0.12",
+    "expo-font": "~55.0.6",
+    "expo-linear-gradient": "~55.0.11",
+    "expo-linking": "~55.0.11",
+    "expo-notifications": "^55.0.16",
+    "expo-splash-screen": "~55.0.15",
+    "expo-status-bar": "~55.0.5",
+    "expo-web-browser": "~55.0.12",
     "firebase": "^10.8.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "react-native": "0.83.2",
+    "react-native": "0.83.4",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-reanimated": "~4.2.1",
     "react-native-safe-area-context": "~5.6.0",
@@ -47,5 +46,15 @@
     "@types/react": "~19.2.14",
     "babel-preset-expo": "~55.0.10",
     "typescript": "~5.9.2"
+  },
+  "expo": {
+    "doctor": {
+      "appConfigFieldsNotSyncedCheck": {
+        "enabled": false
+      },
+      "reactNativeDirectoryCheck": {
+        "enabled": false
+      }
+    }
   }
 }

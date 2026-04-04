@@ -7,14 +7,13 @@
     "icon": "./assets/express.png",
     "userInterfaceStyle": "light",
     "scheme": "expressmart",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/express.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "expirements":{
-      "baseUrl": "https://stephen-j4455.github.io/expressmartweb/"
+    "experiments": {
+      "baseUrl": "/"
     },
     "ios": {
       "supportsTablet": true,
@@ -25,7 +24,6 @@
       }
     },
     "android": {
-      "edgeToEdgeEnabled": true,
       "package": "com.stephenj3.ExpressMart",
       "googleServicesFile": "./google-services.json",
       "permissions": [
@@ -47,7 +45,7 @@
       ]
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/express.png"
     },
     "plugins": [
