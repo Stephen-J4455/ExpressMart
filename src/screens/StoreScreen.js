@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Modal,
+  Linking,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -86,6 +87,59 @@ export const StoreScreen = ({ route, navigation }) => {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
+
+  const openExternalLink = useCallback(
+    async (rawUrl, label = "link") => {
+      const value = String(rawUrl || "").trim();
+      if (!value) {
+        toast.error(`Invalid ${label}`);
+        return;
+      }
+
+      const normalizedUrl = /^(https?:|mailto:|tel:|sms:|whatsapp:)/i.test(
+        value,
+      )
+        ? value
+        : `https://${value}`;
+
+      try {
+        const supported = await Linking.canOpenURL(normalizedUrl);
+        if (!supported) {
+          toast.error(`Unable to open ${label}`);
+          return;
+        }
+        await Linking.openURL(normalizedUrl);
+      } catch (err) {
+        console.error(`Error opening ${label}:`, err);
+        toast.error(`Failed to open ${label}`);
+      }
+    },
+    [toast],
+  );
+
+  const openWhatsAppLink = useCallback(
+    (rawValue) => {
+      const value = String(rawValue || "").trim();
+      if (!value) {
+        toast.error("Invalid WhatsApp");
+        return;
+      }
+
+      if (/^(https?:|whatsapp:)/i.test(value)) {
+        openExternalLink(value, "WhatsApp");
+        return;
+      }
+
+      const digits = value.replace(/[^0-9]/g, "");
+      if (!digits) {
+        toast.error("Invalid WhatsApp");
+        return;
+      }
+
+      openExternalLink(`https://wa.me/${digits}`, "WhatsApp");
+    },
+    [openExternalLink, toast],
+  );
 
   const averageRating =
     storeReviews.length > 0
@@ -700,7 +754,10 @@ export const StoreScreen = ({ route, navigation }) => {
                           <Pressable
                             style={styles.socialButton}
                             onPress={() =>
-                              Linking.openURL(sellerDetail.social_facebook)
+                              openExternalLink(
+                                sellerDetail.social_facebook,
+                                "Facebook",
+                              )
                             }
                           >
                             <Ionicons
@@ -715,7 +772,10 @@ export const StoreScreen = ({ route, navigation }) => {
                           <Pressable
                             style={styles.socialButton}
                             onPress={() =>
-                              Linking.openURL(sellerDetail.social_instagram)
+                              openExternalLink(
+                                sellerDetail.social_instagram,
+                                "Instagram",
+                              )
                             }
                           >
                             <Ionicons
@@ -730,7 +790,10 @@ export const StoreScreen = ({ route, navigation }) => {
                           <Pressable
                             style={styles.socialButton}
                             onPress={() =>
-                              Linking.openURL(sellerDetail.social_twitter)
+                              openExternalLink(
+                                sellerDetail.social_twitter,
+                                "Twitter",
+                              )
                             }
                           >
                             <Ionicons
@@ -745,9 +808,7 @@ export const StoreScreen = ({ route, navigation }) => {
                           <Pressable
                             style={styles.socialButton}
                             onPress={() =>
-                              Linking.openURL(
-                                `https://wa.me/${sellerDetail.social_whatsapp.replace(/[^0-9]/g, "")}`,
-                              )
+                              openWhatsAppLink(sellerDetail.social_whatsapp)
                             }
                           >
                             <Ionicons
@@ -762,7 +823,10 @@ export const StoreScreen = ({ route, navigation }) => {
                           <Pressable
                             style={styles.socialButton}
                             onPress={() =>
-                              Linking.openURL(sellerDetail.social_website)
+                              openExternalLink(
+                                sellerDetail.social_website,
+                                "Website",
+                              )
                             }
                           >
                             <Ionicons

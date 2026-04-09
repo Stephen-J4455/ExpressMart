@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -173,7 +172,7 @@ export const HomeScreen = ({ navigation }) => {
   );
 
   const renderGridItem = useCallback(
-    ({ item }) => (
+    (item) => (
       <View style={{ flex: 1, maxWidth: itemWidth }}>
         {item?.__type === "injected_ad" ? (
           <InlineAdProductCard ad={item.ad} />
@@ -190,6 +189,24 @@ export const HomeScreen = ({ navigation }) => {
       </View>
     ),
     [itemWidth, navigation],
+  );
+
+  const toRows = useCallback((items, columns) => {
+    const rows = [];
+    for (let i = 0; i < items.length; i += columns) {
+      rows.push(items.slice(i, i + columns));
+    }
+    return rows;
+  }, []);
+
+  const forYouRows = useMemo(
+    () => toRows(forYouData, gridColumns),
+    [forYouData, gridColumns, toRows],
+  );
+
+  const popularRows = useMemo(
+    () => toRows(popularData, gridColumns),
+    [popularData, gridColumns, toRows],
   );
 
   return (
@@ -280,47 +297,37 @@ export const HomeScreen = ({ navigation }) => {
 
         <View style={styles.sectionSpacer} />
         <SectionHeader title="ForYou" />
-        <FlatList
-          key={String(gridColumns)}
-          data={forYouData}
-          keyExtractor={(item, index) =>
-            item?.id || `placeholder-foryou-${index}`
-          }
-          numColumns={gridColumns}
-          columnWrapperStyle={{
-            gap: 12,
-            paddingHorizontal: 12,
-            justifyContent: "flex-start",
-          }}
-          contentContainerStyle={{
-            paddingTop: 8,
-            paddingBottom: 8,
-            gap: 12,
-          }}
-          renderItem={renderGridItem}
-          scrollEnabled={false}
-        />
+        <View style={styles.gridSection}>
+          {forYouRows.map((row, rowIndex) => (
+            <View key={`foryou-row-${rowIndex}`} style={styles.gridRow}>
+              {row.map((item, colIndex) => (
+                <View
+                  key={item?.id || `placeholder-foryou-${rowIndex}-${colIndex}`}
+                  style={styles.gridItem}
+                >
+                  {renderGridItem(item)}
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
         <SectionHeader title="Most Popular" />
-        <FlatList
-          key={`popular-${String(gridColumns)}`}
-          data={popularData}
-          keyExtractor={(item, index) =>
-            item?.id || `placeholder-popular-${index}`
-          }
-          numColumns={gridColumns}
-          columnWrapperStyle={{
-            gap: 12,
-            paddingHorizontal: 12,
-            justifyContent: "flex-start",
-          }}
-          contentContainerStyle={{
-            paddingTop: 8,
-            paddingBottom: 16,
-            gap: 12,
-          }}
-          renderItem={renderGridItem}
-          scrollEnabled={false}
-        />
+        <View style={[styles.gridSection, { paddingBottom: 16 }]}>
+          {popularRows.map((row, rowIndex) => (
+            <View key={`popular-row-${rowIndex}`} style={styles.gridRow}>
+              {row.map((item, colIndex) => (
+                <View
+                  key={
+                    item?.id || `placeholder-popular-${rowIndex}-${colIndex}`
+                  }
+                  style={styles.gridItem}
+                >
+                  {renderGridItem(item)}
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
         {loadingMore && (
           <View style={styles.loadMoreIndicator}>
             <ActivityIndicator size="small" color={colors.primary} />
@@ -361,6 +368,19 @@ const styles = StyleSheet.create({
   loadMoreIndicator: {
     paddingVertical: 20,
     alignItems: "center",
+  },
+  gridSection: {
+    paddingTop: 8,
+    gap: 12,
+  },
+  gridRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 12,
+    justifyContent: "flex-start",
+  },
+  gridItem: {
+    flex: 1,
   },
 });
 
