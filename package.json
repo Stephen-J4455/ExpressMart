@@ -1,0 +1,60 @@
+{
+  "name": "expressmart",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "^55.0.9",
+    "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-navigation/bottom-tabs": "^7.8.11",
+    "@react-navigation/native": "^7.1.24",
+    "@react-navigation/native-stack": "^7.8.5",
+    "@supabase/supabase-js": "^2.86.0",
+    "assert": "^2.1.0",
+    "expo": "^55.0.11",
+    "expo-constants": "~55.0.11",
+    "expo-dev-client": "~55.0.22",
+    "expo-device": "~55.0.12",
+    "expo-font": "~55.0.6",
+    "expo-linear-gradient": "~55.0.11",
+    "expo-linking": "~55.0.11",
+    "expo-notifications": "^55.0.16",
+    "expo-splash-screen": "~55.0.15",
+    "expo-status-bar": "~55.0.5",
+    "expo-web-browser": "~55.0.12",
+    "firebase": "^10.8.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.4",
+    "react-native-gesture-handler": "~2.30.0",
+    "react-native-reanimated": "~4.2.1",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.23.0",
+    "react-native-url-polyfill": "^2.0.0",
+    "react-native-web": "^0.21.0",
+    "react-native-webview": "13.16.0",
+    "react-native-worklets": "0.7.2"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/react": "~19.2.14",
+    "babel-preset-expo": "~55.0.10",
+    "typescript": "~5.9.2"
+  },
+  "expo": {
+    "doctor": {
+      "appConfigFieldsNotSyncedCheck": {
+        "enabled": false
+      },
+      "reactNativeDirectoryCheck": {
+        "enabled": false
+      }
+    }
+  }
+}
