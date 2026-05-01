@@ -34,6 +34,8 @@ const mapProduct = (product) => ({
   description: product.description,
   discount: product.discount || 0,
   quantity: product.quantity || 0,
+  is_preorder: product.is_preorder || false,
+  allow_backorder: product.allow_backorder || false,
   sizes: product.sizes || [],
   colors: product.colors || [],
   specifications: product.specifications || null,
@@ -130,7 +132,7 @@ export const ShopProvider = ({ children }) => {
             "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
           )
           .eq("status", "active")
-          .gt("quantity", 0)
+          .or("quantity.gt.0,is_preorder.eq.true")
           .order("created_at", { ascending: false })
           .range(0, PAGE_SIZE - 1),
         supabase
@@ -247,7 +249,7 @@ export const ShopProvider = ({ children }) => {
           "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
         )
         .eq("status", "active")
-        .gt("quantity", 0)
+        .or("quantity.gt.0,is_preorder.eq.true")
         .order("created_at", { ascending: false })
         .range(start, end);
 

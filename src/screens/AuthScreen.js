@@ -430,6 +430,7 @@ const styles = StyleSheet.create({
     height: 56,
     fontSize: 16,
     color: colors.dark,
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   forgotPassword: {
     alignSelf: "flex-end",

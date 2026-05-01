@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TextInput,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -217,6 +218,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.dark,
     fontWeight: "500",
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   centerContainer: {
     flex: 1,

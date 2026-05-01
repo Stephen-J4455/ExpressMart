@@ -119,8 +119,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     product?.quantity ?? product?.stock ?? product?.stock_quantity ?? 0,
   );
   const allowsBackorder = toBoolean(product?.allow_backorder);
+  const isPreorder = toBoolean(product?.is_preorder);
   const isOutOfStock =
-    hasInventoryValue && availableStock <= 0 && !allowsBackorder;
+    !isPreorder && hasInventoryValue && availableStock <= 0 && !allowsBackorder;
 
   // Format price as Ghana Cedis
   const formatPrice = (price, discount = 0) => {
@@ -910,28 +911,51 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 style={[
                   styles.deliveryIconWrap,
                   {
-                    backgroundColor: !isOutOfStock ? "#D1FAE5" : "#FEE2E2",
+                    backgroundColor: isPreorder
+                      ? "#FEF3C7"
+                      : !isOutOfStock
+                        ? "#D1FAE5"
+                        : "#FEE2E2",
                   },
                 ]}
               >
                 <Ionicons
                   name={
-                    !isOutOfStock
-                      ? "checkmark-circle-outline"
-                      : "close-circle-outline"
+                    isPreorder
+                      ? "time-outline"
+                      : !isOutOfStock
+                        ? "checkmark-circle-outline"
+                        : "close-circle-outline"
                   }
                   size={18}
-                  color={!isOutOfStock ? "#059669" : "#DC2626"}
+                  color={
+                    isPreorder
+                      ? "#D97706"
+                      : !isOutOfStock
+                        ? "#059669"
+                        : "#DC2626"
+                  }
                 />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.deliveryLabel}>
-                  {!isOutOfStock ? "In Stock" : "Out of Stock"}
+                  {isPreorder
+                    ? "Preorder"
+                    : !isOutOfStock
+                      ? "In Stock"
+                      : "Out of Stock"}
                 </Text>
-                {!isOutOfStock && hasInventoryValue && (
-                  <Text style={[styles.deliveryValue, { color: "#059669" }]}>
-                    {availableStock} available
+                {isPreorder ? (
+                  <Text style={[styles.deliveryValue, { color: "#D97706" }]}>
+                    Ships later
                   </Text>
+                ) : (
+                  !isOutOfStock &&
+                  hasInventoryValue && (
+                    <Text style={[styles.deliveryValue, { color: "#059669" }]}>
+                      {availableStock} available
+                    </Text>
+                  )
                 )}
               </View>
             </View>
@@ -1319,7 +1343,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             <Text style={styles.ctaText}>
               {isOutOfStock
                 ? "Out of Stock"
-                : `Add to Cart - ${formatPrice(product.price, product.discount)}`}
+                : `${isPreorder ? "Preorder" : "Add to Cart"} - ${formatPrice(product.price, product.discount)}`}
             </Text>
           </LinearGradient>
         </Pressable>
@@ -1602,7 +1626,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Text style={styles.variantAddText}>Add to Cart</Text>
+                <Text style={styles.variantAddText}>
+                  {isPreorder ? "Preorder" : "Add to Cart"}
+                </Text>
               </LinearGradient>
             </Pressable>
           </View>
@@ -2108,6 +2134,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 100,
     textAlignVertical: "top",
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   modalFooter: {
     flexDirection: "row",
@@ -2198,6 +2225,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 40,
     maxHeight: 80,
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   commentButton: {
     paddingHorizontal: 16,

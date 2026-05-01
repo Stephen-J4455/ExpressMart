@@ -76,8 +76,9 @@ export const ProductCard = ({
     product?.quantity ?? product?.stock ?? product?.stock_quantity ?? 0,
   );
   const allowsBackorder = toBoolean(product?.allow_backorder);
+  const isPreorder = toBoolean(product?.is_preorder);
   const isOutOfStock =
-    hasInventoryValue && availableStock <= 0 && !allowsBackorder;
+    !isPreorder && hasInventoryValue && availableStock <= 0 && !allowsBackorder;
 
   // Determine actual price (flash sale price takes priority)
   const actualPrice = flashSale?.flash_price || product.price;

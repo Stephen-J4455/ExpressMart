@@ -5,6 +5,7 @@ import {
   Text,
   View,
   TextInput,
+  Platform,
 } from "react-native";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -333,7 +334,13 @@ const styles = StyleSheet.create({
   },
   inputWrapDisabled: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
   inputIcon: { marginRight: 8 },
-  input: { flex: 1, paddingVertical: 13, fontSize: 15, color: colors.dark },
+  input: {
+    flex: 1,
+    paddingVertical: 13,
+    fontSize: 15,
+    color: colors.dark,
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+  },
   inputDisabled: { color: colors.muted },
   lockPill: { backgroundColor: "#E2E8F0", borderRadius: 6, padding: 4 },
   helperText: {

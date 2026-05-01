@@ -9,6 +9,7 @@ import {
   Text,
   View,
   Switch,
+  Platform,
 } from "react-native";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -453,6 +454,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.dark,
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   modalActions: {
     flexDirection: "row",

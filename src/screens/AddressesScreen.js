@@ -465,5 +465,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.dark,
     backgroundColor: "#FAFBFC",
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
 });

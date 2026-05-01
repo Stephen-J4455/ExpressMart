@@ -6,6 +6,7 @@ import {
   View,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -255,6 +256,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.dark,
     backgroundColor: "#fff",
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   passwordInputContainer: {
     flexDirection: "row",
@@ -270,6 +272,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: colors.dark,
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   eyeButton: {
     padding: 12,
