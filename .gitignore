@@ -18,11 +18,12 @@ web-build/
 *.mobileprovision
 
 # ─── Android ─────────────────────────────────────────────────────────────────
+android
 android/app/build/
 android/build/
 android/.gradle/
 android/local.properties
-android
+
 
 # ─── iOS ─────────────────────────────────────────────────────────────────────
 ios/Pods/
