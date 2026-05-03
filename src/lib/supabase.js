@@ -25,7 +25,7 @@ export const supabase =
           }),
           autoRefreshToken: true,
           persistSession: true,
-          detectSessionInUrl: Platform.OS === "web",
+          detectSessionInUrl: false,
         },
         realtime: {
           params: {
