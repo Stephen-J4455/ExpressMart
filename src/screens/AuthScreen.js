@@ -46,19 +46,42 @@ export const AuthScreen = ({ navigation }) => {
       const hash = window.location.hash;
       const query = window.location.search;
       
-      // Check if we have OAuth tokens in URL (Google redirect)
-      if (hash.includes("access_token") || query.includes("access_token")) {
-        console.log("Detected OAuth callback, extracting tokens...");
+      // Check for auth code (PKCE flow)
+      if (query.includes("code=")) {
+        console.log("Detected OAuth callback with code, exchanging for session...");
         
         try {
-          // Try to get session from URL
-          let params;
+          const urlParams = new URLSearchParams(query);
+          const code = urlParams.get("code");
+          
+          if (code) {
+            // Exchange the code for a session using PKCE
+            const { error } = await supabase.auth.exchangeCodeForSession(code);
+            if (error) throw error;
+            
+            // Clear the URL query to clean up
+            window.history.replaceState({}, document.title, window.location.pathname);
+            toast.success("Successfully signed in with Google!");
+            return;
+          }
+        } catch (error) {
+          console.error("Error exchanging code for session:", error);
+          toast.error("Failed to complete Google Sign-In");
+          return;
+        }
+      }
+      
+      // Check if we have OAuth tokens in URL (implicit flow fallback)
+      if (hash.includes("access_token") || query.includes("access_token")) {
+        console.log("Detected OAuth callback with tokens, extracting...");
+        
+        try {
           let access_token = null;
           let refresh_token = null;
           
           // Check hash fragment first
           if (hash.includes("access_token")) {
-            params = new URLSearchParams(hash.substring(1));
+            const params = new URLSearchParams(hash.substring(1));
             access_token = params.get("access_token");
             refresh_token = params.get("refresh_token");
           }
@@ -79,13 +102,6 @@ export const AuthScreen = ({ navigation }) => {
             if (error) throw error;
             
             // Clear the URL hash/query to clean up
-            window.history.replaceState({}, document.title, window.location.pathname);
-            toast.success("Successfully signed in with Google!");
-          } else if (typeof supabase.auth.getSessionFromUrl === "function") {
-            // Fallback to getSessionFromUrl
-            const { error } = await supabase.auth.getSessionFromUrl();
-            if (error) throw error;
-            
             window.history.replaceState({}, document.title, window.location.pathname);
             toast.success("Successfully signed in with Google!");
           }
@@ -134,54 +150,66 @@ export const AuthScreen = ({ navigation }) => {
         console.log("OAuth result:", result);
         
         if (result.type === "success" && result.url) {
-          // Try to extract tokens from the URL
-          let access_token = null;
-          let refresh_token = null;
+          console.log("OAuth redirect URL:", result.url);
           
-          // Check for hash fragment (implicit flow)
-          if (result.url.includes("#")) {
-            const hash = result.url.split("#")[1];
-            const params = new URLSearchParams(hash);
-            access_token = params.get("access_token");
-            refresh_token = params.get("refresh_token");
-            console.log("Extracted tokens from hash");
+          // Parse the URL to check for error
+          const urlObj = new URL(result.url);
+          const errorDescription = urlObj.searchParams.get("error_description");
+          if (errorDescription) {
+            throw new Error(errorDescription);
           }
           
-          // Check for query params (if no hash tokens)
-          if (!access_token && result.url.includes("?")) {
-            const urlObj = new URL(result.url);
-            access_token = urlObj.searchParams.get("access_token");
-            refresh_token = urlObj.searchParams.get("refresh_token");
-            console.log("Extracted tokens from query");
-          }
+          // Check for auth code (PKCE flow)
+          const code = urlObj.searchParams.get("code");
           
-          if (access_token && refresh_token) {
-            console.log("Setting session with extracted tokens");
-            const { error: setError } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
-            if (setError) throw setError;
-            
-            // Success - session is set via onAuthStateChange listener
+          if (code) {
+            console.log("Found auth code, exchanging for session...");
+            // Exchange the code for a session using PKCE
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            if (exchangeError) {
+              console.error("Code exchange error:", exchangeError);
+              throw exchangeError;
+            }
+            console.log("Successfully exchanged code for session");
             toast.success("Successfully signed in with Google!");
           } else {
-            // Try getSessionFromUrl as fallback
-            console.log("No tokens found, trying getSessionFromUrl");
-            if (typeof supabase.auth.getSessionFromUrl === "function") {
-              const { error: sessionError } = await supabase.auth.getSessionFromUrl(
-                result.url,
-              );
-              if (sessionError) throw sessionError;
+            // Try to extract tokens directly from URL (fallback for implicit flow)
+            let access_token = null;
+            let refresh_token = null;
+            
+            // Check for hash fragment (implicit flow)
+            if (result.url.includes("#")) {
+              const hash = result.url.split("#")[1];
+              const params = new URLSearchParams(hash);
+              access_token = params.get("access_token");
+              refresh_token = params.get("refresh_token");
+              console.log("Extracted tokens from hash");
+            }
+            
+            // Check for query params (if no hash tokens)
+            if (!access_token) {
+              access_token = urlObj.searchParams.get("access_token");
+              refresh_token = urlObj.searchParams.get("refresh_token");
+              console.log("Extracted tokens from query");
+            }
+            
+            if (access_token && refresh_token) {
+              console.log("Setting session with extracted tokens");
+              const { error: setError } = await supabase.auth.setSession({
+                access_token,
+                refresh_token,
+              });
+              if (setError) throw setError;
               toast.success("Successfully signed in with Google!");
             } else {
-              throw new Error("Could not extract authentication tokens from redirect");
+              throw new Error("No authentication code or tokens found in redirect URL");
             }
           }
         } else if (result.type === "cancel" || result.type === "dismiss") {
           console.log("User cancelled OAuth flow");
         } else {
           console.log("OAuth result type:", result.type);
+          throw new Error(`OAuth flow failed: ${result.type}`);
         }
       }
     } catch (error) {
