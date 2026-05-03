@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
 
 export const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -24,6 +25,7 @@ export const ForgotPasswordScreen = ({ navigation }) => {
 
   const { resetPassword } = useAuth();
   const toast = useToast();
+  const { isWide, contentMaxWidth } = useResponsive();
 
   const handleResetPassword = async () => {
     if (!email) {
@@ -52,7 +54,7 @@ export const ForgotPasswordScreen = ({ navigation }) => {
   if (emailSent) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.successContainer}>
+        <View style={[styles.successContainer, isWide && { maxWidth: 480, alignSelf: "center", width: "100%" }]}>
           <View style={styles.successIcon}>
             <Ionicons name="mail" size={60} color={colors.primary} />
           </View>
@@ -104,7 +106,10 @@ export const ForgotPasswordScreen = ({ navigation }) => {
       <View style={styles.bgCircle6} />
 
       <KeyboardAvoidingView
-        style={styles.content}
+        style={[
+          styles.content,
+          isWide && { maxWidth: 480, alignSelf: "center", width: "100%" },
+        ]}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <Pressable
@@ -246,6 +251,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 24,
+    width: "100%",
   },
   backButton: {
     width: 44,
@@ -366,6 +372,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
+    width: "100%",
   },
   successIcon: {
     width: 120,

@@ -119,21 +119,45 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const profileData = await fetchProfile(session.user.id);
-        setProfile(profileData);
+    // Get initial session with timeout to prevent hanging
+    const getSessionWithTimeout = async () => {
+      try {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Session fetch timeout")), 10000)
+        );
+        const sessionPromise = supabase.auth.getSession();
+        
+        const { data: { session }, error } = await Promise.race([
+          sessionPromise,
+          timeoutPromise,
+        ]);
+        
+        if (error) throw error;
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          const profileData = await fetchProfile(session.user.id);
+          setProfile(profileData);
+        }
+      } catch (error) {
+        console.error("Error fetching initial session:", error.message);
+        // Clear any stale session data
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    };
+
+    getSessionWithTimeout();
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("Auth state changed:", event, session?.user?.id);
       setSession(session);
       setUser(session?.user ?? null);
 

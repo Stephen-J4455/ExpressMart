@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -38,6 +38,67 @@ export const AuthScreen = ({ navigation }) => {
   const { signIn, signUp } = useAuth();
   const toast = useToast();
 
+  // Handle OAuth callback on web
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    
+    const handleWebOAuthCallback = async () => {
+      const hash = window.location.hash;
+      const query = window.location.search;
+      
+      // Check if we have OAuth tokens in URL (Google redirect)
+      if (hash.includes("access_token") || query.includes("access_token")) {
+        console.log("Detected OAuth callback, extracting tokens...");
+        
+        try {
+          // Try to get session from URL
+          let params;
+          let access_token = null;
+          let refresh_token = null;
+          
+          // Check hash fragment first
+          if (hash.includes("access_token")) {
+            params = new URLSearchParams(hash.substring(1));
+            access_token = params.get("access_token");
+            refresh_token = params.get("refresh_token");
+          }
+          
+          // Check query params if no tokens in hash
+          if (!access_token && query.includes("access_token")) {
+            const urlParams = new URLSearchParams(query);
+            access_token = urlParams.get("access_token");
+            refresh_token = urlParams.get("refresh_token");
+          }
+          
+          if (access_token && refresh_token) {
+            console.log("Setting session from OAuth callback");
+            const { error } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (error) throw error;
+            
+            // Clear the URL hash/query to clean up
+            window.history.replaceState({}, document.title, window.location.pathname);
+            toast.success("Successfully signed in with Google!");
+          } else if (typeof supabase.auth.getSessionFromUrl === "function") {
+            // Fallback to getSessionFromUrl
+            const { error } = await supabase.auth.getSessionFromUrl();
+            if (error) throw error;
+            
+            window.history.replaceState({}, document.title, window.location.pathname);
+            toast.success("Successfully signed in with Google!");
+          }
+        } catch (error) {
+          console.error("Error handling OAuth callback:", error);
+          toast.error("Failed to complete Google Sign-In");
+        }
+      }
+    };
+    
+    handleWebOAuthCallback();
+  }, []);
+
   const getGoogleRedirectUrl = () => {
     if (Platform.OS === "web") {
       return new URL("/login", window.location.origin).toString();
@@ -50,11 +111,13 @@ export const AuthScreen = ({ navigation }) => {
     setGoogleLoading(true);
     try {
       const redirectTo = getGoogleRedirectUrl();
+      console.log("Google OAuth redirectTo:", redirectTo);
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo,
-          skipBrowserRedirect: true,
+          skipBrowserRedirect: Platform.OS !== "web",
         },
       });
 
@@ -66,38 +129,63 @@ export const AuthScreen = ({ navigation }) => {
           return;
         }
 
+        // Mobile: Open browser for OAuth
         const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        console.log("OAuth result:", result);
+        
         if (result.type === "success" && result.url) {
-          // supabase-js sometimes doesn't expose getSessionFromUrl in RN build
-          // so offer a fallback by parsing tokens manually.
-          if (typeof supabase.auth.getSessionFromUrl === "function") {
-            const { error: sessionError } = await supabase.auth.getSessionFromUrl(
-              result.url,
-            );
-            if (sessionError) throw sessionError;
+          // Try to extract tokens from the URL
+          let access_token = null;
+          let refresh_token = null;
+          
+          // Check for hash fragment (implicit flow)
+          if (result.url.includes("#")) {
+            const hash = result.url.split("#")[1];
+            const params = new URLSearchParams(hash);
+            access_token = params.get("access_token");
+            refresh_token = params.get("refresh_token");
+            console.log("Extracted tokens from hash");
+          }
+          
+          // Check for query params (if no hash tokens)
+          if (!access_token && result.url.includes("?")) {
+            const urlObj = new URL(result.url);
+            access_token = urlObj.searchParams.get("access_token");
+            refresh_token = urlObj.searchParams.get("refresh_token");
+            console.log("Extracted tokens from query");
+          }
+          
+          if (access_token && refresh_token) {
+            console.log("Setting session with extracted tokens");
+            const { error: setError } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (setError) throw setError;
+            
+            // Success - session is set via onAuthStateChange listener
+            toast.success("Successfully signed in with Google!");
           } else {
-            // manually extract tokens and set session
-            let params;
-            if (result.url.includes("#")) {
-              const hash = result.url.split("#")[1];
-              params = new URLSearchParams(hash);
+            // Try getSessionFromUrl as fallback
+            console.log("No tokens found, trying getSessionFromUrl");
+            if (typeof supabase.auth.getSessionFromUrl === "function") {
+              const { error: sessionError } = await supabase.auth.getSessionFromUrl(
+                result.url,
+              );
+              if (sessionError) throw sessionError;
+              toast.success("Successfully signed in with Google!");
             } else {
-              const urlObj = new URL(result.url);
-              params = urlObj.searchParams;
-            }
-            const access_token = params.get("access_token");
-            const refresh_token = params.get("refresh_token");
-            if (access_token && refresh_token) {
-              const { error: setError } = await supabase.auth.setSession({
-                access_token,
-                refresh_token,
-              });
-              if (setError) throw setError;
+              throw new Error("Could not extract authentication tokens from redirect");
             }
           }
+        } else if (result.type === "cancel" || result.type === "dismiss") {
+          console.log("User cancelled OAuth flow");
+        } else {
+          console.log("OAuth result type:", result.type);
         }
       }
     } catch (error) {
+      console.error("Google Sign-In Error:", error);
       toast.error(error.message || "Google Sign-In failed");
     } finally {
       setGoogleLoading(false);
