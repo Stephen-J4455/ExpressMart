@@ -119,9 +119,29 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
+    // Check if we're on a password reset URL - if so, don't auto-login
+    // Let PasswordResetScreen handle the reset flow
+    const isResetPasswordUrl = () => {
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        return window.location.pathname.includes("reset-password") ||
+               window.location.hash.includes("type=recovery") ||
+               window.location.search.includes("type=recovery");
+      }
+      return false;
+    };
+
     // Get initial session with timeout to prevent hanging
     const getSessionWithTimeout = async () => {
       try {
+        // Skip auto-login if on reset-password URL to prevent premature login
+        if (isResetPasswordUrl()) {
+          console.log("AuthContext: Detected reset-password URL, skipping auto-login");
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("Session fetch timeout")), 10000)
         );

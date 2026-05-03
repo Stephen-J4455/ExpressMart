@@ -169,6 +169,14 @@ export default function PasswordResetScreen({ navigation }) {
     let mounted = true;
     const init = async () => {
       try {
+        // IMPORTANT: Clear any existing session first to prevent auto-login
+        // This ensures the PasswordResetScreen handles the reset flow, not AuthContext
+        const { data: { session: existingSession } } = await supabase.auth.getSession();
+        if (existingSession) {
+          console.log("PasswordResetScreen: Clearing existing session to prevent auto-login");
+          await supabase.auth.signOut();
+        }
+
         let initialUrl = await Linking.getInitialURL();
         if (
           Platform.OS === "web" &&
