@@ -49,6 +49,7 @@ import { CategoryProductsScreen } from "./src/screens/CategoryProductsScreen";
 import { StoreScreen } from "./src/screens/StoreScreen";
 import { StoresScreen } from "./src/screens/StoresScreen";
 import { ForgotPasswordScreen } from "./src/screens/ForgotPasswordScreen";
+import PasswordResetScreen from "./src/screens/PasswordResetScreen";
 import { ProfileEditScreen } from "./src/screens/ProfileEditScreen";
 import { ChangePasswordScreen } from "./src/screens/ChangePasswordScreen";
 import { ChangeEmailScreen } from "./src/screens/ChangeEmailScreen";
@@ -297,7 +298,7 @@ const navTheme = {
 
 // only handle our custom URI schemes here; web links will stay in browser
 const linking = {
-  prefixes: ["expressmart://"],
+  prefixes: [Linking.createURL("/"), "expressmart://"],
   config: {
     screens: {
       Main: {
@@ -309,6 +310,7 @@ const linking = {
       },
       Auth: "login",
       ForgotPassword: "forgot-password",
+      ResetPassword: "reset-password",
       Checkout: {
         path: "checkout",
         parse: {
@@ -374,11 +376,18 @@ const AuthenticatedApp = () => {
               name="ForgotPassword"
               component={ForgotPasswordScreen}
             />
-            {/* password reset screen present for legacy but navigation won't use it */}
+            <Stack.Screen
+              name="ResetPassword"
+              component={PasswordResetScreen}
+            />
           </>
         ) : (
           <>
             <Stack.Screen name="Main" component={TabNavigator} />
+            <Stack.Screen
+              name="ResetPassword"
+              component={PasswordResetScreen}
+            />
             <Stack.Screen name="Search" component={SearchScreen} />
             <Stack.Screen
               name="SearchResults"

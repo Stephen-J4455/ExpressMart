@@ -6,7 +6,8 @@ import {
   useCallback,
   useRef,
 } from "react";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
+import * as Linking from "expo-linking";
 import { callEdgeFunction, supabase } from "../lib/supabase";
 
 const AuthContext = createContext();
@@ -303,7 +304,9 @@ export const AuthProvider = ({ children }) => {
   // lives in the root of the main branch of the `express-password-reset`
   // repository.
   const RESET_PAGE =
-    "https://stephen-j4455.github.io/express-password-reset/password-reset.html";
+    Platform.OS === "web"
+      ? new URL("/reset-password", window.location.origin).toString()
+      : Linking.createURL("reset-password");
 
   const resetPassword = async (email) => {
     if (!supabase) {
@@ -314,7 +317,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         // include scheme query so the web page knows which app to deep link back to
-        redirectTo: `${RESET_PAGE}?scheme=expressmart`,
+        redirectTo: RESET_PAGE,
       });
 
       if (error) throw error;

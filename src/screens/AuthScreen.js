@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
+import * as Linking from "expo-linking";
 
 import * as WebBrowser from "expo-web-browser";
 import { supabase } from "../lib/supabase";
@@ -37,30 +38,42 @@ export const AuthScreen = ({ navigation }) => {
   const { signIn, signUp } = useAuth();
   const toast = useToast();
 
+  const getGoogleRedirectUrl = () => {
+    if (Platform.OS === "web") {
+      return new URL("/login", window.location.origin).toString();
+    }
+
+    return Linking.createURL("login");
+  };
+
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     try {
+      const redirectTo = getGoogleRedirectUrl();
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: "expressmart://",
-          skipBrowserRedirect: false,
+          redirectTo,
+          skipBrowserRedirect: true,
         },
       });
 
       if (error) throw error;
 
       if (data?.url) {
-        const result = await WebBrowser.openAuthSessionAsync(
-          data.url,
-          "expressmart://",
-        );
+        if (Platform.OS === "web") {
+          window.location.assign(data.url);
+          return;
+        }
+
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
         if (result.type === "success" && result.url) {
           // supabase-js sometimes doesn't expose getSessionFromUrl in RN build
           // so offer a fallback by parsing tokens manually.
           if (typeof supabase.auth.getSessionFromUrl === "function") {
-            const { error: sessionError } =
-              await supabase.auth.getSessionFromUrl(result.url);
+            const { error: sessionError } = await supabase.auth.getSessionFromUrl(
+              result.url,
+            );
             if (sessionError) throw sessionError;
           } else {
             // manually extract tokens and set session
