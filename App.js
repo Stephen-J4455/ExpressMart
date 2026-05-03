@@ -298,13 +298,7 @@ const navTheme = {
 
 // only handle our custom URI schemes here; web links will stay in browser
 const linking = {
-  prefixes: [
-    ...(Platform.OS === "web" && typeof window !== "undefined"
-      ? [window.location.origin]
-      : []),
-    Linking.createURL("/"),
-    "expressmart://",
-  ],
+  prefixes: [Linking.createURL("/"), "expressmart://"],
   config: {
     screens: {
       Main: {
