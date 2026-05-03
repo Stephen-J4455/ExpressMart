@@ -10,6 +10,7 @@ import {
   Animated,
   Pressable,
   Image,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -297,8 +298,13 @@ const navTheme = {
 };
 
 // only handle our custom URI schemes here; web links will stay in browser
+const prefixes = [Linking.createURL("/"), "expressmart://"];
+if (Platform.OS === "web" && typeof window !== "undefined" && window.location) {
+  prefixes.push(window.location.origin);
+}
+
 const linking = {
-  prefixes: [Linking.createURL("/"), "expressmart://"],
+  prefixes,
   config: {
     screens: {
       Main: {

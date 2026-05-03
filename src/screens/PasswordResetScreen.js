@@ -159,7 +159,14 @@ export default function PasswordResetScreen() {
     let mounted = true;
     const init = async () => {
       try {
-        const initialUrl = await Linking.getInitialURL();
+        let initialUrl = await Linking.getInitialURL();
+        if (
+          Platform.OS === "web" &&
+          typeof window !== "undefined" &&
+          window.location?.href
+        ) {
+          initialUrl = window.location.href;
+        }
         if (!mounted) return;
 
         if (initialUrl) {
