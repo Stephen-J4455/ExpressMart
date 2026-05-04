@@ -19,6 +19,22 @@ export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const appStateRef = useRef(AppState.currentState);
   const presenceChannelRef = useRef(null);
+  const mountedRef = useRef(true);
+  const authSyncVersionRef = useRef(0);
+  const sessionRefreshInFlightRef = useRef(false);
+
+  const withTimeout = useCallback(async (promise, timeoutMs, timeoutMessage) => {
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }, []);
 
   const updateLastSeen = useCallback(async (userId) => {
     if (!supabase || !userId) return;
@@ -113,11 +129,71 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  const applySessionState = useCallback(
+    async (nextSession, { fetchUserProfile = true } = {}) => {
+      const version = ++authSyncVersionRef.current;
+
+      if (!mountedRef.current) return;
+      setSession(nextSession ?? null);
+
+      const nextUser = nextSession?.user ?? null;
+      setUser(nextUser);
+
+      if (!nextUser) {
+        setProfile(null);
+        return;
+      }
+
+      if (!fetchUserProfile) return;
+
+      const profileData = await fetchProfile(nextUser.id);
+      if (!mountedRef.current || version !== authSyncVersionRef.current) return;
+      setProfile(profileData);
+    },
+    [fetchProfile],
+  );
+
+  const syncSessionFromStorage = useCallback(
+    async ({ showLoader = false } = {}) => {
+      if (!supabase || sessionRefreshInFlightRef.current) return;
+
+      sessionRefreshInFlightRef.current = true;
+      if (showLoader && mountedRef.current) {
+        setLoading(true);
+      }
+
+      try {
+        const {
+          data: { session: nextSession },
+          error,
+        } = await withTimeout(
+          supabase.auth.getSession(),
+          12000,
+          "Session fetch timeout",
+        );
+
+        if (error) throw error;
+        await applySessionState(nextSession);
+      } catch (error) {
+        console.error("Error syncing session:", error?.message || error);
+        await applySessionState(null, { fetchUserProfile: false });
+      } finally {
+        sessionRefreshInFlightRef.current = false;
+        if (showLoader && mountedRef.current) {
+          setLoading(false);
+        }
+      }
+    },
+    [applySessionState, withTimeout],
+  );
+
   useEffect(() => {
     if (!supabase) {
       setLoading(false);
       return;
     }
+
+    mountedRef.current = true;
 
     // Check if we're on a password reset URL - if so, don't auto-login
     // Let PasswordResetScreen handle the reset flow
@@ -130,67 +206,47 @@ export const AuthProvider = ({ children }) => {
       return false;
     };
 
-    // Get initial session with timeout to prevent hanging
-    const getSessionWithTimeout = async () => {
+    // Get initial session without locking auth callbacks
+    const bootstrapSession = async () => {
       try {
         // Skip auto-login if on reset-password URL to prevent premature login
         if (isResetPasswordUrl()) {
           console.log("AuthContext: Detected reset-password URL, skipping auto-login");
-          setSession(null);
-          setUser(null);
+          await applySessionState(null, { fetchUserProfile: false });
           setLoading(false);
           return;
         }
 
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Session fetch timeout")), 10000)
-        );
-        const sessionPromise = supabase.auth.getSession();
-        
-        const { data: { session }, error } = await Promise.race([
-          sessionPromise,
-          timeoutPromise,
-        ]);
-        
-        if (error) throw error;
-        
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          const profileData = await fetchProfile(session.user.id);
-          setProfile(profileData);
-        }
+        await syncSessionFromStorage({ showLoader: true });
       } catch (error) {
         console.error("Error fetching initial session:", error.message);
-        // Clear any stale session data
-        setSession(null);
-        setUser(null);
-        setProfile(null);
+        await applySessionState(null, { fetchUserProfile: false });
       } finally {
-        setLoading(false);
+        if (mountedRef.current) {
+          setLoading(false);
+        }
       }
     };
 
-    getSessionWithTimeout();
+    bootstrapSession();
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("Auth state changed:", event, session?.user?.id);
-      setSession(session);
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
-        const profileData = await fetchProfile(session.user.id);
-        setProfile(profileData);
-      } else {
-        setProfile(null);
-      }
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      console.log("Auth state changed:", event, nextSession?.user?.id);
+      // Avoid async Supabase calls directly in callback to prevent auth deadlocks.
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        void applySessionState(nextSession);
+      }, 0);
     });
 
-    return () => subscription.unsubscribe();
-  }, [fetchProfile]);
+    return () => {
+      mountedRef.current = false;
+      subscription.unsubscribe();
+    };
+  }, [applySessionState, syncSessionFromStorage]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -209,16 +265,41 @@ export const AuthProvider = ({ children }) => {
     const subscription = AppState.addEventListener(
       "change",
       async (nextAppState) => {
+        const previousState = appStateRef.current;
         appStateRef.current = nextAppState;
+
+        if (
+          (previousState === "background" || previousState === "inactive") &&
+          nextAppState === "active"
+        ) {
+          await syncSessionFromStorage();
+        }
+
         await syncPresence(nextAppState);
       },
     );
 
+    const visibilityListener =
+      Platform.OS === "web"
+        ? async () => {
+            if (document.visibilityState === "visible") {
+              await syncSessionFromStorage();
+            }
+          }
+        : null;
+
+    if (visibilityListener && typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", visibilityListener);
+    }
+
     return () => {
       subscription.remove();
+      if (visibilityListener && typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", visibilityListener);
+      }
       stopPresence(user?.id);
     };
-  }, [user?.id, startPresence, stopPresence]);
+  }, [user?.id, startPresence, stopPresence, syncSessionFromStorage]);
 
   const signUp = async (email, password, fullName) => {
     if (!supabase) {
