@@ -26,6 +26,9 @@ export const PaymentWebViewScreen = () => {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [paymentProcessed, setPaymentProcessed] = useState(false);
+  const [paystackPublicKey, setPaystackPublicKey] = useState(
+    route?.params?.paystack_public_key || null,
+  );
 
   const { user, isAuthenticated } = useAuth();
   const {
@@ -36,8 +39,6 @@ export const PaymentWebViewScreen = () => {
     authorization_url,
     access_code,
   } = route.params;
-  const paystackPublicKey = getPaystackPublicKey();
-
   // Check authentication on mount
   React.useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -54,6 +55,31 @@ export const PaymentWebViewScreen = () => {
       return;
     }
   }, [isAuthenticated, user, navigation]);
+
+  React.useEffect(() => {
+    let active = true;
+
+    const loadPaystackPublicKey = async () => {
+      if (route?.params?.paystack_public_key) return;
+      try {
+        const key = await getPaystackPublicKey();
+        if (!active) return;
+        setPaystackPublicKey(key);
+      } catch (error) {
+        console.error("Failed to load Paystack public key:", error);
+        Alert.alert(
+          "Payment Configuration Error",
+          "Unable to load payment configuration. Please try again shortly.",
+          [{ text: "OK", onPress: () => navigation.goBack() }],
+        );
+      }
+    };
+
+    loadPaystackPublicKey();
+    return () => {
+      active = false;
+    };
+  }, [navigation, route?.params?.paystack_public_key]);
 
   // Handle back button press (native only)
   React.useEffect(() => {
@@ -398,6 +424,15 @@ export const PaymentWebViewScreen = () => {
   // multi-vendor splits). This avoids the cross-origin iframe redirect that
   // previously hit the edge function without an Authorization header (401).
   if (Platform.OS === "web") {
+    if (!paystackPublicKey) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        </View>
+      );
+    }
     return (
       <View style={styles.container}>
         {loading && (
@@ -419,6 +454,16 @@ export const PaymentWebViewScreen = () => {
   }
 
   // ── NATIVE RENDER ────────────────────────────────────────────────────────────
+  if (!paystackPublicKey) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {loading && (

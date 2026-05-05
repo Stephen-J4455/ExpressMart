@@ -264,6 +264,7 @@ export const CheckoutScreen = ({ navigation }) => {
         navigation.navigate("PaymentWebView", {
           authorization_url: init.data.authorization_url,
           access_code: init.data.access_code,
+          paystack_public_key: init.data.paystack_public_key || null,
           amount: grandTotal,
           email: user.email,
           reference,

@@ -162,6 +162,7 @@ serve(async (req) => {
 
   try {
     const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+    const paystackPublicKey = Deno.env.get("PAYSTACK_PUBLIC_KEY");
     if (!paystackSecretKey) {
       throw new Error("Paystack secret key not configured");
     }
@@ -173,6 +174,24 @@ serve(async (req) => {
       reference: body?.reference ?? null,
       amount: body?.amount ?? null,
     });
+
+    if (action === "get-public-config") {
+      if (!paystackPublicKey) {
+        throw new Error("Paystack public key not configured");
+      }
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            paystack_public_key: paystackPublicKey,
+          },
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
 
     // Initialize payment (create Paystack transaction with subaccount splits)
     if (action === "initialize-payment") {
@@ -563,7 +582,13 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, data: initData.data }),
+        JSON.stringify({
+          success: true,
+          data: {
+            ...initData.data,
+            paystack_public_key: paystackPublicKey || null,
+          },
+        }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 200,
