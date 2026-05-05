@@ -10,7 +10,7 @@ import {
 import { useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -65,6 +65,7 @@ export const ProductCard = ({
   priceLabelOverride,
 }) => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { isAuthenticated } = useAuth();
   const { addToCart } = useCart();
   const toast = useToast();
@@ -105,7 +106,10 @@ export const ProductCard = ({
 
     if (!isAuthenticated) {
       toast.info("Login required", "Please sign in to add items to your cart");
-      navigation.navigate("Auth");
+      navigation.navigate("Auth", {
+        redirectTo: route?.name,
+        redirectParams: route?.params,
+      });
       return;
     }
 
@@ -150,7 +154,10 @@ export const ProductCard = ({
     if (!isAuthenticated) {
       setShowVariantModal(false);
       toast.info("Login required", "Please sign in to add items to your cart");
-      navigation.navigate("Auth");
+      navigation.navigate("Auth", {
+        redirectTo: route?.name,
+        redirectParams: route?.params,
+      });
       return;
     }
 

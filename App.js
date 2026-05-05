@@ -299,6 +299,8 @@ const navTheme = {
 
 const LoginRequiredScreen = ({
   navigation,
+  routeName,
+  routeParams,
   title = "Login required",
   message = "Please sign in to use this feature.",
 }) => (
@@ -308,7 +310,12 @@ const LoginRequiredScreen = ({
     <Text style={authPromptStyles.message}>{message}</Text>
     <Pressable
       style={authPromptStyles.button}
-      onPress={() => navigation.navigate("Auth")}
+      onPress={() =>
+        navigation.navigate("Auth", {
+          redirectTo: routeName,
+          redirectParams: routeParams,
+        })
+      }
     >
       <LinearGradient
         colors={[colors.primary, colors.accent]}
@@ -393,6 +400,8 @@ const AuthenticatedApp = () => {
       return (
         <LoginRequiredScreen
           navigation={props.navigation}
+          routeName={props.route?.name}
+          routeParams={props.route?.params}
           title={title}
           message={message}
         />

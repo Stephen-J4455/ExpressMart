@@ -191,7 +191,11 @@ export const WishlistScreen = ({ navigation }) => {
           <Text style={styles.emptyTitle}>Sign in to view your wishlist</Text>
           <Pressable
             style={styles.signInButton}
-            onPress={() => navigation.navigate("Auth")}
+            onPress={() =>
+              navigation.navigate("Auth", {
+                redirectTo: "Wishlist",
+              })
+            }
           >
             <LinearGradient
               colors={[colors.primary, colors.accent]}

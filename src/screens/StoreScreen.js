@@ -155,7 +155,10 @@ export const StoreScreen = ({ route, navigation }) => {
     if (!sellerId) return;
     if (!user) {
       toast.info("Login required", "Please sign in to follow stores");
-      navigation.navigate("Auth");
+      navigation.navigate("Auth", {
+        redirectTo: "Store",
+        redirectParams: route?.params,
+      });
       return;
     }
     setFollowLoading(true);

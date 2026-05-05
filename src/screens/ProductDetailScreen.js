@@ -331,7 +331,14 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         "Please sign in to add items to your wishlist",
         [
           { text: "Cancel", style: "cancel" },
-          { text: "Sign In", onPress: () => navigation.navigate("Auth") },
+          {
+            text: "Sign In",
+            onPress: () =>
+              navigation.navigate("Auth", {
+                redirectTo: "ProductDetail",
+                redirectParams: route?.params,
+              }),
+          },
         ],
       );
       return;
@@ -365,7 +372,14 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     if (!user) {
       Alert.alert("Sign In Required", "Please sign in to submit a review", [
         { text: "Cancel", style: "cancel" },
-        { text: "Sign In", onPress: () => navigation.navigate("Auth") },
+        {
+          text: "Sign In",
+          onPress: () =>
+            navigation.navigate("Auth", {
+              redirectTo: "ProductDetail",
+              redirectParams: route?.params,
+            }),
+        },
       ]);
       return;
     }
@@ -458,7 +472,14 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     if (!user) {
       Alert.alert("Sign In Required", "Please sign in to add a comment", [
         { text: "Cancel", style: "cancel" },
-        { text: "Sign In", onPress: () => navigation.navigate("Auth") },
+        {
+          text: "Sign In",
+          onPress: () =>
+            navigation.navigate("Auth", {
+              redirectTo: "ProductDetail",
+              redirectParams: route?.params,
+            }),
+        },
       ]);
       return;
     }
@@ -511,7 +532,10 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const handleChatWithSeller = () => {
     if (!user) {
       toast.info("Sign in required", "Please sign in to chat with the seller");
-      navigation.navigate("Auth");
+      navigation.navigate("Auth", {
+        redirectTo: "ProductDetail",
+        redirectParams: route?.params,
+      });
       return;
     }
     if (!product.seller) {
@@ -533,7 +557,10 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const handleAddToCart = () => {
     if (!user) {
       toast.info("Login required", "Please sign in to add items to your cart");
-      navigation.navigate("Auth");
+      navigation.navigate("Auth", {
+        redirectTo: "ProductDetail",
+        redirectParams: route?.params,
+      });
       return;
     }
 
@@ -570,7 +597,10 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     if (!user) {
       setShowVariantModal(false);
       toast.info("Login required", "Please sign in to add items to your cart");
-      navigation.navigate("Auth");
+      navigation.navigate("Auth", {
+        redirectTo: "ProductDetail",
+        redirectParams: route?.params,
+      });
       return;
     }
 

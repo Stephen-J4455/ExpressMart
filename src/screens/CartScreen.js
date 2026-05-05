@@ -93,7 +93,9 @@ export const CartScreen = ({ navigation }) => {
     }
 
     if (!isAuthenticated) {
-      navigation.navigate("Auth");
+      navigation.navigate("Auth", {
+        redirectTo: "Cart",
+      });
     } else {
       navigation.navigate("Checkout");
     }

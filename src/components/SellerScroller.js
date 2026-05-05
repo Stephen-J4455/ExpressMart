@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import {
   FlatList,
   Image,
@@ -18,6 +18,7 @@ import { colors } from "../theme/colors";
 
 export const SellerScroller = ({ sellers = [], onSelect }) => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { user } = useAuth();
   const { isFollowing, followSeller, unfollowSeller } = useShop();
   const toast = useToast();
@@ -28,7 +29,10 @@ export const SellerScroller = ({ sellers = [], onSelect }) => {
     if (!seller.id) return;
     if (!user) {
       toast.info("Login required", "Please sign in to follow stores");
-      navigation.navigate("Auth");
+      navigation.navigate("Auth", {
+        redirectTo: route?.name,
+        redirectParams: route?.params,
+      });
       return;
     }
     setFollowingLoading((prev) => ({ ...prev, [seller.id]: true }));

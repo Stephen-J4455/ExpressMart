@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import {
     Image,
     Pressable,
@@ -17,6 +17,7 @@ import { useToast } from "../context/ToastContext";
 
 export const SellerCard = ({ seller, onPress }) => {
     const navigation = useNavigation();
+    const route = useRoute();
     const { user } = useAuth();
     const { isFollowing, followSeller, unfollowSeller } = useShop();
     const toast = useToast();
@@ -29,7 +30,10 @@ export const SellerCard = ({ seller, onPress }) => {
         if (!seller.id) return;
         if (!user) {
             toast.info("Login required", "Please sign in to follow stores");
-            navigation.navigate("Auth");
+            navigation.navigate("Auth", {
+                redirectTo: route?.name,
+                redirectParams: route?.params,
+            });
             return;
         }
         setFollowLoading(true);

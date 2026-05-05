@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -25,7 +25,7 @@ import { useToast } from "../context/ToastContext";
 
 WebBrowser.maybeCompleteAuthSession();
 
-export const AuthScreen = ({ navigation }) => {
+export const AuthScreen = ({ navigation, route }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,8 +35,52 @@ export const AuthScreen = ({ navigation }) => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const { isWide } = useResponsive();
 
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, isAuthenticated } = useAuth();
   const toast = useToast();
+  const redirectHandledRef = useRef(false);
+
+  const navigateAfterLogin = useCallback(() => {
+    const redirectTo = route?.params?.redirectTo;
+    const redirectParams = route?.params?.redirectParams;
+    const tabScreens = new Set(["Home", "Categories", "Feed", "Cart", "Account"]);
+
+    if (redirectTo && tabScreens.has(redirectTo)) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "Main", params: { screen: redirectTo } }],
+      });
+      return;
+    }
+
+    if (redirectTo && redirectTo !== "Auth") {
+      navigation.reset({
+        index: 1,
+        routes: [{ name: "Main" }, { name: redirectTo, params: redirectParams }],
+      });
+      return;
+    }
+
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Main" }],
+    });
+  }, [navigation, route?.params?.redirectParams, route?.params?.redirectTo]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      redirectHandledRef.current = false;
+      return;
+    }
+
+    if (redirectHandledRef.current) return;
+    redirectHandledRef.current = true;
+    navigateAfterLogin();
+  }, [isAuthenticated, navigateAfterLogin]);
 
   const cleanupWebAuthUrl = () => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;

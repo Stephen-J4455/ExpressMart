@@ -139,7 +139,11 @@ export const AccountScreen = ({ navigation }) => {
           </Text>
           <Pressable
             style={styles.signInButton}
-            onPress={() => navigation.navigate("Auth")}
+            onPress={() =>
+              navigation.navigate("Auth", {
+                redirectTo: "Account",
+              })
+            }
           >
             <LinearGradient
               colors={[colors.primary, colors.accent]}
@@ -153,7 +157,12 @@ export const AccountScreen = ({ navigation }) => {
           </Pressable>
           <Pressable
             style={styles.createAccountButton}
-            onPress={() => navigation.navigate("Auth", { mode: "register" })}
+            onPress={() =>
+              navigation.navigate("Auth", {
+                mode: "register",
+                redirectTo: "Account",
+              })
+            }
           >
             <Text style={styles.createAccountText}>Create Account</Text>
           </Pressable>
