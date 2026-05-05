@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useShop } from "../context/ShopContext";
+import { useAuth } from "../context/AuthContext";
 import { colors, getTheme } from "../theme/colors";
 import { useToast } from "../context/ToastContext";
 import { useResponsive } from "../hooks/useResponsive";
@@ -72,6 +73,7 @@ export const StoreScreen = ({ route, navigation }) => {
   const accentGradient = [theme.gradientStart, theme.gradientEnd];
   const { refresh, loading, followSeller, unfollowSeller, isFollowing } =
     useShop();
+  const { user } = useAuth();
   const toast = useToast();
   const tabScrollRef = useRef(null);
 
@@ -151,6 +153,11 @@ export const StoreScreen = ({ route, navigation }) => {
 
   const handleFollowToggle = async () => {
     if (!sellerId) return;
+    if (!user) {
+      toast.info("Login required", "Please sign in to follow stores");
+      navigation.navigate("Auth");
+      return;
+    }
     setFollowLoading(true);
     try {
       if (isFollowing(sellerId)) {

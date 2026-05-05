@@ -297,6 +297,30 @@ const navTheme = {
   },
 };
 
+const LoginRequiredScreen = ({
+  navigation,
+  title = "Login required",
+  message = "Please sign in to use this feature.",
+}) => (
+  <View style={authPromptStyles.container}>
+    <Ionicons name="lock-closed-outline" size={52} color={colors.primary} />
+    <Text style={authPromptStyles.title}>{title}</Text>
+    <Text style={authPromptStyles.message}>{message}</Text>
+    <Pressable
+      style={authPromptStyles.button}
+      onPress={() => navigation.navigate("Auth")}
+    >
+      <LinearGradient
+        colors={[colors.primary, colors.accent]}
+        style={authPromptStyles.buttonGradient}
+      >
+        <Ionicons name="log-in-outline" size={18} color="#fff" />
+        <Text style={authPromptStyles.buttonText}>Login to continue</Text>
+      </LinearGradient>
+    </Pressable>
+  </View>
+);
+
 // only handle our custom URI schemes here; web links will stay in browser
 const prefixes = [Linking.createURL("/"), "expressmart://"];
 if (Platform.OS === "web" && typeof window !== "undefined" && window.location) {
@@ -360,6 +384,105 @@ const AuthenticatedApp = () => {
     return <CustomerLoadingAnimation />;
   }
 
+  const withAuthGate = (Component, title, message) => {
+    const GuardedScreen = (props) => {
+      if (isAuthenticated) {
+        return <Component {...props} />;
+      }
+
+      return (
+        <LoginRequiredScreen
+          navigation={props.navigation}
+          title={title}
+          message={message}
+        />
+      );
+    };
+
+    return GuardedScreen;
+  };
+
+  const GuardedCheckout = withAuthGate(
+    CheckoutScreen,
+    "Login to checkout",
+    "Please sign in to place your order and manage your payments.",
+  );
+  const GuardedOrders = withAuthGate(
+    OrdersScreen,
+    "Login to view orders",
+    "Please sign in to see your order history.",
+  );
+  const GuardedOrderDetail = withAuthGate(
+    OrderDetailScreen,
+    "Login to view order details",
+    "Please sign in to access this order information.",
+  );
+  const GuardedWishlist = withAuthGate(
+    WishlistScreen,
+    "Login to view wishlist",
+    "Please sign in to access your saved items.",
+  );
+  const GuardedNotifications = withAuthGate(
+    NotificationsScreen,
+    "Login to view notifications",
+    "Please sign in to see your account notifications.",
+  );
+  const GuardedAddresses = withAuthGate(
+    AddressesScreen,
+    "Login to manage addresses",
+    "Please sign in to view and edit your delivery addresses.",
+  );
+  const GuardedPayments = withAuthGate(
+    PaymentsScreen,
+    "Login to manage payments",
+    "Please sign in to manage your payment methods.",
+  );
+  const GuardedFollowing = withAuthGate(
+    FollowingScreen,
+    "Login to view following",
+    "Please sign in to access the stores and sellers you follow.",
+  );
+  const GuardedSettings = withAuthGate(
+    SettingsScreen,
+    "Login to open settings",
+    "Please sign in to manage your account settings.",
+  );
+  const GuardedSecurity = withAuthGate(
+    SecurityScreen,
+    "Login to manage security",
+    "Please sign in to manage security and privacy options.",
+  );
+  const GuardedProfileEdit = withAuthGate(
+    ProfileEditScreen,
+    "Login to edit profile",
+    "Please sign in to update your profile.",
+  );
+  const GuardedChangePassword = withAuthGate(
+    ChangePasswordScreen,
+    "Login to change password",
+    "Please sign in to update your password.",
+  );
+  const GuardedChangeEmail = withAuthGate(
+    ChangeEmailScreen,
+    "Login to change email",
+    "Please sign in to update your email address.",
+  );
+  const GuardedPrivacySettings = withAuthGate(
+    PrivacySettingsScreen,
+    "Login to manage privacy",
+    "Please sign in to manage your privacy settings.",
+  );
+  const GuardedChat = withAuthGate(
+    ChatScreen,
+    "Login to start chat",
+    "Please sign in to message sellers and support.",
+  );
+  const GuardedChats = withAuthGate(
+    ChatsScreen,
+    "Login to view chats",
+    "Please sign in to access your conversations.",
+  );
+
   return (
     <NotificationProvider userId={user?.id}>
       <UpdateModal
@@ -375,82 +498,91 @@ const AuthenticatedApp = () => {
           animationDuration: 100,
         }}
       >
-        {!isAuthenticated ? (
-          <>
-            <Stack.Screen name="Auth" component={AuthScreen} />
-            <Stack.Screen
-              name="ForgotPassword"
-              component={ForgotPasswordScreen}
-            />
-            <Stack.Screen
-              name="ResetPassword"
-              component={PasswordResetScreen}
-            />
-          </>
-        ) : (
-          <>
-            <Stack.Screen name="Main" component={TabNavigator} />
-            <Stack.Screen
-              name="ResetPassword"
-              component={PasswordResetScreen}
-            />
-            <Stack.Screen name="Search" component={SearchScreen} />
-            <Stack.Screen
-              name="SearchResults"
-              component={SearchResultsScreen}
-            />
-            <Stack.Screen
-              name="CategoryProducts"
-              component={CategoryProductsScreen}
-            />
-            <Stack.Screen name="Store" component={StoreScreen} />
-            <Stack.Screen name="Stores" component={StoresScreen} />
-            <Stack.Screen
-              name="ProductDetail"
-              component={ProductDetailScreen}
-            />
-            <Stack.Screen name="Chat" component={ChatScreen} />
-            <Stack.Screen name="Chats" component={ChatsScreen} />
-            <Stack.Screen name="StatusViewer" component={StatusViewer} />
-            <Stack.Screen name="Checkout" component={CheckoutScreen} />
-            <Stack.Screen
-              name="PaymentWebView"
-              component={PaymentWebViewScreen}
-            />
-            <Stack.Screen name="Orders" component={OrdersScreen} />
-            <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
-            <Stack.Screen name="Wishlist" component={WishlistScreen} />
-            <Stack.Screen
-              name="Notifications"
-              component={NotificationsScreen}
-            />
-            <Stack.Screen name="Addresses" component={AddressesScreen} />
-            <Stack.Screen name="Payments" component={PaymentsScreen} />
-            <Stack.Screen name="Following" component={FollowingScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-            <Stack.Screen name="Security" component={SecurityScreen} />
-            <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
-            <Stack.Screen name="Terms" component={TermsScreen} />
-            <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
-            <Stack.Screen
-              name="ChangePassword"
-              component={ChangePasswordScreen}
-            />
-            <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
-            <Stack.Screen
-              name="PrivacySettings"
-              component={PrivacySettingsScreen}
-            />
-            <Stack.Screen
-              name="PrivacyPolicy"
-              component={PrivacyPolicyScreen}
-            />
-          </>
-        )}
+        <Stack.Screen name="Main" component={TabNavigator} />
+        <Stack.Screen name="Auth" component={AuthScreen} />
+        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+        <Stack.Screen name="ResetPassword" component={PasswordResetScreen} />
+        <Stack.Screen name="Search" component={SearchScreen} />
+        <Stack.Screen name="SearchResults" component={SearchResultsScreen} />
+        <Stack.Screen
+          name="CategoryProducts"
+          component={CategoryProductsScreen}
+        />
+        <Stack.Screen name="Store" component={StoreScreen} />
+        <Stack.Screen name="Stores" component={StoresScreen} />
+        <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+        <Stack.Screen name="Chat" component={GuardedChat} />
+        <Stack.Screen name="Chats" component={GuardedChats} />
+        <Stack.Screen name="StatusViewer" component={StatusViewer} />
+        <Stack.Screen name="Checkout" component={GuardedCheckout} />
+        <Stack.Screen name="PaymentWebView" component={PaymentWebViewScreen} />
+        <Stack.Screen name="Orders" component={GuardedOrders} />
+        <Stack.Screen name="OrderDetail" component={GuardedOrderDetail} />
+        <Stack.Screen name="Wishlist" component={GuardedWishlist} />
+        <Stack.Screen name="Notifications" component={GuardedNotifications} />
+        <Stack.Screen name="Addresses" component={GuardedAddresses} />
+        <Stack.Screen name="Payments" component={GuardedPayments} />
+        <Stack.Screen name="Following" component={GuardedFollowing} />
+        <Stack.Screen name="Settings" component={GuardedSettings} />
+        <Stack.Screen name="Security" component={GuardedSecurity} />
+        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+        <Stack.Screen name="Terms" component={TermsScreen} />
+        <Stack.Screen name="ProfileEdit" component={GuardedProfileEdit} />
+        <Stack.Screen
+          name="ChangePassword"
+          component={GuardedChangePassword}
+        />
+        <Stack.Screen name="ChangeEmail" component={GuardedChangeEmail} />
+        <Stack.Screen
+          name="PrivacySettings"
+          component={GuardedPrivacySettings}
+        />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
       </Stack.Navigator>
     </NotificationProvider>
   );
 };
+
+const authPromptStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: colors.background,
+  },
+  title: {
+    marginTop: 12,
+    fontSize: 24,
+    fontWeight: "800",
+    color: colors.dark,
+  },
+  message: {
+    marginTop: 8,
+    textAlign: "center",
+    color: colors.muted,
+    fontSize: 15,
+    lineHeight: 22,
+    maxWidth: 360,
+  },
+  button: {
+    borderRadius: 14,
+    overflow: "hidden",
+    marginTop: 24,
+  },
+  buttonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+});
 
 export default function App() {
   return (

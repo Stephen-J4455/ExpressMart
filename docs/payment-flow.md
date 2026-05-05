@@ -44,7 +44,7 @@ flowchart TD
 | ------------------------------- | --------------------------------------------------------------------------------- |
 | **ExpressMart**                 | Customer app — holds cart, shows subtotal+shipping total, initiates payment       |
 | **Express-Store**               | Seller app — sets product prices, per-product shipping_fee; views net earnings    |
-| **ExpressMartAdmin**            | Admin app — sets `service_fee_percentage` in `express_settings`                   |
+| **ExpressMartAdmin**            | Admin app — sets `service_fee_percentage` and `redis_cache_enabled` in `express_settings` |
 | **Edge fn `payment`**           | Initializes Paystack transaction with correct splits; verifies and records orders |
 | **Edge fn `create_subaccount`** | Creates Paystack subaccounts and updates seller records                           |
 | **Paystack**                    | Processes payment; distributes to subaccounts; charges its fee to main account    |
@@ -68,7 +68,7 @@ flowchart TD
 ### Initialization (`payment` → `action: initialize-payment`)
 
 1. Load cart items for the authenticated user and group by `seller_id`.
-2. Fetch `service_fee_percentage` from `express_settings`.
+2. Resolve cache mode from `express_settings.redis_cache_enabled` (with env fallback), then fetch `service_fee_percentage` (Redis-backed when enabled).
 3. Ensure each seller has a Paystack subaccount; if missing, call `create_subaccount` to create one.
 4. Compute per-seller totals:
    - `productSubtotal`: sum of `item.price × quantity` for this seller.
@@ -86,7 +86,7 @@ flowchart TD
 
 1. Verify Paystack reference via `GET /transaction/verify/{reference}`.
 2. Re-fetch cart items; hydrate missing products from `express_products` if needed.
-3. Recompute groups per seller and re-fetch `service_fee_percentage` from settings.
+3. Recompute groups per seller and re-fetch `service_fee_percentage` (Redis-backed when enabled).
 4. For each seller group, insert an `express_orders` record:
    - `subtotal`: product subtotal for this seller.
    - `shipping_fee`: shipping fees for this seller's products.
@@ -134,7 +134,10 @@ flowchart TD
 ### Admin App
 
 - `SettingsScreen` → "Service Fee Percentage (%)" drives all fee calculations globally.
-- Stored in `express_settings` as `key = service_fee_percentage`.
+- `SettingsScreen` → "Enable Redis Cache" toggles backend Redis usage in payment flows.
+- Stored in `express_settings` as keys:
+  - `service_fee_percentage`
+  - `redis_cache_enabled` (`"true"` / `"false"`)
 
 ### Customer App — ExpressMart
 
@@ -166,6 +169,10 @@ flowchart TD
 | `SUPABASE_URL`              | Supabase client and `create_subaccount` invocation |
 | `SUPABASE_ANON_KEY`         | Authenticated Supabase client                      |
 | `SUPABASE_SERVICE_ROLE_KEY` | Privileged writes (bypasses RLS for order inserts) |
+| `REDIS_REST_URL`            | Redis REST endpoint (e.g. Upstash)                 |
+| `REDIS_REST_TOKEN`          | Redis REST bearer token                            |
+| `REDIS_CACHE_TTL_SECONDS`   | Cache TTL for settings/seller lookups (default 120) |
+| `REDIS_DEFAULT_ENABLED`     | Fallback cache mode when setting key is absent     |
 
 ---
 

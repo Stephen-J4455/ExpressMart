@@ -10,7 +10,9 @@ import {
 import { useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { colors } from "../theme/colors";
 import { FlashSaleBadge } from "./FlashSaleBadge";
@@ -62,6 +64,8 @@ export const ProductCard = ({
   theme,
   priceLabelOverride,
 }) => {
+  const navigation = useNavigation();
+  const { isAuthenticated } = useAuth();
   const { addToCart } = useCart();
   const toast = useToast();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -98,6 +102,12 @@ export const ProductCard = ({
 
   const handleAdd = (e) => {
     e?.stopPropagation?.();
+
+    if (!isAuthenticated) {
+      toast.info("Login required", "Please sign in to add items to your cart");
+      navigation.navigate("Auth");
+      return;
+    }
 
     if (isOutOfStock) {
       toast.error("Out of Stock", "This product is currently unavailable");
@@ -137,6 +147,13 @@ export const ProductCard = ({
   };
 
   const handleConfirmAddToCart = () => {
+    if (!isAuthenticated) {
+      setShowVariantModal(false);
+      toast.info("Login required", "Please sign in to add items to your cart");
+      navigation.navigate("Auth");
+      return;
+    }
+
     // Only require selection if there are multiple options
     if (
       (product.colors && product.colors.length > 1 && !selectedColor) ||

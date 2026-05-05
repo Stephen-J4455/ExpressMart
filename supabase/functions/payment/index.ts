@@ -7,6 +7,154 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const redisRestUrl = (Deno.env.get("REDIS_REST_URL") || "").replace(/\/+$/, "");
+const redisRestToken = Deno.env.get("REDIS_REST_TOKEN") || "";
+const redisConfigured = Boolean(redisRestUrl && redisRestToken);
+const redisCacheTtl = Math.max(
+  10,
+  Number.parseInt(Deno.env.get("REDIS_CACHE_TTL_SECONDS") || "120", 10) || 120,
+);
+
+const parseBoolean = (value: unknown, fallback = false) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on", "enabled"].includes(normalized)) return true;
+    if (["false", "0", "no", "off", "disabled"].includes(normalized))
+      return false;
+  }
+  if (typeof value === "number") return value !== 0;
+  return fallback;
+};
+
+const buildRedisCommandUrl = (command: string, args: (string | number)[]) =>
+  `${redisRestUrl}/${[command, ...args.map((arg) => String(arg))].map((part) => encodeURIComponent(part)).join("/")}`;
+
+const redisCommand = async (command: string, ...args: (string | number)[]) => {
+  if (!redisConfigured) return null;
+
+  const url = buildRedisCommandUrl(command, args);
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${redisRestToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Redis command failed (${command}): ${body}`);
+  }
+
+  const payload = await response.json();
+  if (payload?.error) {
+    throw new Error(`Redis command error (${command}): ${payload.error}`);
+  }
+
+  return payload?.result ?? null;
+};
+
+const redisGetJson = async <T>(key: string): Promise<T | null> => {
+  if (!redisConfigured) return null;
+  try {
+    const raw = await redisCommand("GET", key);
+    if (!raw) return null;
+    return JSON.parse(String(raw)) as T;
+  } catch (error) {
+    console.warn("Redis GET failed:", key, error);
+    return null;
+  }
+};
+
+const redisSetJson = async (key: string, value: unknown, ttl = redisCacheTtl) => {
+  if (!redisConfigured) return;
+  try {
+    await redisCommand("SETEX", key, ttl, JSON.stringify(value));
+  } catch (error) {
+    console.warn("Redis SETEX failed:", key, error);
+  }
+};
+
+const getRedisSettingToggle = async (supabaseClient: any) => {
+  const envDefault = parseBoolean(Deno.env.get("REDIS_DEFAULT_ENABLED"), true);
+  try {
+    const { data, error } = await supabaseClient
+      .from("express_settings")
+      .select("value")
+      .eq("key", "redis_cache_enabled")
+      .maybeSingle();
+
+    if (error) {
+      console.warn("Failed to fetch redis_cache_enabled setting:", error);
+      return envDefault;
+    }
+
+    if (data?.value == null) return envDefault;
+    return parseBoolean(data.value, envDefault);
+  } catch (error) {
+    console.warn("Redis toggle lookup failed:", error);
+    return envDefault;
+  }
+};
+
+const getSettingValue = async (
+  supabaseClient: any,
+  key: string,
+  useRedis: boolean,
+): Promise<string | null> => {
+  const redisKey = `express:settings:${key}`;
+
+  if (useRedis) {
+    const cached = await redisGetJson<{ value: string | null }>(redisKey);
+    if (cached && Object.prototype.hasOwnProperty.call(cached, "value")) {
+      return cached.value;
+    }
+  }
+
+  const { data, error } = await supabaseClient
+    .from("express_settings")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const value = data?.value ?? null;
+  if (useRedis) {
+    await redisSetJson(redisKey, { value });
+  }
+
+  return value;
+};
+
+const getSellerInfo = async (
+  supabaseClient: any,
+  sellerId: string,
+  useRedis: boolean,
+) => {
+  if (!sellerId) return null;
+  const redisKey = `express:sellers:${sellerId}`;
+
+  if (useRedis) {
+    const cached = await redisGetJson<any>(redisKey);
+    if (cached) return cached;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("express_sellers")
+    .select("id,name,email,payment_account,commission_rate")
+    .eq("id", sellerId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (data && useRedis) {
+    await redisSetJson(redisKey, data);
+  }
+
+  return data || null;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -48,6 +196,14 @@ serve(async (req) => {
       } = await supabaseClient.auth.getUser();
       if (!user) throw new Error("Authentication required");
 
+      const redisEnabled = redisConfigured
+        ? await getRedisSettingToggle(supabaseClient)
+        : false;
+      console.log("Redis cache mode (initialize-payment):", {
+        redisConfigured,
+        redisEnabled,
+      });
+
       // Find cart and items
       const { data: cart } = await supabaseClient
         .from("express_carts")
@@ -67,13 +223,13 @@ serve(async (req) => {
       // Fetch global service_fee_percentage from express_settings
       let serviceFeePercentage = 0;
       try {
-        const { data: settingsData } = await supabaseClient
-          .from("express_settings")
-          .select("value")
-          .eq("key", "service_fee_percentage")
-          .maybeSingle();
-        if (settingsData?.value) {
-          serviceFeePercentage = parseFloat(settingsData.value) || 0;
+        const serviceFeeSettingValue = await getSettingValue(
+          supabaseClient,
+          "service_fee_percentage",
+          redisEnabled,
+        );
+        if (serviceFeeSettingValue) {
+          serviceFeePercentage = parseFloat(serviceFeeSettingValue) || 0;
         }
       } catch (settingsErr) {
         console.warn("Failed to fetch service_fee_percentage:", settingsErr);
@@ -137,12 +293,12 @@ serve(async (req) => {
       const validSellerIds = sellerIds.filter((s) => s && s !== "null");
       const sellerResults = await Promise.all(
         validSellerIds.map((sid) =>
-          supabaseClient
-            .from("express_sellers")
-            .select("id,name,email,payment_account,commission_rate")
-            .eq("id", sid)
-            .maybeSingle()
-            .then(({ data }) => ({ sid, seller: data })),
+          getSellerInfo(supabaseClient, sid, redisEnabled)
+            .then((seller) => ({ sid, seller }))
+            .catch((error) => {
+              console.warn("Failed to fetch seller info:", sid, error);
+              return { sid, seller: null };
+            }),
         ),
       );
 
@@ -474,6 +630,14 @@ serve(async (req) => {
       throw new Error("Authentication required");
     }
 
+    const redisEnabled = redisConfigured
+      ? await getRedisSettingToggle(writeClient)
+      : false;
+    console.log("Redis cache mode (verify-payment):", {
+      redisConfigured,
+      redisEnabled,
+    });
+
     console.log("✅ User authenticated:", user.id);
 
     // Get user's cart
@@ -556,13 +720,13 @@ serve(async (req) => {
     // Fetch global service_fee_percentage from express_settings for order records
     let serviceFeePercentage = 0;
     try {
-      const { data: settingsData } = await writeClient
-        .from("express_settings")
-        .select("value")
-        .eq("key", "service_fee_percentage")
-        .maybeSingle();
-      if (settingsData?.value) {
-        serviceFeePercentage = parseFloat(settingsData.value) || 0;
+      const serviceFeeSettingValue = await getSettingValue(
+        writeClient,
+        "service_fee_percentage",
+        redisEnabled,
+      );
+      if (serviceFeeSettingValue) {
+        serviceFeePercentage = parseFloat(serviceFeeSettingValue) || 0;
       }
     } catch (settingsErr) {
       console.warn("Failed to fetch service_fee_percentage:", settingsErr);
@@ -646,13 +810,8 @@ serve(async (req) => {
       let vendorName = "ExpressMart";
       if (sid && sid !== "null") {
         try {
-          const { data: sellerInfo, error: sellerInfoError } = await writeClient
-            .from("express_sellers")
-            .select("name")
-            .eq("id", sid)
-            .maybeSingle();
-          if (!sellerInfoError && sellerInfo?.name)
-            vendorName = sellerInfo.name;
+          const sellerInfo = await getSellerInfo(writeClient, sid, redisEnabled);
+          if (sellerInfo?.name) vendorName = sellerInfo.name;
         } catch (siErr) {
           console.error(
             "❌ Failed to fetch seller info for vendor field:",

@@ -531,6 +531,12 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const handleAddToCart = () => {
+    if (!user) {
+      toast.info("Login required", "Please sign in to add items to your cart");
+      navigation.navigate("Auth");
+      return;
+    }
+
     if (isOutOfStock) {
       toast.error("Out of Stock", "This product is currently unavailable");
       return;
@@ -561,6 +567,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const handleConfirmAddToCart = () => {
+    if (!user) {
+      setShowVariantModal(false);
+      toast.info("Login required", "Please sign in to add items to your cart");
+      navigation.navigate("Auth");
+      return;
+    }
+
     if (isOutOfStock) {
       toast.error("Out of Stock", "This product is currently unavailable");
       setShowVariantModal(false);

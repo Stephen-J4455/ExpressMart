@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
+import { useNavigation } from "@react-navigation/native";
 import {
     Image,
     Pressable,
@@ -11,9 +12,12 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../theme/colors";
 import { useShop } from "../context/ShopContext";
+import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 
 export const SellerCard = ({ seller, onPress }) => {
+    const navigation = useNavigation();
+    const { user } = useAuth();
     const { isFollowing, followSeller, unfollowSeller } = useShop();
     const toast = useToast();
     const [followLoading, setFollowLoading] = useState(false);
@@ -23,6 +27,11 @@ export const SellerCard = ({ seller, onPress }) => {
     const handleFollowPress = async (e) => {
         e.preventDefault();
         if (!seller.id) return;
+        if (!user) {
+            toast.info("Login required", "Please sign in to follow stores");
+            navigation.navigate("Auth");
+            return;
+        }
         setFollowLoading(true);
         try {
             if (isFollowing(seller.id)) {

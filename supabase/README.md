@@ -135,6 +135,11 @@ Make sure to set the following environment variables in your Supabase project:
 - `PAYSTACK_SECRET_KEY`: Your Paystack secret key
 - `SUPABASE_URL`: Your Supabase project URL
 - `SUPABASE_ANON_KEY`: Your Supabase anon key
+- `SUPABASE_SERVICE_ROLE_KEY`: Service role key for privileged writes
+- `REDIS_REST_URL` (optional): Redis REST endpoint used by payment function cache
+- `REDIS_REST_TOKEN` (optional): Redis REST bearer token
+- `REDIS_CACHE_TTL_SECONDS` (optional): TTL for cached settings/seller lookups (default `120`)
+- `REDIS_DEFAULT_ENABLED` (optional): Fallback cache mode when `express_settings.redis_cache_enabled` is not set (`true`/`false`)
 
 ## Testing
 

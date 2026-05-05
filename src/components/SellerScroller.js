@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
+import { useNavigation } from "@react-navigation/native";
 import {
   FlatList,
   Image,
@@ -11,10 +12,13 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useShop } from "../context/ShopContext";
+import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { colors } from "../theme/colors";
 
 export const SellerScroller = ({ sellers = [], onSelect }) => {
+  const navigation = useNavigation();
+  const { user } = useAuth();
   const { isFollowing, followSeller, unfollowSeller } = useShop();
   const toast = useToast();
   const [followingLoading, setFollowingLoading] = useState({});
@@ -22,6 +26,11 @@ export const SellerScroller = ({ sellers = [], onSelect }) => {
   const handleFollowPress = async (e, seller) => {
     e.preventDefault();
     if (!seller.id) return;
+    if (!user) {
+      toast.info("Login required", "Please sign in to follow stores");
+      navigation.navigate("Auth");
+      return;
+    }
     setFollowingLoading((prev) => ({ ...prev, [seller.id]: true }));
     try {
       if (isFollowing(seller.id)) {
