@@ -17,7 +17,6 @@ const CACHE_KEYS = {
   sellers: "expressmart.cache.sellers",
   settings: "expressmart.cache.settings",
 };
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const PAGE_SIZE = 24;
 const isTruthySetting = (value) => {
   if (typeof value === "boolean") return value;
@@ -67,42 +66,44 @@ export const ShopProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [followedSellers, setFollowedSellers] = useState([]);
 
-  // Load cached data on mount for instant display
-  useEffect(() => {
-    const loadCache = async () => {
-      try {
-        const [
-          cachedProducts,
-          cachedCategories,
-          cachedSellers,
-          cachedSettings,
-        ] = await Promise.all([
+  const loadCache = useCallback(async () => {
+    try {
+      const [cachedProducts, cachedCategories, cachedSellers, cachedSettings] =
+        await Promise.all([
           AsyncStorage.getItem(CACHE_KEYS.products),
           AsyncStorage.getItem(CACHE_KEYS.categories),
           AsyncStorage.getItem(CACHE_KEYS.sellers),
           AsyncStorage.getItem(CACHE_KEYS.settings),
         ]);
-        if (cachedProducts) {
-          const { data, ts } = JSON.parse(cachedProducts);
-          if (Date.now() - ts < CACHE_TTL) setProducts(data);
+
+      let hasHydratedProducts = false;
+
+      if (cachedProducts) {
+        const { data } = JSON.parse(cachedProducts);
+        if (Array.isArray(data) && data.length > 0) {
+          setProducts(data);
+          setHasMore(data.length >= PAGE_SIZE);
+          hasHydratedProducts = true;
         }
-        if (cachedCategories) {
-          const { data, ts } = JSON.parse(cachedCategories);
-          if (Date.now() - ts < CACHE_TTL) setCategories(data);
-        }
-        if (cachedSellers) {
-          const { data, ts } = JSON.parse(cachedSellers);
-          if (Date.now() - ts < CACHE_TTL) setSellers(data);
-        }
-        if (cachedSettings) {
-          const { data, ts } = JSON.parse(cachedSettings);
-          if (Date.now() - ts < CACHE_TTL) setSettings(data);
-        }
-      } catch (e) {
-        // Cache read failure is non-fatal
       }
-    };
-    loadCache();
+      if (cachedCategories) {
+        const { data } = JSON.parse(cachedCategories);
+        if (Array.isArray(data)) setCategories(data);
+      }
+      if (cachedSellers) {
+        const { data } = JSON.parse(cachedSellers);
+        if (Array.isArray(data)) setSellers(data);
+      }
+      if (cachedSettings) {
+        const { data } = JSON.parse(cachedSettings);
+        if (data && typeof data === "object") setSettings(data);
+      }
+
+      return hasHydratedProducts;
+    } catch (e) {
+      // Cache read failure is non-fatal
+      return false;
+    }
   }, []);
 
   const saveCache = useCallback(async (key, data) => {
@@ -113,12 +114,12 @@ export const ShopProvider = ({ children }) => {
     }
   }, []);
 
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
+  const fetchProducts = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     setError(null);
     if (!supabase) {
       console.error("Supabase not initialized");
-      setLoading(false);
+      if (!silent) setLoading(false);
       return;
     }
 
@@ -260,15 +261,22 @@ export const ShopProvider = ({ children }) => {
       saveCache(CACHE_KEYS.sellers, updatedSellers);
       saveCache(CACHE_KEYS.settings, settingsMap);
     } catch (err) {
-      setError(err?.message || JSON.stringify(err));
+      if (products.length === 0) {
+        setError(err?.message || JSON.stringify(err));
+      } else {
+        console.warn(
+          "Network sync failed, continuing with local cache:",
+          err?.message || JSON.stringify(err),
+        );
+      }
       console.error(
         "Error fetching products:",
         err?.message || JSON.stringify(err),
       );
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [saveCache]);
+  }, [products.length, saveCache]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || loadingMore || loading) return;
@@ -370,8 +378,15 @@ export const ShopProvider = ({ children }) => {
   );
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    const bootstrap = async () => {
+      const hydratedFromCache = await loadCache();
+      if (hydratedFromCache) {
+        setLoading(false);
+      }
+      await fetchProducts({ silent: hydratedFromCache });
+    };
+    bootstrap();
+  }, [fetchProducts, loadCache]);
 
   // Realtime subscriptions — update products/sellers in-place without full reload
   useEffect(() => {

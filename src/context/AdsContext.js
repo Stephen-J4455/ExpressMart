@@ -3,9 +3,11 @@ import React, {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../lib/supabase";
 
 const AdsContext = createContext();
@@ -21,6 +23,8 @@ export const useAds = () => {
 export const AdsProvider = ({ children }) => {
   const [ads, setAds] = useState([]);
   const [loading, setLoading] = useState(false);
+  const refreshInFlightRef = useRef(new Map());
+  const ADS_CACHE_PREFIX = "expressmart.cache.ads";
 
   const normalizePlacement = (value) => {
     return String(value || "")
@@ -66,12 +70,46 @@ export const AdsProvider = ({ children }) => {
     feed: ["discover"],
   };
 
-  // Fetch ads by placement
-  const fetchAdsByPlacement = useCallback(async (placement) => {
+  const getAdsCacheKey = useCallback(
+    (placement) => `${ADS_CACHE_PREFIX}:${normalizePlacement(placement)}`,
+    [],
+  );
+
+  const loadAdsFromCache = useCallback(
+    async (placement) => {
+      try {
+        const key = getAdsCacheKey(placement);
+        const raw = await AsyncStorage.getItem(key);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed?.data) ? parsed.data : [];
+      } catch {
+        return [];
+      }
+    },
+    [getAdsCacheKey],
+  );
+
+  const saveAdsToCache = useCallback(
+    async (placement, data) => {
+      try {
+        const key = getAdsCacheKey(placement);
+        await AsyncStorage.setItem(
+          key,
+          JSON.stringify({ data: Array.isArray(data) ? data : [], ts: Date.now() }),
+        );
+      } catch {
+        // Cache write failure is non-fatal.
+      }
+    },
+    [getAdsCacheKey],
+  );
+
+  const fetchFreshAdsByPlacement = useCallback(async (placement, silent = false) => {
     if (!supabase) return [];
 
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       // Fetch active ads and filter placement/date/platform client-side for reliability.
       const { data, error } = await supabase
@@ -113,15 +151,49 @@ export const AdsProvider = ({ children }) => {
       });
 
       setAds(valid);
+      await saveAdsToCache(placement, valid);
       return valid;
     } catch (error) {
       console.error("Error fetching ads:", error);
-      setAds([]);
-      return [];
+      const cachedAds = await loadAdsFromCache(placement);
+      if (cachedAds.length > 0) {
+        setAds(cachedAds);
+      } else {
+        setAds([]);
+      }
+      return cachedAds;
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, []);
+  }, [loadAdsFromCache, saveAdsToCache]);
+
+  // Fetch ads by placement (cache-first + background sync)
+  const fetchAdsByPlacement = useCallback(
+    async (placement) => {
+      const requestedPlacement = normalizePlacement(placement);
+      if (!requestedPlacement) return [];
+
+      const cachedAds = await loadAdsFromCache(requestedPlacement);
+      if (cachedAds.length > 0) {
+        setAds(cachedAds);
+
+        if (!refreshInFlightRef.current.get(requestedPlacement)) {
+          const refreshPromise = fetchFreshAdsByPlacement(
+            requestedPlacement,
+            true,
+          ).finally(() => {
+            refreshInFlightRef.current.delete(requestedPlacement);
+          });
+          refreshInFlightRef.current.set(requestedPlacement, refreshPromise);
+        }
+
+        return cachedAds;
+      }
+
+      return fetchFreshAdsByPlacement(requestedPlacement);
+    },
+    [fetchFreshAdsByPlacement, loadAdsFromCache],
+  );
 
   const trackAdEngagement = useCallback(async (adId, eventType) => {
     if (!supabase || !adId) return;

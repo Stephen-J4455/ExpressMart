@@ -396,7 +396,10 @@ const AuthenticatedApp = () => {
   }, []);
 
   if (authLoading) {
-    return <CustomerLoadingAnimation />;
+    if (Platform.OS === "web") {
+      return <CustomerLoadingAnimation />;
+    }
+    return null;
   }
 
   const withAuthGate = (Component, title, message) => {

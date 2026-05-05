@@ -170,7 +170,7 @@ export const AuthScreen = ({ navigation, route }) => {
       return new URL("/login", window.location.origin).toString();
     }
 
-    return Linking.createURL("login");
+    return "expressmart://login";
   };
 
   const handleGoogleLogin = async () => {

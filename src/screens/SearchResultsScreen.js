@@ -29,6 +29,32 @@ import { injectAdsIntoProducts } from "../utils/adPlacement";
 
 const { width: screenWidth } = Dimensions.get("window");
 
+const mapSearchProduct = (product) => ({
+  id: product.id,
+  title: product.title,
+  vendor: product.vendor,
+  price: Number(product.price || 0),
+  rating: Number(product.rating || 0),
+  badges: product.badges || [],
+  thumbnail: product.thumbnail,
+  thumbnails: product.thumbnails || [],
+  category: product.category,
+  description: product.description,
+  discount: product.discount || 0,
+  quantity: product.quantity || 0,
+  allow_backorder: product.allow_backorder || false,
+  is_preorder: product.is_preorder || false,
+  colors: product.colors || [],
+  sizes: product.sizes || [],
+  specifications: product.specifications || null,
+  tags: product.tags || [],
+  weight: product.weight || null,
+  weight_unit: product.weight_unit || null,
+  sku: product.sku || null,
+  barcode: product.barcode || null,
+  seller: product.seller_id || null,
+});
+
 export const SearchResultsScreen = ({ navigation, route }) => {
   const { products } = useShop();
   const { fetchAdsByPlacement } = useAds();
@@ -141,47 +167,46 @@ export const SearchResultsScreen = ({ navigation, route }) => {
       setLoading(true);
       setSearchOffset(0);
       try {
-        let dbQuery = supabase
-          .from("express_products")
-          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
-          .eq("status", "active");
+        let rows = [];
+        try {
+          const { data: cachedData, error: cachedError } =
+            await supabase.functions.invoke("cached-product-search", {
+              body: {
+                query: text || "",
+                tag: tagFilter || "",
+                offset: 0,
+                limit: SEARCH_PAGE_SIZE,
+              },
+            });
+          if (cachedError) throw cachedError;
+          const cacheSource = cachedData?.cache?.source || "database";
+          console.info(
+            `[SearchResults] search fetched from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"} (query="${text || ""}", tag="${tagFilter || ""}")`,
+          );
+          rows = cachedData?.products || [];
+        } catch (cachePathError) {
+          console.warn(
+            "cached-product-search failed, falling back to direct DB search:",
+            cachePathError?.message || cachePathError,
+          );
+          let dbQuery = supabase
+            .from("express_products")
+            .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+            .eq("status", "active");
 
-        if (text) {
-          dbQuery = dbQuery.ilike("title", `%${text}%`);
+          if (text) {
+            dbQuery = dbQuery.ilike("title", `%${text}%`);
+          }
+
+          if (tagFilter) {
+            dbQuery = dbQuery.contains("tags", [tagFilter]);
+          }
+
+          const { data, error } = await dbQuery.range(0, SEARCH_PAGE_SIZE - 1);
+          if (error) throw error;
+          rows = data || [];
         }
-
-        if (tagFilter) {
-          dbQuery = dbQuery.contains("tags", [tagFilter]);
-        }
-
-        const { data, error } = await dbQuery.range(0, SEARCH_PAGE_SIZE - 1);
-        if (error) throw error;
-        const mapped =
-          data?.map((product) => ({
-            id: product.id,
-            title: product.title,
-            vendor: product.vendor,
-            price: Number(product.price || 0),
-            rating: Number(product.rating || 0),
-            badges: product.badges || [],
-            thumbnail: product.thumbnail,
-            thumbnails: product.thumbnails || [],
-            category: product.category,
-            description: product.description,
-            discount: product.discount || 0,
-            quantity: product.quantity || 0,
-            allow_backorder: product.allow_backorder || false,
-            is_preorder: product.is_preorder || false,
-            colors: product.colors || [],
-            sizes: product.sizes || [],
-            specifications: product.specifications || null,
-            tags: product.tags || [],
-            weight: product.weight || null,
-            weight_unit: product.weight_unit || null,
-            sku: product.sku || null,
-            barcode: product.barcode || null,
-            seller: product.seller_id || null,
-          })) || [];
+        const mapped = rows.map(mapSearchProduct);
         setProductResults(mapped);
         setSearchHasMore(mapped.length === SEARCH_PAGE_SIZE);
       } catch (error) {
@@ -200,42 +225,42 @@ export const SearchResultsScreen = ({ navigation, route }) => {
     const newOffset = searchOffset + SEARCH_PAGE_SIZE;
     setLoadingMoreSearch(true);
     try {
-      let dbQuery = supabase
-        .from("express_products")
-        .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
-        .eq("status", "active");
-      if (query) dbQuery = dbQuery.ilike("title", `%${query}%`);
-      if (tag) dbQuery = dbQuery.contains("tags", [tag]);
-      const { data, error } = await dbQuery.range(
-        newOffset,
-        newOffset + SEARCH_PAGE_SIZE - 1,
-      );
-      if (error) throw error;
-      const mapped = (data || []).map((product) => ({
-        id: product.id,
-        title: product.title,
-        vendor: product.vendor,
-        price: Number(product.price || 0),
-        rating: Number(product.rating || 0),
-        badges: product.badges || [],
-        thumbnail: product.thumbnail,
-        thumbnails: product.thumbnails || [],
-        category: product.category,
-        description: product.description,
-        discount: product.discount || 0,
-        quantity: product.quantity || 0,
-        allow_backorder: product.allow_backorder || false,
-        is_preorder: product.is_preorder || false,
-        colors: product.colors || [],
-        sizes: product.sizes || [],
-        specifications: product.specifications || null,
-        tags: product.tags || [],
-        weight: product.weight || null,
-        weight_unit: product.weight_unit || null,
-        sku: product.sku || null,
-        barcode: product.barcode || null,
-        seller: product.seller_id || null,
-      }));
+      let rows = [];
+      try {
+        const { data: cachedData, error: cachedError } =
+          await supabase.functions.invoke("cached-product-search", {
+            body: {
+              query: query || "",
+              tag: tag || "",
+              offset: newOffset,
+              limit: SEARCH_PAGE_SIZE,
+            },
+          });
+        if (cachedError) throw cachedError;
+        const cacheSource = cachedData?.cache?.source || "database";
+        console.info(
+          `[SearchResults] loadMore search fetched from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"} (offset=${newOffset})`,
+        );
+        rows = cachedData?.products || [];
+      } catch (cachePathError) {
+        console.warn(
+          "cached-product-search loadMore failed, falling back to direct DB search:",
+          cachePathError?.message || cachePathError,
+        );
+        let dbQuery = supabase
+          .from("express_products")
+          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+          .eq("status", "active");
+        if (query) dbQuery = dbQuery.ilike("title", `%${query}%`);
+        if (tag) dbQuery = dbQuery.contains("tags", [tag]);
+        const { data, error } = await dbQuery.range(
+          newOffset,
+          newOffset + SEARCH_PAGE_SIZE - 1,
+        );
+        if (error) throw error;
+        rows = data || [];
+      }
+      const mapped = rows.map(mapSearchProduct);
       setProductResults((prev) => [...prev, ...mapped]);
       setSearchHasMore(mapped.length === SEARCH_PAGE_SIZE);
       setSearchOffset(newOffset);
