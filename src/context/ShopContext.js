@@ -19,6 +19,15 @@ const CACHE_KEYS = {
 };
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const PAGE_SIZE = 24;
+const isTruthySetting = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+  return false;
+};
 
 const mapProduct = (product) => ({
   id: product.id,
@@ -119,22 +128,12 @@ export const ShopProvider = ({ children }) => {
       } = await supabase.auth.getUser();
 
       const [
-        { data: productsData, error: productError },
         { data: categoriesData, error: categoriesError },
         { data: sellersData, error: sellersError },
         { data: reviewsData, error: reviewsError },
         { data: settingsData, error: settingsError },
         { data: followsData, error: followsError },
       ] = await Promise.all([
-        supabase
-          .from("express_products")
-          .select(
-            "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-          )
-          .eq("status", "active")
-          .or("quantity.gt.0,is_preorder.eq.true")
-          .order("created_at", { ascending: false })
-          .range(0, PAGE_SIZE - 1),
         supabase
           .from("express_categories")
           .select("id,name,icon,color")
@@ -161,7 +160,6 @@ export const ShopProvider = ({ children }) => {
           : { data: [], error: null },
       ]);
 
-      if (productError) throw productError;
       if (categoriesError) throw categoriesError;
       if (sellersError) throw sellersError;
       if (reviewsError) throw reviewsError;
@@ -178,6 +176,34 @@ export const ShopProvider = ({ children }) => {
         settingsMap[s.key] = s.value;
       });
       setSettings(settingsMap);
+
+      const redisProductsCacheEnabled = isTruthySetting(
+        settingsMap.redis_products_cache_enabled,
+      );
+
+      let productsData = [];
+      if (redisProductsCacheEnabled) {
+        const { data: cachedData, error: cachedError } =
+          await supabase.functions.invoke("cached-products", {
+            body: { offset: 0, limit: PAGE_SIZE },
+          });
+
+        if (cachedError) throw cachedError;
+        productsData = cachedData?.products || [];
+      } else {
+        const { data, error: productError } = await supabase
+          .from("express_products")
+          .select(
+            "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+          )
+          .eq("status", "active")
+          .or("quantity.gt.0,is_preorder.eq.true")
+          .order("created_at", { ascending: false })
+          .range(0, PAGE_SIZE - 1);
+
+        if (productError) throw productError;
+        productsData = data || [];
+      }
 
       const mappedProducts = (productsData || []).map(mapProduct);
       setProducts(mappedProducts);
@@ -243,18 +269,31 @@ export const ShopProvider = ({ children }) => {
     try {
       const start = products.length;
       const end = start + PAGE_SIZE - 1;
-      const { data, error: fetchError } = await supabase
-        .from("express_products")
-        .select(
-          "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-        )
-        .eq("status", "active")
-        .or("quantity.gt.0,is_preorder.eq.true")
-        .order("created_at", { ascending: false })
-        .range(start, end);
 
-      if (fetchError) throw fetchError;
-      const newProducts = (data || []).map(mapProduct);
+      let rows = [];
+      if (isTruthySetting(settings.redis_products_cache_enabled)) {
+        const { data: cachedData, error: cachedError } =
+          await supabase.functions.invoke("cached-products", {
+            body: { offset: start, limit: PAGE_SIZE },
+          });
+        if (cachedError) throw cachedError;
+        rows = cachedData?.products || [];
+      } else {
+        const { data, error: fetchError } = await supabase
+          .from("express_products")
+          .select(
+            "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+          )
+          .eq("status", "active")
+          .or("quantity.gt.0,is_preorder.eq.true")
+          .order("created_at", { ascending: false })
+          .range(start, end);
+
+        if (fetchError) throw fetchError;
+        rows = data || [];
+      }
+
+      const newProducts = rows.map(mapProduct);
       const allProducts = [...products, ...newProducts];
       setProducts(allProducts);
       setHasMore(newProducts.length === PAGE_SIZE);
@@ -264,7 +303,7 @@ export const ShopProvider = ({ children }) => {
     } finally {
       setLoadingMore(false);
     }
-  }, [hasMore, loadingMore, loading, products, saveCache]);
+  }, [hasMore, loadingMore, loading, products, saveCache, settings]);
 
   const followSeller = useCallback(async (sellerId) => {
     if (!supabase) return;
