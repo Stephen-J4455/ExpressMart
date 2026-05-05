@@ -93,6 +93,9 @@ serve(async (req) => {
 
     if (!redisEnabled || !redisUrl || !redisToken) {
       const products = await queryProducts();
+      console.info(
+        `[cached-products] source=database reason=${!redisEnabled ? "cache_disabled" : "redis_not_configured"} offset=${offset} limit=${limit}`,
+      );
       return new Response(
         JSON.stringify({
           products,
@@ -111,6 +114,9 @@ serve(async (req) => {
       const redisGet = await redisRequest(redisUrl, redisToken, ["GET", cacheKey]);
       const cachedValue = redisGet?.result;
       if (typeof cachedValue === "string" && cachedValue.trim()) {
+        console.info(
+          `[cached-products] source=redis cache_hit=true offset=${offset} limit=${limit}`,
+        );
         return new Response(
           JSON.stringify({
             products: JSON.parse(cachedValue),
@@ -129,6 +135,9 @@ serve(async (req) => {
     }
 
     const products = await queryProducts();
+    console.info(
+      `[cached-products] source=database cache_hit=false offset=${offset} limit=${limit}`,
+    );
 
     try {
       await redisRequest(redisUrl, redisToken, [

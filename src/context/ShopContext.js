@@ -189,8 +189,15 @@ export const ShopProvider = ({ children }) => {
           });
 
         if (cachedError) throw cachedError;
+        const cacheSource = cachedData?.cache?.source || "database";
+        console.info(
+          `[ShopContext] Initial products fetched from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}`,
+        );
         productsData = cachedData?.products || [];
       } else {
+        console.info(
+          "[ShopContext] Initial products fetched from database (cache disabled)",
+        );
         const { data, error: productError } = await supabase
           .from("express_products")
           .select(
@@ -277,8 +284,15 @@ export const ShopProvider = ({ children }) => {
             body: { offset: start, limit: PAGE_SIZE },
           });
         if (cachedError) throw cachedError;
+        const cacheSource = cachedData?.cache?.source || "database";
+        console.info(
+          `[ShopContext] loadMore products fetched from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"} (offset=${start})`,
+        );
         rows = cachedData?.products || [];
       } else {
+        console.info(
+          `[ShopContext] loadMore products fetched from database (cache disabled, offset=${start})`,
+        );
         const { data, error: fetchError } = await supabase
           .from("express_products")
           .select(

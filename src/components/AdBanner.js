@@ -446,7 +446,10 @@ export const AdCarousel = ({ ads }) => {
                       </Text>
                     </View>
                   )}
-                  <Text style={[styles.carouselTitle, { color: "#fff" }]}>
+                  <Text
+                    style={[styles.carouselTitle, { color: "#fff" }]}
+                    numberOfLines={2}
+                  >
                     {ad.title}
                   </Text>
                   {ad.description && (
@@ -455,6 +458,7 @@ export const AdCarousel = ({ ads }) => {
                         styles.carouselDescription,
                         { color: "rgba(255,255,255,0.85)" },
                       ]}
+                      numberOfLines={2}
                     >
                       {ad.description}
                     </Text>
@@ -509,6 +513,7 @@ export const AdCarousel = ({ ads }) => {
                     styles.carouselTitle,
                     { color: ad.text_color || "#000000" },
                   ]}
+                  numberOfLines={2}
                 >
                   {ad.title}
                 </Text>
@@ -518,6 +523,7 @@ export const AdCarousel = ({ ads }) => {
                       styles.carouselDescription,
                       { color: ad.text_color || "#000000" },
                     ]}
+                    numberOfLines={2}
                   >
                     {ad.description}
                   </Text>
@@ -640,7 +646,10 @@ export const AdCarousel = ({ ads }) => {
                       </Text>
                     </View>
                   )}
-                  <Text style={[styles.carouselTitle, { color: "#fff" }]}>
+                  <Text
+                    style={[styles.carouselTitle, { color: "#fff" }]}
+                    numberOfLines={2}
+                  >
                     {ad.title}
                   </Text>
                   {ad.description && (
@@ -649,6 +658,7 @@ export const AdCarousel = ({ ads }) => {
                         styles.carouselDescription,
                         { color: "rgba(255,255,255,0.85)" },
                       ]}
+                      numberOfLines={2}
                     >
                       {ad.description}
                     </Text>
@@ -703,6 +713,7 @@ export const AdCarousel = ({ ads }) => {
                     styles.carouselTitle,
                     { color: ad.text_color || "#000000" },
                   ]}
+                  numberOfLines={2}
                 >
                   {ad.title}
                 </Text>
@@ -712,6 +723,7 @@ export const AdCarousel = ({ ads }) => {
                       styles.carouselDescription,
                       { color: ad.text_color || "#000000" },
                     ]}
+                    numberOfLines={2}
                   >
                     {ad.description}
                   </Text>

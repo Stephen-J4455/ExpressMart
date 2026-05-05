@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import * as Linking from "expo-linking";
 import { useIsFocused } from "@react-navigation/native";
 import { useAds } from "../context/AdsContext";
-import { AdRenderer } from "./AdBanner";
 import { ProductCard } from "./ProductCard";
 
 export const InlineAdProductCard = ({ ad }) => {
@@ -12,20 +11,12 @@ export const InlineAdProductCard = ({ ad }) => {
 
   useEffect(() => {
     if (!ad?.id || !isFocused) return;
-    // Non-card styles are delegated to AdRenderer and track themselves.
-    if (style === "card") {
-      trackImpression(ad.id);
-    }
+    trackImpression(ad.id);
   }, [ad?.id, style, isFocused, trackImpression]);
 
   // Overlay/fixed styles are handled by screen-level adaptive rendering.
   if (["popup", "fullscreen", "sticky_footer"].includes(style)) {
     return null;
-  }
-
-  // For non-card styles, defer to the canonical ad renderer so selected format is honored.
-  if (["banner", "carousel", "story", "sidebar"].includes(style)) {
-    return <AdRenderer ad={ad} />;
   }
 
   if (!ad) return null;

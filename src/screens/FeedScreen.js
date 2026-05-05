@@ -1,14 +1,12 @@
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
+  Platform,
   RefreshControl,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ionicons } from "@expo/vector-icons";
 import { ProductCard } from "../components/ProductCard";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
 import { AdRenderer } from "../components/AdBanner";
@@ -114,16 +112,6 @@ export const FeedScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Feed</Text>
-        <Pressable
-          style={styles.headerIcon}
-          onPress={() => navigation.navigate("Wishlist")}
-        >
-          <Ionicons name="heart-outline" size={24} color={colors.dark} />
-        </Pressable>
-      </View>
-
       <FlatList
         data={feedItems}
         key={`${gridColumns}-${category || "all"}`}
@@ -161,32 +149,7 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    paddingBottom: 14,
-    paddingHorizontal: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEF2F8",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: colors.dark,
-    letterSpacing: -0.5,
-  },
-  headerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#EEF2F8",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F8FAFC",
+    paddingTop: Platform.OS === "web" ? 0 : 50,
   },
   container: {
     paddingTop: 8,

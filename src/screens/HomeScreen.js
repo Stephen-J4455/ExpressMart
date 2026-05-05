@@ -41,6 +41,7 @@ export const HomeScreen = ({ navigation }) => {
   const [featuredAds, setFeaturedAds] = useState([]);
   const [flashSales, setFlashSales] = useState([]);
   const [loadingFlashSales, setLoadingFlashSales] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const daySeed = useMemo(() => new Date().toDateString(), []);
 
   // Detect scroll near bottom to trigger load-more
@@ -209,6 +210,15 @@ export const HomeScreen = ({ navigation }) => {
     [popularData, gridColumns, toRows],
   );
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh]);
+
   return (
     <Animated.View
       style={[
@@ -226,7 +236,7 @@ export const HomeScreen = ({ navigation }) => {
         scrollEventThrottle={200}
         onScroll={handleScroll}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={refresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
         <AppHeader

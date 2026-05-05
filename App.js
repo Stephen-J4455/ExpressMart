@@ -3,6 +3,7 @@ import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
+import * as SplashScreen from "expo-splash-screen";
 import {
   Text,
   View,
@@ -69,6 +70,8 @@ import { supabase } from "./src/lib/supabase";
 import React from "react";
 import UpdateModal from "./src/components/UpdateModal";
 import { checkForUpdate } from "./src/services/updateService";
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -385,6 +388,11 @@ const AuthenticatedApp = () => {
     return () => {
       mounted = false;
     };
+  }, []);
+
+  React.useEffect(() => {
+    if (Platform.OS === "web") return;
+    SplashScreen.hideAsync().catch(() => {});
   }, []);
 
   if (authLoading) {
