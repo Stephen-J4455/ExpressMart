@@ -471,8 +471,16 @@ export const ShopProvider = ({ children }) => {
       .subscribe();
 
     return () => {
-      productsChannel.unsubscribe();
-      sellersChannel.unsubscribe();
+      try {
+        supabase.removeChannel(productsChannel);
+      } catch (error) {
+        console.warn("Products realtime cleanup failed:", error);
+      }
+      try {
+        supabase.removeChannel(sellersChannel);
+      } catch (error) {
+        console.warn("Sellers realtime cleanup failed:", error);
+      }
     };
   }, []);
 

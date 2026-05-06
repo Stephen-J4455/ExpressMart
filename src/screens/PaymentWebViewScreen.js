@@ -124,72 +124,106 @@ export const PaymentWebViewScreen = () => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <script src="https://js.paystack.co/v1/inline.js"></script>
         <style>
+          * { box-sizing: border-box; }
           body {
             margin: 0;
-            padding: 10px;
+            padding: 18px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f8f9fa;
-            color: #333;
+            color: #0f172a;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
+            background:
+              radial-gradient(circle at top right, #e0e7ff 0%, #f8fafc 40%),
+              radial-gradient(circle at bottom left, #ede9fe 0%, #f8fafc 45%);
           }
           .container {
-            text-align: center;
-            max-width: 400px;
             width: 100%;
-            margin: 0;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 420px;
+            text-align: center;
+            padding: 28px 22px 24px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            box-shadow: 0 14px 40px rgba(15, 23, 42, 0.12);
+            backdrop-filter: blur(4px);
+          }
+          .brand {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 7px 14px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #4338ca;
+            background: #eef2ff;
+            margin-bottom: 14px;
           }
           .logo {
             font-size: 32px;
-            font-weight: bold;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-weight: 800;
+            letter-spacing: -0.3px;
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
           }
           .amount {
-            font-size: 28px;
-            font-weight: bold;
-            color: #667eea;
-            margin: 20px 0;
+            margin: 0;
+            font-size: 34px;
+            font-weight: 800;
+            color: #111827;
+            letter-spacing: -0.8px;
+          }
+          .label {
+            margin-top: 4px;
+            font-size: 13px;
+            color: #64748b;
           }
           .email {
-            color: #666;
-            margin-bottom: 30px;
+            margin: 14px 0 20px;
+            font-size: 14px;
+            color: #475569;
+            word-break: break-word;
           }
           .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 16px 32px;
-            font-size: 18px;
-            font-weight: bold;
-            border-radius: 25px;
-            cursor: pointer;
             width: 100%;
-            margin-top: 10px;
+            border: none;
+            border-radius: 14px;
+            padding: 15px 18px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #ffffff;
+            cursor: pointer;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            box-shadow: 0 10px 24px rgba(99, 102, 241, 0.35);
+            transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
           }
-          .btn:active { opacity: 0.8; }
-          .info { margin-top: 20px; color: #666; font-size: 14px; }
-          .loading { display: none; color: #666; margin-top: 10px; }
-          .success { display: none; color: #28a745; margin-top: 10px; }
-          .error { display: none; color: #dc3545; margin-top: 10px; }
+          .btn:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(99, 102, 241, 0.4); }
+          .btn:active { transform: translateY(0); opacity: 0.94; }
+          .hint { margin-top: 14px; font-size: 12px; color: #64748b; }
+          .loading, .success, .error {
+            display: none;
+            margin-top: 16px;
+            font-size: 14px;
+            font-weight: 600;
+          }
+          .loading { color: #475569; }
+          .success { color: #15803d; }
+          .error { color: #dc2626; }
         </style>
       </head>
       <body>
         <div class="container">
+          <div class="brand">Secure Checkout</div>
           <div class="logo">ExpressMart</div>
-          <div class="amount">GH₵${displayAmount}</div>
+          <p class="amount">GH₵${displayAmount}</p>
+          <div class="label">Total Amount</div>
           <div class="email">${email}</div>
           <button class="btn" onclick="payWithPaystack()">Pay Now</button>
-          <div class="info">Secure payment powered by Paystack</div>
+          <div class="hint">Protected by Paystack encryption</div>
           <div class="loading" id="loading">Processing payment...</div>
           <div class="success" id="success">Payment successful!</div>
           <div class="error" id="error"></div>
@@ -204,6 +238,7 @@ export const PaymentWebViewScreen = () => {
               amount: ${amountInPesewas},
               currency: 'GHS',
               ref: '${reference}',
+              ${access_code ? `access_code: '${access_code}',` : ""}
               onClose: function() {
                 window.ReactNativeWebView.postMessage(JSON.stringify({ event: 'payment_cancelled' }));
               },
@@ -233,45 +268,105 @@ export const PaymentWebViewScreen = () => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <script src="https://js.paystack.co/v1/inline.js"></script>
         <style>
+          * { box-sizing: border-box; }
           body {
             margin: 0;
-            padding: 10px;
+            padding: 18px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f8f9fa;
-            color: #333;
+            color: #0f172a;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
+            background:
+              radial-gradient(circle at top right, #e0e7ff 0%, #f8fafc 40%),
+              radial-gradient(circle at bottom left, #ede9fe 0%, #f8fafc 45%);
           }
           .container {
-            text-align: center;
-            max-width: 400px;
             width: 100%;
-            margin: 0;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 420px;
+            text-align: center;
+            padding: 28px 22px 24px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            box-shadow: 0 14px 40px rgba(15, 23, 42, 0.12);
+            backdrop-filter: blur(4px);
           }
-          .logo { font-size: 32px; font-weight: bold; background: linear-gradient(135deg,#667eea,#764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 20px; }
-          .amount { font-size: 28px; font-weight: bold; color: #667eea; margin: 20px 0; }
-          .email { color: #666; margin-bottom: 30px; }
-          .btn { background: linear-gradient(135deg,#667eea,#764ba2); color: white; border: none; padding: 16px 32px; font-size: 18px; font-weight: bold; border-radius: 25px; cursor: pointer; width: 100%; margin-top: 10px; }
-          .btn:active { opacity: 0.8; }
-          .info { margin-top: 20px; color: #666; font-size: 14px; }
-          .loading { display: none; color: #666; margin-top: 10px; }
-          .success { display: none; color: #28a745; margin-top: 10px; }
+          .brand {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 7px 14px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #4338ca;
+            background: #eef2ff;
+            margin-bottom: 14px;
+          }
+          .logo {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+          }
+          .amount {
+            margin: 0;
+            font-size: 34px;
+            font-weight: 800;
+            color: #111827;
+            letter-spacing: -0.8px;
+          }
+          .label {
+            margin-top: 4px;
+            font-size: 13px;
+            color: #64748b;
+          }
+          .email {
+            margin: 14px 0 20px;
+            font-size: 14px;
+            color: #475569;
+            word-break: break-word;
+          }
+          .btn {
+            width: 100%;
+            border: none;
+            border-radius: 14px;
+            padding: 15px 18px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #ffffff;
+            cursor: pointer;
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            box-shadow: 0 10px 24px rgba(99, 102, 241, 0.35);
+            transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+          }
+          .btn:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(99, 102, 241, 0.4); }
+          .btn:active { transform: translateY(0); opacity: 0.94; }
+          .hint { margin-top: 14px; font-size: 12px; color: #64748b; }
+          .loading, .success {
+            display: none;
+            margin-top: 16px;
+            font-size: 14px;
+            font-weight: 600;
+          }
+          .loading { color: #475569; }
+          .success { color: #15803d; }
         </style>
       </head>
       <body>
         <div class="container">
+          <div class="brand">Secure Checkout</div>
           <div class="logo">ExpressMart</div>
-          <div class="amount">GH₵${displayAmount}</div>
+          <p class="amount">GH₵${displayAmount}</p>
+          <div class="label">Total Amount</div>
           <div class="email">${email}</div>
           <button class="btn" onclick="payWithPaystack()">Pay Now</button>
-          <div class="info">Secure payment powered by Paystack</div>
+          <div class="hint">Protected by Paystack encryption</div>
           <div class="loading" id="loading">Processing payment...</div>
           <div class="success" id="success">Payment successful!</div>
         </div>
@@ -473,16 +568,10 @@ export const PaymentWebViewScreen = () => {
       )}
       <WebView
         ref={webViewRef}
-        source={
-          authorization_url
-            ? { uri: authorization_url }
-            : { html: paystackHTML }
-        }
+        source={{ html: paystackHTML }}
         style={styles.webview}
         onMessage={handleMessage}
-        onNavigationStateChange={
-          authorization_url ? handleNavigationStateChange : undefined
-        }
+        onNavigationStateChange={handleNavigationStateChange}
         onLoadEnd={handleLoadEnd}
         onError={handleError}
         javaScriptEnabled={true}

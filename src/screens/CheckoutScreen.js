@@ -48,6 +48,7 @@ export const CheckoutScreen = ({ navigation }) => {
     city: "",
     state: "",
   });
+  const processedPaymentReferenceRef = useRef(null);
 
   const checkoutDisplayAds = checkoutAds.filter(
     (ad) => String(ad?.style || "").toLowerCase() !== "carousel",
@@ -115,9 +116,18 @@ export const CheckoutScreen = ({ navigation }) => {
   useEffect(() => {
     const params = route.params;
     if (params?.payment === "success" && params?.reference) {
+      if (processedPaymentReferenceRef.current === params.reference) {
+        return;
+      }
+      processedPaymentReferenceRef.current = params.reference;
+      navigation.setParams({
+        payment: undefined,
+        reference: undefined,
+        orderData: undefined,
+      });
       handlePaymentVerification(params.reference, params.orderData);
     }
-  }, [route.params]);
+  }, [route.params, navigation]);
 
   const handlePaymentVerification = async (reference, orderData) => {
     try {
@@ -138,6 +148,7 @@ export const CheckoutScreen = ({ navigation }) => {
         });
       }, 1500);
     } catch (error) {
+      processedPaymentReferenceRef.current = null;
       console.error("❌ Verification error:", error);
       toast.error("Error", error.message || "Payment verification failed");
     } finally {

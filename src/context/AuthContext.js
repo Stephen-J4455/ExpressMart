@@ -244,7 +244,11 @@ export const AuthProvider = ({ children }) => {
 
     return () => {
       mountedRef.current = false;
-      subscription.unsubscribe();
+      try {
+        subscription?.unsubscribe?.();
+      } catch (error) {
+        console.warn("Auth subscription cleanup failed:", error);
+      }
     };
   }, [applySessionState, syncSessionFromStorage]);
 
@@ -293,7 +297,11 @@ export const AuthProvider = ({ children }) => {
     }
 
     return () => {
-      subscription.remove();
+      try {
+        subscription?.remove?.();
+      } catch (error) {
+        console.warn("AppState subscription cleanup failed:", error);
+      }
       if (visibilityListener && typeof document !== "undefined") {
         document.removeEventListener("visibilitychange", visibilityListener);
       }

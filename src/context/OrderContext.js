@@ -137,7 +137,11 @@ export const OrderProvider = ({ children }) => {
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      try {
+        supabase.removeChannel(subscription);
+      } catch (error) {
+        console.warn("Order realtime cleanup failed:", error);
+      }
     };
   }, [user]);
 

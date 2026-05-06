@@ -385,12 +385,26 @@ export const NotificationProvider = ({ children, userId }) => {
     return () => {
       isMounted = false;
       if (notificationListener.current) {
-        notificationListener.current.remove();
+        try {
+          notificationListener.current.remove();
+        } catch (error) {
+          console.warn("Notification listener cleanup failed:", error);
+        }
+        notificationListener.current = null;
       }
       if (responseListener.current) {
-        responseListener.current.remove();
+        try {
+          responseListener.current.remove();
+        } catch (error) {
+          console.warn("Notification response listener cleanup failed:", error);
+        }
+        responseListener.current = null;
       }
-      subscription?.remove();
+      try {
+        subscription?.remove?.();
+      } catch (error) {
+        console.warn("Notification AppState cleanup failed:", error);
+      }
     };
   }, [userId, registerForFCMAsync, registerDeviceToken]);
 

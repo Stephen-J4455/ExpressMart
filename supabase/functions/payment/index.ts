@@ -655,6 +655,18 @@ serve(async (req) => {
       throw new Error("Authentication required");
     }
 
+    if (!paystackResponse.ok || !paystackData?.status) {
+      throw new Error(
+        paystackData?.message || "Unable to verify payment with Paystack",
+      );
+    }
+
+    if (paystackData?.data?.status !== "success") {
+      throw new Error(
+        `Payment not successful (${paystackData?.data?.status || "unknown"})`,
+      );
+    }
+
     const redisEnabled = redisConfigured
       ? await getRedisSettingToggle(writeClient)
       : false;
@@ -664,6 +676,35 @@ serve(async (req) => {
     });
 
     console.log("✅ User authenticated:", user.id);
+
+    const { data: existingOrders, error: existingOrdersError } = await writeClient
+      .from("express_orders")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("payment_reference", reference);
+
+    if (existingOrdersError) {
+      console.error("❌ Existing order lookup failed:", existingOrdersError);
+    } else if (existingOrders && existingOrders.length > 0) {
+      console.log(
+        "✅ Existing order(s) found for payment reference, returning idempotent result:",
+        reference,
+      );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            orders: existingOrders,
+            paymentInfo: paystackData.data,
+            idempotent: true,
+          },
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
 
     // Get user's cart
     const { data: cart, error: cartError } = await supabaseClient
@@ -764,7 +805,30 @@ serve(async (req) => {
         : 0;
 
     // Accept shipping fee from client or compute from products (use larger value for safety)
-    const shippingAddress = orderData?.shippingAddress ?? null;
+    let shippingAddress = orderData?.shippingAddress ?? null;
+    if (!shippingAddress) {
+      const { data: fallbackAddresses, error: fallbackAddressError } =
+        await supabaseClient
+          .from("express_addresses")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("is_default", { ascending: false })
+          .limit(1);
+
+      if (fallbackAddressError) {
+        console.error(
+          "❌ Failed to load fallback shipping address:",
+          fallbackAddressError,
+        );
+      } else if (fallbackAddresses && fallbackAddresses.length > 0) {
+        shippingAddress = fallbackAddresses[0];
+      }
+    }
+    if (!shippingAddress) {
+      throw new Error(
+        "Shipping address is missing for this payment verification request",
+      );
+    }
     const clientShippingFee = orderData?.shippingFee ?? 0;
     const overallShippingFee =
       Math.max(clientShippingFee, totalShippingFee) || 0;
