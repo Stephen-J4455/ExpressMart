@@ -24,7 +24,7 @@
       }
     },
     "android": {
-      "package": "com.stephenj3.ExpressMart",
+      "package": "com.stephenj.expressmart",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
