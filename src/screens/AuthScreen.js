@@ -166,11 +166,11 @@ export const AuthScreen = ({ navigation, route }) => {
   }, [toast]);
 
   const getGoogleRedirectUrl = () => {
-    if (Platform.OS === "web") {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
       return new URL("/login", window.location.origin).toString();
     }
 
-    return "expressmart://login";
+    return Linking.createURL("login", { scheme: "expressmart" });
   };
 
   const handleGoogleLogin = async () => {
@@ -178,6 +178,21 @@ export const AuthScreen = ({ navigation, route }) => {
     try {
       const redirectTo = getGoogleRedirectUrl();
       console.log("Google OAuth redirectTo:", redirectTo);
+
+      if (Platform.OS === "web") {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo,
+            queryParams: {
+              prompt: "select_account",
+            },
+          },
+        });
+
+        if (error) throw error;
+        return;
+      }
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -192,11 +207,6 @@ export const AuthScreen = ({ navigation, route }) => {
 
       if (error) throw error;
       if (!data?.url) throw new Error("Unable to start Google Sign-In flow");
-
-      if (Platform.OS === "web") {
-        window.location.assign(data.url);
-        return;
-      }
 
       // Mobile: Open browser for OAuth
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);

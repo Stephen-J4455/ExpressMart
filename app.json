@@ -20,7 +20,9 @@
       "bundleIdentifier": "com.stephenj3.ExpressMart",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -40,7 +42,10 @@
               "scheme": "expressmart"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -63,7 +68,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "bf1e4bb1-228e-4e48-a56b-748b7f32980c"
+        "projectId": "d2e5bd63-b4f5-4a61-b288-f7549e59d7c9"
       },
       "firebaseApiKey": "AIzaSyBqrV1yGWsLj17JXFwfIWRP-sqX6hp8vLk",
       "firebaseAuthDomain": "expressmart-7d550.firebaseapp.com",
