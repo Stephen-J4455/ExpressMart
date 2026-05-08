@@ -29,9 +29,11 @@ export const CartProvider = ({ children }) => {
           .from("express_carts")
           .select("id")
           .eq("user_id", user.id)
-          .single();
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        if (cartError && cartError.code !== "PGRST116") {
+        if (cartError) {
           console.warn("Error fetching cart:", cartError);
         }
 
@@ -80,6 +82,24 @@ export const CartProvider = ({ children }) => {
 
           if (createError) {
             console.warn("Error creating cart:", createError);
+            if (createError.code === "23505") {
+              const { data: existingCart, error: existingCartError } =
+                await supabase
+                  .from("express_carts")
+                  .select("id")
+                  .eq("user_id", user.id)
+                  .order("created_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+              if (existingCartError) {
+                console.warn(
+                  "Error loading existing cart after unique violation:",
+                  existingCartError,
+                );
+              } else if (existingCart) {
+                setCartId(existingCart.id);
+              }
+            }
           } else {
             setCartId(newCart.id);
           }

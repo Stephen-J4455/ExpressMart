@@ -24,13 +24,13 @@ export const OrderProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   // Fetch user's orders
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async ({ silent = false } = {}) => {
     if (!supabase || !user) {
       if (!supabase) console.warn("Supabase not initialized in fetchOrders");
       return;
     }
 
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const { data, error: fetchError } = await supabase
         .from("express_orders")
@@ -64,7 +64,7 @@ export const OrderProvider = ({ children }) => {
         err?.message || JSON.stringify(err),
       );
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [user]);
 
@@ -101,49 +101,6 @@ export const OrderProvider = ({ children }) => {
       setAddresses([]);
     }
   }, [user, fetchOrders, fetchAddresses]);
-
-  // Set up realtime subscription for orders
-  useEffect(() => {
-    if (!supabase || !user) return;
-
-    const subscription = supabase
-      .channel("orders-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "express_orders",
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            setOrders((prev) => [payload.new, ...prev]);
-          } else if (payload.eventType === "UPDATE") {
-            setOrders((prev) =>
-              prev.map((order) =>
-                order.id === payload.new.id
-                  ? { ...order, ...payload.new }
-                  : order,
-              ),
-            );
-          } else if (payload.eventType === "DELETE") {
-            setOrders((prev) =>
-              prev.filter((order) => order.id !== payload.old.id),
-            );
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      try {
-        supabase.removeChannel(subscription);
-      } catch (error) {
-        console.warn("Order realtime cleanup failed:", error);
-      }
-    };
-  }, [user]);
 
   // Verify payment
   const verifyPayment = useCallback(

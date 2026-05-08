@@ -228,7 +228,9 @@ serve(async (req) => {
         .from("express_carts")
         .select("id")
         .eq("user_id", user.id)
-        .single();
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
       if (!cart) throw new Error("Cart not found");
 
       const { data: cartItems } = await supabaseClient
@@ -711,7 +713,9 @@ serve(async (req) => {
       .from("express_carts")
       .select("id")
       .eq("user_id", user.id)
-      .single();
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (cartError || !cart) {
       throw new Error("Cart not found");

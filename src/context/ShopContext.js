@@ -84,6 +84,9 @@ export const ShopProvider = ({ children }) => {
           setProducts(data);
           setHasMore(data.length >= PAGE_SIZE);
           hasHydratedProducts = true;
+          console.info(
+            `[ShopContext] Initial products hydrated from local cache (count=${data.length})`,
+          );
         }
       }
       if (cachedCategories) {
@@ -192,12 +195,12 @@ export const ShopProvider = ({ children }) => {
         if (cachedError) throw cachedError;
         const cacheSource = cachedData?.cache?.source || "database";
         console.info(
-          `[ShopContext] Initial products fetched from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}`,
+          `[ShopContext] Network sync fetched products from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}`,
         );
         productsData = cachedData?.products || [];
       } else {
         console.info(
-          "[ShopContext] Initial products fetched from database (cache disabled)",
+          "[ShopContext] Network sync fetched products from database (cache disabled)",
         );
         const { data, error: productError } = await supabase
           .from("express_products")
@@ -382,6 +385,13 @@ export const ShopProvider = ({ children }) => {
       const hydratedFromCache = await loadCache();
       if (hydratedFromCache) {
         setLoading(false);
+        console.info(
+          "[ShopContext] Bootstrap order: local cache -> Upstash Redis -> database fallback",
+        );
+      } else {
+        console.info(
+          "[ShopContext] No local product cache found, starting network fetch",
+        );
       }
       await fetchProducts({ silent: hydratedFromCache });
     };

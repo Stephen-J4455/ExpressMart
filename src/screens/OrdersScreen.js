@@ -87,7 +87,7 @@ const OrderCard = ({ order, onPress, cardWidth }) => {
   );
 };
 
-export const OrdersScreen = ({ navigation }) => {
+export const OrdersScreen = ({ navigation, route }) => {
   const { isAuthenticated } = useAuth();
   const { orders, loading, fetchOrders } = useOrder();
   const { cardColumns, horizontalPadding, getItemWidth } = useResponsive();
@@ -99,6 +99,12 @@ export const OrdersScreen = ({ navigation }) => {
       navigation.replace("Auth");
     }
   }, [isAuthenticated, navigation]);
+
+  useEffect(() => {
+    if (!route?.params?.refreshOnce) return;
+    fetchOrders({ silent: true });
+    navigation.setParams({ refreshOnce: undefined });
+  }, [route?.params?.refreshOnce, fetchOrders, navigation]);
 
   const filteredOrders = orders.filter((order) => {
     if (filter === "all") return true;

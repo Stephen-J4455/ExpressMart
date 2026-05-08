@@ -144,7 +144,10 @@ export const CheckoutScreen = ({ navigation }) => {
         // Reset navigation stack so checkout is fully removed
         navigation.reset({
           index: 1,
-          routes: [{ name: "Main" }, { name: "Orders" }],
+          routes: [
+            { name: "Main" },
+            { name: "Orders", params: { refreshOnce: Date.now() } },
+          ],
         });
       }, 1500);
     } catch (error) {

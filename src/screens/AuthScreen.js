@@ -26,7 +26,14 @@ import { useToast } from "../context/ToastContext";
 WebBrowser.maybeCompleteAuthSession();
 
 export const AuthScreen = ({ navigation, route }) => {
-  const [isLogin, setIsLogin] = useState(true);
+  const getInitialIsLogin = useCallback(() => {
+    const mode = route?.params?.mode;
+    if (mode === "register" || mode === "signup" || mode === "create-account") {
+      return false;
+    }
+    return true;
+  }, [route?.params?.mode]);
+  const [isLogin, setIsLogin] = useState(getInitialIsLogin);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -38,6 +45,7 @@ export const AuthScreen = ({ navigation, route }) => {
   const { signIn, signUp, isAuthenticated } = useAuth();
   const toast = useToast();
   const redirectHandledRef = useRef(false);
+  const oauthCallbackInFlightRef = useRef(false);
 
   const navigateAfterLogin = useCallback(() => {
     const redirectTo = route?.params?.redirectTo;
@@ -82,10 +90,66 @@ export const AuthScreen = ({ navigation, route }) => {
     navigateAfterLogin();
   }, [isAuthenticated, navigateAfterLogin]);
 
+  useEffect(() => {
+    setIsLogin(getInitialIsLogin());
+  }, [getInitialIsLogin]);
+
   const cleanupWebAuthUrl = () => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
     window.history.replaceState({}, document.title, window.location.pathname);
   };
+
+  const completeOAuthFromUrl = useCallback(
+    async (callbackUrl) => {
+      if (!callbackUrl || oauthCallbackInFlightRef.current) return false;
+      oauthCallbackInFlightRef.current = true;
+      try {
+        const urlObj = new URL(callbackUrl);
+        const hashParams = new URLSearchParams(urlObj.hash.replace(/^#/, ""));
+        const errorDescription =
+          urlObj.searchParams.get("error_description") ||
+          hashParams.get("error_description") ||
+          urlObj.searchParams.get("error") ||
+          hashParams.get("error");
+
+        if (errorDescription) {
+          throw new Error(decodeURIComponent(errorDescription));
+        }
+
+        const code = urlObj.searchParams.get("code");
+        if (code) {
+          const { error: exchangeError } =
+            await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+          toast.success("Successfully signed in with Google!");
+          return true;
+        }
+
+        const access_token =
+          hashParams.get("access_token") ||
+          urlObj.searchParams.get("access_token");
+        const refresh_token =
+          hashParams.get("refresh_token") ||
+          urlObj.searchParams.get("refresh_token");
+
+        if (!access_token || !refresh_token) {
+          throw new Error("No authentication code or tokens found in callback URL");
+        }
+
+        const { error: setError } = await supabase.auth.setSession({
+          access_token,
+          refresh_token,
+        });
+        if (setError) throw setError;
+
+        toast.success("Successfully signed in with Google!");
+        return true;
+      } finally {
+        oauthCallbackInFlightRef.current = false;
+      }
+    },
+    [toast],
+  );
 
   // Handle OAuth callback on web
   useEffect(() => {
@@ -155,22 +219,43 @@ export const AuthScreen = ({ navigation, route }) => {
 
         toast.success("Successfully signed in with Google!");
       } catch (error) {
-        console.error("Error handling web OAuth callback:", error);
-        toast.error(error.message || "Failed to complete Google Sign-In");
+        try {
+          const handled = await completeOAuthFromUrl(window.location.href);
+          if (!handled) throw error;
+        } catch (fallbackError) {
+          console.error("Error handling web OAuth callback:", fallbackError);
+          toast.error(fallbackError.message || "Failed to complete Google Sign-In");
+        }
       } finally {
         cleanupWebAuthUrl();
       }
     };
 
     handleWebOAuthCallback();
-  }, [toast]);
+  }, [completeOAuthFromUrl, toast]);
+
+  // Handle OAuth callback on native when the browser redirects back via deep-link.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+
+    const subscription = Linking.addEventListener("url", async ({ url }) => {
+      try {
+        await completeOAuthFromUrl(url);
+      } catch (error) {
+        console.error("Error handling native OAuth callback:", error);
+        toast.error(error.message || "Failed to complete Google Sign-In");
+      }
+    });
+
+    return () => subscription.remove();
+  }, [completeOAuthFromUrl, toast]);
 
   const getGoogleRedirectUrl = () => {
     if (Platform.OS === "web" && typeof window !== "undefined") {
       return new URL("/login", window.location.origin).toString();
     }
 
-    return Linking.createURL("login", { scheme: "expressmart" });
+    return Linking.createURL("auth/callback", { scheme: "expressmart" });
   };
 
   const handleGoogleLogin = async () => {
@@ -214,61 +299,7 @@ export const AuthScreen = ({ navigation, route }) => {
 
       if (result.type === "success" && result.url) {
         console.log("OAuth redirect URL:", result.url);
-
-        // Parse the URL to check for error
-        const urlObj = new URL(result.url);
-        const errorDescription = urlObj.searchParams.get("error_description");
-        if (errorDescription) {
-          throw new Error(errorDescription);
-        }
-
-        // Check for auth code (PKCE flow)
-        const code = urlObj.searchParams.get("code");
-
-        if (code) {
-          console.log("Found auth code, exchanging for session...");
-          // Exchange the code for a session using PKCE
-          const { error: exchangeError } =
-            await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeError) {
-            console.error("Code exchange error:", exchangeError);
-            throw exchangeError;
-          }
-          console.log("Successfully exchanged code for session");
-          toast.success("Successfully signed in with Google!");
-        } else {
-          // Try to extract tokens directly from URL (fallback for implicit flow)
-          let access_token = null;
-          let refresh_token = null;
-
-          // Check for hash fragment (implicit flow)
-          if (result.url.includes("#")) {
-            const hash = result.url.split("#")[1];
-            const params = new URLSearchParams(hash);
-            access_token = params.get("access_token");
-            refresh_token = params.get("refresh_token");
-            console.log("Extracted tokens from hash");
-          }
-
-          // Check for query params (if no hash tokens)
-          if (!access_token) {
-            access_token = urlObj.searchParams.get("access_token");
-            refresh_token = urlObj.searchParams.get("refresh_token");
-            console.log("Extracted tokens from query");
-          }
-
-          if (access_token && refresh_token) {
-            console.log("Setting session with extracted tokens");
-            const { error: setError } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
-            if (setError) throw setError;
-            toast.success("Successfully signed in with Google!");
-          } else {
-            throw new Error("No authentication code or tokens found in redirect URL");
-          }
-        }
+        await completeOAuthFromUrl(result.url);
       } else if (result.type === "cancel" || result.type === "dismiss") {
         console.log("User cancelled OAuth flow");
       } else {
