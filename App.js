@@ -1,5 +1,9 @@
 import "react-native-gesture-handler";
-import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  DefaultTheme,
+  getStateFromPath as defaultGetStateFromPath,
+} from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
@@ -337,8 +341,83 @@ if (Platform.OS === "web" && typeof window !== "undefined" && window.location) {
   prefixes.push(window.location.origin);
 }
 
+const normalizeRecoveryDeepLink = (url) => {
+  if (!url || Platform.OS === "web") return url;
+
+  const raw = String(url);
+  const normalized = raw.toLowerCase();
+  const hasResetPath = normalized.includes("reset-password");
+  const hasRecoveryType = normalized.includes("type=recovery");
+  const hasRecoveryToken =
+    normalized.includes("access_token=") ||
+    normalized.includes("refresh_token=") ||
+    normalized.includes("token_hash=") ||
+    normalized.includes("token=");
+  const isAuthCallback = normalized.includes("auth/callback");
+
+  if (hasResetPath) return raw;
+
+  if (hasRecoveryType || (hasRecoveryToken && !isAuthCallback)) {
+    const hashIndex = raw.indexOf("#");
+    const queryIndex = raw.indexOf("?");
+    const hasQuery =
+      queryIndex >= 0 && (hashIndex < 0 || queryIndex < hashIndex);
+    const query = hasQuery
+      ? raw.slice(queryIndex + 1, hashIndex >= 0 ? hashIndex : undefined)
+      : "";
+    const hash = hashIndex >= 0 ? raw.slice(hashIndex + 1) : "";
+    const base = "expressmart://reset-password";
+    const queryPart = query ? `?${query}` : "";
+    const hashPart = hash ? `#${hash}` : "";
+    return `${base}${queryPart}${hashPart}`;
+  }
+
+  return raw;
+};
+
+const isGoogleOAuthCallbackLink = (value) => {
+  const normalized = String(value || "").toLowerCase();
+  return normalized.includes("auth/callback");
+};
+
+const isRecoveryResetLink = (value) => {
+  const normalized = String(value || "").toLowerCase();
+  const hasRecoveryType = normalized.includes("type=recovery");
+  const hasRecoveryToken =
+    normalized.includes("access_token=") ||
+    normalized.includes("refresh_token=") ||
+    normalized.includes("token_hash=") ||
+    normalized.includes("token=");
+  return hasRecoveryType || hasRecoveryToken;
+};
+
 const linking = {
   prefixes,
+  getInitialURL: async () => {
+    const initialUrl = await Linking.getInitialURL();
+    return normalizeRecoveryDeepLink(initialUrl);
+  },
+  subscribe: (listener) => {
+    const onReceiveUrl = ({ url }) => {
+      listener(normalizeRecoveryDeepLink(url));
+    };
+    const subscription = Linking.addEventListener("url", onReceiveUrl);
+    return () => subscription.remove();
+  },
+  getStateFromPath: (path, options) => {
+    const state = defaultGetStateFromPath(path, options);
+    if (state) return state;
+
+    const normalizedPath = String(path || "");
+    if (
+      isRecoveryResetLink(normalizedPath) &&
+      !isGoogleOAuthCallbackLink(normalizedPath)
+    ) {
+      return { routes: [{ name: "ResetPassword" }] };
+    }
+
+    return state;
+  },
   config: {
     screens: {
       Main: {

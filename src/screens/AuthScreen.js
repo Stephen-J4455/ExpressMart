@@ -99,9 +99,39 @@ export const AuthScreen = ({ navigation, route }) => {
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 
+  const isGoogleOAuthCallbackUrl = useCallback((callbackUrl) => {
+    if (!callbackUrl) return false;
+
+    try {
+      const parsed = Linking.parse(callbackUrl);
+      const path = (parsed.path || "").toLowerCase();
+      const host = (parsed.hostname || "").toLowerCase();
+      const query = parsed.queryParams || {};
+      const hash = String(parsed.fragment || "").toLowerCase();
+
+      if (path.includes("reset-password")) return false;
+      if (query.type === "recovery") return false;
+      if (query.token_hash) return false;
+      if (query.token) return false;
+      if (hash.includes("type=recovery")) return false;
+      if (hash.includes("token_hash=")) return false;
+      if (hash.includes("token=")) return false;
+
+      return (
+        path.includes("auth/callback") ||
+        host === "auth" ||
+        path === "login" ||
+        path === "/login"
+      );
+    } catch {
+      return false;
+    }
+  }, []);
+
   const completeOAuthFromUrl = useCallback(
     async (callbackUrl) => {
       if (!callbackUrl || oauthCallbackInFlightRef.current) return false;
+      if (!isGoogleOAuthCallbackUrl(callbackUrl)) return false;
       oauthCallbackInFlightRef.current = true;
       try {
         const urlObj = new URL(callbackUrl);
@@ -148,7 +178,7 @@ export const AuthScreen = ({ navigation, route }) => {
         oauthCallbackInFlightRef.current = false;
       }
     },
-    [toast],
+    [isGoogleOAuthCallbackUrl, toast],
   );
 
   // Handle OAuth callback on web
@@ -157,6 +187,18 @@ export const AuthScreen = ({ navigation, route }) => {
 
     const handleWebOAuthCallback = async () => {
       const url = new URL(window.location.href);
+      if (
+        url.pathname.toLowerCase().includes("reset-password") ||
+        url.searchParams.get("type") === "recovery" ||
+        url.searchParams.has("token_hash") ||
+        url.searchParams.has("token") ||
+        new URLSearchParams(url.hash.replace(/^#/, "")).has("token_hash") ||
+        new URLSearchParams(url.hash.replace(/^#/, "")).has("token") ||
+        url.hash.toLowerCase().includes("type=recovery")
+      ) {
+        return;
+      }
+
       const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
       const hasOAuthParams =
         url.searchParams.has("code") ||

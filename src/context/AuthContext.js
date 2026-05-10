@@ -22,6 +22,7 @@ export const AuthProvider = ({ children }) => {
   const mountedRef = useRef(true);
   const authSyncVersionRef = useRef(0);
   const sessionRefreshInFlightRef = useRef(false);
+  const skipAuthStateSyncRef = useRef(false);
 
   const withTimeout = useCallback(async (promise, timeoutMs, timeoutMessage) => {
     let timeoutId;
@@ -195,23 +196,39 @@ export const AuthProvider = ({ children }) => {
 
     mountedRef.current = true;
 
-    // Check if we're on a password reset URL - if so, don't auto-login
-    // Let PasswordResetScreen handle the reset flow
-    const isResetPasswordUrl = () => {
+    const isRecoveryOrResetUrl = (url) => {
+      if (!url) return false;
+      const normalized = String(url).toLowerCase();
+      return (
+        normalized.includes("reset-password") ||
+        normalized.includes("type=recovery") ||
+        normalized.includes("token_hash=") ||
+        normalized.includes("token=")
+      );
+    };
+
+    // Check if we're on a password reset URL - if so, don't auto-login.
+    // Let PasswordResetScreen own the full reset flow.
+    const shouldBypassAuthSync = async () => {
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        return window.location.pathname.includes("reset-password") ||
-               window.location.hash.includes("type=recovery") ||
-               window.location.search.includes("type=recovery");
+        return isRecoveryOrResetUrl(window.location.href);
       }
-      return false;
+
+      const initialUrl = await Linking.getInitialURL();
+      return isRecoveryOrResetUrl(initialUrl);
     };
 
     // Get initial session without locking auth callbacks
     const bootstrapSession = async () => {
       try {
-        // Skip auto-login if on reset-password URL to prevent premature login
-        if (isResetPasswordUrl()) {
-          console.log("AuthContext: Detected reset-password URL, skipping auto-login");
+        const bypassAuthSync = await shouldBypassAuthSync();
+        skipAuthStateSyncRef.current = bypassAuthSync;
+
+        // Skip auto-login for recovery/reset deep links to prevent premature login
+        if (bypassAuthSync) {
+          console.log(
+            "AuthContext: Detected password-reset recovery URL, skipping auto-login",
+          );
           await applySessionState(null, { fetchUserProfile: false });
           setLoading(false);
           return;
@@ -234,6 +251,14 @@ export const AuthProvider = ({ children }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (skipAuthStateSyncRef.current) {
+        console.log(
+          "AuthContext: Ignoring auth state change during password reset flow",
+          event,
+        );
+        return;
+      }
+
       console.log("Auth state changed:", event, nextSession?.user?.id);
       // Avoid async Supabase calls directly in callback to prevent auth deadlocks.
       setTimeout(() => {
@@ -433,13 +458,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // reset page is deployed on GitHub Pages. the password-reset.html file
-  // lives in the root of the main branch of the `express-password-reset`
-  // repository.
+  // Use explicit native scheme so Supabase redirect URLs stay stable in email flows.
   const RESET_PAGE =
     Platform.OS === "web"
       ? new URL("/reset-password", window.location.origin).toString()
-      : Linking.createURL("reset-password");
+      : "expressmart://reset-password";
 
   const resetPassword = async (email) => {
     if (!supabase) {

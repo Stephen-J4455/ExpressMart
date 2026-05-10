@@ -29,6 +29,7 @@ export default function PasswordResetScreen({ navigation }) {
   const toast = useToast();
   const { resetPassword } = useAuth();
   const { isWide } = useResponsive();
+  const liveUrl = Linking.useURL();
 
   // On web, avoid persisting the recovery-session to localStorage.
   // Otherwise, other tabs of the app will become authenticated as soon as the
@@ -66,34 +67,43 @@ export default function PasswordResetScreen({ navigation }) {
       return {
         access_token: null,
         refresh_token: null,
+        token_hash: null,
+        token: null,
         type: null,
         code: null,
       };
 
     try {
-      const hashIndex = url.indexOf("#");
-      if (hashIndex >= 0) {
-        const hash = url.slice(hashIndex + 1);
-        const params = new URLSearchParams(hash);
-        return {
-          access_token: params.get("access_token"),
-          refresh_token: params.get("refresh_token"),
-          type: params.get("type"),
-          code: params.get("code"),
-        };
-      }
-
       const queryIndex = url.indexOf("?");
-      const qs = queryIndex >= 0 ? url.slice(queryIndex + 1) : "";
-      const params = new URLSearchParams(qs);
+      const hashIndex = url.indexOf("#");
+      const hasQuery =
+        queryIndex >= 0 && (hashIndex < 0 || queryIndex < hashIndex);
+      const qs = hasQuery
+        ? url.slice(queryIndex + 1, hashIndex >= 0 ? hashIndex : undefined)
+        : "";
+      const hash = hashIndex >= 0 ? url.slice(hashIndex + 1) : "";
+      const queryParams = new URLSearchParams(qs);
+      const hashParams = new URLSearchParams(hash);
+      const getParam = (name) =>
+        hashParams.get(name) || queryParams.get(name) || null;
+
       return {
-        access_token: params.get("access_token"),
-        refresh_token: params.get("refresh_token"),
-        type: params.get("type"),
-        code: params.get("code"),
+        access_token: getParam("access_token"),
+        refresh_token: getParam("refresh_token"),
+        token_hash: getParam("token_hash"),
+        token: getParam("token"),
+        type: getParam("type"),
+        code: getParam("code"),
       };
     } catch (e) {
-      return { access_token: null, refresh_token: null, type: null, code: null };
+      return {
+        access_token: null,
+        refresh_token: null,
+        token_hash: null,
+        token: null,
+        type: null,
+        code: null,
+      };
     }
   }, []);
 
@@ -108,17 +118,32 @@ export default function PasswordResetScreen({ navigation }) {
 
         console.log("PasswordResetScreen incoming url:", url);
 
-        const { access_token, refresh_token, type, code } =
+        const { access_token, refresh_token, token_hash, token, type, code } =
           extractTokensFromUrl(url);
+        const recoveryTokenHash = token_hash || (type === "recovery" ? token : null);
 
         // Supabase may send recovery links in two shapes:
         // 1) Implicit: #access_token=...&refresh_token=...&type=recovery
         // 2) PKCE: ?code=... (optionally with type=recovery)
+        // 3) Token hash: ?token_hash=...&type=recovery
+        // 4) Confirmation URL token: ?token=...&type=recovery
         if (code) {
           setRecoveryCode(code);
           const { error: exchErr } =
             await resetSupabase.auth.exchangeCodeForSession(code);
           if (exchErr) throw exchErr;
+        } else if (recoveryTokenHash) {
+          if (type && type !== "recovery") {
+            throw new Error(
+              "Password reset link type is invalid. Please request a new one.",
+            );
+          }
+
+          const { error: verifyErr } = await resetSupabase.auth.verifyOtp({
+            token_hash: recoveryTokenHash,
+            type: "recovery",
+          });
+          if (verifyErr) throw verifyErr;
         } else if (access_token) {
           // Some environments omit `type` even though it's a valid token.
           if (type && type !== "recovery") {
@@ -130,11 +155,23 @@ export default function PasswordResetScreen({ navigation }) {
           setRecoveryToken(access_token);
           setRefreshToken(refresh_token || "");
 
-          const { error: setErr } = await resetSupabase.auth.setSession({
-            access_token,
-            refresh_token: refresh_token || "",
-          });
-          if (setErr) throw setErr;
+          if (refresh_token) {
+            const { error: setErr } = await resetSupabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (setErr) throw setErr;
+          } else if (typeof resetSupabase.auth.getSessionFromUrl === "function") {
+            const { error: urlErr } = await resetSupabase.auth.getSessionFromUrl({
+              url,
+              storeSession: false,
+            });
+            if (urlErr) throw urlErr;
+          } else {
+            throw new Error(
+              "Password reset link is missing required parameters. Please request a new one.",
+            );
+          }
         } else if (typeof resetSupabase.auth.getSessionFromUrl === "function") {
           const { error: urlErr } = await resetSupabase.auth.getSessionFromUrl({
             url,
@@ -216,6 +253,11 @@ export default function PasswordResetScreen({ navigation }) {
       }
     };
   }, [handleIncomingUrl]);
+
+  React.useEffect(() => {
+    if (!liveUrl || !loading) return;
+    handleIncomingUrl(liveUrl);
+  }, [handleIncomingUrl, liveUrl, loading]);
 
   const handleUpdate = async () => {
     if (submitting) return;
