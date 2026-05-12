@@ -302,7 +302,9 @@ export const HomeScreen = ({ navigation }) => {
         />
         <SellerScroller
           sellers={sellers}
-          onSelect={(seller) => navigation.navigate("Store", { seller })}
+          onSelect={(seller) =>
+            navigation.navigate("Store", { sellerId: seller?.id, seller })
+          }
         />
 
         <View style={styles.sectionSpacer} />

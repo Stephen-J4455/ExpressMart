@@ -41,7 +41,9 @@ export const StoresScreen = () => {
     <View style={{ width: itemWidth }}>
       <SellerCard
         seller={item}
-        onPress={() => navigation.navigate("Store", { seller: item })}
+        onPress={() =>
+          navigation.navigate("Store", { sellerId: item?.id, seller: item })
+        }
       />
     </View>
   );
@@ -102,7 +104,10 @@ export const StoresScreen = () => {
           numColumns={gridColumns}
           key={`grid-${gridColumns}`}
           columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: 16 + insets.bottom },
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

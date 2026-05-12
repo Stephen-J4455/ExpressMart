@@ -19,7 +19,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Linking from "expo-linking";
 import { useResponsive } from "./src/hooks/useResponsive";
 import { WebSidebar } from "./src/components/WebSidebar";
@@ -85,6 +85,10 @@ const tabIcon =
   ({ color, size, focused }) => {
     return <Ionicons name={name} size={size} color={color} />;
   };
+
+const MOBILE_TAB_BAR_HEIGHT = 70;
+const MOBILE_TAB_BAR_PADDING_TOP = 10;
+const MOBILE_TAB_BAR_PADDING_BOTTOM = 10;
 
 const TabNavigator = () => {
   const { items } = useCart();
@@ -226,8 +230,19 @@ const DefaultTabBar = ({
   cartCount,
   defaultTheme,
 }) => {
+  const insets = useSafeAreaInsets();
+  const androidBottomInset = Platform.OS === "android" ? insets.bottom : 0;
+
   return (
-    <View style={tabStyles.mobileBar}>
+    <View
+      style={[
+        tabStyles.mobileBar,
+        androidBottomInset > 0 && {
+          height: MOBILE_TAB_BAR_HEIGHT + androidBottomInset,
+          paddingBottom: MOBILE_TAB_BAR_PADDING_BOTTOM + androidBottomInset,
+        },
+      ]}
+    >
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
@@ -277,9 +292,9 @@ const tabStyles = StyleSheet.create({
   },
   mobileBar: {
     flexDirection: "row",
-    height: 70,
-    paddingBottom: 10,
-    paddingTop: 10,
+    height: MOBILE_TAB_BAR_HEIGHT,
+    paddingBottom: MOBILE_TAB_BAR_PADDING_BOTTOM,
+    paddingTop: MOBILE_TAB_BAR_PADDING_TOP,
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -48,17 +48,96 @@ const BADGE_CONFIG = {
     icon: "leaf",
     color: "#059669",
   },
+  top_seller: {
+    label: "Top Seller",
+    icon: "trophy",
+    color: "#F59E0B",
+  },
+  local: {
+    label: "Local Business",
+    icon: "location",
+    color: "#8B5CF6",
+  },
+  trending: {
+    label: "Trending",
+    icon: "trending-up",
+    color: "#EC4899",
+  },
+  premium: {
+    label: "Premium",
+    icon: "star",
+    color: "#EAB308",
+  },
+};
+
+const FALLBACK_BADGE_STYLE = {
+  icon: "pricetag",
+  color: "#64748B",
+};
+
+const normalizeBadgeId = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_");
+
+const toBadgeLabel = (badgeId) =>
+  String(badgeId || "")
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+
+const normalizeSellerBadges = (badges) => {
+  let rawBadges = [];
+
+  if (Array.isArray(badges)) {
+    rawBadges = badges;
+  } else if (typeof badges === "string") {
+    try {
+      const parsed = JSON.parse(badges);
+      if (Array.isArray(parsed)) {
+        rawBadges = parsed;
+      } else {
+        rawBadges = badges.split(",");
+      }
+    } catch {
+      rawBadges = badges.split(",");
+    }
+  } else if (badges && typeof badges === "object") {
+    rawBadges = Object.entries(badges)
+      .filter(([, enabled]) => enabled === true)
+      .map(([badgeId]) => badgeId);
+  }
+
+  return [...new Set(rawBadges.map(normalizeBadgeId).filter(Boolean))];
+};
+
+const dedupeProductsById = (items = []) => {
+  const seen = new Set();
+  return (items || []).filter((item) => {
+    const id = item?.id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 };
 
 export const StoreScreen = ({ route, navigation }) => {
-  const rawSeller =
-    (route.params &&
-      (route.params.seller || route.params.sellerId || route.params.id)) ||
+  const rawSeller = route?.params || null;
+  const routeSellerId =
+    rawSeller?.sellerId ||
+    rawSeller?.id ||
+    rawSeller?.seller?.id ||
+    rawSeller?.seller?.seller_id?.id ||
+    rawSeller?.seller?.seller_id ||
     null;
   const [sellerDetail, setSellerDetail] = useState(
-    typeof rawSeller === "object" ? rawSeller : null,
+    rawSeller?.seller && typeof rawSeller.seller === "object"
+      ? rawSeller.seller
+      : null,
   );
-  const sellerId = typeof rawSeller === "string" ? rawSeller : sellerDetail?.id;
+  const sellerId = routeSellerId || sellerDetail?.id;
   const insets = useSafeAreaInsets();
   const { width: screenWidth, gridColumns, getItemWidth } = useResponsive();
   const itemWidth = getItemWidth(gridColumns, 12, 12);
@@ -150,6 +229,33 @@ export const StoreScreen = ({ route, navigation }) => {
           storeReviews.length
         ).toFixed(1)
       : "0.0";
+  const sellerBadgeIds = useMemo(
+    () => normalizeSellerBadges(sellerDetail?.badges),
+    [sellerDetail?.badges],
+  );
+
+  useEffect(() => {
+    if (!sellerId) return;
+    const routeSeller =
+      rawSeller?.seller && typeof rawSeller.seller === "object"
+        ? rawSeller.seller
+        : null;
+    setSellerDetail((prev) => {
+      if (routeSeller?.id === sellerId) return routeSeller;
+      if (prev?.id === sellerId) return prev;
+      return { id: sellerId };
+    });
+    setStoreProducts([]);
+    setStoreHasMore(true);
+    setStoreLoading(true);
+    setStoreLoadingMore(false);
+    setStatuses([]);
+    setStoreReviews([]);
+    setUserProfiles({});
+    setFollowerCount(0);
+    setActiveTab("products");
+    tabScrollRef.current?.scrollTo({ x: 0, animated: false });
+  }, [sellerId, rawSeller?.seller]);
 
   const handleFollowToggle = async () => {
     if (!sellerId) return;
@@ -179,23 +285,25 @@ export const StoreScreen = ({ route, navigation }) => {
   };
 
   useEffect(() => {
-    // If we were passed only a seller id (string), fetch full seller row
+    // If we were passed only a seller id (string), hydrate seller detail.
     const fetchSeller = async () => {
-      // Always fetch the latest seller row from the DB by id so flags like
-      // `theme_apply_store` are up-to-date even when a seller object was
-      // passed through navigation params.
-      const id =
-        sellerId || (typeof rawSeller === "string" ? rawSeller : rawSeller?.id);
-      if (!id) return;
+      if (!supabase || !sellerId) return;
+
       try {
         const { data, error } = await supabase
           .from("express_sellers")
           .select(
             "id,name,avatar,badges,rating,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
           )
-          .eq("id", id)
+          .eq("id", sellerId)
           .single();
-        if (!error && data) setSellerDetail(data);
+        if (!error && data) {
+          setSellerDetail((prev) => ({
+            ...prev,
+            ...data,
+            badges: data.badges ?? prev?.badges ?? [],
+          }));
+        }
       } catch (err) {
         console.error("Error fetching seller detail:", err);
       }
@@ -315,7 +423,7 @@ export const StoreScreen = ({ route, navigation }) => {
     }
   };
 
-  // Replace ShopContext filter with direct paginated fetch
+  // Fetch only this store's products and dedupe by product id.
   const fetchStoreProducts = useCallback(
     async (reset = true) => {
       if (!supabase || !sellerId) return;
@@ -328,9 +436,12 @@ export const StoreScreen = ({ route, navigation }) => {
           .eq("seller_id", sellerId)
           .eq("status", "active")
           .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
           .range(start, end);
         if (error) throw error;
-        const mapped = (data || []).map((p) => {
+
+        const rows = data || [];
+        const mapped = rows.map((p) => {
           const normalizedQuantity = p.quantity ?? p.stock ?? p.stock_quantity;
           const normalizedStock = p.stock ?? p.quantity ?? p.stock_quantity;
           const normalizedBackorder =
@@ -366,8 +477,24 @@ export const StoreScreen = ({ route, navigation }) => {
             seller: p.seller_id || null,
           };
         });
-        setStoreProducts(reset ? mapped : (prev) => [...prev, ...mapped]);
-        setStoreHasMore(mapped.length === STORE_PAGE_SIZE);
+
+        const uniqueMapped = dedupeProductsById(mapped);
+        const nextProducts = reset
+          ? uniqueMapped
+          : dedupeProductsById([...storeProducts, ...uniqueMapped]);
+
+        if (reset && rows[0]?.seller_id) {
+          setSellerDetail((prev) => ({
+            ...prev,
+            ...rows[0].seller_id,
+            badges: rows[0].seller_id.badges ?? prev?.badges ?? [],
+          }));
+        }
+
+        setStoreProducts(nextProducts);
+        const receivedFullPage = rows.length === STORE_PAGE_SIZE;
+        const appendedNewProducts = reset || nextProducts.length > storeProducts.length;
+        setStoreHasMore(receivedFullPage && appendedNewProducts);
       } catch (err) {
         console.error("fetchStoreProducts error", err);
       } finally {
@@ -375,7 +502,7 @@ export const StoreScreen = ({ route, navigation }) => {
         setStoreLoading(false);
       }
     },
-    [sellerId, storeProducts.length],
+    [sellerId, storeProducts],
   );
 
   const handleLoadMoreStoreProducts = useCallback(async () => {
@@ -514,11 +641,13 @@ export const StoreScreen = ({ route, navigation }) => {
                 </View>
 
                 {/* Badges Section */}
-                {sellerDetail?.badges && sellerDetail.badges.length > 0 && (
+                {sellerBadgeIds.length > 0 && (
                   <View style={styles.badgesRow}>
-                    {[...new Set(sellerDetail.badges)].map((badgeId, index) => {
-                      const badgeConfig = BADGE_CONFIG[badgeId];
-                      if (!badgeConfig) return null;
+                    {sellerBadgeIds.map((badgeId, index) => {
+                      const badgeConfig = BADGE_CONFIG[badgeId] || {
+                        ...FALLBACK_BADGE_STYLE,
+                        label: toBadgeLabel(badgeId),
+                      };
                       return (
                         <View
                           key={`${badgeId}-${index}`}
@@ -971,7 +1100,10 @@ export const StoreScreen = ({ route, navigation }) => {
           </View>
         }
         renderItem={() => null}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[
+          styles.listContainer,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
         scrollEnabled={true}
         scrollIndicatorInsets={{ top: 0 }}
         overScrollMode="never"

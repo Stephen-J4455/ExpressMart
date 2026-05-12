@@ -57,6 +57,8 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const offset = Math.max(0, Number(body?.offset ?? 0) || 0);
     const limit = Math.min(100, Math.max(1, Number(body?.limit ?? 24) || 24));
+    const sellerId = String(body?.sellerId ?? "").trim();
+    const includeOutOfStock = toBoolean(body?.includeOutOfStock);
 
     const { data: cacheSetting, error: cacheSettingError } = await supabase
       .from("express_settings")
@@ -69,13 +71,22 @@ serve(async (req) => {
     const redisEnabled = toBoolean(cacheSetting?.value);
 
     const queryProducts = async () => {
-      const { data, error } = await supabase
+      let productsQuery = supabase
         .from("express_products")
         .select(
           "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-        )
-        .eq("status", "active")
-        .or("quantity.gt.0,is_preorder.eq.true")
+         )
+        .eq("status", "active");
+
+      if (sellerId) {
+        productsQuery = productsQuery.eq("seller_id", sellerId);
+      }
+
+      if (!includeOutOfStock) {
+        productsQuery = productsQuery.or("quantity.gt.0,is_preorder.eq.true");
+      }
+
+      const { data, error } = await productsQuery
         .order("created_at", { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -89,12 +100,14 @@ serve(async (req) => {
       30,
       Number(Deno.env.get("REDIS_PRODUCTS_CACHE_TTL_SECONDS") ?? 120) || 120,
     );
-    const cacheKey = `expressmart:products:active:v1:${offset}:${limit}`;
+    const sellerCacheSegment = encodeURIComponent(sellerId || "all");
+    const stockCacheSegment = includeOutOfStock ? "all_stock" : "in_stock_only";
+    const cacheKey = `expressmart:products:active:v2:${sellerCacheSegment}:${stockCacheSegment}:${offset}:${limit}`;
 
     if (!redisEnabled || !redisUrl || !redisToken) {
       const products = await queryProducts();
       console.info(
-        `[cached-products] source=database reason=${!redisEnabled ? "cache_disabled" : "redis_not_configured"} offset=${offset} limit=${limit}`,
+        `[cached-products] source=database reason=${!redisEnabled ? "cache_disabled" : "redis_not_configured"} seller_id=${sellerId || "all"} include_out_of_stock=${includeOutOfStock} offset=${offset} limit=${limit}`,
       );
       return new Response(
         JSON.stringify({
@@ -115,7 +128,7 @@ serve(async (req) => {
       const cachedValue = redisGet?.result;
       if (typeof cachedValue === "string" && cachedValue.trim()) {
         console.info(
-          `[cached-products] source=redis cache_hit=true offset=${offset} limit=${limit}`,
+          `[cached-products] source=redis cache_hit=true seller_id=${sellerId || "all"} include_out_of_stock=${includeOutOfStock} offset=${offset} limit=${limit}`,
         );
         return new Response(
           JSON.stringify({
@@ -136,7 +149,7 @@ serve(async (req) => {
 
     const products = await queryProducts();
     console.info(
-      `[cached-products] source=database cache_hit=false offset=${offset} limit=${limit}`,
+      `[cached-products] source=database cache_hit=false seller_id=${sellerId || "all"} include_out_of_stock=${includeOutOfStock} offset=${offset} limit=${limit}`,
     );
 
     try {

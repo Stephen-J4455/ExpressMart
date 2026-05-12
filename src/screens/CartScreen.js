@@ -308,7 +308,13 @@ export const CartScreen = ({ navigation }) => {
           <View style={{ height: 20 }} />
         </ScrollView>
 
-        <View style={isWide ? styles.summaryWide : styles.summary}>
+        <View
+          style={
+            isWide
+              ? styles.summaryWide
+              : [styles.summary, { paddingBottom: 32 + insets.bottom }]
+          }
+        >
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
             <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>

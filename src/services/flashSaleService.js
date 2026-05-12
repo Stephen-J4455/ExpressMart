@@ -17,7 +17,7 @@ export const flashSaleService = {
         .select(
           `
           *,
-          product:express_products(*)
+          product:express_products(*, seller_id(id,name,avatar,badges))
         `
         )
         .eq("is_active", true)
@@ -73,7 +73,7 @@ export const flashSaleService = {
         .select(
           `
           *,
-          product:express_products(*)
+          product:express_products(*, seller_id(id,name,avatar,badges))
         `
         )
         .eq("is_active", true)
@@ -137,7 +137,7 @@ export const flashSaleService = {
         .select(
           `
           *,
-          product:express_products(*)
+          product:express_products(*, seller_id(id,name,avatar,badges))
         `
         )
         .eq("is_active", true)

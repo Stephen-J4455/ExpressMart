@@ -53,7 +53,12 @@ export const OrderDetailScreen = () => {
       )
       .subscribe();
 
-    return () => channel.unsubscribe();
+    return () => {
+      if (!channel || typeof channel.unsubscribe !== "function") return;
+      Promise.resolve(channel.unsubscribe()).catch((err) => {
+        console.warn("Order detail realtime cleanup failed:", err);
+      });
+    };
   }, [order?.id]);
 
   const fetchOrderItems = async () => {

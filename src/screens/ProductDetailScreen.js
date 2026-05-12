@@ -20,14 +20,16 @@ import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useShop } from "../context/ShopContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
 import { AdRenderer } from "../components/AdBanner";
+import { ProductCard } from "../components/ProductCard";
 import { InlineAdProductCard } from "../components/InlineAdProductCard";
 import { FlashSaleCountdown } from "../components/FlashSaleCountdown";
 import { useAds } from "../context/AdsContext";
 import { flashSaleService } from "../services/flashSaleService";
-import { useResponsive } from "../hooks/useResponsive";
+import { injectAdsIntoProducts } from "../utils/adPlacement";
 
 const SELLER_BADGE_CONFIG = {
   verified: {
@@ -72,9 +74,11 @@ const toBoolean = (value) => {
   return false;
 };
 
+const REVIEW_STAR_COLOR = "#F97316";
+
 export const ProductDetailScreen = ({ route, navigation }) => {
-  const { isWide, horizontalPadding } = useResponsive();
   const { product: initialProduct } = route.params;
+  const insets = useSafeAreaInsets();
   const { addToCart } = useCart();
   const { user } = useAuth();
   const toast = useToast();
@@ -105,6 +109,10 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [previewImageIndex, setPreviewImageIndex] = useState(0);
   const [expandedReviews, setExpandedReviews] = useState({});
+  const [similarProducts, setSimilarProducts] = useState([]);
+  const [loadingSimilarProducts, setLoadingSimilarProducts] = useState(false);
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
+  const [canExpandDetails, setCanExpandDetails] = useState(false);
   const previewScrollRef = useRef(null);
 
   const screenWidth = Dimensions.get("window").width;
@@ -122,6 +130,17 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const isPreorder = toBoolean(product?.is_preorder);
   const isOutOfStock =
     !isPreorder && hasInventoryValue && availableStock <= 0 && !allowsBackorder;
+  const originalDisplayPrice = Number(
+    hasFlashSale ? flashSale?.original_price || product.price || 0 : product.price || 0,
+  );
+  const currentDisplayPrice = Number(
+    hasFlashSale
+      ? flashSale?.flash_price || product.price || 0
+      : product.discount > 0
+        ? (product.price || 0) * (1 - product.discount / 100)
+        : product.price || 0,
+  );
+  const savingsAmount = Math.max(0, originalDisplayPrice - currentDisplayPrice);
 
   // Format price as Ghana Cedis
   const formatPrice = (price, discount = 0) => {
@@ -258,71 +277,190 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     );
   }, [fetchAdsByPlacement]);
 
-  const relatedTagAds = useMemo(() => {
-    const normalize = (value) =>
-      String(value || "")
-        .trim()
-        .toLowerCase();
+  const productTagList = useMemo(
+    () => {
+      const rawTags = product?.tags;
+      let tags = [];
 
-    const productTagSet = new Set(
-      (product?.tags || []).map(normalize).filter(Boolean),
+      if (Array.isArray(rawTags)) {
+        tags = rawTags;
+      } else if (typeof rawTags === "string") {
+        try {
+          const parsed = JSON.parse(rawTags);
+          if (Array.isArray(parsed)) {
+            tags = parsed;
+          } else {
+            tags = rawTags.split(",");
+          }
+        } catch {
+          tags = rawTags.split(",");
+        }
+      }
+
+      return tags.map((tag) => String(tag || "").trim()).filter(Boolean);
+    },
+    [product?.tags],
+  );
+
+  const productDetailsText = useMemo(() => {
+    const baseDescription = String(
+      product.description ||
+        `High-quality product from ${product.vendor}. Category: ${product.category}. Perfect for your needs with excellent features and durability.`,
+    ).trim();
+
+    const extraBits = [];
+    if (product?.category) {
+      extraBits.push(`Category: ${product.category}.`);
+    }
+    if (product?.weight) {
+      extraBits.push(`Weight: ${product.weight} ${product.weight_unit || "kg"}.`);
+    }
+    if (Array.isArray(product?.sizes) && product.sizes.length > 0) {
+      extraBits.push(`Available sizes: ${product.sizes.join(", ")}.`);
+    }
+    if (Array.isArray(product?.colors) && product.colors.length > 0) {
+      extraBits.push(`Available colors: ${product.colors.join(", ")}.`);
+    }
+    if (Array.isArray(productTagList) && productTagList.length > 0) {
+      extraBits.push(`Popular tags: ${productTagList.join(", ")}.`);
+    }
+    if (
+      product?.specifications &&
+      typeof product.specifications === "object" &&
+      Object.keys(product.specifications).length > 0
+    ) {
+      const specsPreview = Object.entries(product.specifications)
+        .slice(0, 4)
+        .map(([key, value]) => `${key}: ${value}`)
+        .join(" • ");
+      if (specsPreview) {
+        extraBits.push(`Key specifications: ${specsPreview}.`);
+      }
+    }
+    extraBits.push(
+      "Review the specifications, available options, and customer feedback to confirm this product fits your needs before checkout.",
     );
 
-    if (productTagSet.size === 0) {
-      return (productAds || []).slice(0, 5);
-    }
+    return [baseDescription, ...extraBits].join("\n\n");
+  }, [
+    product.description,
+    product.vendor,
+    product.category,
+    product.weight,
+    product.weight_unit,
+    product.sizes,
+    product.colors,
+    product.specifications,
+    productTagList,
+  ]);
 
-    const extractAdTags = (ad) => {
-      const fields = [
-        ad?.tags,
-        ad?.target_tags,
-        ad?.keywords,
-        ad?.target_keywords,
-        ad?.context_tags,
-        ad?.category,
-        ad?.target_category,
-      ];
+  const similarInlineAds = useMemo(
+    () =>
+      (productAds || []).filter((ad) => {
+        const style = String(ad?.style || "").toLowerCase();
+        return style === "card" || style === "inline" || style === "";
+      }),
+    [productAds],
+  );
 
-      const tokens = [];
-      fields.forEach((field) => {
-        if (!field) return;
-        if (Array.isArray(field)) {
-          tokens.push(...field);
-          return;
-        }
-        if (typeof field === "string") {
-          try {
-            const parsed = JSON.parse(field);
-            if (Array.isArray(parsed)) {
-              tokens.push(...parsed);
-              return;
-            }
-          } catch {
-            // Not JSON, continue with split
+  const similarFeedItems = useMemo(
+    () =>
+      injectAdsIntoProducts({
+        products: similarProducts,
+        ads: similarInlineAds,
+        seed: `similar-products-${product?.id}-${similarProducts.length}`,
+        minInterval: 3,
+        maxInterval: 5,
+        maxAds: 2,
+      }),
+    [product?.id, similarProducts, similarInlineAds],
+  );
+
+  useEffect(() => {
+    setIsDetailsExpanded(false);
+    const estimatedCharsPerLine = 58;
+    setCanExpandDetails(productDetailsText.length > estimatedCharsPerLine * 5);
+  }, [product?.id, productDetailsText]);
+
+  const mapSimilarProduct = useCallback((item) => {
+    const seller = item?.seller_id || item?.seller || null;
+    return {
+      id: item.id,
+      title: item.title,
+      vendor: item.vendor,
+      price: Number(item.price || 0),
+      rating: Number(item.rating || 0),
+      badges: item.badges || [],
+      thumbnail: item.thumbnail,
+      thumbnails: item.thumbnails || [],
+      category: item.category,
+      description: item.description,
+      discount: item.discount || 0,
+      quantity: item.quantity ?? item.stock ?? item.stock_quantity ?? 0,
+      stock: item.stock ?? item.quantity ?? item.stock_quantity ?? 0,
+      allow_backorder: item.allow_backorder || false,
+      is_preorder: item.is_preorder || false,
+      colors: item.colors || [],
+      sizes: item.sizes || [],
+      specifications: item.specifications || null,
+      tags: item.tags || [],
+      weight: item.weight || null,
+      weight_unit: item.weight_unit || null,
+      sku: item.sku || null,
+      barcode: item.barcode || null,
+      seller,
+    };
+  }, []);
+
+  useEffect(() => {
+    const fetchSimilarProducts = async () => {
+      if (!supabase || !product?.id) return;
+      setLoadingSimilarProducts(true);
+      try {
+        let similar = [];
+
+        if (productTagList.length > 0) {
+          const { data: tagData, error: tagError } = await supabase
+            .from("express_products")
+            .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+            .eq("status", "active")
+            .neq("id", product.id)
+            .overlaps("tags", productTagList)
+            .order("created_at", { ascending: false })
+            .limit(8);
+
+          if (tagError) {
+            console.warn("Tag-based similar query failed:", tagError.message);
+          } else {
+            similar = tagData || [];
           }
-          tokens.push(...field.split(","));
         }
-      });
 
-      // Fallback to title/description words when explicit targeting is missing.
-      if (tokens.length === 0) {
-        const fallbackText = `${ad?.title || ""} ${ad?.description || ""}`;
-        tokens.push(...fallbackText.split(/\s+/));
+        if (similar.length === 0 && product?.category) {
+          const { data: categoryData, error: categoryError } = await supabase
+            .from("express_products")
+            .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+            .eq("status", "active")
+            .neq("id", product.id)
+            .eq("category", product.category)
+            .order("created_at", { ascending: false })
+            .limit(8);
+
+          if (categoryError) throw categoryError;
+          similar = categoryData || [];
+        }
+
+        setSimilarProducts(similar.map(mapSimilarProduct));
+      } catch (err) {
+        console.error("Error fetching similar products:", err);
+        setSimilarProducts([]);
+      } finally {
+        setLoadingSimilarProducts(false);
       }
-
-      return new Set(tokens.map(normalize).filter(Boolean));
     };
 
-    const matched = (productAds || []).filter((ad) => {
-      const adTags = extractAdTags(ad);
-      for (const tag of productTagSet) {
-        if (adTags.has(tag)) return true;
-      }
-      return false;
-    });
-
-    return (matched.length > 0 ? matched : productAds || []).slice(0, 5);
-  }, [product?.tags, productAds]);
+    fetchSimilarProducts();
+  }, [mapSimilarProduct, product?.id, product?.category, productTagList]);
 
   const toggleWishlist = useCallback(async () => {
     if (!user) {
@@ -729,10 +867,24 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         </Pressable>
 
         <View style={styles.content}>
-          <View style={styles.vendorRow}>
-            <Text style={styles.vendor}>
-              {product.seller?.name || product.vendor}
-            </Text>
+            <View style={styles.vendorRow}>
+              <View style={styles.sellerPill}>
+                <Ionicons
+                  name="storefront-outline"
+                  size={14}
+                  color={colors.primary}
+                />
+                <Text style={styles.vendor}>
+                  {product.seller?.name || product.vendor}
+                </Text>
+              </View>
+              {!!product.category && (
+                <View style={styles.categoryPill}>
+                  <Text style={styles.categoryPillText}>{product.category}</Text>
+                </View>
+              )}
+            </View>
+
             {product.seller?.badges && product.seller.badges.length > 0 && (
               <View style={styles.sellerBadgesRow}>
                 {product.seller.badges.slice(0, 3).map((badgeId) => {
@@ -761,141 +913,146 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 })}
               </View>
             )}
-          </View>
-          <Text style={styles.title}>{product.title}</Text>
 
-          {hasFlashSale && (
-            <View style={styles.flashSaleSection}>
-              <FlashSaleCountdown
-                endTime={flashSale.end_time}
-                startTime={flashSale.start_time}
-                withProgressBar
-                onExpire={() => {
-                  setFlashSale(null);
-                  refreshProductData();
-                }}
-                availableQty={
-                  flashSale.max_quantity != null
-                    ? Math.max(
-                        0,
-                        (flashSale.max_quantity || 0) -
-                          (flashSale.sold_quantity || 0),
-                      )
-                    : null
-                }
-              />
-            </View>
-          )}
+            <Text style={styles.title}>{product.title}</Text>
 
-          <View style={styles.priceSection}>
-            <View style={styles.priceRow}>
-              <View style={styles.priceContainer}>
-                <Text style={styles.price}>
-                  {formatPrice(product.price, product.discount)}
-                </Text>
-                {hasFlashSale ? (
-                  <>
-                    <Text style={styles.originalPrice}>
-                      GH₵
-                      {Number(
-                        flashSale.original_price || product.price,
-                      ).toLocaleString()}
-                    </Text>
-                    <View style={styles.flashDiscountBadge}>
-                      <LinearGradient
-                        colors={["#EF4444", "#DC2626"]}
-                        style={styles.flashBadgeGradient}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                      >
-                        <Ionicons name="flash" size={12} color="#fff" />
-                        <Text style={styles.flashDiscountText}>
-                          {Math.round(flashSale.discount_percentage)}% OFF
-                        </Text>
-                      </LinearGradient>
-                    </View>
-                  </>
-                ) : (
-                  product.discount > 0 && (
-                    <>
-                      <Text style={styles.originalPrice}>
-                        GH₵{Number(product.price).toLocaleString()}
-                      </Text>
-                      <View style={styles.discountBadge}>
-                        <Text style={styles.discountText}>
-                          {product.discount}% OFF
-                        </Text>
-                      </View>
-                    </>
-                  )
-                )}
-              </View>
-            </View>
             <View style={styles.ratingRow}>
-              <Ionicons name="star" size={20} color={colors.secondary} />
-              <Text style={styles.ratingText}>
-                {reviewCount > 0
-                  ? product.rating?.toFixed(1) || "0.0"
-                  : "No reviews"}
-              </Text>
+              <View style={styles.ratingChip}>
+                <Ionicons name="star" size={16} color="#F59E0B" />
+                <Text style={styles.ratingText}>
+                  {reviewCount > 0
+                    ? product.rating?.toFixed(1) || "0.0"
+                    : "No reviews"}
+                </Text>
+              </View>
               {reviewCount > 0 && (
-                <Text style={styles.ratingCount}>({reviewCount} reviews)</Text>
+                <Text style={styles.ratingCount}>{reviewCount} reviews</Text>
               )}
             </View>
-          </View>
 
-          {/* Product Badges — fall back to seller badges when product has none */}
-          {(() => {
-            const productBadges = product.badges || [];
-            const sellerBadges = product.seller?.badges || [];
-            const displayBadges =
-              productBadges.length > 0 ? productBadges : sellerBadges;
-            if (displayBadges.length === 0) return null;
-            return (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.badgeRow}
-                contentContainerStyle={styles.badgeRowContent}
-              >
-                {displayBadges.map((label) => {
-                  const normalizedLabel = label.toLowerCase();
-                  const badgeConfig =
-                    PRODUCT_BADGE_CONFIG[normalizedLabel] ||
-                    SELLER_BADGE_CONFIG[normalizedLabel];
-                  const displayLabel = badgeConfig?.label || label;
-                  return (
-                    <View
-                      key={label}
-                      style={[
-                        styles.productBadge,
-                        {
-                          backgroundColor:
-                            (badgeConfig?.color || colors.primary) + "20",
-                        },
-                      ]}
-                    >
-                      {badgeConfig?.icon && (
-                        <Ionicons
-                          name={badgeConfig.icon}
-                          size={12}
-                          color={badgeConfig.color || colors.primary}
-                        />
-                      )}
-                      <Text
+            {hasFlashSale && (
+              <View style={styles.flashSaleSection}>
+                <FlashSaleCountdown
+                  endTime={flashSale.end_time}
+                  startTime={flashSale.start_time}
+                  withProgressBar
+                  onExpire={() => {
+                    setFlashSale(null);
+                    refreshProductData();
+                  }}
+                  availableQty={
+                    flashSale.max_quantity != null
+                      ? Math.max(
+                          0,
+                          (flashSale.max_quantity || 0) -
+                            (flashSale.sold_quantity || 0),
+                        )
+                      : null
+                  }
+                />
+              </View>
+            )}
+
+            <View style={styles.priceSection}>
+              <View style={styles.priceRow}>
+                <View style={styles.priceContainer}>
+                  <Text style={styles.price}>
+                    {formatPrice(product.price, product.discount)}
+                  </Text>
+                  {hasFlashSale ? (
+                    <>
+                      <Text style={styles.originalPrice}>
+                        GH₵{originalDisplayPrice.toLocaleString()}
+                      </Text>
+                      <View style={styles.flashDiscountBadge}>
+                        <LinearGradient
+                          colors={["#EF4444", "#DC2626"]}
+                          style={styles.flashBadgeGradient}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                        >
+                          <Ionicons name="flash" size={12} color="#fff" />
+                          <Text style={styles.flashDiscountText}>
+                            {Math.round(flashSale.discount_percentage)}% OFF
+                          </Text>
+                        </LinearGradient>
+                      </View>
+                    </>
+                  ) : (
+                    product.discount > 0 && (
+                      <>
+                        <Text style={styles.originalPrice}>
+                          GH₵{originalDisplayPrice.toLocaleString()}
+                        </Text>
+                        <View style={styles.discountBadge}>
+                          <Text style={styles.discountText}>
+                            {product.discount}% OFF
+                          </Text>
+                        </View>
+                      </>
+                    )
+                  )}
+                </View>
+              </View>
+              {savingsAmount > 0 && (
+                <Text style={styles.savingsText}>
+                  You save GH₵{savingsAmount.toLocaleString()}
+                </Text>
+              )}
+            </View>
+
+            {/* Product Badges — fall back to seller badges when product has none */}
+            {(() => {
+              const productBadges = product.badges || [];
+              const sellerBadges = product.seller?.badges || [];
+              const displayBadges =
+                productBadges.length > 0 ? productBadges : sellerBadges;
+              if (displayBadges.length === 0) return null;
+              return (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.badgeRow}
+                  contentContainerStyle={styles.badgeRowContent}
+                >
+                  {displayBadges.map((label) => {
+                    const normalizedLabel = label.toLowerCase();
+                    const badgeConfig =
+                      PRODUCT_BADGE_CONFIG[normalizedLabel] ||
+                      SELLER_BADGE_CONFIG[normalizedLabel];
+                    const displayLabel = badgeConfig?.label || label;
+                    return (
+                      <View
+                        key={label}
                         style={[
-                          styles.productBadgeText,
-                          { color: badgeConfig?.color || colors.primary },
+                          styles.productBadge,
+                          {
+                            backgroundColor:
+                              (badgeConfig?.color || colors.primary) + "20",
+                          },
                         ]}
                       >
-                        {displayLabel}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            );
-          })()}
+                        {badgeConfig?.icon && (
+                          <Ionicons
+                            name={badgeConfig.icon}
+                            size={12}
+                            color={badgeConfig.color || colors.primary}
+                          />
+                        )}
+                        <Text
+                          style={[
+                            styles.productBadgeText,
+                            { color: badgeConfig?.color || colors.primary },
+                          ]}
+                        >
+                          {displayLabel}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              );
+            })()}
 
           {/* Shipping & Stock Info Row */}
           <View style={styles.deliveryRow}>
@@ -1005,120 +1162,141 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Product Details</Text>
-            <Text style={styles.description}>
-              {product.description ||
-                `High-quality product from ${product.vendor}. Category: ${product.category}. Perfect for your needs with excellent features and durability.`}
-            </Text>
+            <Text style={styles.sectionTitle}>Specifications</Text>
+            <View style={styles.sectionPanel}>
+              <View style={styles.specRow}>
+                <Text style={styles.specLabel}>Seller</Text>
+                <Text style={styles.specValue}>
+                  {product.seller?.name || product.vendor}
+                </Text>
+              </View>
+              <View style={styles.specRow}>
+                <Text style={styles.specLabel}>Category</Text>
+                <Text style={styles.specValue}>{product.category}</Text>
+              </View>
+              <View style={styles.specRow}>
+                <Text style={styles.specLabel}>Rating</Text>
+                <Text style={styles.specValue}>
+                  {product.rating?.toFixed(1) || "N/A"} / 5.0
+                </Text>
+              </View>
+
+              {product.weight && (
+                <View style={styles.specRow}>
+                  <Text style={styles.specLabel}>Weight</Text>
+                  <Text style={styles.specValue}>
+                    {product.weight} {product.weight_unit || "kg"}
+                  </Text>
+                </View>
+              )}
+
+              {product.sku && (
+                <View style={styles.specRow}>
+                  <Text style={styles.specLabel}>SKU</Text>
+                  <Text style={styles.specValue}>{product.sku}</Text>
+                </View>
+              )}
+
+              {product.barcode && (
+                <View style={styles.specRow}>
+                  <Text style={styles.specLabel}>Barcode</Text>
+                  <Text style={styles.specValue}>{product.barcode}</Text>
+                </View>
+              )}
+
+              {product.colors && product.colors.length > 0 && (
+                <View style={styles.specRow}>
+                  <Text style={styles.specLabel}>Available Colors</Text>
+                  <View style={styles.colorGrid}>
+                    {product.colors.map((colorName, index) => {
+                      const COLOR_MAP = {
+                        Black: "#000000",
+                        White: "#FFFFFF",
+                        Red: "#EF4444",
+                        Blue: "#3B82F6",
+                        Green: "#10B981",
+                        Yellow: "#F59E0B",
+                        Purple: "#8B5CF6",
+                        Pink: "#EC4899",
+                        Orange: "#F97316",
+                        Brown: "#92400E",
+                        Gray: "#6B7280",
+                        Navy: "#1E3A8A",
+                      };
+                      return (
+                        <View key={index} style={styles.colorBadge}>
+                          <View
+                            style={[
+                              styles.colorDot,
+                              {
+                                backgroundColor: COLOR_MAP[colorName] || "#CCC",
+                              },
+                            ]}
+                          />
+                          <Text style={styles.colorName}>{colorName}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {product.sizes && product.sizes.length > 0 && (
+                <View style={styles.specRow}>
+                  <Text style={styles.specLabel}>Available Sizes</Text>
+                  <View style={styles.sizeGrid}>
+                    {product.sizes.map((size, index) => (
+                      <View key={index} style={styles.sizeBadge}>
+                        <Text style={styles.sizeName}>{size}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {product.specifications &&
+                typeof product.specifications === "object" &&
+                Object.keys(product.specifications).length > 0 && (
+                  <>
+                    <View style={styles.divider} />
+                    {Object.entries(product.specifications).map(
+                      ([key, value], index) => (
+                        <View key={index} style={styles.specRow}>
+                          <Text style={styles.specLabel}>{key}</Text>
+                          <Text style={styles.specValue}>{value}</Text>
+                        </View>
+                      ),
+                    )}
+                  </>
+                )}
+            </View>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Specifications</Text>
-            <View style={styles.specRow}>
-              <Text style={styles.specLabel}>Seller</Text>
-              <Text style={styles.specValue}>
-                {product.seller?.name || product.vendor}
+            <Text style={styles.sectionTitle}>Product Details</Text>
+            <View style={styles.detailsPanel}>
+              <Text
+                style={styles.description}
+                numberOfLines={isDetailsExpanded ? undefined : 5}
+              >
+                {productDetailsText}
               </Text>
-            </View>
-            <View style={styles.specRow}>
-              <Text style={styles.specLabel}>Category</Text>
-              <Text style={styles.specValue}>{product.category}</Text>
-            </View>
-            <View style={styles.specRow}>
-              <Text style={styles.specLabel}>Rating</Text>
-              <Text style={styles.specValue}>
-                {product.rating?.toFixed(1) || "N/A"} / 5.0
-              </Text>
-            </View>
-
-            {product.weight && (
-              <View style={styles.specRow}>
-                <Text style={styles.specLabel}>Weight</Text>
-                <Text style={styles.specValue}>
-                  {product.weight} {product.weight_unit || "kg"}
-                </Text>
-              </View>
-            )}
-
-            {product.sku && (
-              <View style={styles.specRow}>
-                <Text style={styles.specLabel}>SKU</Text>
-                <Text style={styles.specValue}>{product.sku}</Text>
-              </View>
-            )}
-
-            {product.barcode && (
-              <View style={styles.specRow}>
-                <Text style={styles.specLabel}>Barcode</Text>
-                <Text style={styles.specValue}>{product.barcode}</Text>
-              </View>
-            )}
-
-            {product.colors && product.colors.length > 0 && (
-              <View style={styles.specRow}>
-                <Text style={styles.specLabel}>Available Colors</Text>
-                <View style={styles.colorGrid}>
-                  {product.colors.map((colorName, index) => {
-                    const COLOR_MAP = {
-                      Black: "#000000",
-                      White: "#FFFFFF",
-                      Red: "#EF4444",
-                      Blue: "#3B82F6",
-                      Green: "#10B981",
-                      Yellow: "#F59E0B",
-                      Purple: "#8B5CF6",
-                      Pink: "#EC4899",
-                      Orange: "#F97316",
-                      Brown: "#92400E",
-                      Gray: "#6B7280",
-                      Navy: "#1E3A8A",
-                    };
-                    return (
-                      <View key={index} style={styles.colorBadge}>
-                        <View
-                          style={[
-                            styles.colorDot,
-                            {
-                              backgroundColor: COLOR_MAP[colorName] || "#CCC",
-                            },
-                          ]}
-                        />
-                        <Text style={styles.colorName}>{colorName}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {product.sizes && product.sizes.length > 0 && (
-              <View style={styles.specRow}>
-                <Text style={styles.specLabel}>Available Sizes</Text>
-                <View style={styles.sizeGrid}>
-                  {product.sizes.map((size, index) => (
-                    <View key={index} style={styles.sizeBadge}>
-                      <Text style={styles.sizeName}>{size}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {product.specifications &&
-              typeof product.specifications === "object" &&
-              Object.keys(product.specifications).length > 0 && (
-                <>
-                  <View style={styles.divider} />
-                  {Object.entries(product.specifications).map(
-                    ([key, value], index) => (
-                      <View key={index} style={styles.specRow}>
-                        <Text style={styles.specLabel}>{key}</Text>
-                        <Text style={styles.specValue}>{value}</Text>
-                      </View>
-                    ),
-                  )}
-                </>
+              {canExpandDetails && (
+                <Pressable
+                  style={styles.expandDetailsButton}
+                  onPress={() => setIsDetailsExpanded((prev) => !prev)}
+                >
+                  <Text style={styles.expandDetailsText}>
+                    {isDetailsExpanded ? "Read less" : "Read full details"}
+                  </Text>
+                  <Ionicons
+                    name={isDetailsExpanded ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={colors.primary}
+                  />
+                </Pressable>
               )}
+            </View>
           </View>
 
           {product.tags && product.tags.length > 0 && (
@@ -1140,24 +1318,52 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             </View>
           )}
 
-          {relatedTagAds.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>
-                Sponsored For Similar Tags
-              </Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Similar Products</Text>
+            {loadingSimilarProducts ? (
+              <View style={styles.similarProductsLoader}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : similarFeedItems.length > 0 ? (
               <ScrollView
                 horizontal
+                style={styles.similarProductsScroll}
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.relatedAdsScroller}
+                contentContainerStyle={styles.relatedProductsScroller}
               >
-                {relatedTagAds.map((ad) => (
-                  <View key={ad.id} style={styles.relatedAdItem}>
-                    <InlineAdProductCard ad={ad} />
-                  </View>
-                ))}
+                {similarFeedItems.map((item, index) =>
+                  item?.__type === "injected_ad" ? (
+                    <View
+                      key={`similar-ad-${item.id || index}`}
+                      style={styles.relatedProductItem}
+                    >
+                      <InlineAdProductCard ad={item.ad} />
+                    </View>
+                  ) : (
+                    <View
+                      key={item.id}
+                      style={styles.relatedProductItem}
+                    >
+                      <ProductCard
+                        product={item}
+                        compact
+                        hideCta
+                        onPress={() =>
+                          navigation.push("ProductDetail", {
+                            product: item,
+                          })
+                        }
+                      />
+                    </View>
+                  ),
+                )}
               </ScrollView>
-            </View>
-          )}
+            ) : (
+              <Text style={styles.similarProductsEmpty}>
+                No similar products available right now.
+              </Text>
+            )}
+          </View>
 
           <View style={styles.section}>
             <View style={styles.reviewsHeader}>
@@ -1205,7 +1411,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                                 star <= review.rating ? "star" : "star-outline"
                               }
                               size={14}
-                              color={colors.secondary}
+                              color={REVIEW_STAR_COLOR}
                             />
                           ))}
                         </View>
@@ -1359,7 +1565,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         return <AdRenderer ads={overlayAds} />;
       })()}
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: 24 + insets.bottom }]}>
         <Pressable style={styles.chatButton} onPress={handleChatWithSeller}>
           <Ionicons
             name="chatbubble-ellipses"
@@ -1447,7 +1653,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
           {/* Bottom: page indicator dots + counter */}
           {(product.thumbnails?.length || 1) > 1 && (
-            <View style={styles.previewDotsRow}>
+            <View
+              style={[styles.previewDotsRow, { bottom: 52 + insets.bottom }]}
+            >
               {(product.thumbnails || [product.thumbnail]).map((_, i) => (
                 <View
                   key={i}
@@ -1459,7 +1667,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               ))}
             </View>
           )}
-          <Text style={styles.previewCounter}>
+          <Text style={[styles.previewCounter, { bottom: 24 + insets.bottom }]}>
             {previewImageIndex + 1} / {product.thumbnails?.length || 1}
           </Text>
         </View>
@@ -1516,7 +1724,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                       name={star <= reviewRating ? "star" : "star-outline"}
                       size={32}
                       color={
-                        star <= reviewRating ? colors.secondary : colors.muted
+                        star <= reviewRating ? REVIEW_STAR_COLOR : colors.muted
                       }
                     />
                   </Pressable>
@@ -1538,7 +1746,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             </View>
           </ScrollView>
 
-          <View style={styles.modalFooter}>
+          <View
+            style={[styles.modalFooter, { paddingBottom: 16 + insets.bottom }]}
+          >
             <Pressable
               style={styles.cancelButton}
               onPress={() => {
@@ -1576,7 +1786,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         onRequestClose={() => setShowVariantModal(false)}
       >
         <View style={styles.variantOverlay}>
-          <View style={styles.variantModal}>
+          <View
+            style={[styles.variantModal, { paddingBottom: 20 + insets.bottom }]}
+          >
             <View style={styles.variantHeader}>
               <Text style={styles.variantTitle}>Select Options</Text>
               <Pressable onPress={() => setShowVariantModal(false)} hitSlop={8}>
@@ -1755,20 +1967,48 @@ const styles = StyleSheet.create({
     marginTop: -24,
   },
   vendorRow: {
-    flexDirection: "column",
-    gap: 8,
-    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 10,
+  },
+  sellerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primary + "12",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.primary + "22",
+  },
+  categoryPill: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  categoryPillText: {
+    fontSize: 11,
+    color: colors.muted,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   vendor: {
-    fontSize: 14,
-    color: colors.muted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: "700",
   },
   sellerBadgesRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
+    marginBottom: 12,
   },
   sellerBadge: {
     flexDirection: "row",
@@ -1783,25 +2023,30 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   title: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 25,
+    fontWeight: "800",
     color: colors.dark,
-    marginBottom: 12,
+    lineHeight: 32,
+    letterSpacing: -0.3,
+    marginBottom: 10,
   },
-  relatedAdsScroller: {
+  similarProductsScroll: {
+    width: "100%",
+  },
+  relatedProductsScroller: {
     gap: 12,
     paddingVertical: 4,
   },
-  relatedAdItem: {
-    width: 260,
+  relatedProductItem: {
+    width: 220,
   },
   badgeRow: {
-    marginBottom: 16,
+    marginTop: 10,
   },
   badgeRowContent: {
     flexDirection: "row",
     gap: 6,
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   productBadge: {
     flexDirection: "row",
@@ -1829,23 +2074,24 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   priceSection: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   priceRow: {
-    marginBottom: 8,
+    marginBottom: 6,
   },
   price: {
-    fontSize: 28,
-    fontWeight: "700",
+    fontSize: 30,
+    fontWeight: "800",
     color: colors.primary,
   },
   priceContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexWrap: "wrap",
   },
   originalPrice: {
-    fontSize: 18,
+    fontSize: 16,
     color: colors.muted,
     textDecorationLine: "line-through",
   },
@@ -1862,7 +2108,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   flashSaleSection: {
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  savingsText: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#059669",
   },
   availableTextDetail: {
     marginTop: 6,
@@ -1890,16 +2142,29 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  ratingChip: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FDBA74",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   ratingText: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: "700",
     color: colors.dark,
   },
   ratingCount: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted,
+    fontWeight: "500",
   },
   stockRow: {
     flexDirection: "row",
@@ -1917,6 +2182,21 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
+  sectionPanel: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  detailsPanel: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 16,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
@@ -1927,6 +2207,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.muted,
     lineHeight: 24,
+  },
+  expandDetailsButton: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+  },
+  expandDetailsText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  similarProductsLoader: {
+    paddingVertical: 20,
+    alignItems: "center",
+  },
+  similarProductsEmpty: {
+    fontSize: 14,
+    color: colors.muted,
+    fontWeight: "500",
   },
   specRow: {
     flexDirection: "row",
@@ -2485,8 +2786,7 @@ const styles = StyleSheet.create({
   deliveryRow: {
     flexDirection: "row",
     gap: 10,
-    marginHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   deliveryPill: {
     flex: 1,

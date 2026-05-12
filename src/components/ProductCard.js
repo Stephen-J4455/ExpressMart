@@ -11,6 +11,7 @@ import { useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -66,6 +67,7 @@ export const ProductCard = ({
 }) => {
   const navigation = useNavigation();
   const route = useRoute();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
   const { addToCart } = useCart();
   const toast = useToast();
@@ -100,6 +102,16 @@ export const ProductCard = ({
     const discountedPrice = discount > 0 ? price * (1 - discount / 100) : price;
     return `GH₵${Number(discountedPrice || 0).toLocaleString()}`;
   };
+
+  const displayStoreName = hasFlashSale
+    ? product.seller?.name ||
+      product.seller_id?.name ||
+      product.store?.name ||
+      product.store_name ||
+      product.vendor ||
+      "Store"
+    : product.seller?.name || product.store_name || product.vendor;
+  const sellerBadgeIds = product.seller?.badges || product.seller_id?.badges || [];
 
   const handleAdd = (e) => {
     e?.stopPropagation?.();
@@ -269,10 +281,10 @@ export const ProductCard = ({
               <View style={{ flex: 1 }}>
                 <View style={styles.vendorRow}>
                   <Text style={styles.vendor} numberOfLines={1}>
-                    {product.seller?.name || product.vendor}
+                    {displayStoreName}
                   </Text>
                   {SELLER_BADGE_PRIORITY.filter((id) =>
-                    product.seller?.badges?.includes(id),
+                    sellerBadgeIds?.includes(id),
                   )
                     .slice(0, 2)
                     .map((id) => {
@@ -413,7 +425,9 @@ export const ProductCard = ({
           onRequestClose={() => setShowVariantModal(false)}
         >
           <View style={styles.variantOverlay}>
-            <View style={styles.variantModal}>
+            <View
+              style={[styles.variantModal, { paddingBottom: 28 + insets.bottom }]}
+            >
               <View style={styles.variantHeader}>
                 <Text style={styles.variantTitle}>Select Options</Text>
                 <Pressable
@@ -576,10 +590,10 @@ export const ProductCard = ({
               style={compact ? styles.vendorCompact : styles.vendor}
               numberOfLines={1}
             >
-              {product.seller?.name || product.vendor}
+              {displayStoreName}
             </Text>
             {SELLER_BADGE_PRIORITY.filter((id) =>
-              product.seller?.badges?.includes(id),
+              sellerBadgeIds?.includes(id),
             )
               .slice(0, 2)
               .map((id) => {
@@ -687,7 +701,9 @@ export const ProductCard = ({
         onRequestClose={() => setShowVariantModal(false)}
       >
         <View style={styles.variantOverlay}>
-          <View style={styles.variantModal}>
+          <View
+            style={[styles.variantModal, { paddingBottom: 28 + insets.bottom }]}
+          >
             <View style={styles.variantHeader}>
               <Text style={styles.variantTitle}>Select Options</Text>
               <Pressable onPress={() => setShowVariantModal(false)} hitSlop={8}>

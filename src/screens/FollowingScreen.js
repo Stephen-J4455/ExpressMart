@@ -43,7 +43,9 @@ export const FollowingScreen = ({ navigation }) => {
     return (
       <Pressable
         style={styles.card}
-        onPress={() => navigation.navigate("Store", { seller: item })}
+        onPress={() =>
+          navigation.navigate("Store", { sellerId: item?.id, seller: item })
+        }
       >
         {/* Banner / Avatar area */}
         <View style={styles.cardImageArea}>
@@ -106,7 +108,9 @@ export const FollowingScreen = ({ navigation }) => {
 
           <Pressable
             style={styles.visitBtn}
-            onPress={() => navigation.navigate("Store", { seller: item })}
+            onPress={() =>
+              navigation.navigate("Store", { sellerId: item?.id, seller: item })
+            }
           >
             <Text style={styles.visitBtnText}>Visit Store</Text>
             <Ionicons name="arrow-forward" size={13} color={colors.primary} />

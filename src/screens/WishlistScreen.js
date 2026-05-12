@@ -96,7 +96,12 @@ export const WishlistScreen = ({ navigation }) => {
       )
       .subscribe();
 
-    return () => channel.unsubscribe();
+    return () => {
+      if (!channel || typeof channel.unsubscribe !== "function") return;
+      Promise.resolve(channel.unsubscribe()).catch((err) => {
+        console.warn("Wishlist realtime cleanup failed:", err);
+      });
+    };
   }, [user, fetchWishlist]);
 
   const removeFromWishlist = async (wishlistId) => {

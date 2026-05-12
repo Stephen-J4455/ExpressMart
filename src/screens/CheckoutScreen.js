@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
@@ -30,6 +31,7 @@ import { useResponsive } from "../hooks/useResponsive";
 
 export const CheckoutScreen = ({ navigation }) => {
   const { isWide, horizontalPadding } = useResponsive();
+  const insets = useSafeAreaInsets();
   const route = useRoute();
   const { user, profile, isAuthenticated } = useAuth();
   const { items, total, clearCart } = useCart();
@@ -326,7 +328,7 @@ export const CheckoutScreen = ({ navigation }) => {
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
       >
         {checkoutDisplayAds.length > 0 && (
           <View style={styles.adSection}>
@@ -559,7 +561,7 @@ export const CheckoutScreen = ({ navigation }) => {
       </ScrollView>
 
       {/* Checkout Button */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: 32 + insets.bottom }]}>
         <View style={styles.footerTotal}>
           <Text style={styles.footerLabel}>Total</Text>
           <Text style={styles.footerValue}>

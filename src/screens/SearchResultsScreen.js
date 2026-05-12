@@ -26,6 +26,7 @@ import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -56,6 +57,7 @@ const mapSearchProduct = (product) => ({
 });
 
 export const SearchResultsScreen = ({ navigation, route }) => {
+  const insets = useSafeAreaInsets();
   const { products } = useShop();
   const { fetchAdsByPlacement } = useAds();
   const initialQuery = route.params?.query || "";
@@ -502,6 +504,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
 
       <ScrollView
         style={styles.content}
+        contentContainerStyle={{ paddingBottom: 20 + insets.bottom }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={200}

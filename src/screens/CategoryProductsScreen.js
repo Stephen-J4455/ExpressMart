@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
@@ -33,6 +33,7 @@ const SORT_OPTIONS = [
 
 export const CategoryProductsScreen = ({ navigation, route }) => {
   const { category } = route.params;
+  const insets = useSafeAreaInsets();
   const { addToCart } = useCart();
   const toast = useToast();
   const { fetchAdsByPlacement } = useAds();
@@ -321,6 +322,7 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
             contentContainerStyle={[
               styles.gridContent,
               isDesktop && styles.gridContentDesktop,
+              { paddingBottom: 32 + insets.bottom },
             ]}
             showsVerticalScrollIndicator={false}
             onEndReached={onLoadMore}

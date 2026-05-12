@@ -481,15 +481,18 @@ export const ShopProvider = ({ children }) => {
       .subscribe();
 
     return () => {
-      try {
-        supabase.removeChannel(productsChannel);
-      } catch (error) {
-        console.warn("Products realtime cleanup failed:", error);
+      if (
+        productsChannel &&
+        typeof productsChannel.unsubscribe === "function"
+      ) {
+        Promise.resolve(productsChannel.unsubscribe()).catch((error) => {
+          console.warn("Products realtime cleanup failed:", error);
+        });
       }
-      try {
-        supabase.removeChannel(sellersChannel);
-      } catch (error) {
-        console.warn("Sellers realtime cleanup failed:", error);
+      if (sellersChannel && typeof sellersChannel.unsubscribe === "function") {
+        Promise.resolve(sellersChannel.unsubscribe()).catch((error) => {
+          console.warn("Sellers realtime cleanup failed:", error);
+        });
       }
     };
   }, []);
