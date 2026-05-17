@@ -68,7 +68,7 @@ import { StatusViewer } from "./src/screens/StatusViewer";
 import { PaymentWebViewScreen } from "./src/screens/PaymentWebViewScreen";
 import { CustomerLoadingAnimation } from "./src/components/CustomerLoadingAnimation";
 import { colors, getTheme } from "./src/theme/colors";
-// password reset handled exclusively via web; mobile screen no longer used
+// PasswordResetScreen handles recovery links on both web and native.
 
 import { supabase } from "./src/lib/supabase";
 import React from "react";
@@ -451,14 +451,18 @@ const linking = {
 
     const normalizedPath = String(path || "");
     if (hasResetPasswordPath(normalizedPath)) {
-      return { routes: [{ name: "ResetPassword" }] };
+      return {
+        routes: [{ name: "ResetPassword", params: { initialUrl: path } }],
+      };
     }
 
     if (
       isRecoveryResetLink(normalizedPath) &&
       !isGoogleOAuthCallbackLink(normalizedPath)
     ) {
-      return { routes: [{ name: "ResetPassword" }] };
+      return {
+        routes: [{ name: "ResetPassword", params: { initialUrl: path } }],
+      };
     }
 
     return state;

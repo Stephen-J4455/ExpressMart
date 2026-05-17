@@ -25,17 +25,17 @@ import { useToast } from "../context/ToastContext";
 import { useAuth } from "../context/AuthContext";
 import { useResponsive } from "../hooks/useResponsive";
 
-export default function PasswordResetScreen({ navigation }) {
+export default function PasswordResetScreen({ navigation, route }) {
   const toast = useToast();
   const { resetPassword } = useAuth();
   const { isWide } = useResponsive();
   const liveUrl = Linking.useURL();
+  const initialRouteUrl =
+    route?.params?.initialUrl || route?.params?.url || null;
 
-  // On web, avoid persisting the recovery-session to localStorage.
-  // Otherwise, other tabs of the app will become authenticated as soon as the
-  // reset link is opened.
+  // Use an isolated client for the recovery flow so the reset session never
+  // spills into the shared app auth state on any platform.
   const resetSupabase = React.useMemo(() => {
-    if (Platform.OS !== "web") return supabase;
     if (!supabaseUrl || !supabaseAnonKey) return supabase;
 
     return createClient(supabaseUrl, supabaseAnonKey, {
@@ -127,6 +127,16 @@ export default function PasswordResetScreen({ navigation }) {
           email: recoveryEmail,
         } = extractTokensFromUrl(url);
         const recoveryTokenHash = token_hash || null;
+        const hasRecoveryPayload =
+          !!access_token || !!refresh_token || !!recoveryTokenHash || !!code || type === "recovery";
+
+        if (
+          !hasRecoveryPayload &&
+          (String(url).toLowerCase().includes("reset-password") ||
+            String(url).toLowerCase().includes("password-reset"))
+        ) {
+          return;
+        }
 
         if (recoveryEmail) {
           setEmail(String(recoveryEmail).trim().toLowerCase());
@@ -209,7 +219,7 @@ export default function PasswordResetScreen({ navigation }) {
         setLoading(false);
       }
     },
-    [extractTokensFromUrl, resetSupabase],
+    [extractTokensFromUrl, initialRouteUrl, resetSupabase],
   );
 
   React.useEffect(() => {
@@ -224,7 +234,7 @@ export default function PasswordResetScreen({ navigation }) {
           await supabase.auth.signOut();
         }
 
-        let initialUrl = await Linking.getInitialURL();
+        let initialUrl = initialRouteUrl || (await Linking.getInitialURL());
         if (
           Platform.OS === "web" &&
           typeof window !== "undefined" &&

@@ -485,7 +485,7 @@ export const AuthProvider = ({ children }) => {
   const getResetRedirectTo = () =>
     Platform.OS === "web" && typeof window !== "undefined"
       ? new URL("/reset-password", window.location.origin).toString()
-      : "expressmart://reset-password";
+      : Linking.createURL("reset-password", { scheme: "expressmart" });
 
   const resetPassword = async (email) => {
     if (!supabase) {
