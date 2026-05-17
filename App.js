@@ -380,7 +380,23 @@ const normalizeRecoveryDeepLink = (url) => {
   const isRecoveryDeepLink =
     hasRecoveryType || (hasRecoveryToken && !isAuthCallback);
 
-  if (Platform.OS === "web" && hasWebResetScreen) return raw;
+  if (Platform.OS === "web" && hasWebResetScreen) {
+    const hashIndex = raw.indexOf("#");
+    const queryIndex = raw.indexOf("?");
+    const hasQuery =
+      queryIndex >= 0 && (hashIndex < 0 || queryIndex < hashIndex);
+    const query = hasQuery
+      ? raw.slice(queryIndex + 1, hashIndex >= 0 ? hashIndex : undefined)
+      : "";
+    const hash = hashIndex >= 0 ? raw.slice(hashIndex + 1) : "";
+    const queryPart = query ? `?${query}` : "";
+    const hashPart = hash ? `#${hash}` : "";
+    const origin =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : "";
+    return `${origin}/reset-password${queryPart}${hashPart}`;
+  }
   if (hasResetPath && isNativeResetDeepLink) return raw;
 
   if ((hasResetPath && hasAppSource) || isRecoveryDeepLink) {
