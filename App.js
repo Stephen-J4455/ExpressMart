@@ -481,19 +481,19 @@ const linking = {
       };
     }
 
-    const state = defaultGetStateFromPath(path, options);
-    if (state) return state;
-
-    if (hasResetPasswordPath(normalizedPath)) {
+    if (
+      isRecoveryResetLink(normalizedPath) &&
+      !isGoogleOAuthCallbackLink(normalizedPath)
+    ) {
       return {
         routes: [{ name: "ResetPassword", params: { initialUrl: path } }],
       };
     }
 
-    if (
-      isRecoveryResetLink(normalizedPath) &&
-      !isGoogleOAuthCallbackLink(normalizedPath)
-    ) {
+    const state = defaultGetStateFromPath(path, options);
+    if (state) return state;
+
+    if (hasResetPasswordPath(normalizedPath)) {
       return {
         routes: [{ name: "ResetPassword", params: { initialUrl: path } }],
       };
