@@ -475,6 +475,21 @@ const linking = {
   },
   getStateFromPath: (path, options) => {
     const normalizedPath = String(path || "");
+    const webHref =
+      Platform.OS === "web" && typeof window !== "undefined"
+        ? window.location.href
+        : "";
+
+    if (
+      webHref &&
+      isRecoveryResetLink(webHref) &&
+      !isGoogleOAuthCallbackLink(webHref)
+    ) {
+      return {
+        routes: [{ name: "ResetPassword", params: { initialUrl: webHref } }],
+      };
+    }
+
     if (isWebResetScreenUrl(normalizedPath)) {
       return {
         routes: [{ name: "ResetPassword", params: { initialUrl: path } }],
