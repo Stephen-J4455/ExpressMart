@@ -361,6 +361,8 @@ const normalizeRecoveryDeepLink = (url) => {
 
   const raw = String(url);
   const normalized = raw.toLowerCase();
+  const hasWebResetScreen = normalized.includes("screen=reset-password") ||
+    normalized.includes("screen=password-reset");
   const hasResetPath =
     normalized.includes("reset-password") ||
     normalized.includes("password-reset");
@@ -378,6 +380,7 @@ const normalizeRecoveryDeepLink = (url) => {
   const isRecoveryDeepLink =
     hasRecoveryType || (hasRecoveryToken && !isAuthCallback);
 
+  if (Platform.OS === "web" && hasWebResetScreen) return raw;
   if (hasResetPath && isNativeResetDeepLink) return raw;
 
   if ((hasResetPath && hasAppSource) || isRecoveryDeepLink) {
@@ -424,6 +427,15 @@ const isRecoveryResetLink = (value) => {
   return hasRecoveryType || hasRecoveryToken;
 };
 
+const isWebResetScreenUrl = (value) => {
+  if (Platform.OS !== "web") return false;
+  const normalized = String(value || "").toLowerCase();
+  return (
+    normalized.includes("screen=reset-password") ||
+    normalized.includes("screen=password-reset")
+  );
+};
+
 const hasResetPasswordPath = (value) => {
   const normalized = String(value || "").toLowerCase();
   return (
@@ -446,10 +458,16 @@ const linking = {
     return () => subscription.remove();
   },
   getStateFromPath: (path, options) => {
+    const normalizedPath = String(path || "");
+    if (isWebResetScreenUrl(normalizedPath)) {
+      return {
+        routes: [{ name: "ResetPassword", params: { initialUrl: path } }],
+      };
+    }
+
     const state = defaultGetStateFromPath(path, options);
     if (state) return state;
 
-    const normalizedPath = String(path || "");
     if (hasResetPasswordPath(normalizedPath)) {
       return {
         routes: [{ name: "ResetPassword", params: { initialUrl: path } }],

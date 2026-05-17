@@ -208,6 +208,8 @@ export const AuthProvider = ({ children }) => {
       return (
         normalized.includes("reset-password") ||
         normalized.includes("password-reset") ||
+        normalized.includes("screen=reset-password") ||
+        normalized.includes("screen=password-reset") ||
         normalized.includes("type=recovery") ||
         normalized.includes("token_hash=") ||
         normalized.includes("token=")
@@ -484,7 +486,7 @@ export const AuthProvider = ({ children }) => {
 
   const getResetRedirectTo = () =>
     Platform.OS === "web" && typeof window !== "undefined"
-      ? new URL("/reset-password", window.location.origin).toString()
+      ? new URL("/?screen=reset-password", window.location.origin).toString()
       : Linking.createURL("reset-password", { scheme: "expressmart" });
 
   const resetPassword = async (email) => {
