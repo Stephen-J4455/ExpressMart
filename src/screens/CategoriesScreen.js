@@ -31,19 +31,28 @@ export const CategoriesScreen = ({ navigation }) => {
     Math.floor((contentWidth - hPad * 2 + gap) / (targetMinCardWidth + gap)),
   );
   const cardWidth = getItemWidth(categoryGridColumns, hPad, gap, contentWidth);
+  const sortedCategories = useMemo(
+    () =>
+      [...categories].sort((a, b) =>
+        String(a?.name || "").localeCompare(String(b?.name || ""), undefined, {
+          sensitivity: "base",
+        }),
+      ),
+    [categories],
+  );
 
   // Initialize selection
   useEffect(() => {
-    if (categories.length > 0 && !selectedCategoryId) {
-      setSelectedCategoryId(categories[0].id);
+    if (sortedCategories.length > 0 && !selectedCategoryId) {
+      setSelectedCategoryId(sortedCategories[0].id);
     }
-  }, [categories]);
+  }, [selectedCategoryId, sortedCategories]);
 
   const filteredProducts = useMemo(() => {
     if (!selectedCategoryId) return [];
 
     // Get selected category name for fallback matching
-    const selectedCategory = categories.find(
+    const selectedCategory = sortedCategories.find(
       (c) => c.id === selectedCategoryId,
     );
     const categoryName = selectedCategory ? selectedCategory.name : "";
@@ -55,7 +64,7 @@ export const CategoriesScreen = ({ navigation }) => {
         (typeof p.category === "string" &&
           p.category.toLowerCase() === categoryName.toLowerCase()),
     );
-  }, [products, selectedCategoryId, categories]);
+  }, [products, selectedCategoryId, sortedCategories]);
 
   const renderCategoryItem = ({ item }) => {
     const isSelected = item.id === selectedCategoryId;
@@ -92,7 +101,7 @@ export const CategoriesScreen = ({ navigation }) => {
   };
 
   const selectedCategory =
-    categories.find((c) => c.id === selectedCategoryId) || null;
+    sortedCategories.find((c) => c.id === selectedCategoryId) || null;
 
   const renderProductItem = ({ item }) => (
     <View style={{ flex: 1, maxWidth: cardWidth, marginBottom: 10 }}>
@@ -112,7 +121,7 @@ export const CategoriesScreen = ({ navigation }) => {
       <View style={[styles.sidebar, { width: categorySidebarWidth }]}>
         <View style={styles.sidebarHeader} />
         <FlatList
-          data={categories}
+          data={sortedCategories}
           renderItem={renderCategoryItem}
           keyExtractor={(item) => item.id.toString()}
           showsVerticalScrollIndicator={false}

@@ -112,7 +112,7 @@ const buildDestinationUrl = (platform, rawValue) => {
   }
 };
 
-const openAdDestination = async (ad, trackClick) => {
+export const openAdDestination = async (ad, trackClick) => {
   if (!ad) return;
 
   if (typeof trackClick === "function") {

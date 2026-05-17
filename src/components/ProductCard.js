@@ -60,10 +60,12 @@ export const ProductCard = ({
   variant = "grid",
   onPress,
   hideCta,
+  footerAction,
   compact,
   flashSale,
   theme,
   priceLabelOverride,
+  priceLabelLines = 2,
 }) => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -332,7 +334,10 @@ export const ProductCard = ({
                     </Text>
                   )}
                   {priceLabelOverride ? (
-                    <Text numberOfLines={2} style={styles.metaDescriptionList}>
+                    <Text
+                      numberOfLines={priceLabelLines}
+                      style={styles.metaDescriptionList}
+                    >
                       {priceLabelOverride}
                     </Text>
                   ) : (
@@ -626,7 +631,7 @@ export const ProductCard = ({
               )}
               {priceLabelOverride ? (
                 <Text
-                  numberOfLines={2}
+                  numberOfLines={priceLabelLines}
                   style={
                     compact
                       ? styles.metaDescriptionCompact
@@ -659,37 +664,41 @@ export const ProductCard = ({
               }
             />
           )}
-          {!hideCta && !hasFlashSale && (
-            <Pressable
-              style={[styles.cta, isOutOfStock && styles.ctaDisabled]}
-              onPress={handleAdd}
-              disabled={isOutOfStock}
-              accessibilityLabel="Add to cart"
-            >
-              <LinearGradient
-                colors={
-                  isOutOfStock
-                    ? ["#9CA3AF", "#9CA3AF"]
-                    : [
-                        themeObj.gradientStart || themeObj.primary || accent,
-                        themeObj.gradientEnd || themeObj.primary || accent,
-                      ]
-                }
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.ctaGradient}
+          {footerAction || (!hideCta && !hasFlashSale) ? (
+            footerAction ? (
+              <View style={styles.footerActionWrap}>{footerAction}</View>
+            ) : (
+              <Pressable
+                style={[styles.cta, isOutOfStock && styles.ctaDisabled]}
+                onPress={handleAdd}
+                disabled={isOutOfStock}
+                accessibilityLabel="Add to cart"
               >
-                <Ionicons
-                  name={isOutOfStock ? "close-circle" : "cart"}
-                  size={16}
-                  color="#fff"
-                />
-                <Text style={styles.ctaText}>
-                  {isOutOfStock ? "Out of Stock" : "Add to Cart"}
-                </Text>
-              </LinearGradient>
-            </Pressable>
-          )}
+                <LinearGradient
+                  colors={
+                    isOutOfStock
+                      ? ["#9CA3AF", "#9CA3AF"]
+                      : [
+                          themeObj.gradientStart || themeObj.primary || accent,
+                          themeObj.gradientEnd || themeObj.primary || accent,
+                        ]
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.ctaGradient}
+                >
+                  <Ionicons
+                    name={isOutOfStock ? "close-circle" : "cart"}
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.ctaText}>
+                    {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+                  </Text>
+                </LinearGradient>
+              </Pressable>
+            )
+          ) : null}
         </View>
       </Pressable>
 
@@ -996,6 +1005,9 @@ const styles = StyleSheet.create({
   },
   ctaDisabled: {
     opacity: 1,
+  },
+  footerActionWrap: {
+    marginTop: 10,
   },
   ctaGradient: {
     height: 40,

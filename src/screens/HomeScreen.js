@@ -176,7 +176,7 @@ export const HomeScreen = ({ navigation }) => {
     (item) => (
       <View style={{ flex: 1, maxWidth: itemWidth }}>
         {item?.__type === "injected_ad" ? (
-          <InlineAdProductCard ad={item.ad} />
+          <InlineAdProductCard ad={item.ad} showCta />
         ) : item ? (
           <ProductCard
             product={item}

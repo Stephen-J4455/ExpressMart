@@ -658,7 +658,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
           contentContainerStyle={[
             styles.messagesList,
             {
-              paddingBottom: inputHeight + insets.bottom + keyboardHeight + 16,
+              paddingBottom: Math.max(insets.bottom, 8),
             },
           ]}
           onContentSizeChange={() => scrollToBottom(true)}
@@ -835,7 +835,7 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 0,
   },
   messageWrapper: {
     marginBottom: 16,
@@ -918,43 +918,34 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: "row",
     alignItems: "flex-end",
-    backgroundColor: colors.light,
-    borderRadius: 25,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     gap: 8,
-    // elevate the input container for visual separation
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
   textInput: {
     flex: 1,
-    fontSize: 16,
-    maxHeight: 120,
-    paddingTop: 8,
-    paddingBottom: 8,
+    fontSize: 15,
+    maxHeight: 100,
+    paddingTop: 10,
+    paddingBottom: 10,
     color: colors.dark,
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: colors.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
   },
   sendButtonDisabled: {
     backgroundColor: colors.muted,
-    opacity: 0.5,
+    opacity: 0.4,
   },
   productAttachment: {
     flexDirection: "row",

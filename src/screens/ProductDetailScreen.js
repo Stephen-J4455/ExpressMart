@@ -16,6 +16,7 @@ import {
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import Markdown from "react-native-markdown-display";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -1163,7 +1164,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Specifications</Text>
-            <View style={styles.sectionPanel}>
+            <View>
               <View style={styles.specRow}>
                 <Text style={styles.specLabel}>Seller</Text>
                 <Text style={styles.specValue}>
@@ -1273,21 +1274,21 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Product Details</Text>
-            <View style={styles.detailsPanel}>
-              <Text
-                style={styles.description}
-                numberOfLines={isDetailsExpanded ? undefined : 5}
+            <Text style={styles.sectionTitle}>Description</Text>
+            <View>
+              <Markdown
+                style={markdownStyles}
+                onLinkPress={(url) => {}}
               >
-                {productDetailsText}
-              </Text>
+                {!isDetailsExpanded ? productDetailsText.split('\n').slice(0, 5).join('\n') : productDetailsText}
+              </Markdown>
               {canExpandDetails && (
                 <Pressable
                   style={styles.expandDetailsButton}
                   onPress={() => setIsDetailsExpanded((prev) => !prev)}
                 >
                   <Text style={styles.expandDetailsText}>
-                    {isDetailsExpanded ? "Read less" : "Read full details"}
+                    {isDetailsExpanded ? "Read less" : "Read more"}
                   </Text>
                   <Ionicons
                     name={isDetailsExpanded ? "chevron-up" : "chevron-down"}
@@ -2891,5 +2892,69 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.55)",
     fontSize: 13,
     fontWeight: "600",
+  },
+});
+
+const markdownStyles = StyleSheet.create({
+  body: {
+    fontSize: 15,
+    color: colors.muted,
+    lineHeight: 24,
+  },
+  heading1: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: colors.dark,
+    marginVertical: 8,
+  },
+  heading2: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.dark,
+    marginVertical: 6,
+  },
+  heading3: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.dark,
+    marginVertical: 4,
+  },
+  text: {
+    fontSize: 15,
+    color: colors.muted,
+    lineHeight: 24,
+  },
+  strong: {
+    fontWeight: "700",
+    color: colors.dark,
+  },
+  em: {
+    fontStyle: "italic",
+  },
+  list_item: {
+    marginLeft: 16,
+    marginVertical: 4,
+  },
+  bullet_list: {
+    marginVertical: 8,
+  },
+  code_inline: {
+    backgroundColor: colors.light,
+    color: colors.primary,
+    paddingHorizontal: 4,
+    borderRadius: 4,
+    fontFamily: "monospace",
+  },
+  code_block: {
+    backgroundColor: colors.light,
+    color: colors.dark,
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    fontFamily: "monospace",
+    fontSize: 13,
+  },
+  link: {
+    color: colors.primary,
   },
 });

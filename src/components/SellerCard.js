@@ -130,19 +130,6 @@ export const SellerCard = ({ seller, onPress }) => {
                     </Pressable>
                 </View>
 
-                {/* Badges Row */}
-                {otherBadges.length > 0 && (
-                    <View style={styles.badgeRow}>
-                        {otherBadges.slice(0, 2).map((badge) => (
-                            <View key={badge} style={styles.badge}>
-                                <Text numberOfLines={1} style={styles.badgeText}>
-                                    {badge.replace("_", " ")}
-                                </Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
-
                 {/* Action Button */}
                 <View style={styles.actionRow}>
                     <View style={styles.visitButton}>
