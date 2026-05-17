@@ -68,9 +68,9 @@ export default function PasswordResetScreen({ navigation }) {
         access_token: null,
         refresh_token: null,
         token_hash: null,
-        token: null,
         type: null,
         code: null,
+        email: null,
       };
 
     try {
@@ -91,18 +91,18 @@ export default function PasswordResetScreen({ navigation }) {
         access_token: getParam("access_token"),
         refresh_token: getParam("refresh_token"),
         token_hash: getParam("token_hash"),
-        token: getParam("token"),
         type: getParam("type"),
         code: getParam("code"),
+        email: getParam("email"),
       };
     } catch (e) {
       return {
         access_token: null,
         refresh_token: null,
         token_hash: null,
-        token: null,
         type: null,
         code: null,
+        email: null,
       };
     }
   }, []);
@@ -118,15 +118,24 @@ export default function PasswordResetScreen({ navigation }) {
 
         console.log("PasswordResetScreen incoming url:", url);
 
-        const { access_token, refresh_token, token_hash, token, type, code } =
-          extractTokensFromUrl(url);
-        const recoveryTokenHash = token_hash || (type === "recovery" ? token : null);
+        const {
+          access_token,
+          refresh_token,
+          token_hash,
+          type,
+          code,
+          email: recoveryEmail,
+        } = extractTokensFromUrl(url);
+        const recoveryTokenHash = token_hash || null;
+
+        if (recoveryEmail) {
+          setEmail(String(recoveryEmail).trim().toLowerCase());
+        }
 
         // Supabase may send recovery links in two shapes:
         // 1) Implicit: #access_token=...&refresh_token=...&type=recovery
         // 2) PKCE: ?code=... (optionally with type=recovery)
         // 3) Token hash: ?token_hash=...&type=recovery
-        // 4) Confirmation URL token: ?token=...&type=recovery
         if (code) {
           setRecoveryCode(code);
           const { error: exchErr } =
@@ -190,6 +199,7 @@ export default function PasswordResetScreen({ navigation }) {
         if (!session) {
           throw new Error("Unable to establish session from reset link");
         }
+        setError("");
       } catch (e) {
         setError(
           e?.message ||

@@ -357,11 +357,17 @@ if (Platform.OS === "web" && typeof window !== "undefined" && window.location) {
 }
 
 const normalizeRecoveryDeepLink = (url) => {
-  if (!url || Platform.OS === "web") return url;
+  if (!url) return url;
 
   const raw = String(url);
   const normalized = raw.toLowerCase();
-  const hasResetPath = normalized.includes("reset-password");
+  const hasResetPath =
+    normalized.includes("reset-password") ||
+    normalized.includes("password-reset");
+  const hasAppSource = normalized.includes("source=app");
+  const isNativeResetDeepLink =
+    normalized.startsWith("expressmart://reset-password") ||
+    normalized.startsWith("expressmart://password-reset");
   const hasRecoveryType = normalized.includes("type=recovery");
   const hasRecoveryToken =
     normalized.includes("access_token=") ||
@@ -369,10 +375,12 @@ const normalizeRecoveryDeepLink = (url) => {
     normalized.includes("token_hash=") ||
     normalized.includes("token=");
   const isAuthCallback = normalized.includes("auth/callback");
+  const isRecoveryDeepLink =
+    hasRecoveryType || (hasRecoveryToken && !isAuthCallback);
 
-  if (hasResetPath) return raw;
+  if (hasResetPath && isNativeResetDeepLink) return raw;
 
-  if (hasRecoveryType || (hasRecoveryToken && !isAuthCallback)) {
+  if ((hasResetPath && hasAppSource) || isRecoveryDeepLink) {
     const hashIndex = raw.indexOf("#");
     const queryIndex = raw.indexOf("?");
     const hasQuery =
@@ -381,11 +389,21 @@ const normalizeRecoveryDeepLink = (url) => {
       ? raw.slice(queryIndex + 1, hashIndex >= 0 ? hashIndex : undefined)
       : "";
     const hash = hashIndex >= 0 ? raw.slice(hashIndex + 1) : "";
-    const base = "expressmart://reset-password";
     const queryPart = query ? `?${query}` : "";
     const hashPart = hash ? `#${hash}` : "";
-    return `${base}${queryPart}${hashPart}`;
+
+    if (Platform.OS === "web") {
+      const origin =
+        typeof window !== "undefined" && window.location?.origin
+          ? window.location.origin
+          : "";
+      return `${origin}/reset-password${queryPart}${hashPart}`;
+    }
+
+    return `expressmart://reset-password${queryPart}${hashPart}`;
   }
+
+  if (hasResetPath) return raw;
 
   return raw;
 };
@@ -406,6 +424,14 @@ const isRecoveryResetLink = (value) => {
   return hasRecoveryType || hasRecoveryToken;
 };
 
+const hasResetPasswordPath = (value) => {
+  const normalized = String(value || "").toLowerCase();
+  return (
+    normalized.includes("reset-password") ||
+    normalized.includes("password-reset")
+  );
+};
+
 const linking = {
   prefixes,
   getInitialURL: async () => {
@@ -424,6 +450,10 @@ const linking = {
     if (state) return state;
 
     const normalizedPath = String(path || "");
+    if (hasResetPasswordPath(normalizedPath)) {
+      return { routes: [{ name: "ResetPassword" }] };
+    }
+
     if (
       isRecoveryResetLink(normalizedPath) &&
       !isGoogleOAuthCallbackLink(normalizedPath)
@@ -654,6 +684,85 @@ const AuthenticatedApp = () => {
   );
 };
 
+const DeepLinkHandler = () => {
+  const { setIsRecoveryMode } = useAuth();
+
+  React.useEffect(() => {
+    let mounted = true;
+
+    const handleDeepLink = async (url) => {
+      try {
+        if (!url) return;
+        if (hasResetPasswordPath(url)) return;
+
+        // Extract params from hash or query
+        let params = null;
+        if (url.includes("#")) {
+          const hash = url.split("#")[1];
+          params = new URLSearchParams(hash);
+        } else if (url.includes("?")) {
+          const query = url.split("?")[1];
+          params = new URLSearchParams(query);
+        }
+
+        if (!params) return;
+
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
+        const type = params.get("type");
+        const tokenHash = params.get("token_hash");
+
+        const isRecovery =
+          (accessToken && type === "recovery") || tokenHash || type === "recovery";
+
+        if (isRecovery) {
+          console.log("DeepLinkHandler: recovery link detected");
+          if (setIsRecoveryMode) setIsRecoveryMode(true);
+
+          // small delay to ensure recovery mode is set before session is applied
+          await new Promise((r) => setTimeout(r, 100));
+
+          if (accessToken) {
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || "",
+            });
+            if (error) {
+              console.error("Error setting session from deep link:", error);
+              if (setIsRecoveryMode) setIsRecoveryMode(false);
+            } else {
+              // give session a moment to persist
+              await new Promise((r) => setTimeout(r, 500));
+              console.log("DeepLinkHandler: session set from deep link");
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error processing deep link:", e);
+      }
+    };
+
+    Linking.getInitialURL().then((url) => {
+      handleDeepLink(url);
+    });
+
+    const urlListener = Linking.addEventListener("url", (event) => {
+      handleDeepLink(event.url);
+    });
+
+    return () => {
+      mounted = false;
+      try {
+        urlListener?.remove?.();
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, [setIsRecoveryMode]);
+
+  return null;
+};
+
 const authPromptStyles = StyleSheet.create({
   container: {
     flex: 1,
@@ -705,6 +814,7 @@ export default function App() {
               <OrderProvider>
                 <ChatProvider>
                   <AdsProvider>
+                    <DeepLinkHandler />
                     <NavigationContainer theme={navTheme} linking={linking}>
                       <StatusBar style="dark" />
                       <AuthenticatedApp />

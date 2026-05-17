@@ -20,7 +20,10 @@ export const supabase =
           }),
           autoRefreshToken: true,
           persistSession: true,
-          detectSessionInUrl: Platform.OS === "web",
+          // Handle auth recovery and OAuth callbacks explicitly in the app so
+          // reset-password links keep their parameters until the reset screen
+          // consumes them.
+          detectSessionInUrl: false,
         },
         realtime: {
           params: {

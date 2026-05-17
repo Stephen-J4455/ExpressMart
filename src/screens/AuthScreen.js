@@ -109,7 +109,9 @@ export const AuthScreen = ({ navigation, route }) => {
       const query = parsed.queryParams || {};
       const hash = String(parsed.fragment || "").toLowerCase();
 
-      if (path.includes("reset-password")) return false;
+      if (path.includes("reset-password") || path.includes("password-reset")) {
+        return false;
+      }
       if (query.type === "recovery") return false;
       if (query.token_hash) return false;
       if (query.token) return false;
@@ -189,6 +191,7 @@ export const AuthScreen = ({ navigation, route }) => {
       const url = new URL(window.location.href);
       if (
         url.pathname.toLowerCase().includes("reset-password") ||
+        url.pathname.toLowerCase().includes("password-reset") ||
         url.searchParams.get("type") === "recovery" ||
         url.searchParams.has("token_hash") ||
         url.searchParams.has("token") ||

@@ -23,6 +23,12 @@ export const AuthProvider = ({ children }) => {
   const authSyncVersionRef = useRef(0);
   const sessionRefreshInFlightRef = useRef(false);
   const skipAuthStateSyncRef = useRef(false);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const isRecoveryModeRef = useRef(false);
+  // Keep ref in sync with state
+  useEffect(() => {
+    isRecoveryModeRef.current = isRecoveryMode;
+  }, [isRecoveryMode]);
 
   const withTimeout = useCallback(async (promise, timeoutMs, timeoutMessage) => {
     let timeoutId;
@@ -201,6 +207,7 @@ export const AuthProvider = ({ children }) => {
       const normalized = String(url).toLowerCase();
       return (
         normalized.includes("reset-password") ||
+        normalized.includes("password-reset") ||
         normalized.includes("type=recovery") ||
         normalized.includes("token_hash=") ||
         normalized.includes("token=")
@@ -259,12 +266,29 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
+      if (isRecoveryModeRef.current && event === "SIGNED_IN") {
+        console.log(
+          "AuthContext: Recovery mode - applying session without fetching profile",
+          event,
+        );
+        setTimeout(() => {
+          if (!mountedRef.current) return;
+          void applySessionState(nextSession, { fetchUserProfile: false });
+        }, 0);
+        return;
+      }
+
       console.log("Auth state changed:", event, nextSession?.user?.id);
       // Avoid async Supabase calls directly in callback to prevent auth deadlocks.
       setTimeout(() => {
         if (!mountedRef.current) return;
         void applySessionState(nextSession);
       }, 0);
+
+      if (isRecoveryModeRef.current && event === "USER_UPDATED") {
+        // Password was updated - exit recovery mode
+        setIsRecoveryMode(false);
+      }
     });
 
     return () => {
@@ -458,9 +482,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Use explicit native scheme so Supabase redirect URLs stay stable in email flows.
-  const RESET_PAGE =
-    Platform.OS === "web"
+  const getResetRedirectTo = () =>
+    Platform.OS === "web" && typeof window !== "undefined"
       ? new URL("/reset-password", window.location.origin).toString()
       : "expressmart://reset-password";
 
@@ -472,8 +495,7 @@ export const AuthProvider = ({ children }) => {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        // include scheme query so the web page knows which app to deep link back to
-        redirectTo: RESET_PAGE,
+        redirectTo: getResetRedirectTo(),
       });
 
       if (error) throw error;
@@ -556,6 +578,8 @@ export const AuthProvider = ({ children }) => {
     session,
     loading,
     isAuthenticated: !!user,
+    isRecoveryMode,
+    setIsRecoveryMode,
     signUp,
     signIn,
     signOut,
