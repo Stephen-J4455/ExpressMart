@@ -731,6 +731,7 @@ const DeepLinkHandler = () => {
     const handleDeepLink = async (url) => {
       try {
         if (!url) return;
+        if (Platform.OS === "web") return;
         if (hasResetPasswordPath(url)) return;
 
         // Extract params from hash or query
