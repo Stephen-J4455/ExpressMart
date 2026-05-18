@@ -356,6 +356,57 @@ if (Platform.OS === "web" && typeof window !== "undefined" && window.location) {
   prefixes.push(window.location.origin);
 }
 
+const getUrlParamsFromValue = (value) => {
+  const raw = String(value || "");
+  const hashIndex = raw.indexOf("#");
+  const queryIndex = raw.indexOf("?");
+  const hasQuery = queryIndex >= 0 && (hashIndex < 0 || queryIndex < hashIndex);
+  const query = hasQuery
+    ? raw.slice(queryIndex + 1, hashIndex >= 0 ? hashIndex : undefined)
+    : "";
+  const hash = hashIndex >= 0 ? raw.slice(hashIndex + 1) : "";
+  return {
+    queryParams: new URLSearchParams(query),
+    hashParams: new URLSearchParams(hash),
+  };
+};
+
+const isWebRecoveryResetLink = (value) => {
+  if (Platform.OS !== "web") return false;
+
+  const raw = String(value || "");
+  const normalized = raw.toLowerCase();
+  const hasWebResetScreen =
+    normalized.includes("screen=reset-password") ||
+    normalized.includes("screen=password-reset");
+  const hasResetPath =
+    normalized.includes("reset-password") ||
+    normalized.includes("password-reset");
+  const hasAppSource = normalized.includes("source=app");
+  const isAuthCallback = normalized.includes("auth/callback");
+  if (isAuthCallback) return false;
+
+  const { queryParams, hashParams } = getUrlParamsFromValue(raw);
+  const getParam = (name) => hashParams.get(name) || queryParams.get(name) || "";
+
+  const type = String(getParam("type")).toLowerCase();
+  const tokenHash = getParam("token_hash");
+  const oneTimeToken = getParam("token");
+  const accessToken = getParam("access_token");
+  const refreshToken = getParam("refresh_token");
+
+  if (type === "recovery") return true;
+  if (tokenHash || oneTimeToken) return true;
+  if (
+    (accessToken || refreshToken) &&
+    (hasResetPath || hasWebResetScreen || hasAppSource)
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 const normalizeRecoveryDeepLink = (url) => {
   if (!url) return url;
 
@@ -377,8 +428,10 @@ const normalizeRecoveryDeepLink = (url) => {
     normalized.includes("token_hash=") ||
     normalized.includes("token=");
   const isAuthCallback = normalized.includes("auth/callback");
-  const isRecoveryDeepLink =
+  const isNativeRecoveryDeepLink =
     hasRecoveryType || (hasRecoveryToken && !isAuthCallback);
+  const isRecoveryDeepLink =
+    Platform.OS === "web" ? isWebRecoveryResetLink(raw) : isNativeRecoveryDeepLink;
 
   if (Platform.OS === "web" && hasWebResetScreen) {
     const hashIndex = raw.indexOf("#");
@@ -433,6 +486,10 @@ const isGoogleOAuthCallbackLink = (value) => {
 };
 
 const isRecoveryResetLink = (value) => {
+  if (Platform.OS === "web") {
+    return isWebRecoveryResetLink(value);
+  }
+
   const normalized = String(value || "").toLowerCase();
   const hasRecoveryType = normalized.includes("type=recovery");
   const hasRecoveryToken =
