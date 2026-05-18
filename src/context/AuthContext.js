@@ -202,18 +202,67 @@ export const AuthProvider = ({ children }) => {
 
     mountedRef.current = true;
 
+    const parseUrlAuthParams = (value) => {
+      const raw = String(value || "");
+      const hashIndex = raw.indexOf("#");
+      const queryIndex = raw.indexOf("?");
+      const hasQuery =
+        queryIndex >= 0 && (hashIndex < 0 || queryIndex < hashIndex);
+      const query = hasQuery
+        ? raw.slice(queryIndex + 1, hashIndex >= 0 ? hashIndex : undefined)
+        : "";
+      const hash = hashIndex >= 0 ? raw.slice(hashIndex + 1) : "";
+      const queryParams = new URLSearchParams(query);
+      const hashParams = new URLSearchParams(hash);
+      const getParam = (name) =>
+        hashParams.get(name) || queryParams.get(name) || "";
+
+      return { getParam };
+    };
+
     const isRecoveryOrResetUrl = (url) => {
       if (!url) return false;
-      const normalized = String(url).toLowerCase();
-      return (
+      const raw = String(url);
+      const normalized = raw.toLowerCase();
+
+      const hasResetPath =
         normalized.includes("reset-password") ||
-        normalized.includes("password-reset") ||
+        normalized.includes("password-reset");
+      const hasResetScreen =
         normalized.includes("screen=reset-password") ||
-        normalized.includes("screen=password-reset") ||
-        normalized.includes("type=recovery") ||
-        normalized.includes("token_hash=") ||
-        normalized.includes("token=")
-      );
+        normalized.includes("screen=password-reset");
+
+      if (Platform.OS !== "web") {
+        return (
+          hasResetPath ||
+          hasResetScreen ||
+          normalized.includes("type=recovery") ||
+          normalized.includes("token_hash=") ||
+          normalized.includes("token=")
+        );
+      }
+
+      if (normalized.includes("auth/callback")) return false;
+
+      const { getParam } = parseUrlAuthParams(raw);
+      const type = String(getParam("type")).toLowerCase();
+      const tokenHash = getParam("token_hash");
+      const oneTimeToken = getParam("token");
+      const accessToken = getParam("access_token");
+      const refreshToken = getParam("refresh_token");
+      const hasAppSource = normalized.includes("source=app");
+
+      if (hasResetPath || hasResetScreen) return true;
+      if (type === "recovery") return true;
+      if (tokenHash || oneTimeToken) return true;
+      if (
+        (accessToken || refreshToken) &&
+        (hasResetPath || hasResetScreen || hasAppSource)
+      ) {
+        return true;
+      }
+
+      return false;
     };
 
     // Check if we're on a password reset URL - if so, don't auto-login.
