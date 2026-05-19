@@ -17,7 +17,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.stephenj3.ExpressMart",
+      "usesAppleSignIn": true,
+      "bundleIdentifier": "com.stephenj.expressmart",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "UIBackgroundModes": [
@@ -66,6 +67,7 @@
         }
       ],
       "expo-font",
+      "expo-apple-authentication",
       "expo-web-browser"
     ],
     "extra": {

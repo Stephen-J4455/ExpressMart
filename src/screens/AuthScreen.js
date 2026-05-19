@@ -40,7 +40,9 @@ export const AuthScreen = ({ navigation, route }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const { isWide } = useResponsive();
+  const isIOS = Platform.OS === "ios";
 
   const { signIn, signUp, isAuthenticated } = useAuth();
   const toast = useToast();
@@ -99,7 +101,7 @@ export const AuthScreen = ({ navigation, route }) => {
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 
-  const isGoogleOAuthCallbackUrl = useCallback((callbackUrl) => {
+  const isOAuthCallbackUrl = useCallback((callbackUrl) => {
     if (!callbackUrl) return false;
 
     try {
@@ -133,7 +135,7 @@ export const AuthScreen = ({ navigation, route }) => {
   const completeOAuthFromUrl = useCallback(
     async (callbackUrl) => {
       if (!callbackUrl || oauthCallbackInFlightRef.current) return false;
-      if (!isGoogleOAuthCallbackUrl(callbackUrl)) return false;
+      if (!isOAuthCallbackUrl(callbackUrl)) return false;
       oauthCallbackInFlightRef.current = true;
       try {
         const urlObj = new URL(callbackUrl);
@@ -153,7 +155,7 @@ export const AuthScreen = ({ navigation, route }) => {
           const { error: exchangeError } =
             await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
-          toast.success("Successfully signed in with Google!");
+          toast.success("Successfully signed in!");
           return true;
         }
 
@@ -174,13 +176,13 @@ export const AuthScreen = ({ navigation, route }) => {
         });
         if (setError) throw setError;
 
-        toast.success("Successfully signed in with Google!");
+        toast.success("Successfully signed in!");
         return true;
       } finally {
         oauthCallbackInFlightRef.current = false;
       }
     },
-    [isGoogleOAuthCallbackUrl, toast],
+    [isOAuthCallbackUrl, toast],
   );
 
   // Handle OAuth callback on web
@@ -262,14 +264,14 @@ export const AuthScreen = ({ navigation, route }) => {
           if (setSessionError) throw setSessionError;
         }
 
-        toast.success("Successfully signed in with Google!");
+        toast.success("Successfully signed in!");
       } catch (error) {
         try {
           const handled = await completeOAuthFromUrl(window.location.href);
           if (!handled) throw error;
         } catch (fallbackError) {
           console.error("Error handling web OAuth callback:", fallbackError);
-          toast.error(fallbackError.message || "Failed to complete Google Sign-In");
+          toast.error(fallbackError.message || "Failed to complete sign-in");
         }
       } finally {
         cleanupWebAuthUrl();
@@ -288,14 +290,14 @@ export const AuthScreen = ({ navigation, route }) => {
         await completeOAuthFromUrl(url);
       } catch (error) {
         console.error("Error handling native OAuth callback:", error);
-        toast.error(error.message || "Failed to complete Google Sign-In");
+        toast.error(error.message || "Failed to complete sign-in");
       }
     });
 
     return () => subscription.remove();
   }, [completeOAuthFromUrl, toast]);
 
-  const getGoogleRedirectUrl = () => {
+  const getOAuthRedirectUrl = () => {
     if (Platform.OS === "web" && typeof window !== "undefined") {
       return new URL("/login", window.location.origin).toString();
     }
@@ -303,20 +305,27 @@ export const AuthScreen = ({ navigation, route }) => {
     return Linking.createURL("auth/callback", { scheme: "expressmart" });
   };
 
-  const handleGoogleLogin = async () => {
-    setGoogleLoading(true);
+  const startOAuthLogin = async (provider, setProviderLoading) => {
+    setProviderLoading(true);
+    const providerLabel = provider === "apple" ? "Apple" : "Google";
+
     try {
-      const redirectTo = getGoogleRedirectUrl();
-      console.log("Google OAuth redirectTo:", redirectTo);
+      const redirectTo = getOAuthRedirectUrl();
+      console.log(`${providerLabel} OAuth redirectTo:`, redirectTo);
+
+      const queryParams =
+        provider === "google"
+          ? {
+              prompt: "select_account",
+            }
+          : undefined;
 
       if (Platform.OS === "web") {
         const { error } = await supabase.auth.signInWithOAuth({
-          provider: "google",
+          provider,
           options: {
             redirectTo,
-            queryParams: {
-              prompt: "select_account",
-            },
+            ...(queryParams ? { queryParams } : {}),
           },
         });
 
@@ -325,18 +334,16 @@ export const AuthScreen = ({ navigation, route }) => {
       }
 
       const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
+        provider,
         options: {
           redirectTo,
           skipBrowserRedirect: true,
-          queryParams: {
-            prompt: "select_account",
-          },
+          ...(queryParams ? { queryParams } : {}),
         },
       });
 
       if (error) throw error;
-      if (!data?.url) throw new Error("Unable to start Google Sign-In flow");
+      if (!data?.url) throw new Error(`Unable to start ${providerLabel} Sign-In flow`);
 
       // Mobile: Open browser for OAuth
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
@@ -352,11 +359,19 @@ export const AuthScreen = ({ navigation, route }) => {
         throw new Error(`OAuth flow failed: ${result.type}`);
       }
     } catch (error) {
-      console.error("Google Sign-In Error:", error);
-      toast.error(error.message || "Google Sign-In failed");
+      console.error(`${providerLabel} Sign-In Error:`, error);
+      toast.error(error.message || `${providerLabel} Sign-In failed`);
     } finally {
-      setGoogleLoading(false);
+      setProviderLoading(false);
     }
+  };
+
+  const handleGoogleLogin = async () => {
+    await startOAuthLogin("google", setGoogleLoading);
+  };
+
+  const handleAppleLogin = async () => {
+    await startOAuthLogin("apple", setAppleLoading);
   };
 
   const handleSubmit = async () => {
@@ -542,7 +557,7 @@ export const AuthScreen = ({ navigation, route }) => {
             <Pressable
               style={[styles.socialButton, googleLoading && { opacity: 0.7 }]}
               onPress={handleGoogleLogin}
-              disabled={googleLoading || loading}
+              disabled={googleLoading || appleLoading || loading}
             >
               {googleLoading ? (
                 <ActivityIndicator color={colors.dark} />
@@ -553,8 +568,25 @@ export const AuthScreen = ({ navigation, route }) => {
                     Continue with Google
                   </Text>
                 </>
-              )}
+                )}
             </Pressable>
+
+            {isIOS && (
+              <Pressable
+                style={[styles.socialButton, appleLoading && { opacity: 0.7 }]}
+                onPress={handleAppleLogin}
+                disabled={appleLoading || googleLoading || loading}
+              >
+                {appleLoading ? (
+                  <ActivityIndicator color={colors.dark} />
+                ) : (
+                  <>
+                    <Ionicons name="logo-apple" size={20} color="#000000" />
+                    <Text style={styles.socialButtonText}>Continue with Apple</Text>
+                  </>
+                )}
+              </Pressable>
+            )}
           </View>
 
           {/* Footer */}
