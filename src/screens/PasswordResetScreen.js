@@ -2,6 +2,7 @@ import React from "react";
 import {
   View,
   Text,
+<<<<<<< HEAD
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -350,10 +351,29 @@ export default function PasswordResetScreen({ navigation, route }) {
     } finally {
       setRequestingNewLink(false);
     }
+=======
+  TouchableOpacity,
+  StyleSheet,
+  Linking,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "../theme/colors";
+
+// This screen is no longer used by the mobile apps.  It remains
+// in the repo purely as a fallback, showing a helpful message that
+// password resets must be performed on the web.
+
+export default function PasswordResetScreen() {
+  const openWeb = () => {
+    const url =
+      "https://stephen-j4455.github.io/express-password-reset/password-reset.html";
+    Linking.openURL(url);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   };
 
   return (
     <SafeAreaView style={styles.container}>
+<<<<<<< HEAD
       {/* Subtle background circles */}
       <View style={styles.bgCircle1} />
       <View style={styles.bgCircle2} />
@@ -523,6 +543,19 @@ export default function PasswordResetScreen({ navigation, route }) {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+=======
+      <View style={styles.messageBox}>
+        <Text style={styles.title}>Reset via Web</Text>
+        <Text style={styles.text}>
+          Password resets are now performed exclusively on the website. Please
+          open the link from your email in a browser or tap the button below to
+          go there.
+        </Text>
+        <TouchableOpacity style={styles.button} onPress={openWeb}>
+          <Text style={styles.buttonText}>Open Web Password Reset</Text>
+        </TouchableOpacity>
+      </View>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     </SafeAreaView>
   );
 }
@@ -530,6 +563,7 @@ export default function PasswordResetScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+<<<<<<< HEAD
     backgroundColor: colors.background,
   },
   // Subtle background circles
@@ -643,11 +677,27 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   errorText: {
+=======
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: colors.background,
+  },
+  messageBox: { alignItems: "center" },
+  title: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 12,
+    color: colors.primary,
+  },
+  text: {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     fontSize: 16,
     color: colors.dark,
     textAlign: "center",
     marginBottom: 20,
   },
+<<<<<<< HEAD
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -697,4 +747,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
   },
+=======
+  button: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  buttonText: { color: "#fff", fontWeight: "600" },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 });

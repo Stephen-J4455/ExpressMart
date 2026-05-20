@@ -382,6 +382,7 @@ export const NotificationProvider = ({ children, userId }) => {
       },
     );
 
+<<<<<<< HEAD
     return () => {
       isMounted = false;
       if (notificationListener.current) {
@@ -407,6 +408,19 @@ export const NotificationProvider = ({ children, userId }) => {
       }
     };
   }, [userId, registerForFCMAsync, registerDeviceToken]);
+=======
+    return () => {
+      isMounted = false;
+      if (notificationListener.current) {
+        notificationListener.current.remove();
+      }
+      if (responseListener.current) {
+        responseListener.current.remove();
+      }
+      subscription?.remove();
+    };
+  }, [userId, registerForFCMAsync, registerDeviceToken]);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   // Update token when userId changes
   useEffect(() => {

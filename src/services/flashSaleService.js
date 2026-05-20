@@ -17,7 +17,11 @@ export const flashSaleService = {
         .select(
           `
           *,
+<<<<<<< HEAD
           product:express_products(*, seller_id(id,name,avatar,badges))
+=======
+          product:express_products(*)
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         `
         )
         .eq("is_active", true)
@@ -73,7 +77,11 @@ export const flashSaleService = {
         .select(
           `
           *,
+<<<<<<< HEAD
           product:express_products(*, seller_id(id,name,avatar,badges))
+=======
+          product:express_products(*)
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         `
         )
         .eq("is_active", true)
@@ -137,7 +145,11 @@ export const flashSaleService = {
         .select(
           `
           *,
+<<<<<<< HEAD
           product:express_products(*, seller_id(id,name,avatar,badges))
+=======
+          product:express_products(*)
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         `
         )
         .eq("is_active", true)

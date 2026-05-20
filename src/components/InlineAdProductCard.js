@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+<<<<<<< HEAD
 import { Pressable, StyleSheet, Text } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,13 +10,29 @@ import { openAdDestination } from "./AdBanner";
 import { ProductCard } from "./ProductCard";
 
 export const InlineAdProductCard = ({ ad, showCta = false }) => {
+=======
+import * as Linking from "expo-linking";
+import { useIsFocused } from "@react-navigation/native";
+import { useAds } from "../context/AdsContext";
+import { AdRenderer } from "./AdBanner";
+import { ProductCard } from "./ProductCard";
+
+export const InlineAdProductCard = ({ ad }) => {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
   const style = String(ad?.style || "card").toLowerCase();
 
   useEffect(() => {
     if (!ad?.id || !isFocused) return;
+<<<<<<< HEAD
     trackImpression(ad.id);
+=======
+    // Non-card styles are delegated to AdRenderer and track themselves.
+    if (style === "card") {
+      trackImpression(ad.id);
+    }
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   }, [ad?.id, style, isFocused, trackImpression]);
 
   // Overlay/fixed styles are handled by screen-level adaptive rendering.
@@ -23,10 +40,29 @@ export const InlineAdProductCard = ({ ad, showCta = false }) => {
     return null;
   }
 
+<<<<<<< HEAD
   if (!ad) return null;
 
   const handlePress = async () => {
     await openAdDestination(ad, trackClick);
+=======
+  // For non-card styles, defer to the canonical ad renderer so selected format is honored.
+  if (["banner", "carousel", "story", "sidebar"].includes(style)) {
+    return <AdRenderer ad={ad} />;
+  }
+
+  if (!ad) return null;
+
+  const handlePress = async () => {
+    await Promise.resolve(trackClick(ad.id));
+    if (!ad.cta_url) return;
+
+    try {
+      await Linking.openURL(ad.cta_url);
+    } catch (error) {
+      console.error("Error opening ad URL:", error);
+    }
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   };
 
   const mappedAdProduct = {
@@ -43,6 +79,7 @@ export const InlineAdProductCard = ({ ad, showCta = false }) => {
     tags: ad.tags || [],
   };
 
+<<<<<<< HEAD
   const ctaLabel = ad.cta_text || "Shop Now";
   const ctaButton = showCta && ad.cta_url ? (
     <Pressable
@@ -63,11 +100,14 @@ export const InlineAdProductCard = ({ ad, showCta = false }) => {
     </Pressable>
   ) : null;
 
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   return (
     <ProductCard
       product={mappedAdProduct}
       onPress={handlePress}
       hideCta
+<<<<<<< HEAD
       footerAction={ctaButton}
       priceLabelOverride={ad.description || "Sponsored"}
       priceLabelLines={1}
@@ -99,3 +139,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+=======
+      priceLabelOverride={ad.description || "Sponsored"}
+    />
+  );
+};
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880

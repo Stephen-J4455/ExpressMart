@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import {
   supabase,
   callEdgeFunction,
@@ -6,6 +7,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const PAYSTACK_PUBLIC_KEY_CACHE_KEY = "expressmart.paystack.public_key";
 let inMemoryPaystackPublicKey = null;
+=======
+import {
+  supabase,
+  supabaseUrl,
+  callEdgeFunction,
+  PAYSTACK_CONFIG,
+} from "../lib/supabase";
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
 /**
  * Verify payment and create order via Supabase Edge Function
@@ -52,6 +61,7 @@ export function generatePaymentReference(userId) {
 }
 
 /**
+<<<<<<< HEAD
  * Get Paystack public key from edge function (cached locally for offline fallback)
  */
 export async function getPaystackPublicKey() {
@@ -78,3 +88,10 @@ export async function getPaystackPublicKey() {
     throw error;
   }
 }
+=======
+ * Get Paystack public key
+ */
+export function getPaystackPublicKey() {
+  return PAYSTACK_CONFIG.publicKey;
+}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880

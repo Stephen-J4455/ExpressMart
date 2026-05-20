@@ -16,7 +16,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { colors } from "../theme/colors";
+<<<<<<< HEAD
 import { useResponsive } from "../hooks/useResponsive";
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
 export const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -25,7 +28,10 @@ export const ForgotPasswordScreen = ({ navigation }) => {
 
   const { resetPassword } = useAuth();
   const toast = useToast();
+<<<<<<< HEAD
   const { isWide, contentMaxWidth } = useResponsive();
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const handleResetPassword = async () => {
     if (!email) {
@@ -54,7 +60,11 @@ export const ForgotPasswordScreen = ({ navigation }) => {
   if (emailSent) {
     return (
       <SafeAreaView style={styles.container}>
+<<<<<<< HEAD
         <View style={[styles.successContainer, isWide && { maxWidth: 480, alignSelf: "center", width: "100%" }]}>
+=======
+        <View style={styles.successContainer}>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
           <View style={styles.successIcon}>
             <Ionicons name="mail" size={60} color={colors.primary} />
           </View>
@@ -106,10 +116,14 @@ export const ForgotPasswordScreen = ({ navigation }) => {
       <View style={styles.bgCircle6} />
 
       <KeyboardAvoidingView
+<<<<<<< HEAD
         style={[
           styles.content,
           isWide && { maxWidth: 480, alignSelf: "center", width: "100%" },
         ]}
+=======
+        style={styles.content}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <Pressable
@@ -251,7 +265,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 24,
+<<<<<<< HEAD
     width: "100%",
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   backButton: {
     width: 44,
@@ -323,7 +340,10 @@ const styles = StyleSheet.create({
     height: 56,
     fontSize: 16,
     color: colors.dark,
+<<<<<<< HEAD
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   submitButton: {
     borderRadius: 16,
@@ -372,7 +392,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
+<<<<<<< HEAD
     width: "100%",
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   successIcon: {
     width: 120,

@@ -1,7 +1,13 @@
+<<<<<<< HEAD
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import {
+=======
+import { Ionicons } from "@expo/vector-icons";
+import React, { useState } from "react";
+import {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   FlatList,
   Image,
   Pressable,
@@ -10,6 +16,7 @@ import {
   View,
   ActivityIndicator,
 } from "react-native";
+<<<<<<< HEAD
 import { LinearGradient } from "expo-linear-gradient";
 import { useShop } from "../context/ShopContext";
 import { useAuth } from "../context/AuthContext";
@@ -36,6 +43,22 @@ export const SellerScroller = ({ sellers = [], onSelect }) => {
       return;
     }
     setFollowingLoading((prev) => ({ ...prev, [seller.id]: true }));
+=======
+import { LinearGradient } from "expo-linear-gradient";
+import { useShop } from "../context/ShopContext";
+import { useToast } from "../context/ToastContext";
+import { colors } from "../theme/colors";
+
+export const SellerScroller = ({ sellers = [], onSelect }) => {
+  const { isFollowing, followSeller, unfollowSeller } = useShop();
+  const toast = useToast();
+  const [followingLoading, setFollowingLoading] = useState({});
+
+  const handleFollowPress = async (e, seller) => {
+    e.preventDefault();
+    if (!seller.id) return;
+    setFollowingLoading((prev) => ({ ...prev, [seller.id]: true }));
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     try {
       if (isFollowing(seller.id)) {
         await unfollowSeller(seller.id);

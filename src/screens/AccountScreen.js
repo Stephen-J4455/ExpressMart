@@ -137,6 +137,7 @@ export const AccountScreen = ({ navigation }) => {
             Sign in to track orders, save favorites,{"\n"}and enjoy personalized
             shopping.
           </Text>
+<<<<<<< HEAD
           <Pressable
             style={styles.signInButton}
             onPress={() =>
@@ -145,6 +146,12 @@ export const AccountScreen = ({ navigation }) => {
               })
             }
           >
+=======
+          <Pressable
+            style={styles.signInButton}
+            onPress={() => navigation.navigate("Auth")}
+          >
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             <LinearGradient
               colors={[colors.primary, colors.accent]}
               style={styles.signInGradient}
@@ -155,6 +162,7 @@ export const AccountScreen = ({ navigation }) => {
               <Text style={styles.signInText}>Sign In</Text>
             </LinearGradient>
           </Pressable>
+<<<<<<< HEAD
           <Pressable
             style={styles.createAccountButton}
             onPress={() =>
@@ -164,6 +172,12 @@ export const AccountScreen = ({ navigation }) => {
               })
             }
           >
+=======
+          <Pressable
+            style={styles.createAccountButton}
+            onPress={() => navigation.navigate("Auth", { mode: "register" })}
+          >
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             <Text style={styles.createAccountText}>Create Account</Text>
           </Pressable>
         </View>

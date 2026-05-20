@@ -19,16 +19,25 @@ import { getPaystackPublicKey } from "../services/payment";
 const WebView =
   Platform.OS !== "web" ? require("react-native-webview").WebView : null;
 
+<<<<<<< HEAD
 export const PaymentWebViewScreen = () => {
+=======
+export const PaymentWebViewScreen = () => {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   const navigation = useNavigation();
   const route = useRoute();
   const webViewRef = useRef(null);
   const toast = useToast();
+<<<<<<< HEAD
   const [loading, setLoading] = useState(true);
   const [paymentProcessed, setPaymentProcessed] = useState(false);
   const [paystackPublicKey, setPaystackPublicKey] = useState(
     route?.params?.paystack_public_key || null,
   );
+=======
+  const [loading, setLoading] = useState(true);
+  const [paymentProcessed, setPaymentProcessed] = useState(false);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const { user, isAuthenticated } = useAuth();
   const {
@@ -39,8 +48,15 @@ export const PaymentWebViewScreen = () => {
     authorization_url,
     access_code,
   } = route.params;
+<<<<<<< HEAD
   // Check authentication on mount
   React.useEffect(() => {
+=======
+  const paystackPublicKey = getPaystackPublicKey();
+
+  // Check authentication on mount
+  React.useEffect(() => {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     if (!isAuthenticated || !user) {
       Alert.alert(
         "Authentication Required",
@@ -54,6 +70,7 @@ export const PaymentWebViewScreen = () => {
       );
       return;
     }
+<<<<<<< HEAD
   }, [isAuthenticated, user, navigation]);
 
   React.useEffect(() => {
@@ -80,6 +97,9 @@ export const PaymentWebViewScreen = () => {
       active = false;
     };
   }, [navigation, route?.params?.paystack_public_key]);
+=======
+  }, [isAuthenticated, user, navigation]);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   // Handle back button press (native only)
   React.useEffect(() => {
@@ -123,6 +143,7 @@ export const PaymentWebViewScreen = () => {
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <script src="https://js.paystack.co/v1/inline.js"></script>
+<<<<<<< HEAD
         <style>
           * { box-sizing: border-box; }
           body {
@@ -227,11 +248,84 @@ export const PaymentWebViewScreen = () => {
           <div class="loading" id="loading">Processing payment...</div>
           <div class="success" id="success">Payment successful!</div>
           <div class="error" id="error"></div>
+=======
+        <style>
+          body {
+            margin: 0;
+            padding: 10px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f8f9fa;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+          }
+          .container {
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+            margin: 0;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+          .logo {
+            font-size: 32px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+          }
+          .amount {
+            font-size: 28px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 20px 0;
+          }
+          .email {
+            color: #666;
+            margin-bottom: 30px;
+          }
+          .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+          }
+          .btn:active { opacity: 0.8; }
+          .info { margin-top: 20px; color: #666; font-size: 14px; }
+          .loading { display: none; color: #666; margin-top: 10px; }
+          .success { display: none; color: #28a745; margin-top: 10px; }
+          .error { display: none; color: #dc3545; margin-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="logo">ExpressMart</div>
+          <div class="amount">GH₵${displayAmount}</div>
+          <div class="email">${email}</div>
+          <button class="btn" onclick="payWithPaystack()">Pay Now</button>
+          <div class="info">Secure payment powered by Paystack</div>
+          <div class="loading" id="loading">Processing payment...</div>
+          <div class="success" id="success">Payment successful!</div>
+          <div class="error" id="error"></div>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         </div>
         <script>
           function payWithPaystack() {
             document.querySelector('.btn').style.display = 'none';
             document.getElementById('loading').style.display = 'block';
+<<<<<<< HEAD
             var handler = PaystackPop.setup({
               key: '${paystackPublicKey}',
               email: '${email}',
@@ -242,6 +336,17 @@ export const PaymentWebViewScreen = () => {
               onClose: function() {
                 window.ReactNativeWebView.postMessage(JSON.stringify({ event: 'payment_cancelled' }));
               },
+=======
+            var handler = PaystackPop.setup({
+              key: '${paystackPublicKey}',
+              email: '${email}',
+              amount: ${amountInPesewas},
+              currency: 'GHS',
+              ref: '${reference}',
+              onClose: function() {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ event: 'payment_cancelled' }));
+              },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
               callback: function(response) {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('success').style.display = 'block';
@@ -267,6 +372,7 @@ export const PaymentWebViewScreen = () => {
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <script src="https://js.paystack.co/v1/inline.js"></script>
+<<<<<<< HEAD
         <style>
           * { box-sizing: border-box; }
           body {
@@ -370,6 +476,51 @@ export const PaymentWebViewScreen = () => {
           <div class="loading" id="loading">Processing payment...</div>
           <div class="success" id="success">Payment successful!</div>
         </div>
+=======
+        <style>
+          body {
+            margin: 0;
+            padding: 10px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f8f9fa;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+          }
+          .container {
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+            margin: 0;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+          .logo { font-size: 32px; font-weight: bold; background: linear-gradient(135deg,#667eea,#764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 20px; }
+          .amount { font-size: 28px; font-weight: bold; color: #667eea; margin: 20px 0; }
+          .email { color: #666; margin-bottom: 30px; }
+          .btn { background: linear-gradient(135deg,#667eea,#764ba2); color: white; border: none; padding: 16px 32px; font-size: 18px; font-weight: bold; border-radius: 25px; cursor: pointer; width: 100%; margin-top: 10px; }
+          .btn:active { opacity: 0.8; }
+          .info { margin-top: 20px; color: #666; font-size: 14px; }
+          .loading { display: none; color: #666; margin-top: 10px; }
+          .success { display: none; color: #28a745; margin-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="logo">ExpressMart</div>
+          <div class="amount">GH₵${displayAmount}</div>
+          <div class="email">${email}</div>
+          <button class="btn" onclick="payWithPaystack()">Pay Now</button>
+          <div class="info">Secure payment powered by Paystack</div>
+          <div class="loading" id="loading">Processing payment...</div>
+          <div class="success" id="success">Payment successful!</div>
+        </div>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         <script>
           function payWithPaystack() {
             document.querySelector('.btn').style.display = 'none';
@@ -513,6 +664,7 @@ export const PaymentWebViewScreen = () => {
     );
   };
 
+<<<<<<< HEAD
   // ── WEB RENDER ──────────────────────────────────────────────────────────────
   // Always use the inline Paystack popup HTML on web. When access_code is
   // available the popup resumes the server-initialized transaction (preserving
@@ -530,6 +682,16 @@ export const PaymentWebViewScreen = () => {
     }
     return (
       <View style={styles.container}>
+=======
+  // ── WEB RENDER ──────────────────────────────────────────────────────────────
+  // Always use the inline Paystack popup HTML on web. When access_code is
+  // available the popup resumes the server-initialized transaction (preserving
+  // multi-vendor splits). This avoids the cross-origin iframe redirect that
+  // previously hit the edge function without an Authorization header (401).
+  if (Platform.OS === "web") {
+    return (
+      <View style={styles.container}>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         {loading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -548,6 +710,7 @@ export const PaymentWebViewScreen = () => {
     );
   }
 
+<<<<<<< HEAD
   // ── NATIVE RENDER ────────────────────────────────────────────────────────────
   if (!paystackPublicKey) {
     return (
@@ -560,18 +723,37 @@ export const PaymentWebViewScreen = () => {
   }
 
   return (
+=======
+  // ── NATIVE RENDER ────────────────────────────────────────────────────────────
+  return (
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     <View style={styles.container}>
       {loading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       )}
+<<<<<<< HEAD
       <WebView
         ref={webViewRef}
         source={{ html: paystackHTML }}
         style={styles.webview}
         onMessage={handleMessage}
         onNavigationStateChange={handleNavigationStateChange}
+=======
+      <WebView
+        ref={webViewRef}
+        source={
+          authorization_url
+            ? { uri: authorization_url }
+            : { html: paystackHTML }
+        }
+        style={styles.webview}
+        onMessage={handleMessage}
+        onNavigationStateChange={
+          authorization_url ? handleNavigationStateChange : undefined
+        }
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         onLoadEnd={handleLoadEnd}
         onError={handleError}
         javaScriptEnabled={true}

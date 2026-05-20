@@ -7,6 +7,7 @@
   "client": [
     {
       "client_info": {
+<<<<<<< HEAD
         "mobilesdk_app_id": "1:499123636329:android:0abc3222c9d627eaf57af8",
         "android_client_info": {
           "package_name": "com.stephenj.expressmart"
@@ -18,6 +19,14 @@
           "client_type": 3
         }
       ],
+=======
+        "mobilesdk_app_id": "1:499123636329:android:e2b19f4b17fbfb5df57af8",
+        "android_client_info": {
+          "package_name": "com.stephenj3.ExpressMart"
+        }
+      },
+      "oauth_client": [],
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       "api_key": [
         {
           "current_key": "AIzaSyBpstGU_OQb2nnKWmGcf7KJQfABylOkYL0"
@@ -25,6 +34,7 @@
       ],
       "services": {
         "appinvite_service": {
+<<<<<<< HEAD
           "other_platform_oauth_client": [
             {
               "client_id": "499123636329-2lr99c2ti5ktf9jfovc95jfn49tq9snn.apps.googleusercontent.com",
@@ -89,6 +99,9 @@
               "client_type": 3
             }
           ]
+=======
+          "other_platform_oauth_client": []
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         }
       }
     }

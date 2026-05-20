@@ -24,13 +24,21 @@ export const OrderProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   // Fetch user's orders
+<<<<<<< HEAD
   const fetchOrders = useCallback(async ({ silent = false } = {}) => {
+=======
+  const fetchOrders = useCallback(async () => {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     if (!supabase || !user) {
       if (!supabase) console.warn("Supabase not initialized in fetchOrders");
       return;
     }
 
+<<<<<<< HEAD
     if (!silent) setLoading(true);
+=======
+    setLoading(true);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     try {
       const { data, error: fetchError } = await supabase
         .from("express_orders")
@@ -63,10 +71,17 @@ export const OrderProvider = ({ children }) => {
         "Error fetching orders:",
         err?.message || JSON.stringify(err),
       );
+<<<<<<< HEAD
     } finally {
       if (!silent) setLoading(false);
     }
   }, [user]);
+=======
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   // Fetch user's addresses
   const fetchAddresses = useCallback(async () => {
@@ -102,6 +117,48 @@ export const OrderProvider = ({ children }) => {
     }
   }, [user, fetchOrders, fetchAddresses]);
 
+<<<<<<< HEAD
+=======
+  // Set up realtime subscription for orders
+  useEffect(() => {
+    if (!supabase || !user) return;
+
+    const subscription = supabase
+      .channel("orders-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "express_orders",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setOrders((prev) => [payload.new, ...prev]);
+          } else if (payload.eventType === "UPDATE") {
+            setOrders((prev) =>
+              prev.map((order) =>
+                order.id === payload.new.id
+                  ? { ...order, ...payload.new }
+                  : order,
+              ),
+            );
+          } else if (payload.eventType === "DELETE") {
+            setOrders((prev) =>
+              prev.filter((order) => order.id !== payload.old.id),
+            );
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user]);
+
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   // Verify payment
   const verifyPayment = useCallback(
     async (reference, orderData = null) => {

@@ -16,21 +16,34 @@ import {
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+<<<<<<< HEAD
 import Markdown from "react-native-markdown-display";
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useShop } from "../context/ShopContext";
+<<<<<<< HEAD
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
 import { AdRenderer } from "../components/AdBanner";
 import { ProductCard } from "../components/ProductCard";
+=======
+import { supabase } from "../lib/supabase";
+import { colors } from "../theme/colors";
+import { AdRenderer } from "../components/AdBanner";
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import { InlineAdProductCard } from "../components/InlineAdProductCard";
 import { FlashSaleCountdown } from "../components/FlashSaleCountdown";
 import { useAds } from "../context/AdsContext";
 import { flashSaleService } from "../services/flashSaleService";
+<<<<<<< HEAD
 import { injectAdsIntoProducts } from "../utils/adPlacement";
+=======
+import { useResponsive } from "../hooks/useResponsive";
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
 const SELLER_BADGE_CONFIG = {
   verified: {
@@ -65,13 +78,20 @@ const PRODUCT_BADGE_CONFIG = {
   featured: { icon: "star", color: "#22C55E", label: "Featured" },
 };
 
+<<<<<<< HEAD
 const toBoolean = (value) => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value === 1;
+=======
+const toBoolean = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
     return normalized === "true" || normalized === "1" || normalized === "yes";
   }
+<<<<<<< HEAD
   return false;
 };
 
@@ -82,6 +102,16 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();
   const { addToCart } = useCart();
   const { user } = useAuth();
+=======
+  return false;
+};
+
+export const ProductDetailScreen = ({ route, navigation }) => {
+  const { isWide, horizontalPadding } = useResponsive();
+  const { product: initialProduct } = route.params;
+  const { addToCart } = useCart();
+  const { user } = useAuth();
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   const toast = useToast();
   const { refresh: refreshShop } = useShop();
   const { fetchAdsByPlacement } = useAds();
@@ -105,6 +135,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const [showVariantModal, setShowVariantModal] = useState(false);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
+<<<<<<< HEAD
   const [flashSale, setFlashSale] = useState(null);
   const [loadingFlashSale, setLoadingFlashSale] = useState(true);
   const [showImagePreview, setShowImagePreview] = useState(false);
@@ -115,6 +146,14 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
   const [canExpandDetails, setCanExpandDetails] = useState(false);
   const previewScrollRef = useRef(null);
+=======
+  const [flashSale, setFlashSale] = useState(null);
+  const [loadingFlashSale, setLoadingFlashSale] = useState(true);
+  const [showImagePreview, setShowImagePreview] = useState(false);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
+  const [expandedReviews, setExpandedReviews] = useState({});
+  const previewScrollRef = useRef(null);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const screenWidth = Dimensions.get("window").width;
 
@@ -128,6 +167,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     product?.quantity ?? product?.stock ?? product?.stock_quantity ?? 0,
   );
   const allowsBackorder = toBoolean(product?.allow_backorder);
+<<<<<<< HEAD
   const isPreorder = toBoolean(product?.is_preorder);
   const isOutOfStock =
     !isPreorder && hasInventoryValue && availableStock <= 0 && !allowsBackorder;
@@ -142,6 +182,10 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         : product.price || 0,
   );
   const savingsAmount = Math.max(0, originalDisplayPrice - currentDisplayPrice);
+=======
+  const isOutOfStock =
+    hasInventoryValue && availableStock <= 0 && !allowsBackorder;
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   // Format price as Ghana Cedis
   const formatPrice = (price, discount = 0) => {
@@ -272,6 +316,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     fetchFlashSale();
   }, [product.id]);
 
+<<<<<<< HEAD
   useEffect(() => {
     fetchAdsByPlacement("product_detail").then((ads) =>
       setProductAds(ads || []),
@@ -462,6 +507,79 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
     fetchSimilarProducts();
   }, [mapSimilarProduct, product?.id, product?.category, productTagList]);
+=======
+  useEffect(() => {
+    fetchAdsByPlacement("product_detail").then((ads) =>
+      setProductAds(ads || []),
+    );
+  }, [fetchAdsByPlacement]);
+
+  const relatedTagAds = useMemo(() => {
+    const normalize = (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase();
+
+    const productTagSet = new Set(
+      (product?.tags || []).map(normalize).filter(Boolean),
+    );
+
+    if (productTagSet.size === 0) {
+      return (productAds || []).slice(0, 5);
+    }
+
+    const extractAdTags = (ad) => {
+      const fields = [
+        ad?.tags,
+        ad?.target_tags,
+        ad?.keywords,
+        ad?.target_keywords,
+        ad?.context_tags,
+        ad?.category,
+        ad?.target_category,
+      ];
+
+      const tokens = [];
+      fields.forEach((field) => {
+        if (!field) return;
+        if (Array.isArray(field)) {
+          tokens.push(...field);
+          return;
+        }
+        if (typeof field === "string") {
+          try {
+            const parsed = JSON.parse(field);
+            if (Array.isArray(parsed)) {
+              tokens.push(...parsed);
+              return;
+            }
+          } catch {
+            // Not JSON, continue with split
+          }
+          tokens.push(...field.split(","));
+        }
+      });
+
+      // Fallback to title/description words when explicit targeting is missing.
+      if (tokens.length === 0) {
+        const fallbackText = `${ad?.title || ""} ${ad?.description || ""}`;
+        tokens.push(...fallbackText.split(/\s+/));
+      }
+
+      return new Set(tokens.map(normalize).filter(Boolean));
+    };
+
+    const matched = (productAds || []).filter((ad) => {
+      const adTags = extractAdTags(ad);
+      for (const tag of productTagSet) {
+        if (adTags.has(tag)) return true;
+      }
+      return false;
+    });
+
+    return (matched.length > 0 ? matched : productAds || []).slice(0, 5);
+  }, [product?.tags, productAds]);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const toggleWishlist = useCallback(async () => {
     if (!user) {
@@ -470,6 +588,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         "Please sign in to add items to your wishlist",
         [
           { text: "Cancel", style: "cancel" },
+<<<<<<< HEAD
           {
             text: "Sign In",
             onPress: () =>
@@ -478,6 +597,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 redirectParams: route?.params,
               }),
           },
+=======
+          { text: "Sign In", onPress: () => navigation.navigate("Auth") },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         ],
       );
       return;
@@ -511,6 +633,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     if (!user) {
       Alert.alert("Sign In Required", "Please sign in to submit a review", [
         { text: "Cancel", style: "cancel" },
+<<<<<<< HEAD
         {
           text: "Sign In",
           onPress: () =>
@@ -519,6 +642,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               redirectParams: route?.params,
             }),
         },
+=======
+        { text: "Sign In", onPress: () => navigation.navigate("Auth") },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       ]);
       return;
     }
@@ -611,6 +737,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     if (!user) {
       Alert.alert("Sign In Required", "Please sign in to add a comment", [
         { text: "Cancel", style: "cancel" },
+<<<<<<< HEAD
         {
           text: "Sign In",
           onPress: () =>
@@ -619,6 +746,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               redirectParams: route?.params,
             }),
         },
+=======
+        { text: "Sign In", onPress: () => navigation.navigate("Auth") },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       ]);
       return;
     }
@@ -670,12 +800,18 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
   const handleChatWithSeller = () => {
     if (!user) {
+<<<<<<< HEAD
       toast.info("Sign in required", "Please sign in to chat with the seller");
       navigation.navigate("Auth", {
         redirectTo: "ProductDetail",
         redirectParams: route?.params,
       });
       return;
+=======
+      toast.info("Sign in required", "Please sign in to chat with the seller");
+      navigation.navigate("Auth");
+      return;
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     }
     if (!product.seller) {
       toast.error("Unavailable", "Seller information not available");
@@ -693,6 +829,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     });
   };
 
+<<<<<<< HEAD
   const handleAddToCart = () => {
     if (!user) {
       toast.info("Login required", "Please sign in to add items to your cart");
@@ -706,6 +843,12 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     if (isOutOfStock) {
       toast.error("Out of Stock", "This product is currently unavailable");
       return;
+=======
+  const handleAddToCart = () => {
+    if (isOutOfStock) {
+      toast.error("Out of Stock", "This product is currently unavailable");
+      return;
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     }
 
     const hasMultipleColors = product.colors && product.colors.length > 1;
@@ -732,6 +875,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     }
   };
 
+<<<<<<< HEAD
   const handleConfirmAddToCart = () => {
     if (!user) {
       setShowVariantModal(false);
@@ -746,6 +890,12 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     if (isOutOfStock) {
       toast.error("Out of Stock", "This product is currently unavailable");
       setShowVariantModal(false);
+=======
+  const handleConfirmAddToCart = () => {
+    if (isOutOfStock) {
+      toast.error("Out of Stock", "This product is currently unavailable");
+      setShowVariantModal(false);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       return;
     }
 
@@ -867,6 +1017,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           )}
         </Pressable>
 
+<<<<<<< HEAD
         <View style={styles.content}>
             <View style={styles.vendorRow}>
               <View style={styles.sellerPill}>
@@ -1057,6 +1208,179 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
           {/* Shipping & Stock Info Row */}
           <View style={styles.deliveryRow}>
+=======
+        <View style={styles.content}>
+          <View style={styles.vendorRow}>
+            <Text style={styles.vendor}>
+              {product.seller?.name || product.vendor}
+            </Text>
+            {product.seller?.badges && product.seller.badges.length > 0 && (
+              <View style={styles.sellerBadgesRow}>
+                {product.seller.badges.slice(0, 3).map((badgeId) => {
+                  const badge = SELLER_BADGE_CONFIG[badgeId];
+                  if (!badge) return null;
+                  return (
+                    <View
+                      key={badgeId}
+                      style={[
+                        styles.sellerBadge,
+                        { backgroundColor: badge.color + "20" },
+                      ]}
+                    >
+                      <Ionicons
+                        name={badge.icon}
+                        size={14}
+                        color={badge.color}
+                      />
+                      <Text
+                        style={[styles.sellerBadgeText, { color: badge.color }]}
+                      >
+                        {badge.label}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+          <Text style={styles.title}>{product.title}</Text>
+
+          {hasFlashSale && (
+            <View style={styles.flashSaleSection}>
+              <FlashSaleCountdown
+                endTime={flashSale.end_time}
+                startTime={flashSale.start_time}
+                withProgressBar
+                onExpire={() => {
+                  setFlashSale(null);
+                  refreshProductData();
+                }}
+                availableQty={
+                  flashSale.max_quantity != null
+                    ? Math.max(
+                        0,
+                        (flashSale.max_quantity || 0) -
+                          (flashSale.sold_quantity || 0),
+                      )
+                    : null
+                }
+              />
+            </View>
+          )}
+
+          <View style={styles.priceSection}>
+            <View style={styles.priceRow}>
+              <View style={styles.priceContainer}>
+                <Text style={styles.price}>
+                  {formatPrice(product.price, product.discount)}
+                </Text>
+                {hasFlashSale ? (
+                  <>
+                    <Text style={styles.originalPrice}>
+                      GH₵
+                      {Number(
+                        flashSale.original_price || product.price,
+                      ).toLocaleString()}
+                    </Text>
+                    <View style={styles.flashDiscountBadge}>
+                      <LinearGradient
+                        colors={["#EF4444", "#DC2626"]}
+                        style={styles.flashBadgeGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        <Ionicons name="flash" size={12} color="#fff" />
+                        <Text style={styles.flashDiscountText}>
+                          {Math.round(flashSale.discount_percentage)}% OFF
+                        </Text>
+                      </LinearGradient>
+                    </View>
+                  </>
+                ) : (
+                  product.discount > 0 && (
+                    <>
+                      <Text style={styles.originalPrice}>
+                        GH₵{Number(product.price).toLocaleString()}
+                      </Text>
+                      <View style={styles.discountBadge}>
+                        <Text style={styles.discountText}>
+                          {product.discount}% OFF
+                        </Text>
+                      </View>
+                    </>
+                  )
+                )}
+              </View>
+            </View>
+            <View style={styles.ratingRow}>
+              <Ionicons name="star" size={20} color={colors.secondary} />
+              <Text style={styles.ratingText}>
+                {reviewCount > 0
+                  ? product.rating?.toFixed(1) || "0.0"
+                  : "No reviews"}
+              </Text>
+              {reviewCount > 0 && (
+                <Text style={styles.ratingCount}>({reviewCount} reviews)</Text>
+              )}
+            </View>
+          </View>
+
+          {/* Product Badges — fall back to seller badges when product has none */}
+          {(() => {
+            const productBadges = product.badges || [];
+            const sellerBadges = product.seller?.badges || [];
+            const displayBadges =
+              productBadges.length > 0 ? productBadges : sellerBadges;
+            if (displayBadges.length === 0) return null;
+            return (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.badgeRow}
+                contentContainerStyle={styles.badgeRowContent}
+              >
+                {displayBadges.map((label) => {
+                  const normalizedLabel = label.toLowerCase();
+                  const badgeConfig =
+                    PRODUCT_BADGE_CONFIG[normalizedLabel] ||
+                    SELLER_BADGE_CONFIG[normalizedLabel];
+                  const displayLabel = badgeConfig?.label || label;
+                  return (
+                    <View
+                      key={label}
+                      style={[
+                        styles.productBadge,
+                        {
+                          backgroundColor:
+                            (badgeConfig?.color || colors.primary) + "20",
+                        },
+                      ]}
+                    >
+                      {badgeConfig?.icon && (
+                        <Ionicons
+                          name={badgeConfig.icon}
+                          size={12}
+                          color={badgeConfig.color || colors.primary}
+                        />
+                      )}
+                      <Text
+                        style={[
+                          styles.productBadgeText,
+                          { color: badgeConfig?.color || colors.primary },
+                        ]}
+                      >
+                        {displayLabel}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            );
+          })()}
+
+          {/* Shipping & Stock Info Row */}
+          <View style={styles.deliveryRow}>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             {/* Shipping pill */}
             <View
               style={[
@@ -1112,16 +1436,21 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 style={[
                   styles.deliveryIconWrap,
                   {
+<<<<<<< HEAD
                     backgroundColor: isPreorder
                       ? "#FEF3C7"
                       : !isOutOfStock
                         ? "#D1FAE5"
                         : "#FEE2E2",
+=======
+                    backgroundColor: !isOutOfStock ? "#D1FAE5" : "#FEE2E2",
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                   },
                 ]}
               >
                 <Ionicons
                   name={
+<<<<<<< HEAD
                     isPreorder
                       ? "time-outline"
                       : !isOutOfStock
@@ -1136,10 +1465,19 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                         ? "#059669"
                         : "#DC2626"
                   }
+=======
+                    !isOutOfStock
+                      ? "checkmark-circle-outline"
+                      : "close-circle-outline"
+                  }
+                  size={18}
+                  color={!isOutOfStock ? "#059669" : "#DC2626"}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                 />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.deliveryLabel}>
+<<<<<<< HEAD
                   {isPreorder
                     ? "Preorder"
                     : !isOutOfStock
@@ -1157,12 +1495,21 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                       {availableStock} available
                     </Text>
                   )
+=======
+                  {!isOutOfStock ? "In Stock" : "Out of Stock"}
+                </Text>
+                {!isOutOfStock && hasInventoryValue && (
+                  <Text style={[styles.deliveryValue, { color: "#059669" }]}>
+                    {availableStock} available
+                  </Text>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                 )}
               </View>
             </View>
           </View>
 
           <View style={styles.section}>
+<<<<<<< HEAD
             <Text style={styles.sectionTitle}>Specifications</Text>
             <View>
               <View style={styles.specRow}>
@@ -1298,6 +1645,122 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 </Pressable>
               )}
             </View>
+=======
+            <Text style={styles.sectionTitle}>Product Details</Text>
+            <Text style={styles.description}>
+              {product.description ||
+                `High-quality product from ${product.vendor}. Category: ${product.category}. Perfect for your needs with excellent features and durability.`}
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Specifications</Text>
+            <View style={styles.specRow}>
+              <Text style={styles.specLabel}>Seller</Text>
+              <Text style={styles.specValue}>
+                {product.seller?.name || product.vendor}
+              </Text>
+            </View>
+            <View style={styles.specRow}>
+              <Text style={styles.specLabel}>Category</Text>
+              <Text style={styles.specValue}>{product.category}</Text>
+            </View>
+            <View style={styles.specRow}>
+              <Text style={styles.specLabel}>Rating</Text>
+              <Text style={styles.specValue}>
+                {product.rating?.toFixed(1) || "N/A"} / 5.0
+              </Text>
+            </View>
+
+            {product.weight && (
+              <View style={styles.specRow}>
+                <Text style={styles.specLabel}>Weight</Text>
+                <Text style={styles.specValue}>
+                  {product.weight} {product.weight_unit || "kg"}
+                </Text>
+              </View>
+            )}
+
+            {product.sku && (
+              <View style={styles.specRow}>
+                <Text style={styles.specLabel}>SKU</Text>
+                <Text style={styles.specValue}>{product.sku}</Text>
+              </View>
+            )}
+
+            {product.barcode && (
+              <View style={styles.specRow}>
+                <Text style={styles.specLabel}>Barcode</Text>
+                <Text style={styles.specValue}>{product.barcode}</Text>
+              </View>
+            )}
+
+            {product.colors && product.colors.length > 0 && (
+              <View style={styles.specRow}>
+                <Text style={styles.specLabel}>Available Colors</Text>
+                <View style={styles.colorGrid}>
+                  {product.colors.map((colorName, index) => {
+                    const COLOR_MAP = {
+                      Black: "#000000",
+                      White: "#FFFFFF",
+                      Red: "#EF4444",
+                      Blue: "#3B82F6",
+                      Green: "#10B981",
+                      Yellow: "#F59E0B",
+                      Purple: "#8B5CF6",
+                      Pink: "#EC4899",
+                      Orange: "#F97316",
+                      Brown: "#92400E",
+                      Gray: "#6B7280",
+                      Navy: "#1E3A8A",
+                    };
+                    return (
+                      <View key={index} style={styles.colorBadge}>
+                        <View
+                          style={[
+                            styles.colorDot,
+                            {
+                              backgroundColor: COLOR_MAP[colorName] || "#CCC",
+                            },
+                          ]}
+                        />
+                        <Text style={styles.colorName}>{colorName}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {product.sizes && product.sizes.length > 0 && (
+              <View style={styles.specRow}>
+                <Text style={styles.specLabel}>Available Sizes</Text>
+                <View style={styles.sizeGrid}>
+                  {product.sizes.map((size, index) => (
+                    <View key={index} style={styles.sizeBadge}>
+                      <Text style={styles.sizeName}>{size}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {product.specifications &&
+              typeof product.specifications === "object" &&
+              Object.keys(product.specifications).length > 0 && (
+                <>
+                  <View style={styles.divider} />
+                  {Object.entries(product.specifications).map(
+                    ([key, value], index) => (
+                      <View key={index} style={styles.specRow}>
+                        <Text style={styles.specLabel}>{key}</Text>
+                        <Text style={styles.specValue}>{value}</Text>
+                      </View>
+                    ),
+                  )}
+                </>
+              )}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
           </View>
 
           {product.tags && product.tags.length > 0 && (
@@ -1319,6 +1782,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             </View>
           )}
 
+<<<<<<< HEAD
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Similar Products</Text>
             {loadingSimilarProducts ? (
@@ -1365,6 +1829,26 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               </Text>
             )}
           </View>
+=======
+          {relatedTagAds.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                Sponsored For Similar Tags
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.relatedAdsScroller}
+              >
+                {relatedTagAds.map((ad) => (
+                  <View key={ad.id} style={styles.relatedAdItem}>
+                    <InlineAdProductCard ad={ad} />
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
           <View style={styles.section}>
             <View style={styles.reviewsHeader}>
@@ -1408,6 +1892,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                           {[1, 2, 3, 4, 5].map((star) => (
                             <Ionicons
                               key={star}
+<<<<<<< HEAD
                               name={
                                 star <= review.rating ? "star" : "star-outline"
                               }
@@ -1416,6 +1901,16 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                             />
                           ))}
                         </View>
+=======
+                              name={
+                                star <= review.rating ? "star" : "star-outline"
+                              }
+                              size={14}
+                              color={colors.secondary}
+                            />
+                          ))}
+                        </View>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                         <Text style={styles.reviewDate}>
                           {new Date(review.created_at).toLocaleDateString()}
                         </Text>
@@ -1566,7 +2061,11 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         return <AdRenderer ads={overlayAds} />;
       })()}
 
+<<<<<<< HEAD
       <View style={[styles.footer, { paddingBottom: 24 + insets.bottom }]}>
+=======
+      <View style={styles.footer}>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         <Pressable style={styles.chatButton} onPress={handleChatWithSeller}>
           <Ionicons
             name="chatbubble-ellipses"
@@ -1593,7 +2092,11 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             <Text style={styles.ctaText}>
               {isOutOfStock
                 ? "Out of Stock"
+<<<<<<< HEAD
                 : `${isPreorder ? "Preorder" : "Add to Cart"} - ${formatPrice(product.price, product.discount)}`}
+=======
+                : `Add to Cart - ${formatPrice(product.price, product.discount)}`}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             </Text>
           </LinearGradient>
         </Pressable>
@@ -1654,9 +2157,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
           {/* Bottom: page indicator dots + counter */}
           {(product.thumbnails?.length || 1) > 1 && (
+<<<<<<< HEAD
             <View
               style={[styles.previewDotsRow, { bottom: 52 + insets.bottom }]}
             >
+=======
+            <View style={styles.previewDotsRow}>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
               {(product.thumbnails || [product.thumbnail]).map((_, i) => (
                 <View
                   key={i}
@@ -1668,9 +2175,15 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               ))}
             </View>
           )}
+<<<<<<< HEAD
           <Text style={[styles.previewCounter, { bottom: 24 + insets.bottom }]}>
             {previewImageIndex + 1} / {product.thumbnails?.length || 1}
           </Text>
+=======
+          <Text style={styles.previewCounter}>
+            {previewImageIndex + 1} / {product.thumbnails?.length || 1}
+          </Text>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         </View>
       </Modal>
 
@@ -1722,6 +2235,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 {[1, 2, 3, 4, 5].map((star) => (
                   <Pressable key={star} onPress={() => setReviewRating(star)}>
                     <Ionicons
+<<<<<<< HEAD
                       name={star <= reviewRating ? "star" : "star-outline"}
                       size={32}
                       color={
@@ -1729,6 +2243,15 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                       }
                     />
                   </Pressable>
+=======
+                      name={star <= reviewRating ? "star" : "star-outline"}
+                      size={32}
+                      color={
+                        star <= reviewRating ? colors.secondary : colors.muted
+                      }
+                    />
+                  </Pressable>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                 ))}
               </View>
             </View>
@@ -1747,9 +2270,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             </View>
           </ScrollView>
 
+<<<<<<< HEAD
           <View
             style={[styles.modalFooter, { paddingBottom: 16 + insets.bottom }]}
           >
+=======
+          <View style={styles.modalFooter}>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             <Pressable
               style={styles.cancelButton}
               onPress={() => {
@@ -1787,9 +2314,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         onRequestClose={() => setShowVariantModal(false)}
       >
         <View style={styles.variantOverlay}>
+<<<<<<< HEAD
           <View
             style={[styles.variantModal, { paddingBottom: 20 + insets.bottom }]}
           >
+=======
+          <View style={styles.variantModal}>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             <View style={styles.variantHeader}>
               <Text style={styles.variantTitle}>Select Options</Text>
               <Pressable onPress={() => setShowVariantModal(false)} hitSlop={8}>
@@ -1882,9 +2413,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
+<<<<<<< HEAD
                 <Text style={styles.variantAddText}>
                   {isPreorder ? "Preorder" : "Add to Cart"}
                 </Text>
+=======
+                <Text style={styles.variantAddText}>Add to Cart</Text>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
               </LinearGradient>
             </Pressable>
           </View>
@@ -1960,6 +2495,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
+<<<<<<< HEAD
   content: {
     padding: 20,
     backgroundColor: "#fff",
@@ -2011,6 +2547,31 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 12,
   },
+=======
+  content: {
+    padding: 20,
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: -24,
+  },
+  vendorRow: {
+    flexDirection: "column",
+    gap: 8,
+    marginBottom: 8,
+  },
+  vendor: {
+    fontSize: 14,
+    color: colors.muted,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  sellerBadgesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   sellerBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -2023,6 +2584,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
   },
+<<<<<<< HEAD
   title: {
     fontSize: 25,
     fontWeight: "800",
@@ -2049,6 +2611,29 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 2,
   },
+=======
+  title: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: colors.dark,
+    marginBottom: 12,
+  },
+  relatedAdsScroller: {
+    gap: 12,
+    paddingVertical: 4,
+  },
+  relatedAdItem: {
+    width: 260,
+  },
+  badgeRow: {
+    marginBottom: 16,
+  },
+  badgeRowContent: {
+    flexDirection: "row",
+    gap: 6,
+    paddingVertical: 4,
+  },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   productBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -2074,6 +2659,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: "600",
   },
+<<<<<<< HEAD
   priceSection: {
     marginBottom: 10,
   },
@@ -2096,6 +2682,29 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textDecorationLine: "line-through",
   },
+=======
+  priceSection: {
+    marginBottom: 12,
+  },
+  priceRow: {
+    marginBottom: 8,
+  },
+  price: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  priceContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  originalPrice: {
+    fontSize: 18,
+    color: colors.muted,
+    textDecorationLine: "line-through",
+  },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   discountBadge: {
     backgroundColor: colors.accent,
     paddingHorizontal: 8,
@@ -2108,6 +2717,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     textTransform: "uppercase",
   },
+<<<<<<< HEAD
   flashSaleSection: {
     marginBottom: 12,
   },
@@ -2120,6 +2730,14 @@ const styles = StyleSheet.create({
   availableTextDetail: {
     marginTop: 6,
     fontSize: 14,
+=======
+  flashSaleSection: {
+    marginBottom: 16,
+  },
+  availableTextDetail: {
+    marginTop: 6,
+    fontSize: 14,
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     fontWeight: "600",
     color: "#DC2626",
   },
@@ -2140,6 +2758,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     textTransform: "uppercase",
   },
+<<<<<<< HEAD
   ratingRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2167,6 +2786,22 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontWeight: "500",
   },
+=======
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  ratingText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.dark,
+  },
+  ratingCount: {
+    fontSize: 14,
+    color: colors.muted,
+  },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   stockRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -2180,6 +2815,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+<<<<<<< HEAD
   section: {
     marginBottom: 24,
   },
@@ -2230,6 +2866,22 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontWeight: "500",
   },
+=======
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.dark,
+    marginBottom: 12,
+  },
+  description: {
+    fontSize: 15,
+    color: colors.muted,
+    lineHeight: 24,
+  },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   specRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2479,7 +3131,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 100,
     textAlignVertical: "top",
+<<<<<<< HEAD
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   modalFooter: {
     flexDirection: "row",
@@ -2570,7 +3225,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 40,
     maxHeight: 80,
+<<<<<<< HEAD
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   commentButton: {
     paddingHorizontal: 16,
@@ -2784,11 +3442,20 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   // Shipping & stock redesign
+<<<<<<< HEAD
   deliveryRow: {
     flexDirection: "row",
     gap: 10,
     marginBottom: 24,
   },
+=======
+  deliveryRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginHorizontal: 20,
+    marginBottom: 20,
+  },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   deliveryPill: {
     flex: 1,
     flexDirection: "row",
@@ -2894,6 +3561,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+<<<<<<< HEAD
 
 const markdownStyles = StyleSheet.create({
   body: {
@@ -2958,3 +3626,5 @@ const markdownStyles = StyleSheet.create({
     color: colors.primary,
   },
 });
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880

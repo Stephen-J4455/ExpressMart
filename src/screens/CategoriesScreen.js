@@ -30,6 +30,7 @@ export const CategoriesScreen = ({ navigation }) => {
     2,
     Math.floor((contentWidth - hPad * 2 + gap) / (targetMinCardWidth + gap)),
   );
+<<<<<<< HEAD
   const cardWidth = getItemWidth(categoryGridColumns, hPad, gap, contentWidth);
   const sortedCategories = useMemo(
     () =>
@@ -47,14 +48,31 @@ export const CategoriesScreen = ({ navigation }) => {
       setSelectedCategoryId(sortedCategories[0].id);
     }
   }, [selectedCategoryId, sortedCategories]);
+=======
+  const cardWidth = getItemWidth(categoryGridColumns, hPad, gap, contentWidth);
+
+  // Initialize selection
+  useEffect(() => {
+    if (categories.length > 0 && !selectedCategoryId) {
+      setSelectedCategoryId(categories[0].id);
+    }
+  }, [categories]);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const filteredProducts = useMemo(() => {
     if (!selectedCategoryId) return [];
 
+<<<<<<< HEAD
     // Get selected category name for fallback matching
     const selectedCategory = sortedCategories.find(
       (c) => c.id === selectedCategoryId,
     );
+=======
+    // Get selected category name for fallback matching
+    const selectedCategory = categories.find(
+      (c) => c.id === selectedCategoryId,
+    );
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     const categoryName = selectedCategory ? selectedCategory.name : "";
 
     return products.filter(
@@ -64,7 +82,11 @@ export const CategoriesScreen = ({ navigation }) => {
         (typeof p.category === "string" &&
           p.category.toLowerCase() === categoryName.toLowerCase()),
     );
+<<<<<<< HEAD
   }, [products, selectedCategoryId, sortedCategories]);
+=======
+  }, [products, selectedCategoryId, categories]);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const renderCategoryItem = ({ item }) => {
     const isSelected = item.id === selectedCategoryId;
@@ -101,7 +123,11 @@ export const CategoriesScreen = ({ navigation }) => {
   };
 
   const selectedCategory =
+<<<<<<< HEAD
     sortedCategories.find((c) => c.id === selectedCategoryId) || null;
+=======
+    categories.find((c) => c.id === selectedCategoryId) || null;
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const renderProductItem = ({ item }) => (
     <View style={{ flex: 1, maxWidth: cardWidth, marginBottom: 10 }}>
@@ -121,7 +147,11 @@ export const CategoriesScreen = ({ navigation }) => {
       <View style={[styles.sidebar, { width: categorySidebarWidth }]}>
         <View style={styles.sidebarHeader} />
         <FlatList
+<<<<<<< HEAD
           data={sortedCategories}
+=======
+          data={categories}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
           renderItem={renderCategoryItem}
           keyExtractor={(item) => item.id.toString()}
           showsVerticalScrollIndicator={false}

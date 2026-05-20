@@ -442,6 +442,7 @@ const styles = StyleSheet.create({
   conversationItem: {
     flexDirection: "row",
     alignItems: "center",
+<<<<<<< HEAD
     backgroundColor: "rgba(255, 255, 255, 0.7)",
     borderRadius: 0,
     padding: 14,
@@ -456,6 +457,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(59, 130, 246, 0.1)",
     borderBottomColor: colors.primary,
     borderBottomWidth: 1,
+=======
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  conversationItemActive: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.1,
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   userNameActive: {
     color: colors.primary,
@@ -464,6 +483,7 @@ const styles = StyleSheet.create({
     color: colors.dark,
   },
   avatar: {
+<<<<<<< HEAD
     width: 54,
     height: 54,
     borderRadius: 27,
@@ -474,6 +494,16 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(59, 130, 246, 0.3)",
+=======
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: colors.light,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+    overflow: "hidden",
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   avatarImage: {
     width: "100%",

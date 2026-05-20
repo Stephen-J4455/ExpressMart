@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+<<<<<<< HEAD
 import {
   Platform,
   Pressable,
@@ -7,6 +8,9 @@ import {
   TextInput,
   View,
 } from "react-native";
+=======
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import { colors } from "../theme/colors";
 
 export const SearchBar = ({
@@ -72,7 +76,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: colors.dark,
+<<<<<<< HEAD
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   placeholder: {
     color: colors.muted,

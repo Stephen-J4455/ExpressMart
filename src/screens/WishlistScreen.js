@@ -96,6 +96,7 @@ export const WishlistScreen = ({ navigation }) => {
       )
       .subscribe();
 
+<<<<<<< HEAD
     return () => {
       if (!channel || typeof channel.unsubscribe !== "function") return;
       Promise.resolve(channel.unsubscribe()).catch((err) => {
@@ -103,6 +104,10 @@ export const WishlistScreen = ({ navigation }) => {
       });
     };
   }, [user, fetchWishlist]);
+=======
+    return () => channel.unsubscribe();
+  }, [user, fetchWishlist]);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const removeFromWishlist = async (wishlistId) => {
     if (!supabase) return;
@@ -194,6 +199,7 @@ export const WishlistScreen = ({ navigation }) => {
         <View style={styles.emptyContainer}>
           <Ionicons name="heart-outline" size={80} color={colors.muted} />
           <Text style={styles.emptyTitle}>Sign in to view your wishlist</Text>
+<<<<<<< HEAD
           <Pressable
             style={styles.signInButton}
             onPress={() =>
@@ -202,6 +208,12 @@ export const WishlistScreen = ({ navigation }) => {
               })
             }
           >
+=======
+          <Pressable
+            style={styles.signInButton}
+            onPress={() => navigation.navigate("Auth")}
+          >
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             <LinearGradient
               colors={[colors.primary, colors.accent]}
               style={styles.signInGradient}

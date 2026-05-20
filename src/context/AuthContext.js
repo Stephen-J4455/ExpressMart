@@ -6,12 +6,17 @@ import {
   useCallback,
   useRef,
 } from "react";
+<<<<<<< HEAD
 import { AppState, Platform } from "react-native";
 import * as Linking from "expo-linking";
+=======
+import { AppState } from "react-native";
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import { callEdgeFunction, supabase } from "../lib/supabase";
 
 const AuthContext = createContext();
 
+<<<<<<< HEAD
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -42,6 +47,15 @@ export const AuthProvider = ({ children }) => {
       clearTimeout(timeoutId);
     }
   }, []);
+=======
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState(null);
+  const appStateRef = useRef(AppState.currentState);
+  const presenceChannelRef = useRef(null);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const updateLastSeen = useCallback(async (userId) => {
     if (!supabase || !userId) return;
@@ -109,7 +123,11 @@ export const AuthProvider = ({ children }) => {
     [stopPresence],
   );
 
+<<<<<<< HEAD
   const fetchProfile = useCallback(async (userId) => {
+=======
+  const fetchProfile = useCallback(async (userId) => {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     if (!supabase || !userId) return null;
 
     try {
@@ -134,6 +152,7 @@ export const AuthProvider = ({ children }) => {
       );
       return null;
     }
+<<<<<<< HEAD
   }, []);
 
   const applySessionState = useCallback(
@@ -351,6 +370,44 @@ export const AuthProvider = ({ children }) => {
       }
     };
   }, [applySessionState, syncSessionFromStorage]);
+=======
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
+    // Get initial session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        const profileData = await fetchProfile(session.user.id);
+        setProfile(profileData);
+      }
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+
+      if (session?.user) {
+        const profileData = await fetchProfile(session.user.id);
+        setProfile(profileData);
+      } else {
+        setProfile(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [fetchProfile]);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   useEffect(() => {
     if (!supabase) return;
@@ -366,6 +423,7 @@ export const AuthProvider = ({ children }) => {
 
     syncPresence();
 
+<<<<<<< HEAD
     const subscription = AppState.addEventListener(
       "change",
       async (nextAppState) => {
@@ -408,6 +466,21 @@ export const AuthProvider = ({ children }) => {
       stopPresence(user?.id);
     };
   }, [user?.id, startPresence, stopPresence, syncSessionFromStorage]);
+=======
+    const subscription = AppState.addEventListener(
+      "change",
+      async (nextAppState) => {
+        appStateRef.current = nextAppState;
+        await syncPresence(nextAppState);
+      },
+    );
+
+    return () => {
+      subscription.remove();
+      stopPresence(user?.id);
+    };
+  }, [user?.id, startPresence, stopPresence]);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const signUp = async (email, password, fullName) => {
     if (!supabase) {
@@ -533,10 +606,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+<<<<<<< HEAD
   const getResetRedirectTo = () =>
     Platform.OS === "web" && typeof window !== "undefined"
       ? new URL("/reset-password", window.location.origin).toString()
       : Linking.createURL("reset-password", { scheme: "expressmart" });
+=======
+  // reset page is deployed on GitHub Pages. the password-reset.html file
+  // lives in the root of the main branch of the `express-password-reset`
+  // repository.
+  const RESET_PAGE =
+    "https://stephen-j4455.github.io/express-password-reset/password-reset.html";
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const resetPassword = async (email) => {
     if (!supabase) {
@@ -545,9 +626,16 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
+<<<<<<< HEAD
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: getResetRedirectTo(),
       });
+=======
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        // include scheme query so the web page knows which app to deep link back to
+        redirectTo: `${RESET_PAGE}?scheme=expressmart`,
+      });
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
       if (error) throw error;
 
@@ -629,8 +717,11 @@ export const AuthProvider = ({ children }) => {
     session,
     loading,
     isAuthenticated: !!user,
+<<<<<<< HEAD
     isRecoveryMode,
     setIsRecoveryMode,
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     signUp,
     signIn,
     signOut,

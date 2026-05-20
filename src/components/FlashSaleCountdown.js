@@ -125,6 +125,12 @@ export const FlashSaleCountdown = ({ endTime, startTime, onExpire, compact = fal
             <Text style={styles.progressBarTitle}>Flash Sale Ends In</Text>
           </View>
           <View style={styles.timeQtyRow}>
+<<<<<<< HEAD
+=======
+            {availableQty != null && (
+              <Text style={styles.availableText}>{availableQty} left</Text>
+            )}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             <Text style={styles.progressBarTime}>
               {timeLeft.days > 0
                 ? `${timeLeft.days}d ${String(timeLeft.hours).padStart(2, "0")}:${String(timeLeft.minutes).padStart(2, "0")}:${String(timeLeft.seconds).padStart(2, "0")}`
@@ -141,6 +147,7 @@ export const FlashSaleCountdown = ({ endTime, startTime, onExpire, compact = fal
           />
         </View>
         <View style={styles.progressBarLabels}>
+<<<<<<< HEAD
           <Text style={styles.progressBarLabel}>
             Hurry! Limited Time{" "}
             <Text style={styles.progressBarPercentage}>
@@ -150,6 +157,10 @@ export const FlashSaleCountdown = ({ endTime, startTime, onExpire, compact = fal
           {availableQty != null && (
             <Text style={styles.availableText}>{availableQty} left</Text>
           )}
+=======
+          <Text style={styles.progressBarLabel}>Hurry! Limited Time</Text>
+          <Text style={styles.progressBarPercentage}>{Math.round(progress)}%</Text>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         </View>
       </View>
     );

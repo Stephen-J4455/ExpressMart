@@ -7,6 +7,7 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
+<<<<<<< HEAD
 import { useState } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,6 +18,15 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { colors } from "../theme/colors";
 import { FlashSaleBadge } from "./FlashSaleBadge";
+=======
+import { useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { useCart } from "../context/CartContext";
+import { useToast } from "../context/ToastContext";
+import { colors } from "../theme/colors";
+import { FlashSaleBadge } from "./FlashSaleBadge";
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import { FlashSaleCountdown } from "./FlashSaleCountdown";
 
 const SELLER_BADGE_CONFIG = {
@@ -54,6 +64,7 @@ const toBoolean = (value) => {
   return false;
 };
 
+<<<<<<< HEAD
 export const ProductCard = ({
   product,
   style,
@@ -73,6 +84,21 @@ export const ProductCard = ({
   const { isAuthenticated } = useAuth();
   const { addToCart } = useCart();
   const toast = useToast();
+=======
+export const ProductCard = ({
+  product,
+  style,
+  variant = "grid",
+  onPress,
+  hideCta,
+  compact,
+  flashSale,
+  theme,
+  priceLabelOverride,
+}) => {
+  const { addToCart } = useCart();
+  const toast = useToast();
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showVariantModal, setShowVariantModal] = useState(false);
   const [selectedColor, setSelectedColor] = useState(null);
@@ -85,9 +111,14 @@ export const ProductCard = ({
     product?.quantity ?? product?.stock ?? product?.stock_quantity ?? 0,
   );
   const allowsBackorder = toBoolean(product?.allow_backorder);
+<<<<<<< HEAD
   const isPreorder = toBoolean(product?.is_preorder);
   const isOutOfStock =
     !isPreorder && hasInventoryValue && availableStock <= 0 && !allowsBackorder;
+=======
+  const isOutOfStock =
+    hasInventoryValue && availableStock <= 0 && !allowsBackorder;
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   // Determine actual price (flash sale price takes priority)
   const actualPrice = flashSale?.flash_price || product.price;
@@ -96,12 +127,17 @@ export const ProductCard = ({
     ? flashSale.discount_percentage
     : product.discount;
 
+<<<<<<< HEAD
   const formatPrice = (price, discount = 0) => {
+=======
+  const formatPrice = (price, discount = 0) => {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     // If there's a flash sale, use flash sale price directly
     if (hasFlashSale) {
       return `GH₵${Number(flashSale.flash_price || 0).toLocaleString()}`;
     }
     const discountedPrice = discount > 0 ? price * (1 - discount / 100) : price;
+<<<<<<< HEAD
     return `GH₵${Number(discountedPrice || 0).toLocaleString()}`;
   };
 
@@ -130,6 +166,17 @@ export const ProductCard = ({
     if (isOutOfStock) {
       toast.error("Out of Stock", "This product is currently unavailable");
       return;
+=======
+    return `GH₵${Number(discountedPrice || 0).toLocaleString()}`;
+  };
+
+  const handleAdd = (e) => {
+    e?.stopPropagation?.();
+
+    if (isOutOfStock) {
+      toast.error("Out of Stock", "This product is currently unavailable");
+      return;
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     }
 
     const hasColors = product.colors && product.colors.length > 0;
@@ -164,6 +211,7 @@ export const ProductCard = ({
     }
   };
 
+<<<<<<< HEAD
   const handleConfirmAddToCart = () => {
     if (!isAuthenticated) {
       setShowVariantModal(false);
@@ -178,6 +226,12 @@ export const ProductCard = ({
     // Only require selection if there are multiple options
     if (
       (product.colors && product.colors.length > 1 && !selectedColor) ||
+=======
+  const handleConfirmAddToCart = () => {
+    // Only require selection if there are multiple options
+    if (
+      (product.colors && product.colors.length > 1 && !selectedColor) ||
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       (product.sizes && product.sizes.length > 1 && !selectedSize)
     ) {
       toast.error("Selection Required", "Please select all required options");
@@ -281,6 +335,7 @@ export const ProductCard = ({
           <View style={styles.listContent}>
             <View style={styles.listTop}>
               <View style={{ flex: 1 }}>
+<<<<<<< HEAD
                 <View style={styles.vendorRow}>
                   <Text style={styles.vendor} numberOfLines={1}>
                     {displayStoreName}
@@ -288,6 +343,15 @@ export const ProductCard = ({
                   {SELLER_BADGE_PRIORITY.filter((id) =>
                     sellerBadgeIds?.includes(id),
                   )
+=======
+                <View style={styles.vendorRow}>
+                  <Text style={styles.vendor} numberOfLines={1}>
+                    {product.seller?.name || product.vendor}
+                  </Text>
+                  {SELLER_BADGE_PRIORITY.filter((id) =>
+                    product.seller?.badges?.includes(id),
+                  )
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                     .slice(0, 2)
                     .map((id) => {
                       const b = SELLER_BADGE_CONFIG[id];
@@ -334,12 +398,18 @@ export const ProductCard = ({
                     </Text>
                   )}
                   {priceLabelOverride ? (
+<<<<<<< HEAD
                     <Text
                       numberOfLines={priceLabelLines}
                       style={styles.metaDescriptionList}
                     >
                       {priceLabelOverride}
                     </Text>
+=======
+                    <Text numberOfLines={2} style={styles.metaDescriptionList}>
+                      {priceLabelOverride}
+                    </Text>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                   ) : (
                     <Text style={styles.price}>
                       {formatPrice(product.price, product.discount)}
@@ -429,10 +499,15 @@ export const ProductCard = ({
           transparent
           onRequestClose={() => setShowVariantModal(false)}
         >
+<<<<<<< HEAD
           <View style={styles.variantOverlay}>
             <View
               style={[styles.variantModal, { paddingBottom: 28 + insets.bottom }]}
             >
+=======
+          <View style={styles.variantOverlay}>
+            <View style={styles.variantModal}>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
               <View style={styles.variantHeader}>
                 <Text style={styles.variantTitle}>Select Options</Text>
                 <Pressable
@@ -590,6 +665,7 @@ export const ProductCard = ({
           )}
         </View>
         <View style={styles.content}>
+<<<<<<< HEAD
           <View style={styles.vendorRow}>
             <Text
               style={compact ? styles.vendorCompact : styles.vendor}
@@ -600,6 +676,18 @@ export const ProductCard = ({
             {SELLER_BADGE_PRIORITY.filter((id) =>
               sellerBadgeIds?.includes(id),
             )
+=======
+          <View style={styles.vendorRow}>
+            <Text
+              style={compact ? styles.vendorCompact : styles.vendor}
+              numberOfLines={1}
+            >
+              {product.seller?.name || product.vendor}
+            </Text>
+            {SELLER_BADGE_PRIORITY.filter((id) =>
+              product.seller?.badges?.includes(id),
+            )
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
               .slice(0, 2)
               .map((id) => {
                 const b = SELLER_BADGE_CONFIG[id];
@@ -631,10 +719,17 @@ export const ProductCard = ({
               )}
               {priceLabelOverride ? (
                 <Text
+<<<<<<< HEAD
                   numberOfLines={priceLabelLines}
                   style={
                     compact
                       ? styles.metaDescriptionCompact
+=======
+                  numberOfLines={2}
+                  style={
+                    compact
+                      ? styles.metaDescriptionCompact
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                       : styles.metaDescription
                   }
                 >
@@ -664,6 +759,7 @@ export const ProductCard = ({
               }
             />
           )}
+<<<<<<< HEAD
           {footerAction || (!hideCta && !hasFlashSale) ? (
             footerAction ? (
               <View style={styles.footerActionWrap}>{footerAction}</View>
@@ -701,6 +797,41 @@ export const ProductCard = ({
           ) : null}
         </View>
       </Pressable>
+=======
+          {!hideCta && !hasFlashSale && (
+            <Pressable
+              style={[styles.cta, isOutOfStock && styles.ctaDisabled]}
+              onPress={handleAdd}
+              disabled={isOutOfStock}
+              accessibilityLabel="Add to cart"
+            >
+              <LinearGradient
+                colors={
+                  isOutOfStock
+                    ? ["#9CA3AF", "#9CA3AF"]
+                    : [
+                        themeObj.gradientStart || themeObj.primary || accent,
+                        themeObj.gradientEnd || themeObj.primary || accent,
+                      ]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.ctaGradient}
+              >
+                <Ionicons
+                  name={isOutOfStock ? "close-circle" : "cart"}
+                  size={16}
+                  color="#fff"
+                />
+                <Text style={styles.ctaText}>
+                  {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          )}
+        </View>
+      </Pressable>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
       {/* Variant Selection Modal */}
       <Modal
@@ -709,10 +840,15 @@ export const ProductCard = ({
         transparent
         onRequestClose={() => setShowVariantModal(false)}
       >
+<<<<<<< HEAD
         <View style={styles.variantOverlay}>
           <View
             style={[styles.variantModal, { paddingBottom: 28 + insets.bottom }]}
           >
+=======
+        <View style={styles.variantOverlay}>
+          <View style={styles.variantModal}>
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             <View style={styles.variantHeader}>
               <Text style={styles.variantTitle}>Select Options</Text>
               <Pressable onPress={() => setShowVariantModal(false)} hitSlop={8}>
@@ -1000,6 +1136,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#92400E",
   },
+<<<<<<< HEAD
   cta: {
     marginTop: 10,
   },
@@ -1011,6 +1148,16 @@ const styles = StyleSheet.create({
   },
   ctaGradient: {
     height: 40,
+=======
+  cta: {
+    marginTop: 10,
+  },
+  ctaDisabled: {
+    opacity: 1,
+  },
+  ctaGradient: {
+    height: 40,
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",

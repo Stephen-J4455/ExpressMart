@@ -229,6 +229,7 @@ export const NotificationsScreen = ({ navigation }) => {
             color={colors.muted}
           />
           <Text style={styles.emptyTitle}>Sign in to view notifications</Text>
+<<<<<<< HEAD
           <Pressable
             style={styles.signInButton}
             onPress={() =>
@@ -237,6 +238,12 @@ export const NotificationsScreen = ({ navigation }) => {
               })
             }
           >
+=======
+          <Pressable
+            style={styles.signInButton}
+            onPress={() => navigation.navigate("Auth")}
+          >
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             <Text style={styles.signInText}>Sign In</Text>
           </Pressable>
         </View>

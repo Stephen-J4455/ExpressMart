@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+<<<<<<< HEAD
 import {
   ActivityIndicator,
   FlatList,
@@ -13,6 +14,22 @@ import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../context/OrderContext";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
+=======
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "../context/AuthContext";
+import { useOrder } from "../context/OrderContext";
+import { colors } from "../theme/colors";
+import { useResponsive } from "../hooks/useResponsive";
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
 const statusColors = {
   pending_payment: "#F59E0B",
@@ -87,13 +104,18 @@ const OrderCard = ({ order, onPress, cardWidth }) => {
   );
 };
 
+<<<<<<< HEAD
 export const OrdersScreen = ({ navigation, route }) => {
+=======
+export const OrdersScreen = ({ navigation }) => {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   const { isAuthenticated } = useAuth();
   const { orders, loading, fetchOrders } = useOrder();
   const { cardColumns, horizontalPadding, getItemWidth } = useResponsive();
   const cardItemWidth = getItemWidth(cardColumns);
   const [filter, setFilter] = useState("all");
 
+<<<<<<< HEAD
   useEffect(() => {
     if (!isAuthenticated) {
       navigation.replace("Auth");
@@ -107,6 +129,15 @@ export const OrdersScreen = ({ navigation, route }) => {
   }, [route?.params?.refreshOnce, fetchOrders, navigation]);
 
   const filteredOrders = orders.filter((order) => {
+=======
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigation.replace("Auth");
+    }
+  }, [isAuthenticated, navigation]);
+
+  const filteredOrders = orders.filter((order) => {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     if (filter === "all") return true;
     if (filter === "active")
       return ["processing", "packed", "shipped"].includes(order.status);

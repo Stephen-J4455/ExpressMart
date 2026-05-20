@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+=======
+import React, { useCallback, useEffect, useState, useRef } from "react";
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import {
   View,
   Text,
@@ -16,22 +20,37 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+<<<<<<< HEAD
 import { supabase } from "../lib/supabase";
 import { useShop } from "../context/ShopContext";
 import { useAuth } from "../context/AuthContext";
 import { colors, getTheme } from "../theme/colors";
 import { useToast } from "../context/ToastContext";
+=======
+import { supabase } from "../lib/supabase";
+import { useShop } from "../context/ShopContext";
+import { colors, getTheme } from "../theme/colors";
+import { useToast } from "../context/ToastContext";
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import { useResponsive } from "../hooks/useResponsive";
 import { ProductCard } from "../components/ProductCard";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
 
 const TABS = ["products", "profile", "reviews"];
 
+<<<<<<< HEAD
 const BADGE_CONFIG = {
   verified: {
     label: "Verified",
     icon: "checkmark-circle",
     color: "#10B981",
+=======
+const BADGE_CONFIG = {
+  verified: {
+    label: "Verified",
+    icon: "checkmark-circle",
+    color: "#10B981",
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   fast_shipping: {
     label: "Fast Shipping",
@@ -43,6 +62,7 @@ const BADGE_CONFIG = {
     icon: "shield-checkmark",
     color: "#3B82F6",
   },
+<<<<<<< HEAD
   eco_friendly: {
     label: "Eco Friendly",
     icon: "leaf",
@@ -138,6 +158,24 @@ export const StoreScreen = ({ route, navigation }) => {
       : null,
   );
   const sellerId = routeSellerId || sellerDetail?.id;
+=======
+  eco_friendly: {
+    label: "Eco Friendly",
+    icon: "leaf",
+    color: "#059669",
+  },
+};
+
+export const StoreScreen = ({ route, navigation }) => {
+  const rawSeller =
+    (route.params &&
+      (route.params.seller || route.params.sellerId || route.params.id)) ||
+    null;
+  const [sellerDetail, setSellerDetail] = useState(
+    typeof rawSeller === "object" ? rawSeller : null,
+  );
+  const sellerId = typeof rawSeller === "string" ? rawSeller : sellerDetail?.id;
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   const insets = useSafeAreaInsets();
   const { width: screenWidth, gridColumns, getItemWidth } = useResponsive();
   const itemWidth = getItemWidth(gridColumns, 12, 12);
@@ -150,10 +188,16 @@ export const StoreScreen = ({ route, navigation }) => {
     : getTheme(colors.primary);
   const accent = theme.primary;
   const accentGradient = [theme.gradientStart, theme.gradientEnd];
+<<<<<<< HEAD
   const { refresh, loading, followSeller, unfollowSeller, isFollowing } =
     useShop();
   const { user } = useAuth();
   const toast = useToast();
+=======
+  const { refresh, loading, followSeller, unfollowSeller, isFollowing } =
+    useShop();
+  const toast = useToast();
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   const tabScrollRef = useRef(null);
 
   const [statuses, setStatuses] = useState([]);
@@ -222,6 +266,7 @@ export const StoreScreen = ({ route, navigation }) => {
     [openExternalLink, toast],
   );
 
+<<<<<<< HEAD
   const averageRating =
     storeReviews.length > 0
       ? (
@@ -268,6 +313,19 @@ export const StoreScreen = ({ route, navigation }) => {
       return;
     }
     setFollowLoading(true);
+=======
+  const averageRating =
+    storeReviews.length > 0
+      ? (
+          storeReviews.reduce((sum, r) => sum + (r.rating || 0), 0) /
+          storeReviews.length
+        ).toFixed(1)
+      : "0.0";
+
+  const handleFollowToggle = async () => {
+    if (!sellerId) return;
+    setFollowLoading(true);
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     try {
       if (isFollowing(sellerId)) {
         await unfollowSeller(sellerId);
@@ -284,6 +342,7 @@ export const StoreScreen = ({ route, navigation }) => {
     }
   };
 
+<<<<<<< HEAD
   useEffect(() => {
     // If we were passed only a seller id (string), hydrate seller detail.
     const fetchSeller = async () => {
@@ -309,6 +368,31 @@ export const StoreScreen = ({ route, navigation }) => {
       }
     };
     fetchSeller();
+=======
+  useEffect(() => {
+    // If we were passed only a seller id (string), fetch full seller row
+    const fetchSeller = async () => {
+      // Always fetch the latest seller row from the DB by id so flags like
+      // `theme_apply_store` are up-to-date even when a seller object was
+      // passed through navigation params.
+      const id =
+        sellerId || (typeof rawSeller === "string" ? rawSeller : rawSeller?.id);
+      if (!id) return;
+      try {
+        const { data, error } = await supabase
+          .from("express_sellers")
+          .select(
+            "id,name,avatar,badges,rating,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
+          )
+          .eq("id", id)
+          .single();
+        if (!error && data) setSellerDetail(data);
+      } catch (err) {
+        console.error("Error fetching seller detail:", err);
+      }
+    };
+    fetchSeller();
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
     const fetchStoreReviews = async () => {
       if (!sellerId) return;
@@ -423,6 +507,7 @@ export const StoreScreen = ({ route, navigation }) => {
     }
   };
 
+<<<<<<< HEAD
   // Fetch only this store's products and dedupe by product id.
   const fetchStoreProducts = useCallback(
     async (reset = true) => {
@@ -447,6 +532,29 @@ export const StoreScreen = ({ route, navigation }) => {
           const normalizedBackorder =
             p.allow_backorder === true ||
             p.allow_backorder === 1 ||
+=======
+  // Replace ShopContext filter with direct paginated fetch
+  const fetchStoreProducts = useCallback(
+    async (reset = true) => {
+      if (!supabase || !sellerId) return;
+      const start = reset ? 0 : storeProducts.length;
+      const end = start + STORE_PAGE_SIZE - 1;
+      try {
+        const { data, error } = await supabase
+          .from("express_products")
+          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+          .eq("seller_id", sellerId)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .range(start, end);
+        if (error) throw error;
+        const mapped = (data || []).map((p) => {
+          const normalizedQuantity = p.quantity ?? p.stock ?? p.stock_quantity;
+          const normalizedStock = p.stock ?? p.quantity ?? p.stock_quantity;
+          const normalizedBackorder =
+            p.allow_backorder === true ||
+            p.allow_backorder === 1 ||
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             String(p.allow_backorder || "")
               .trim()
               .toLowerCase() === "true";
@@ -474,6 +582,7 @@ export const StoreScreen = ({ route, navigation }) => {
             weight_unit: p.weight_unit || null,
             sku: p.sku || null,
             barcode: p.barcode || null,
+<<<<<<< HEAD
             seller: p.seller_id || null,
           };
         });
@@ -498,12 +607,27 @@ export const StoreScreen = ({ route, navigation }) => {
       } catch (err) {
         console.error("fetchStoreProducts error", err);
       } finally {
+=======
+            seller: p.seller_id || null,
+          };
+        });
+        setStoreProducts(reset ? mapped : (prev) => [...prev, ...mapped]);
+        setStoreHasMore(mapped.length === STORE_PAGE_SIZE);
+      } catch (err) {
+        console.error("fetchStoreProducts error", err);
+      } finally {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         setStoreLoadingMore(false);
         setStoreLoading(false);
       }
     },
+<<<<<<< HEAD
     [sellerId, storeProducts],
   );
+=======
+    [sellerId, storeProducts.length],
+  );
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const handleLoadMoreStoreProducts = useCallback(async () => {
     if (!storeHasMore || storeLoadingMore || loading) return;
@@ -641,6 +765,7 @@ export const StoreScreen = ({ route, navigation }) => {
                 </View>
 
                 {/* Badges Section */}
+<<<<<<< HEAD
                 {sellerBadgeIds.length > 0 && (
                   <View style={styles.badgesRow}>
                     {sellerBadgeIds.map((badgeId, index) => {
@@ -653,6 +778,18 @@ export const StoreScreen = ({ route, navigation }) => {
                           key={`${badgeId}-${index}`}
                           style={[
                             styles.badge,
+=======
+                {sellerDetail?.badges && sellerDetail.badges.length > 0 && (
+                  <View style={styles.badgesRow}>
+                    {[...new Set(sellerDetail.badges)].map((badgeId, index) => {
+                      const badgeConfig = BADGE_CONFIG[badgeId];
+                      if (!badgeConfig) return null;
+                      return (
+                        <View
+                          key={`${badgeId}-${index}`}
+                          style={[
+                            styles.badge,
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                             {
                               backgroundColor: badgeConfig.color + "20",
                             },
@@ -1099,6 +1236,7 @@ export const StoreScreen = ({ route, navigation }) => {
             </ScrollView>
           </View>
         }
+<<<<<<< HEAD
         renderItem={() => null}
         contentContainerStyle={[
           styles.listContainer,
@@ -1107,6 +1245,13 @@ export const StoreScreen = ({ route, navigation }) => {
         scrollEnabled={true}
         scrollIndicatorInsets={{ top: 0 }}
         overScrollMode="never"
+=======
+        renderItem={() => null}
+        contentContainerStyle={styles.listContainer}
+        scrollEnabled={true}
+        scrollIndicatorInsets={{ top: 0 }}
+        overScrollMode="never"
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       />
 
       {/* Status viewing now handled by StatusViewer screen */}

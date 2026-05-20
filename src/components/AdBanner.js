@@ -112,7 +112,11 @@ const buildDestinationUrl = (platform, rawValue) => {
   }
 };
 
+<<<<<<< HEAD
 export const openAdDestination = async (ad, trackClick) => {
+=======
+const openAdDestination = async (ad, trackClick) => {
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   if (!ad) return;
 
   if (typeof trackClick === "function") {
@@ -446,6 +450,7 @@ export const AdCarousel = ({ ads }) => {
                       </Text>
                     </View>
                   )}
+<<<<<<< HEAD
                   <Text
                     style={[styles.carouselTitle, { color: "#fff" }]}
                     numberOfLines={2}
@@ -463,6 +468,21 @@ export const AdCarousel = ({ ads }) => {
                       {ad.description}
                     </Text>
                   )}
+=======
+                  <Text style={[styles.carouselTitle, { color: "#fff" }]}>
+                    {ad.title}
+                  </Text>
+                  {ad.description && (
+                    <Text
+                      style={[
+                        styles.carouselDescription,
+                        { color: "rgba(255,255,255,0.85)" },
+                      ]}
+                    >
+                      {ad.description}
+                    </Text>
+                  )}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                   <Pressable
                     style={[
                       styles.carouselCta,
@@ -508,6 +528,7 @@ export const AdCarousel = ({ ads }) => {
                     </Text>
                   </View>
                 )}
+<<<<<<< HEAD
                 <Text
                   style={[
                     styles.carouselTitle,
@@ -528,6 +549,26 @@ export const AdCarousel = ({ ads }) => {
                     {ad.description}
                   </Text>
                 )}
+=======
+                <Text
+                  style={[
+                    styles.carouselTitle,
+                    { color: ad.text_color || "#000000" },
+                  ]}
+                >
+                  {ad.title}
+                </Text>
+                {ad.description && (
+                  <Text
+                    style={[
+                      styles.carouselDescription,
+                      { color: ad.text_color || "#000000" },
+                    ]}
+                  >
+                    {ad.description}
+                  </Text>
+                )}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                 <Pressable
                   style={[
                     styles.carouselCta,
@@ -646,6 +687,7 @@ export const AdCarousel = ({ ads }) => {
                       </Text>
                     </View>
                   )}
+<<<<<<< HEAD
                   <Text
                     style={[styles.carouselTitle, { color: "#fff" }]}
                     numberOfLines={2}
@@ -663,6 +705,21 @@ export const AdCarousel = ({ ads }) => {
                       {ad.description}
                     </Text>
                   )}
+=======
+                  <Text style={[styles.carouselTitle, { color: "#fff" }]}>
+                    {ad.title}
+                  </Text>
+                  {ad.description && (
+                    <Text
+                      style={[
+                        styles.carouselDescription,
+                        { color: "rgba(255,255,255,0.85)" },
+                      ]}
+                    >
+                      {ad.description}
+                    </Text>
+                  )}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                   <Pressable
                     style={[
                       styles.carouselCta,
@@ -708,6 +765,7 @@ export const AdCarousel = ({ ads }) => {
                     </Text>
                   </View>
                 )}
+<<<<<<< HEAD
                 <Text
                   style={[
                     styles.carouselTitle,
@@ -728,6 +786,26 @@ export const AdCarousel = ({ ads }) => {
                     {ad.description}
                   </Text>
                 )}
+=======
+                <Text
+                  style={[
+                    styles.carouselTitle,
+                    { color: ad.text_color || "#000000" },
+                  ]}
+                >
+                  {ad.title}
+                </Text>
+                {ad.description && (
+                  <Text
+                    style={[
+                      styles.carouselDescription,
+                      { color: ad.text_color || "#000000" },
+                    ]}
+                  >
+                    {ad.description}
+                  </Text>
+                )}
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                 <Pressable
                   style={[
                     styles.carouselCta,
@@ -1345,19 +1423,34 @@ const styles = StyleSheet.create({
     marginVertical: 12,
     gap: 12,
   },
+<<<<<<< HEAD
   carouselGridItem: {
     flex: 1,
     borderRadius: 12,
     overflow: "hidden",
     shadowColor: "#000",
+=======
+  carouselGridItem: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: "hidden",
+    shadowColor: "#000",
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
   },
+<<<<<<< HEAD
   carouselSlide: {
     borderRadius: 12,
     overflow: "hidden",
     shadowColor: "#000",
+=======
+  carouselSlide: {
+    borderRadius: 12,
+    overflow: "hidden",
+    shadowColor: "#000",
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
@@ -1366,10 +1459,17 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 180,
   },
+<<<<<<< HEAD
   carouselContent: {
     padding: 16,
     gap: 10,
   },
+=======
+  carouselContent: {
+    padding: 16,
+    gap: 10,
+  },
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   carouselBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 10,

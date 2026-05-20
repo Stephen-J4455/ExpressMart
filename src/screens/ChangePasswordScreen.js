@@ -6,7 +6,10 @@ import {
   View,
   TextInput,
   ActivityIndicator,
+<<<<<<< HEAD
   Platform,
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 } from "react-native";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -278,7 +281,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: colors.dark,
+<<<<<<< HEAD
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+=======
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   eyeButton: {
     padding: 12,

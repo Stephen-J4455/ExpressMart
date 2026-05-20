@@ -658,7 +658,11 @@ export const ChatScreen = ({ route, navigation, seller }) => {
           contentContainerStyle={[
             styles.messagesList,
             {
+<<<<<<< HEAD
               paddingBottom: Math.max(insets.bottom, 8),
+=======
+              paddingBottom: inputHeight + insets.bottom + keyboardHeight + 16,
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             },
           ]}
           onContentSizeChange={() => scrollToBottom(true)}
@@ -835,7 +839,11 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 16,
+<<<<<<< HEAD
     paddingBottom: 0,
+=======
+    paddingBottom: 32,
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   messageWrapper: {
     marginBottom: 16,
@@ -918,6 +926,7 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: "row",
     alignItems: "flex-end",
+<<<<<<< HEAD
     backgroundColor: "#fff",
     borderRadius: 20,
     paddingHorizontal: 12,
@@ -946,6 +955,44 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: colors.muted,
     opacity: 0.4,
+=======
+    backgroundColor: colors.light,
+    borderRadius: 25,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+    // elevate the input container for visual separation
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 16,
+    maxHeight: 120,
+    paddingTop: 8,
+    paddingBottom: 8,
+    color: colors.dark,
+  },
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: colors.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  sendButtonDisabled: {
+    backgroundColor: colors.muted,
+    opacity: 0.5,
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   productAttachment: {
     flexDirection: "row",

@@ -24,6 +24,7 @@ export const CartProvider = ({ children }) => {
   const loadCart = useCallback(async () => {
     try {
       if (user && supabase) {
+<<<<<<< HEAD
         // Load from database for authenticated users
         const { data: cart, error: cartError } = await supabase
           .from("express_carts")
@@ -36,6 +37,18 @@ export const CartProvider = ({ children }) => {
         if (cartError) {
           console.warn("Error fetching cart:", cartError);
         }
+=======
+        // Load from database for authenticated users
+        const { data: cart, error: cartError } = await supabase
+          .from("express_carts")
+          .select("id")
+          .eq("user_id", user.id)
+          .single();
+
+        if (cartError && cartError.code !== "PGRST116") {
+          console.warn("Error fetching cart:", cartError);
+        }
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
         if (cart) {
           setCartId(cart.id);
@@ -80,6 +93,7 @@ export const CartProvider = ({ children }) => {
             .select("id")
             .single();
 
+<<<<<<< HEAD
           if (createError) {
             console.warn("Error creating cart:", createError);
             if (createError.code === "23505") {
@@ -103,6 +117,13 @@ export const CartProvider = ({ children }) => {
           } else {
             setCartId(newCart.id);
           }
+=======
+          if (createError) {
+            console.warn("Error creating cart:", createError);
+          } else {
+            setCartId(newCart.id);
+          }
+>>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
           setItems([]);
         }
       } else {
