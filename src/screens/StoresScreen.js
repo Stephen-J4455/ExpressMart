@@ -8,10 +8,7 @@ import {
   ActivityIndicator,
   TextInput,
   RefreshControl,
-<<<<<<< HEAD
   Platform,
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -42,19 +39,12 @@ export const StoresScreen = () => {
 
   const renderStoreCard = ({ item }) => (
     <View style={{ width: itemWidth }}>
-<<<<<<< HEAD
       <SellerCard
         seller={item}
         onPress={() =>
           navigation.navigate("Store", { sellerId: item?.id, seller: item })
         }
       />
-=======
-      <SellerCard
-        seller={item}
-        onPress={() => navigation.navigate("Store", { seller: item })}
-      />
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     </View>
   );
 
@@ -112,7 +102,6 @@ export const StoresScreen = () => {
           keyExtractor={(item) => item.id}
           renderItem={renderStoreCard}
           numColumns={gridColumns}
-<<<<<<< HEAD
           key={`grid-${gridColumns}`}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={[
@@ -121,13 +110,6 @@ export const StoresScreen = () => {
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
-=======
-          key={`grid-${gridColumns}`}
-          columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
@@ -241,10 +223,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.dark,
     fontWeight: "500",
-<<<<<<< HEAD
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   centerContainer: {
     flex: 1,

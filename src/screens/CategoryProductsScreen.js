@@ -8,15 +8,9 @@ import {
   Text,
   View,
 } from "react-native";
-<<<<<<< HEAD
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-=======
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import { supabase } from "../lib/supabase";
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
@@ -37,18 +31,11 @@ const SORT_OPTIONS = [
   { key: "rating", label: "Top Rated", icon: "star-outline" },
 ];
 
-<<<<<<< HEAD
 export const CategoryProductsScreen = ({ navigation, route }) => {
   const { category } = route.params;
   const insets = useSafeAreaInsets();
   const { addToCart } = useCart();
   const toast = useToast();
-=======
-export const CategoryProductsScreen = ({ navigation, route }) => {
-  const { category } = route.params;
-  const { addToCart } = useCart();
-  const toast = useToast();
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   const { fetchAdsByPlacement } = useAds();
   const [products, setProducts] = useState([]);
   const [categoryAds, setCategoryAds] = useState([]);
@@ -120,12 +107,9 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
           category: product.category,
           description: product.description,
           discount: product.discount || 0,
-<<<<<<< HEAD
           quantity: product.quantity || 0,
           allow_backorder: product.allow_backorder || false,
           is_preorder: product.is_preorder || false,
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
           colors: product.colors || [],
           sizes: product.sizes || [],
           specifications: product.specifications || null,
@@ -335,18 +319,11 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
             }
             numColumns={gridColumns}
             columnWrapperStyle={columnWrapperStyle}
-<<<<<<< HEAD
             contentContainerStyle={[
               styles.gridContent,
               isDesktop && styles.gridContentDesktop,
               { paddingBottom: 32 + insets.bottom },
             ]}
-=======
-            contentContainerStyle={[
-              styles.gridContent,
-              isDesktop && styles.gridContentDesktop,
-            ]}
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
             showsVerticalScrollIndicator={false}
             onEndReached={onLoadMore}
             onEndReachedThreshold={0.4}

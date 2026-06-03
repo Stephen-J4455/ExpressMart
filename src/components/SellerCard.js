@@ -1,22 +1,14 @@
-<<<<<<< HEAD
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import {
     Image,
-=======
-import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
-import {
-    Image,
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     Pressable,
     StyleSheet,
     Text,
     View,
     ActivityIndicator,
 } from "react-native";
-<<<<<<< HEAD
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../theme/colors";
 import { useShop } from "../context/ShopContext";
@@ -29,21 +21,10 @@ export const SellerCard = ({ seller, onPress }) => {
     const { user } = useAuth();
     const { isFollowing, followSeller, unfollowSeller } = useShop();
     const toast = useToast();
-=======
-import { LinearGradient } from "expo-linear-gradient";
-import { colors } from "../theme/colors";
-import { useShop } from "../context/ShopContext";
-import { useToast } from "../context/ToastContext";
-
-export const SellerCard = ({ seller, onPress }) => {
-    const { isFollowing, followSeller, unfollowSeller } = useShop();
-    const toast = useToast();
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     const [followLoading, setFollowLoading] = useState(false);
     const isVerified = seller.badges && seller.badges.includes("verified");
     const otherBadges = seller.badges?.filter((badge) => badge !== "verified") || [];
 
-<<<<<<< HEAD
     const handleFollowPress = async (e) => {
         e.preventDefault();
         if (!seller.id) return;
@@ -56,12 +37,6 @@ export const SellerCard = ({ seller, onPress }) => {
             return;
         }
         setFollowLoading(true);
-=======
-    const handleFollowPress = async (e) => {
-        e.preventDefault();
-        if (!seller.id) return;
-        setFollowLoading(true);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         try {
             if (isFollowing(seller.id)) {
                 await unfollowSeller(seller.id);
@@ -153,26 +128,8 @@ export const SellerCard = ({ seller, onPress }) => {
                             </>
                         )}
                     </Pressable>
-<<<<<<< HEAD
                 </View>
 
-=======
-                </View>
-
-                {/* Badges Row */}
-                {otherBadges.length > 0 && (
-                    <View style={styles.badgeRow}>
-                        {otherBadges.slice(0, 2).map((badge) => (
-                            <View key={badge} style={styles.badge}>
-                                <Text numberOfLines={1} style={styles.badgeText}>
-                                    {badge.replace("_", " ")}
-                                </Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
-
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                 {/* Action Button */}
                 <View style={styles.actionRow}>
                     <View style={styles.visitButton}>

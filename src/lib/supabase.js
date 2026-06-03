@@ -6,21 +6,11 @@ const supabaseUrl = "https://meiljgoztnhnyvtfkzuh.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1laWxqZ296dG5obnl2dGZrenVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxMTI0OTksImV4cCI6MjA4MDY4ODQ5OX0.X7zve3MSvaoplAHl45BpC57h9G4IY5suhBBteIoEU3I";
 
-<<<<<<< HEAD
 export { supabaseUrl, supabaseAnonKey };
-=======
-// Paystack configuration
-export const PAYSTACK_CONFIG = {
-  publicKey: "pk_live_0427f2f19342832a6c8a9e582c11751f83637e97", // Your Paystack public key
-};
-
-export { supabaseUrl, supabaseAnonKey };
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
 export const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey, {
-<<<<<<< HEAD
         auth: {
           // Use AsyncStorage only on native — on web let supabase default to
           // localStorage so the session is actually persisted and returned by
@@ -35,19 +25,6 @@ export const supabase =
           // consumes them.
           detectSessionInUrl: false,
         },
-=======
-        auth: {
-          // Use AsyncStorage only on native — on web let supabase default to
-          // localStorage so the session is actually persisted and returned by
-          // getSession(), preventing the 401 "Missing authorization header".
-          ...(Platform.OS !== "web" && {
-            storage: AsyncStorage,
-          }),
-          autoRefreshToken: true,
-          persistSession: true,
-          detectSessionInUrl: Platform.OS === "web",
-        },
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         realtime: {
           params: {
             eventsPerSecond: 10,

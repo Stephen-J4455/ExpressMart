@@ -26,7 +26,6 @@ import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
-<<<<<<< HEAD
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width: screenWidth } = Dimensions.get("window");
@@ -59,12 +58,6 @@ const mapSearchProduct = (product) => ({
 
 export const SearchResultsScreen = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
-=======
-
-const { width: screenWidth } = Dimensions.get("window");
-
-export const SearchResultsScreen = ({ navigation, route }) => {
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   const { products } = useShop();
   const { fetchAdsByPlacement } = useAds();
   const initialQuery = route.params?.query || "";
@@ -176,7 +169,6 @@ export const SearchResultsScreen = ({ navigation, route }) => {
       setLoading(true);
       setSearchOffset(0);
       try {
-<<<<<<< HEAD
         let rows = [];
         try {
           const { data: cachedData, error: cachedError } =
@@ -217,46 +209,6 @@ export const SearchResultsScreen = ({ navigation, route }) => {
           rows = data || [];
         }
         const mapped = rows.map(mapSearchProduct);
-=======
-        let dbQuery = supabase
-          .from("express_products")
-          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
-          .eq("status", "active");
-
-        if (text) {
-          dbQuery = dbQuery.ilike("title", `%${text}%`);
-        }
-
-        if (tagFilter) {
-          dbQuery = dbQuery.contains("tags", [tagFilter]);
-        }
-
-        const { data, error } = await dbQuery.range(0, SEARCH_PAGE_SIZE - 1);
-        if (error) throw error;
-        const mapped =
-          data?.map((product) => ({
-            id: product.id,
-            title: product.title,
-            vendor: product.vendor,
-            price: Number(product.price || 0),
-            rating: Number(product.rating || 0),
-            badges: product.badges || [],
-            thumbnail: product.thumbnail,
-            thumbnails: product.thumbnails || [],
-            category: product.category,
-            description: product.description,
-            discount: product.discount || 0,
-            colors: product.colors || [],
-            sizes: product.sizes || [],
-            specifications: product.specifications || null,
-            tags: product.tags || [],
-            weight: product.weight || null,
-            weight_unit: product.weight_unit || null,
-            sku: product.sku || null,
-            barcode: product.barcode || null,
-            seller: product.seller_id || null,
-          })) || [];
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         setProductResults(mapped);
         setSearchHasMore(mapped.length === SEARCH_PAGE_SIZE);
       } catch (error) {
@@ -275,7 +227,6 @@ export const SearchResultsScreen = ({ navigation, route }) => {
     const newOffset = searchOffset + SEARCH_PAGE_SIZE;
     setLoadingMoreSearch(true);
     try {
-<<<<<<< HEAD
       let rows = [];
       try {
         const { data: cachedData, error: cachedError } =
@@ -312,41 +263,6 @@ export const SearchResultsScreen = ({ navigation, route }) => {
         rows = data || [];
       }
       const mapped = rows.map(mapSearchProduct);
-=======
-      let dbQuery = supabase
-        .from("express_products")
-        .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
-        .eq("status", "active");
-      if (query) dbQuery = dbQuery.ilike("title", `%${query}%`);
-      if (tag) dbQuery = dbQuery.contains("tags", [tag]);
-      const { data, error } = await dbQuery.range(
-        newOffset,
-        newOffset + SEARCH_PAGE_SIZE - 1,
-      );
-      if (error) throw error;
-      const mapped = (data || []).map((product) => ({
-        id: product.id,
-        title: product.title,
-        vendor: product.vendor,
-        price: Number(product.price || 0),
-        rating: Number(product.rating || 0),
-        badges: product.badges || [],
-        thumbnail: product.thumbnail,
-        thumbnails: product.thumbnails || [],
-        category: product.category,
-        description: product.description,
-        discount: product.discount || 0,
-        colors: product.colors || [],
-        sizes: product.sizes || [],
-        specifications: product.specifications || null,
-        tags: product.tags || [],
-        weight: product.weight || null,
-        weight_unit: product.weight_unit || null,
-        sku: product.sku || null,
-        barcode: product.barcode || null,
-        seller: product.seller_id || null,
-      }));
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       setProductResults((prev) => [...prev, ...mapped]);
       setSearchHasMore(mapped.length === SEARCH_PAGE_SIZE);
       setSearchOffset(newOffset);
@@ -588,10 +504,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
 
       <ScrollView
         style={styles.content}
-<<<<<<< HEAD
         contentContainerStyle={{ paddingBottom: 20 + insets.bottom }}
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={200}
@@ -857,10 +770,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.dark,
     paddingVertical: 0,
-<<<<<<< HEAD
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   clearIcon: {
     padding: 4,

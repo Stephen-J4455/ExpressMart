@@ -1,23 +1,12 @@
 import {
   ActivityIndicator,
   FlatList,
-<<<<<<< HEAD
   Platform,
   RefreshControl,
   StyleSheet,
   View,
 } from "react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-=======
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ionicons } from "@expo/vector-icons";
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import { ProductCard } from "../components/ProductCard";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
 import { AdRenderer } from "../components/AdBanner";
@@ -123,19 +112,6 @@ export const FeedScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.wrapper}>
-<<<<<<< HEAD
-=======
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Feed</Text>
-        <Pressable
-          style={styles.headerIcon}
-          onPress={() => navigation.navigate("Wishlist")}
-        >
-          <Ionicons name="heart-outline" size={24} color={colors.dark} />
-        </Pressable>
-      </View>
-
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       <FlatList
         data={feedItems}
         key={`${gridColumns}-${category || "all"}`}
@@ -173,37 +149,7 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
     backgroundColor: colors.background,
-<<<<<<< HEAD
     paddingTop: Platform.OS === "web" ? 0 : 50,
-=======
-  },
-  header: {
-    paddingTop: 56,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEF2F8",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: colors.dark,
-    letterSpacing: -0.5,
-  },
-  headerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#EEF2F8",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F8FAFC",
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   container: {
     paddingTop: 8,

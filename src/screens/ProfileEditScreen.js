@@ -5,10 +5,7 @@ import {
   Text,
   View,
   TextInput,
-<<<<<<< HEAD
   Platform,
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 } from "react-native";
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -337,7 +334,6 @@ const styles = StyleSheet.create({
   },
   inputWrapDisabled: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
   inputIcon: { marginRight: 8 },
-<<<<<<< HEAD
   input: {
     flex: 1,
     paddingVertical: 13,
@@ -345,9 +341,6 @@ const styles = StyleSheet.create({
     color: colors.dark,
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
-=======
-  input: { flex: 1, paddingVertical: 13, fontSize: 15, color: colors.dark },
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   inputDisabled: { color: colors.muted },
   lockPill: { backgroundColor: "#E2E8F0", borderRadius: 6, padding: 4 },
   helperText: {

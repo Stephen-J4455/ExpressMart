@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { useState, useEffect, useRef, useCallback } from "react";
-=======
-import { useState } from "react";
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import {
   ActivityIndicator,
   Image,
@@ -21,10 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
-<<<<<<< HEAD
 import * as Linking from "expo-linking";
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
 import * as WebBrowser from "expo-web-browser";
 import { supabase } from "../lib/supabase";
@@ -32,7 +25,6 @@ import { useToast } from "../context/ToastContext";
 
 WebBrowser.maybeCompleteAuthSession();
 
-<<<<<<< HEAD
 export const AuthScreen = ({ navigation, route }) => {
   const getInitialIsLogin = useCallback(() => {
     const mode = route?.params?.mode;
@@ -381,74 +373,6 @@ export const AuthScreen = ({ navigation, route }) => {
   const handleAppleLogin = async () => {
     await startOAuthLogin("apple", setAppleLoading);
   };
-=======
-export const AuthScreen = ({ navigation }) => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const { isWide } = useResponsive();
-
-  const { signIn, signUp } = useAuth();
-  const toast = useToast();
-
-  const handleGoogleLogin = async () => {
-    setGoogleLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: "expressmart://",
-          skipBrowserRedirect: false,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.url) {
-        const result = await WebBrowser.openAuthSessionAsync(
-          data.url,
-          "expressmart://",
-        );
-        if (result.type === "success" && result.url) {
-          // supabase-js sometimes doesn't expose getSessionFromUrl in RN build
-          // so offer a fallback by parsing tokens manually.
-          if (typeof supabase.auth.getSessionFromUrl === "function") {
-            const { error: sessionError } =
-              await supabase.auth.getSessionFromUrl(result.url);
-            if (sessionError) throw sessionError;
-          } else {
-            // manually extract tokens and set session
-            let params;
-            if (result.url.includes("#")) {
-              const hash = result.url.split("#")[1];
-              params = new URLSearchParams(hash);
-            } else {
-              const urlObj = new URL(result.url);
-              params = urlObj.searchParams;
-            }
-            const access_token = params.get("access_token");
-            const refresh_token = params.get("refresh_token");
-            if (access_token && refresh_token) {
-              const { error: setError } = await supabase.auth.setSession({
-                access_token,
-                refresh_token,
-              });
-              if (setError) throw setError;
-            }
-          }
-        }
-      }
-    } catch (error) {
-      toast.error(error.message || "Google Sign-In failed");
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const handleSubmit = async () => {
     if (!email || !password) {
@@ -630,7 +554,6 @@ export const AuthScreen = ({ navigation }) => {
               <View style={styles.dividerLine} />
             </View>
 
-<<<<<<< HEAD
             <Pressable
               style={[styles.socialButton, googleLoading && { opacity: 0.7 }]}
               onPress={handleGoogleLogin}
@@ -638,15 +561,6 @@ export const AuthScreen = ({ navigation }) => {
             >
               {googleLoading ? (
                 <ActivityIndicator color={colors.dark} />
-=======
-            <Pressable
-              style={[styles.socialButton, googleLoading && { opacity: 0.7 }]}
-              onPress={handleGoogleLogin}
-              disabled={googleLoading || loading}
-            >
-              {googleLoading ? (
-                <ActivityIndicator color={colors.dark} />
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
               ) : (
                 <>
                   <Ionicons name="logo-google" size={20} color="#EA4335" />
@@ -654,7 +568,6 @@ export const AuthScreen = ({ navigation }) => {
                     Continue with Google
                   </Text>
                 </>
-<<<<<<< HEAD
                 )}
             </Pressable>
 
@@ -675,11 +588,6 @@ export const AuthScreen = ({ navigation }) => {
               </Pressable>
             )}
           </View>
-=======
-              )}
-            </Pressable>
-          </View>
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
           {/* Footer */}
           <View style={styles.footer}>
@@ -822,10 +730,7 @@ const styles = StyleSheet.create({
     height: 56,
     fontSize: 16,
     color: colors.dark,
-<<<<<<< HEAD
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   forgotPassword: {
     alignSelf: "flex-end",

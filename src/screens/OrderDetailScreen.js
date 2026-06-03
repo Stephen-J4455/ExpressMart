@@ -53,7 +53,6 @@ export const OrderDetailScreen = () => {
       )
       .subscribe();
 
-<<<<<<< HEAD
     return () => {
       if (!channel || typeof channel.unsubscribe !== "function") return;
       Promise.resolve(channel.unsubscribe()).catch((err) => {
@@ -61,10 +60,6 @@ export const OrderDetailScreen = () => {
       });
     };
   }, [order?.id]);
-=======
-    return () => channel.unsubscribe();
-  }, [order?.id]);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const fetchOrderItems = async () => {
     try {

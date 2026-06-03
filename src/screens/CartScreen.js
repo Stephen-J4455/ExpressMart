@@ -92,7 +92,6 @@ export const CartScreen = ({ navigation }) => {
       return;
     }
 
-<<<<<<< HEAD
     if (!isAuthenticated) {
       navigation.navigate("Auth", {
         redirectTo: "Cart",
@@ -100,13 +99,6 @@ export const CartScreen = ({ navigation }) => {
     } else {
       navigation.navigate("Checkout");
     }
-=======
-    if (!isAuthenticated) {
-      navigation.navigate("Auth");
-    } else {
-      navigation.navigate("Checkout");
-    }
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   };
 
   if (!items.length) {
@@ -316,7 +308,6 @@ export const CartScreen = ({ navigation }) => {
           <View style={{ height: 20 }} />
         </ScrollView>
 
-<<<<<<< HEAD
         <View
           style={
             isWide
@@ -324,9 +315,6 @@ export const CartScreen = ({ navigation }) => {
               : [styles.summary, { paddingBottom: 32 + insets.bottom }]
           }
         >
-=======
-        <View style={isWide ? styles.summaryWide : styles.summary}>
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
             <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>

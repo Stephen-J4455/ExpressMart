@@ -9,7 +9,6 @@ import {
   Text,
   TextInput,
   View,
-<<<<<<< HEAD
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,13 +16,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
-=======
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import { useAuth } from "../context/AuthContext";
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
 import { useAds } from "../context/AdsContext";
@@ -37,18 +29,11 @@ import {
 import { callEdgeFunction } from "../lib/supabase";
 import { useResponsive } from "../hooks/useResponsive";
 
-<<<<<<< HEAD
 export const CheckoutScreen = ({ navigation }) => {
   const { isWide, horizontalPadding } = useResponsive();
   const insets = useSafeAreaInsets();
   const route = useRoute();
   const { user, profile, isAuthenticated } = useAuth();
-=======
-export const CheckoutScreen = ({ navigation }) => {
-  const { isWide, horizontalPadding } = useResponsive();
-  const route = useRoute();
-  const { user, profile, isAuthenticated } = useAuth();
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   const { items, total, clearCart } = useCart();
   const toast = useToast();
   const { fetchAdsByPlacement } = useAds();
@@ -57,25 +42,15 @@ export const CheckoutScreen = ({ navigation }) => {
   const [checkoutAds, setCheckoutAds] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [loading, setLoading] = useState(false);
-<<<<<<< HEAD
   const [showAddAddress, setShowAddAddress] = useState(false);
   const [newAddress, setNewAddress] = useState({
-=======
-  const [showAddAddress, setShowAddAddress] = useState(false);
-  const [newAddress, setNewAddress] = useState({
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     full_name: "",
     phone: "",
     street_address: "",
     city: "",
-<<<<<<< HEAD
     state: "",
   });
   const processedPaymentReferenceRef = useRef(null);
-=======
-    state: "",
-  });
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const checkoutDisplayAds = checkoutAds.filter(
     (ad) => String(ad?.style || "").toLowerCase() !== "carousel",
@@ -140,7 +115,6 @@ export const CheckoutScreen = ({ navigation }) => {
   }, [profile]);
 
   // Handle payment success from WebView
-<<<<<<< HEAD
   useEffect(() => {
     const params = route.params;
     if (params?.payment === "success" && params?.reference) {
@@ -156,14 +130,6 @@ export const CheckoutScreen = ({ navigation }) => {
       handlePaymentVerification(params.reference, params.orderData);
     }
   }, [route.params, navigation]);
-=======
-  useEffect(() => {
-    const params = route.params;
-    if (params?.payment === "success" && params?.reference) {
-      handlePaymentVerification(params.reference, params.orderData);
-    }
-  }, [route.params]);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const handlePaymentVerification = async (reference, orderData) => {
     try {
@@ -178,7 +144,6 @@ export const CheckoutScreen = ({ navigation }) => {
       );
       setTimeout(() => {
         // Reset navigation stack so checkout is fully removed
-<<<<<<< HEAD
         navigation.reset({
           index: 1,
           routes: [
@@ -192,17 +157,6 @@ export const CheckoutScreen = ({ navigation }) => {
       console.error("❌ Verification error:", error);
       toast.error("Error", error.message || "Payment verification failed");
     } finally {
-=======
-        navigation.reset({
-          index: 1,
-          routes: [{ name: "Main" }, { name: "Orders" }],
-        });
-      }, 1500);
-    } catch (error) {
-      console.error("❌ Verification error:", error);
-      toast.error("Error", error.message || "Payment verification failed");
-    } finally {
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       setLoading(false);
     }
   };
@@ -326,10 +280,7 @@ export const CheckoutScreen = ({ navigation }) => {
         navigation.navigate("PaymentWebView", {
           authorization_url: init.data.authorization_url,
           access_code: init.data.access_code,
-<<<<<<< HEAD
           paystack_public_key: init.data.paystack_public_key || null,
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
           amount: grandTotal,
           email: user.email,
           reference,
@@ -374,19 +325,11 @@ export const CheckoutScreen = ({ navigation }) => {
         <View style={{ width: 44 }} />
       </View>
 
-<<<<<<< HEAD
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
       >
-=======
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 120 }}
-      >
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         {checkoutDisplayAds.length > 0 && (
           <View style={styles.adSection}>
             <AdRenderer ads={checkoutDisplayAds} />
@@ -618,11 +561,7 @@ export const CheckoutScreen = ({ navigation }) => {
       </ScrollView>
 
       {/* Checkout Button */}
-<<<<<<< HEAD
       <View style={[styles.footer, { paddingBottom: 32 + insets.bottom }]}>
-=======
-      <View style={styles.footer}>
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         <View style={styles.footerTotal}>
           <Text style={styles.footerLabel}>Total</Text>
           <Text style={styles.footerValue}>
@@ -810,10 +749,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E4E8F0",
-<<<<<<< HEAD
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   },
   row: {
     flexDirection: "row",

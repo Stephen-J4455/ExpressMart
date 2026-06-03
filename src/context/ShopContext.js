@@ -17,7 +17,6 @@ const CACHE_KEYS = {
   sellers: "expressmart.cache.sellers",
   settings: "expressmart.cache.settings",
 };
-<<<<<<< HEAD
 const PAGE_SIZE = 24;
 const isTruthySetting = (value) => {
   if (typeof value === "boolean") return value;
@@ -28,10 +27,6 @@ const isTruthySetting = (value) => {
   }
   return false;
 };
-=======
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const PAGE_SIZE = 24;
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
 const mapProduct = (product) => ({
   id: product.id,
@@ -47,11 +42,8 @@ const mapProduct = (product) => ({
   description: product.description,
   discount: product.discount || 0,
   quantity: product.quantity || 0,
-<<<<<<< HEAD
   is_preorder: product.is_preorder || false,
   allow_backorder: product.allow_backorder || false,
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   sizes: product.sizes || [],
   colors: product.colors || [],
   specifications: product.specifications || null,
@@ -70,7 +62,6 @@ export const ShopProvider = ({ children }) => {
   const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-<<<<<<< HEAD
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState(null);
   const [followedSellers, setFollowedSellers] = useState([]);
@@ -117,49 +108,6 @@ export const ShopProvider = ({ children }) => {
       return false;
     }
   }, []);
-=======
-  const [hasMore, setHasMore] = useState(true);
-  const [error, setError] = useState(null);
-  const [followedSellers, setFollowedSellers] = useState([]);
-
-  // Load cached data on mount for instant display
-  useEffect(() => {
-    const loadCache = async () => {
-      try {
-        const [
-          cachedProducts,
-          cachedCategories,
-          cachedSellers,
-          cachedSettings,
-        ] = await Promise.all([
-          AsyncStorage.getItem(CACHE_KEYS.products),
-          AsyncStorage.getItem(CACHE_KEYS.categories),
-          AsyncStorage.getItem(CACHE_KEYS.sellers),
-          AsyncStorage.getItem(CACHE_KEYS.settings),
-        ]);
-        if (cachedProducts) {
-          const { data, ts } = JSON.parse(cachedProducts);
-          if (Date.now() - ts < CACHE_TTL) setProducts(data);
-        }
-        if (cachedCategories) {
-          const { data, ts } = JSON.parse(cachedCategories);
-          if (Date.now() - ts < CACHE_TTL) setCategories(data);
-        }
-        if (cachedSellers) {
-          const { data, ts } = JSON.parse(cachedSellers);
-          if (Date.now() - ts < CACHE_TTL) setSellers(data);
-        }
-        if (cachedSettings) {
-          const { data, ts } = JSON.parse(cachedSettings);
-          if (Date.now() - ts < CACHE_TTL) setSettings(data);
-        }
-      } catch (e) {
-        // Cache read failure is non-fatal
-      }
-    };
-    loadCache();
-  }, []);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const saveCache = useCallback(async (key, data) => {
     try {
@@ -169,7 +117,6 @@ export const ShopProvider = ({ children }) => {
     }
   }, []);
 
-<<<<<<< HEAD
   const fetchProducts = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     setError(null);
@@ -178,23 +125,12 @@ export const ShopProvider = ({ children }) => {
       if (!silent) setLoading(false);
       return;
     }
-=======
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    if (!supabase) {
-      console.error("Supabase not initialized");
-      setLoading(false);
-      return;
-    }
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-<<<<<<< HEAD
       const [
         { data: categoriesData, error: categoriesError },
         { data: sellersData, error: sellersError },
@@ -205,28 +141,6 @@ export const ShopProvider = ({ children }) => {
         supabase
           .from("express_categories")
           .select("id,name,icon,color")
-=======
-      const [
-        { data: productsData, error: productError },
-        { data: categoriesData, error: categoriesError },
-        { data: sellersData, error: sellersError },
-        { data: reviewsData, error: reviewsError },
-        { data: settingsData, error: settingsError },
-        { data: followsData, error: followsError },
-      ] = await Promise.all([
-        supabase
-          .from("express_products")
-          .select(
-            "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-          )
-          .eq("status", "active")
-          .gt("quantity", 0)
-          .order("created_at", { ascending: false })
-          .range(0, PAGE_SIZE - 1),
-        supabase
-          .from("express_categories")
-          .select("id,name,icon,color")
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
           .eq("is_active", true)
           .order("sort_order"),
         supabase
@@ -248,20 +162,11 @@ export const ShopProvider = ({ children }) => {
               .select("seller_id")
               .eq("user_id", user.id)
           : { data: [], error: null },
-<<<<<<< HEAD
       ]);
 
       if (categoriesError) throw categoriesError;
       if (sellersError) throw sellersError;
       if (reviewsError) throw reviewsError;
-=======
-      ]);
-
-      if (productError) throw productError;
-      if (categoriesError) throw categoriesError;
-      if (sellersError) throw sellersError;
-      if (reviewsError) throw reviewsError;
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       if (settingsError) throw settingsError;
       if (followsError) throw followsError;
 
@@ -271,7 +176,6 @@ export const ShopProvider = ({ children }) => {
 
       // Map settings to object
       const settingsMap = {};
-<<<<<<< HEAD
       (settingsData || []).forEach((s) => {
         settingsMap[s.key] = s.value;
       });
@@ -314,15 +218,6 @@ export const ShopProvider = ({ children }) => {
 
       const mappedProducts = (productsData || []).map(mapProduct);
       setProducts(mappedProducts);
-=======
-      (settingsData || []).forEach((s) => {
-        settingsMap[s.key] = s.value;
-      });
-      setSettings(settingsMap);
-
-      const mappedProducts = (productsData || []).map(mapProduct);
-      setProducts(mappedProducts);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       setHasMore(mappedProducts.length === PAGE_SIZE);
 
       // Calculate seller ratings from actual reviews
@@ -368,7 +263,6 @@ export const ShopProvider = ({ children }) => {
       saveCache(CACHE_KEYS.categories, categoriesData || []);
       saveCache(CACHE_KEYS.sellers, updatedSellers);
       saveCache(CACHE_KEYS.settings, settingsMap);
-<<<<<<< HEAD
     } catch (err) {
       if (products.length === 0) {
         setError(err?.message || JSON.stringify(err));
@@ -429,51 +323,12 @@ export const ShopProvider = ({ children }) => {
       setProducts(allProducts);
       setHasMore(newProducts.length === PAGE_SIZE);
       saveCache(CACHE_KEYS.products, allProducts);
-=======
-    } catch (err) {
-      setError(err?.message || JSON.stringify(err));
-      console.error(
-        "Error fetching products:",
-        err?.message || JSON.stringify(err),
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [saveCache]);
-
-  const loadMore = useCallback(async () => {
-    if (!hasMore || loadingMore || loading) return;
-    setLoadingMore(true);
-    try {
-      const start = products.length;
-      const end = start + PAGE_SIZE - 1;
-      const { data, error: fetchError } = await supabase
-        .from("express_products")
-        .select(
-          "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-        )
-        .eq("status", "active")
-        .gt("quantity", 0)
-        .order("created_at", { ascending: false })
-        .range(start, end);
-
-      if (fetchError) throw fetchError;
-      const newProducts = (data || []).map(mapProduct);
-      const allProducts = [...products, ...newProducts];
-      setProducts(allProducts);
-      setHasMore(newProducts.length === PAGE_SIZE);
-      saveCache(CACHE_KEYS.products, allProducts);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     } catch (err) {
       console.warn("loadMore error:", err);
     } finally {
       setLoadingMore(false);
     }
-<<<<<<< HEAD
   }, [hasMore, loadingMore, loading, products, saveCache, settings]);
-=======
-  }, [hasMore, loadingMore, loading, products, saveCache]);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const followSeller = useCallback(async (sellerId) => {
     if (!supabase) return;
@@ -525,7 +380,6 @@ export const ShopProvider = ({ children }) => {
     [followedSellers],
   );
 
-<<<<<<< HEAD
   useEffect(() => {
     const bootstrap = async () => {
       const hydratedFromCache = await loadCache();
@@ -543,11 +397,6 @@ export const ShopProvider = ({ children }) => {
     };
     bootstrap();
   }, [fetchProducts, loadCache]);
-=======
-  useEffect(() => {
-    fetchProducts();
-  }, []);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   // Realtime subscriptions — update products/sellers in-place without full reload
   useEffect(() => {
@@ -631,7 +480,6 @@ export const ShopProvider = ({ children }) => {
       )
       .subscribe();
 
-<<<<<<< HEAD
     return () => {
       if (
         productsChannel &&
@@ -648,13 +496,6 @@ export const ShopProvider = ({ children }) => {
       }
     };
   }, []);
-=======
-    return () => {
-      productsChannel.unsubscribe();
-      sellersChannel.unsubscribe();
-    };
-  }, []);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const value = useMemo(
     () => ({

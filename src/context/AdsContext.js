@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import React, {
   createContext,
   useCallback,
@@ -10,17 +9,6 @@ import React, {
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../lib/supabase";
-=======
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-} from "react";
-import { Platform } from "react-native";
-import { supabase } from "../lib/supabase";
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
 const AdsContext = createContext();
 
@@ -32,17 +20,11 @@ export const useAds = () => {
   return context;
 };
 
-<<<<<<< HEAD
 export const AdsProvider = ({ children }) => {
   const [ads, setAds] = useState([]);
   const [loading, setLoading] = useState(false);
   const refreshInFlightRef = useRef(new Map());
   const ADS_CACHE_PREFIX = "expressmart.cache.ads";
-=======
-export const AdsProvider = ({ children }) => {
-  const [ads, setAds] = useState([]);
-  const [loading, setLoading] = useState(false);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const normalizePlacement = (value) => {
     return String(value || "")
@@ -75,11 +57,7 @@ export const AdsProvider = ({ children }) => {
     return raw.split(",").map(normalizePlacement).filter(Boolean);
   };
 
-<<<<<<< HEAD
   const placementAliases = {
-=======
-  const placementAliases = {
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     profile: ["account"],
     account: ["profile"],
     category: ["categories"],
@@ -89,7 +67,6 @@ export const AdsProvider = ({ children }) => {
     checkout: ["cart_checkout"],
     search: ["search_results"],
     search_results: ["search"],
-<<<<<<< HEAD
     feed: ["discover"],
   };
 
@@ -137,21 +114,6 @@ export const AdsProvider = ({ children }) => {
       // Fetch active ads and filter placement/date/platform client-side for reliability.
       const { data, error } = await supabase
         .from("express_ads")
-=======
-    feed: ["discover"],
-  };
-
-  // Fetch ads by placement
-  const fetchAdsByPlacement = useCallback(async (placement) => {
-    if (!supabase) return [];
-
-    try {
-      setLoading(true);
-
-      // Fetch active ads and filter placement/date/platform client-side for reliability.
-      const { data, error } = await supabase
-        .from("express_ads")
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         .select("*")
         .eq("is_active", true)
         .order("position", { ascending: true });
@@ -185,7 +147,6 @@ export const AdsProvider = ({ children }) => {
           startTs == null || Number.isNaN(startTs) || startTs <= now;
         const beforeEnd = endTs == null || Number.isNaN(endTs) || endTs >= now;
 
-<<<<<<< HEAD
         return afterStart && beforeEnd;
       });
 
@@ -233,21 +194,6 @@ export const AdsProvider = ({ children }) => {
     },
     [fetchFreshAdsByPlacement, loadAdsFromCache],
   );
-=======
-        return afterStart && beforeEnd;
-      });
-
-      setAds(valid);
-      return valid;
-    } catch (error) {
-      console.error("Error fetching ads:", error);
-      setAds([]);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  }, []);
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
   const trackAdEngagement = useCallback(async (adId, eventType) => {
     if (!supabase || !adId) return;
