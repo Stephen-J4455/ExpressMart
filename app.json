@@ -17,30 +17,16 @@
     },
     "ios": {
       "supportsTablet": true,
-<<<<<<< HEAD
       "usesAppleSignIn": true,
       "bundleIdentifier": "com.stephenj.expressmart",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "remote-notification",
-          "remote-notification"
-        ],
+        "UIBackgroundModes": ["remote-notification"],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.stephenj.expressmart",
-=======
-      "bundleIdentifier": "com.stephenj3.ExpressMart",
-      "googleServicesFile": "./GoogleService-Info.plist",
-      "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
-      }
-    },
-    "android": {
-      "package": "com.stephenj3.ExpressMart",
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
@@ -56,14 +42,10 @@
               "scheme": "expressmart"
             }
           ],
-<<<<<<< HEAD
           "category": [
             "BROWSABLE",
             "DEFAULT"
           ]
-=======
-          "category": ["BROWSABLE", "DEFAULT"]
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
         }
       ]
     },
@@ -82,19 +64,12 @@
         }
       ],
       "expo-font",
-<<<<<<< HEAD
       "expo-apple-authentication",
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       "expo-web-browser"
     ],
     "extra": {
       "eas": {
-<<<<<<< HEAD
         "projectId": "d2e5bd63-b4f5-4a61-b288-f7549e59d7c9"
-=======
-        "projectId": "bf1e4bb1-228e-4e48-a56b-748b7f32980c"
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       },
       "firebaseApiKey": "AIzaSyBqrV1yGWsLj17JXFwfIWRP-sqX6hp8vLk",
       "firebaseAuthDomain": "expressmart-7d550.firebaseapp.com",
