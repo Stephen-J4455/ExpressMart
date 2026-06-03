@@ -1,5 +1,4 @@
 import "react-native-gesture-handler";
-<<<<<<< HEAD
 import {
   NavigationContainer,
   DefaultTheme,
@@ -9,12 +8,6 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
-=======
-import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { StatusBar } from "expo-status-bar";
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import {
   Text,
   View,
@@ -22,18 +15,11 @@ import {
   Animated,
   Pressable,
   Image,
-<<<<<<< HEAD
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
-=======
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaProvider } from "react-native-safe-area-context";
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import * as Linking from "expo-linking";
 import { useResponsive } from "./src/hooks/useResponsive";
 import { WebSidebar } from "./src/components/WebSidebar";
@@ -69,10 +55,7 @@ import { CategoryProductsScreen } from "./src/screens/CategoryProductsScreen";
 import { StoreScreen } from "./src/screens/StoreScreen";
 import { StoresScreen } from "./src/screens/StoresScreen";
 import { ForgotPasswordScreen } from "./src/screens/ForgotPasswordScreen";
-<<<<<<< HEAD
 import PasswordResetScreen from "./src/screens/PasswordResetScreen";
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 import { ProfileEditScreen } from "./src/screens/ProfileEditScreen";
 import { ChangePasswordScreen } from "./src/screens/ChangePasswordScreen";
 import { ChangeEmailScreen } from "./src/screens/ChangeEmailScreen";
@@ -85,22 +68,15 @@ import { StatusViewer } from "./src/screens/StatusViewer";
 import { PaymentWebViewScreen } from "./src/screens/PaymentWebViewScreen";
 import { CustomerLoadingAnimation } from "./src/components/CustomerLoadingAnimation";
 import { colors, getTheme } from "./src/theme/colors";
-<<<<<<< HEAD
 // PasswordResetScreen handles recovery links on both web and native.
-=======
-// password reset handled exclusively via web; mobile screen no longer used
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 
 import { supabase } from "./src/lib/supabase";
 import React from "react";
 import UpdateModal from "./src/components/UpdateModal";
 import { checkForUpdate } from "./src/services/updateService";
 
-<<<<<<< HEAD
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
@@ -110,13 +86,10 @@ const tabIcon =
     return <Ionicons name={name} size={size} color={color} />;
   };
 
-<<<<<<< HEAD
 const MOBILE_TAB_BAR_HEIGHT = 70;
 const MOBILE_TAB_BAR_PADDING_TOP = 10;
 const MOBILE_TAB_BAR_PADDING_BOTTOM = 10;
 
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 const TabNavigator = () => {
   const { items } = useCart();
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -257,7 +230,6 @@ const DefaultTabBar = ({
   cartCount,
   defaultTheme,
 }) => {
-<<<<<<< HEAD
   const insets = useSafeAreaInsets();
   const androidBottomInset = Platform.OS === "android" ? insets.bottom : 0;
 
@@ -271,10 +243,6 @@ const DefaultTabBar = ({
         },
       ]}
     >
-=======
-  return (
-    <View style={tabStyles.mobileBar}>
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
@@ -324,15 +292,9 @@ const tabStyles = StyleSheet.create({
   },
   mobileBar: {
     flexDirection: "row",
-<<<<<<< HEAD
     height: MOBILE_TAB_BAR_HEIGHT,
     paddingBottom: MOBILE_TAB_BAR_PADDING_BOTTOM,
     paddingTop: MOBILE_TAB_BAR_PADDING_TOP,
-=======
-    height: 70,
-    paddingBottom: 10,
-    paddingTop: 10,
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
@@ -357,7 +319,6 @@ const navTheme = {
   },
 };
 
-<<<<<<< HEAD
 const LoginRequiredScreen = ({
   navigation,
   routeName,
@@ -612,11 +573,6 @@ const linking = {
 
     return state;
   },
-=======
-// only handle our custom URI schemes here; web links will stay in browser
-const linking = {
-  prefixes: ["expressmart://"],
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   config: {
     screens: {
       Main: {
@@ -628,10 +584,7 @@ const linking = {
       },
       Auth: "login",
       ForgotPassword: "forgot-password",
-<<<<<<< HEAD
       ResetPassword: "reset-password",
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       Checkout: {
         path: "checkout",
         parse: {
@@ -671,19 +624,15 @@ const AuthenticatedApp = () => {
     };
   }, []);
 
-<<<<<<< HEAD
   React.useEffect(() => {
     if (Platform.OS === "web") return;
     SplashScreen.hideAsync().catch(() => {});
   }, []);
 
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   if (authLoading) {
     return <CustomerLoadingAnimation />;
   }
 
-<<<<<<< HEAD
   const withAuthGate = (Component, title, message) => {
     const GuardedScreen = (props) => {
       if (isAuthenticated) {
@@ -785,8 +734,6 @@ const AuthenticatedApp = () => {
     "Please sign in to access your conversations.",
   );
 
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
   return (
     <NotificationProvider userId={user?.id}>
       <UpdateModal
@@ -802,7 +749,6 @@ const AuthenticatedApp = () => {
           animationDuration: 100,
         }}
       >
-<<<<<<< HEAD
         <Stack.Screen name="Main" component={TabNavigator} />
         <Stack.Screen name="Auth" component={AuthScreen} />
         <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
@@ -843,79 +789,11 @@ const AuthenticatedApp = () => {
           component={GuardedPrivacySettings}
         />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
-=======
-        {!isAuthenticated ? (
-          <>
-            <Stack.Screen name="Auth" component={AuthScreen} />
-            <Stack.Screen
-              name="ForgotPassword"
-              component={ForgotPasswordScreen}
-            />
-            {/* password reset screen present for legacy but navigation won't use it */}
-          </>
-        ) : (
-          <>
-            <Stack.Screen name="Main" component={TabNavigator} />
-            <Stack.Screen name="Search" component={SearchScreen} />
-            <Stack.Screen
-              name="SearchResults"
-              component={SearchResultsScreen}
-            />
-            <Stack.Screen
-              name="CategoryProducts"
-              component={CategoryProductsScreen}
-            />
-            <Stack.Screen name="Store" component={StoreScreen} />
-            <Stack.Screen name="Stores" component={StoresScreen} />
-            <Stack.Screen
-              name="ProductDetail"
-              component={ProductDetailScreen}
-            />
-            <Stack.Screen name="Chat" component={ChatScreen} />
-            <Stack.Screen name="Chats" component={ChatsScreen} />
-            <Stack.Screen name="StatusViewer" component={StatusViewer} />
-            <Stack.Screen name="Checkout" component={CheckoutScreen} />
-            <Stack.Screen
-              name="PaymentWebView"
-              component={PaymentWebViewScreen}
-            />
-            <Stack.Screen name="Orders" component={OrdersScreen} />
-            <Stack.Screen name="OrderDetail" component={OrderDetailScreen} />
-            <Stack.Screen name="Wishlist" component={WishlistScreen} />
-            <Stack.Screen
-              name="Notifications"
-              component={NotificationsScreen}
-            />
-            <Stack.Screen name="Addresses" component={AddressesScreen} />
-            <Stack.Screen name="Payments" component={PaymentsScreen} />
-            <Stack.Screen name="Following" component={FollowingScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-            <Stack.Screen name="Security" component={SecurityScreen} />
-            <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
-            <Stack.Screen name="Terms" component={TermsScreen} />
-            <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
-            <Stack.Screen
-              name="ChangePassword"
-              component={ChangePasswordScreen}
-            />
-            <Stack.Screen name="ChangeEmail" component={ChangeEmailScreen} />
-            <Stack.Screen
-              name="PrivacySettings"
-              component={PrivacySettingsScreen}
-            />
-            <Stack.Screen
-              name="PrivacyPolicy"
-              component={PrivacyPolicyScreen}
-            />
-          </>
-        )}
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
       </Stack.Navigator>
     </NotificationProvider>
   );
 };
 
-<<<<<<< HEAD
 const DeepLinkHandler = () => {
   const { setIsRecoveryMode } = useAuth();
 
@@ -1037,8 +915,6 @@ const authPromptStyles = StyleSheet.create({
   },
 });
 
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -1049,10 +925,7 @@ export default function App() {
               <OrderProvider>
                 <ChatProvider>
                   <AdsProvider>
-<<<<<<< HEAD
                     <DeepLinkHandler />
-=======
->>>>>>> 1093fc65a75ec7311fb87f0777f113828da0f880
                     <NavigationContainer theme={navTheme} linking={linking}>
                       <StatusBar style="dark" />
                       <AuthenticatedApp />

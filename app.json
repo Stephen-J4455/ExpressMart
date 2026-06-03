@@ -21,7 +21,9 @@
       "bundleIdentifier": "com.stephenj.expressmart",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -65,7 +67,9 @@
       ],
       "expo-font",
       "expo-apple-authentication",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-asset",
+      "expo-splash-screen"
     ],
     "extra": {
       "eas": {
