@@ -25,17 +25,20 @@ export const AppHeader = ({
       ]}
     >
       <View style={styles.topRow}>
-        <View>
-          <Text style={styles.caption}>Ship to</Text>
-          <View style={styles.locationRow}>
-            <Text style={styles.location}>Shipping to Ghana</Text>
-            <Ionicons name="chevron-down" size={16} color={colors.primary} />
+       
+          <View style={styles.searchWrap}>
+            <SearchBar
+              editable={false}
+              onPress={onSearchPress}
+              placeholder="Search Express-style deals"
+              style={{ paddingVertical: 14 }}
+            />
           </View>
-        </View>
+       
         <View style={styles.iconRow}>
-          <Pressable style={styles.iconButton} onPress={onStoresPress}>
+          {/* <Pressable style={styles.iconButton} onPress={onStoresPress}>
             <Ionicons name="storefront-outline" size={20} color={colors.dark} />
-          </Pressable>
+          </Pressable> */}
           <Pressable style={styles.iconButton} onPress={onChatPress}>
             <Ionicons name="chatbubble-outline" size={20} color={colors.dark} />
           </Pressable>
@@ -47,17 +50,6 @@ export const AppHeader = ({
             />
           </Pressable>
         </View>
-      </View>
-      <View style={styles.searchWrap}>
-        <SearchBar
-          editable={false}
-          onPress={onSearchPress}
-          placeholder="Search Express-style deals"
-          style={{ paddingVertical: 14 }}
-        />
-        <Pressable style={styles.iconButton}>
-          <Ionicons name="qr-code-outline" size={20} color={colors.dark} />
-        </Pressable>
       </View>
     </View>
   );
@@ -93,7 +85,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   searchWrap: {
-    marginTop: 12,
+    marginTop: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,

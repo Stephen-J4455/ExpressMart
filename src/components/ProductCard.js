@@ -388,36 +388,6 @@ export const ProductCard = ({
                   </Text>
                 )}
               </View>
-              {!hasFlashSale && (
-                <Pressable
-                  style={[styles.listCta, isOutOfStock && styles.ctaDisabled]}
-                  onPress={handleAdd}
-                  disabled={isOutOfStock}
-                  accessibilityLabel="Add to cart"
-                >
-                  <LinearGradient
-                    colors={
-                      isOutOfStock
-                        ? ["#9CA3AF", "#9CA3AF"]
-                        : [
-                            themeObj.gradientStart ||
-                              themeObj.primary ||
-                              accent,
-                            themeObj.gradientEnd || themeObj.primary || accent,
-                          ]
-                    }
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.listCtaGradient}
-                  >
-                    <Ionicons
-                      name={isOutOfStock ? "close-circle" : "cart"}
-                      size={18}
-                      color="#fff"
-                    />
-                  </LinearGradient>
-                </Pressable>
-              )}
             </View>
           </View>
         </Pressable>
@@ -664,40 +634,8 @@ export const ProductCard = ({
               }
             />
           )}
-          {footerAction || (!hideCta && !hasFlashSale) ? (
-            footerAction ? (
-              <View style={styles.footerActionWrap}>{footerAction}</View>
-            ) : (
-              <Pressable
-                style={[styles.cta, isOutOfStock && styles.ctaDisabled]}
-                onPress={handleAdd}
-                disabled={isOutOfStock}
-                accessibilityLabel="Add to cart"
-              >
-                <LinearGradient
-                  colors={
-                    isOutOfStock
-                      ? ["#9CA3AF", "#9CA3AF"]
-                      : [
-                          themeObj.gradientStart || themeObj.primary || accent,
-                          themeObj.gradientEnd || themeObj.primary || accent,
-                        ]
-                  }
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.ctaGradient}
-                >
-                  <Ionicons
-                    name={isOutOfStock ? "close-circle" : "cart"}
-                    size={16}
-                    color="#fff"
-                  />
-                  <Text style={styles.ctaText}>
-                    {isOutOfStock ? "Out of Stock" : "Add to Cart"}
-                  </Text>
-                </LinearGradient>
-              </Pressable>
-            )
+          {footerAction ? (
+            <View style={styles.footerActionWrap}>{footerAction}</View>
           ) : null}
         </View>
       </Pressable>

@@ -6,6 +6,11 @@
     "orientation": "portrait",
     "icon": "./assets/express.png",
     "userInterfaceStyle": "light",
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#ffffff",
+      "translucent": true
+    },
     "scheme": "expressmart",
     "splash": {
       "image": "./assets/express.png",

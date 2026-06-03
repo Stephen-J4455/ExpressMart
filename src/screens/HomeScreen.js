@@ -476,7 +476,7 @@ export const HomeScreen = ({ navigation }) => {
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
 
-        <View style={styles.topAdWrap}>
+        {/* <View style={styles.topAdWrap}>
           {topCarouselAds.length > 0 ? (
             <AdRenderer ads={topCarouselAds} />
           ) : (
@@ -484,15 +484,15 @@ export const HomeScreen = ({ navigation }) => {
               <AdBannerPlaceholder />
             </View>
           )}
-        </View>
+        </View> */}
 
-        <StatusRow
+        {/* <StatusRow
           onSelectStatus={(status) => {
             if (status) {
               navigation.navigate("StatusViewer", { status });
             }
           }}
-        />
+        /> */}
 
         <View>
           {flashSales.length > 0 && (
@@ -525,9 +525,9 @@ export const HomeScreen = ({ navigation }) => {
               </ScrollView>
             </>
           )}
-        </View>
+        </View> 
 
-        <SectionHeader
+        {/* <SectionHeader
           title="Stores"
           actionLabel="All"
           onActionPress={() => navigation.navigate("Stores")}
@@ -537,7 +537,7 @@ export const HomeScreen = ({ navigation }) => {
           onSelect={(seller) =>
             navigation.navigate("Store", { sellerId: seller?.id, seller })
           }
-        />
+        /> */}
 
         <View
           style={styles.feedStickyHeader}
@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   feedTitleSpacer: {
-    height: 36,
+    
     marginBottom: 10,
   },
   feedTabsRow: {
