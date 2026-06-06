@@ -501,6 +501,7 @@ export const ProductCard = ({
                 </View>
               )}
 
+              {/* Temporarily hide variant add-to-cart button
               <Pressable
                 style={styles.variantAddButton}
                 onPress={handleConfirmAddToCart}
@@ -514,6 +515,7 @@ export const ProductCard = ({
                   <Text style={styles.variantAddText}>Add to Cart</Text>
                 </View>
               </Pressable>
+              */}
             </View>
           </View>
         </Modal>
@@ -735,6 +737,7 @@ export const ProductCard = ({
               </View>
             )}
 
+            {/* Temporarily hide variant add-to-cart button
             <Pressable
               style={styles.variantAddButton}
               onPress={handleConfirmAddToCart}
@@ -748,6 +751,7 @@ export const ProductCard = ({
                 <Text style={styles.variantAddText}>Add to Cart</Text>
               </View>
             </Pressable>
+            */}
           </View>
         </View>
       </Modal>

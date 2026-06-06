@@ -14,7 +14,6 @@ import { AppHeader } from "../components/AppHeader";
 import { CategoryScroller } from "../components/CategoryScroller";
 import { ProductCard } from "../components/ProductCard";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
-import { SectionHeader } from "../components/SectionHeader";
 import { SellerScroller } from "../components/SellerScroller";
 import { AdRenderer } from "../components/AdBanner";
 import { InlineAdProductCard } from "../components/InlineAdProductCard";
@@ -48,18 +47,17 @@ export const HomeScreen = ({ navigation }) => {
   const [loadingFlashSales, setLoadingFlashSales] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFeed, setActiveFeed] = useState("forYou");
-  const [tabsUnlocked, setTabsUnlocked] = useState(false);
   const daySeed = useMemo(() => new Date().toDateString(), []);
   const homeScrollRef = useRef(null);
   const tabPagesRef = useRef(null);
   const activeFeedRef = useRef("forYou");
-  const tabsUnlockedRef = useRef(false);
   const tabScrollOffsets = useRef({});
   const currentHomeOffsetY = useRef(0);
   const stickyHeaderStartY = useRef(Number.MAX_SAFE_INTEGER);
   const feedTabs = useMemo(
     () => [
       { key: "forYou", label: "For You" },
+      { key: "flashSales", label: "⚡ Flash Sales" },
       { key: "topRated", label: "Top Rated" },
       { key: "newArrivals", label: "New Arrivals" },
       { key: "trending", label: "Trending" },
@@ -75,13 +73,6 @@ export const HomeScreen = ({ navigation }) => {
       const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
       currentHomeOffsetY.current = contentOffset.y;
       tabScrollOffsets.current[activeFeedRef.current] = contentOffset.y;
-      const unlockNow =
-        contentOffset.y >= stickyHeaderStartY.current - 8 ||
-        activeFeedRef.current !== "forYou";
-      if (unlockNow !== tabsUnlockedRef.current) {
-        tabsUnlockedRef.current = unlockNow;
-        setTabsUnlocked(unlockNow);
-      }
       const distanceFromBottom =
         contentSize.height - contentOffset.y - layoutMeasurement.height;
       if (distanceFromBottom < 400 && hasMore && !loadingMore && !loading) {
@@ -316,22 +307,44 @@ export const HomeScreen = ({ navigation }) => {
   );
 
   const renderGridItem = useCallback(
-    (item) => (
-      <View style={{ flex: 1, maxWidth: itemWidth }}>
-        {item?.__type === "injected_ad" ? (
-          <InlineAdProductCard ad={item.ad} showCta />
-        ) : item ? (
+    (item) => {
+      if (!item) {
+        return (
+          <View style={{ flex: 1, maxWidth: itemWidth }}>
+            <ProductCardPlaceholder />
+          </View>
+        );
+      }
+
+      if (item.__type === "injected_ad") {
+        return (
+          <View style={{ flex: 1, maxWidth: itemWidth }}>
+            <InlineAdProductCard ad={item.ad} showCta />
+          </View>
+        );
+      }
+
+      const isFlashSaleItem =
+        item?.product &&
+        (item?.flash_price != null || item?.discount_percentage != null);
+      const productItem = isFlashSaleItem ? item.product : item;
+
+      return (
+        <View style={{ flex: 1, maxWidth: itemWidth }}>
           <ProductCard
-            product={item}
+            product={productItem}
+            flashSale={isFlashSaleItem ? item : undefined}
+            compact={isFlashSaleItem}
             onPress={() =>
-              navigation.navigate("ProductDetail", { product: item })
+              navigation.navigate("ProductDetail", {
+                product: productItem,
+                flashSale: isFlashSaleItem ? item : undefined,
+              })
             }
           />
-        ) : (
-          <ProductCardPlaceholder />
-        )}
-      </View>
-    ),
+        </View>
+      );
+    },
     [itemWidth, navigation],
   );
 
@@ -369,9 +382,17 @@ export const HomeScreen = ({ navigation }) => {
     [budgetPicksData, gridColumns, toRows],
   );
 
+  const flashSalesRows = useMemo(() => {
+    const rowsSource = loadingFlashSales
+      ? Array(gridColumns * 2).fill(null)
+      : flashSales;
+    return toRows(rowsSource, gridColumns);
+  }, [flashSales, gridColumns, loadingFlashSales, toRows]);
+
   const rowsByFeed = useMemo(
     () => ({
       forYou: forYouRows,
+      flashSales: flashSalesRows,
       topRated: topRatedRows,
       newArrivals: newArrivalsRows,
       trending: trendingRows,
@@ -380,6 +401,7 @@ export const HomeScreen = ({ navigation }) => {
     }),
     [
       forYouRows,
+      flashSalesRows,
       topRatedRows,
       newArrivalsRows,
       trendingRows,
@@ -390,7 +412,6 @@ export const HomeScreen = ({ navigation }) => {
 
   const switchFeed = useCallback(
     (nextFeed) => {
-      if (!tabsUnlockedRef.current && nextFeed !== "forYou") return;
       if (nextFeed === activeFeedRef.current) return;
       const nextTabIndex = feedTabs.findIndex((tab) => tab.key === nextFeed);
       if (nextTabIndex < 0) return;
@@ -406,10 +427,6 @@ export const HomeScreen = ({ navigation }) => {
     ({ nativeEvent }) => {
       const index = Math.round(nativeEvent.contentOffset.x / screenWidth);
       const tab = feedTabs[index]?.key;
-      if (!tabsUnlockedRef.current && tab !== "forYou") {
-        tabPagesRef.current?.scrollTo({ x: 0, animated: true });
-        return;
-      }
       if (!tab || tab === activeFeedRef.current) return;
 
       tabScrollOffsets.current[activeFeedRef.current] = currentHomeOffsetY.current;
@@ -462,7 +479,7 @@ export const HomeScreen = ({ navigation }) => {
         contentInsetAdjustmentBehavior="automatic"
         overScrollMode="never"
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[6]}
+        stickyHeaderIndices={[0, 2]}
         scrollEventThrottle={200}
         onScroll={handleScroll}
         refreshControl={
@@ -476,7 +493,7 @@ export const HomeScreen = ({ navigation }) => {
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
 
-        {/* <View style={styles.topAdWrap}>
+       <View style={styles.topAdWrap}>
           {topCarouselAds.length > 0 ? (
             <AdRenderer ads={topCarouselAds} />
           ) : (
@@ -484,7 +501,7 @@ export const HomeScreen = ({ navigation }) => {
               <AdBannerPlaceholder />
             </View>
           )}
-        </View> */}
+        </View>
 
         {/* <StatusRow
           onSelectStatus={(status) => {
@@ -494,62 +511,12 @@ export const HomeScreen = ({ navigation }) => {
           }}
         /> */}
 
-        <View>
-          {flashSales.length > 0 && (
-            <>
-              <SectionHeader
-                title="⚡ Flash Sales"
-                actionLabel="All"
-                onActionPress={() => navigation.navigate("FlashSales")}
-              />
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.flashSalesContainer}
-              >
-                {flashSales.slice(0, 6).map((flashSale) => (
-                  <View key={flashSale.id} style={styles.flashSaleItem}>
-                    <ProductCard
-                      product={flashSale.product}
-                      flashSale={flashSale}
-                      compact
-                      onPress={() =>
-                        navigation.navigate("ProductDetail", {
-                          product: flashSale.product,
-                          flashSale,
-                        })
-                      }
-                    />
-                  </View>
-                ))}
-              </ScrollView>
-            </>
-          )}
-        </View> 
 
-        {/* <SectionHeader
-          title="Stores"
-          actionLabel="All"
-          onActionPress={() => navigation.navigate("Stores")}
-        />
-        <SellerScroller
-          sellers={sellers}
-          onSelect={(seller) =>
-            navigation.navigate("Store", { sellerId: seller?.id, seller })
-          }
-        /> */}
 
         <View
           style={styles.feedStickyHeader}
           onLayout={(event) => {
             stickyHeaderStartY.current = event.nativeEvent.layout.y;
-            const unlockNow =
-              currentHomeOffsetY.current >= stickyHeaderStartY.current - 8 ||
-              activeFeedRef.current !== "forYou";
-            if (unlockNow !== tabsUnlockedRef.current) {
-              tabsUnlockedRef.current = unlockNow;
-              setTabsUnlocked(unlockNow);
-            }
           }}
         >
           <View style={styles.feedTitleSpacer} />
@@ -558,7 +525,7 @@ export const HomeScreen = ({ navigation }) => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.feedTabsRow}
           >
-            {(tabsUnlocked ? feedTabs : [feedTabs[0]]).map((tab) => (
+            {feedTabs.map((tab) => (
               <Pressable
                 key={tab.key}
                 onPress={() => switchFeed(tab.key)}
@@ -581,7 +548,7 @@ export const HomeScreen = ({ navigation }) => {
           ref={tabPagesRef}
           horizontal
           pagingEnabled
-          scrollEnabled={tabsUnlocked}
+          scrollEnabled={true}
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
           onMomentumScrollEnd={handleTabPagesScrollEnd}
@@ -648,8 +615,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   feedStickyHeader: {
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: 0,
+    paddingTop: 32,
     paddingBottom: 10,
     backgroundColor: colors.background,
   },

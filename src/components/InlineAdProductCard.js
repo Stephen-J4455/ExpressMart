@@ -43,32 +43,31 @@ export const InlineAdProductCard = ({ ad, showCta = false }) => {
     tags: ad.tags || [],
   };
 
-  const ctaLabel = ad.cta_text || "Shop Now";
-  const ctaButton = showCta && ad.cta_url ? (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${ctaLabel} for sponsored content`}
-      style={styles.ctaButton}
-      onPress={handlePress}
-    >
-      <LinearGradient
-        colors={[ad.accent_color || colors.primary, colors.accent]}
-        style={styles.ctaGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-      >
-        <Text style={styles.ctaText}>{ctaLabel}</Text>
-        <Ionicons name="arrow-forward" size={16} color="#fff" />
-      </LinearGradient>
-    </Pressable>
-  ) : null;
+  // const ctaLabel = ad.cta_text || "Shop Now";
+  // const ctaButton = showCta && ad.cta_url ? (
+  //   <Pressable
+  //     accessibilityRole="button"
+  //     accessibilityLabel={`${ctaLabel} for sponsored content`}
+  //     style={styles.ctaButton}
+  //     onPress={handlePress}
+  //   >
+  //     <LinearGradient
+  //       colors={[ad.accent_color || colors.primary, colors.accent]}
+  //       style={styles.ctaGradient}
+  //       start={{ x: 0, y: 0 }}
+  //       end={{ x: 1, y: 0 }}
+  //     >
+  //       <Text style={styles.ctaText}>{ctaLabel}</Text>
+  //       <Ionicons name="arrow-forward" size={16} color="#fff" />
+  //     </LinearGradient>
+  //   </Pressable>
+  // ) : null;
 
   return (
     <ProductCard
       product={mappedAdProduct}
       onPress={handlePress}
       hideCta
-      footerAction={ctaButton}
       priceLabelOverride={ad.description || "Sponsored"}
       priceLabelLines={1}
     />
