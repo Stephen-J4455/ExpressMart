@@ -152,6 +152,7 @@ export const SearchScreen = ({ navigation, route }) => {
           onChangeText={(text) => {
             setQuery(text);
           }}
+          style={{ paddingVertical: 4 }}
           onSubmitEditing={() => {
             if (query.trim()) {
               saveSearch(query);

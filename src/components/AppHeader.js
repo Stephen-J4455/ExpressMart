@@ -30,15 +30,15 @@ export const AppHeader = ({
             <SearchBar
               editable={false}
               onPress={onSearchPress}
-              placeholder="Search Express-style deals"
+              placeholder="Search ExpressMart"
               style={{ paddingVertical: 14 }}
             />
           </View>
        
         <View style={styles.iconRow}>
-          {/* <Pressable style={styles.iconButton} onPress={onStoresPress}>
+           <Pressable style={styles.iconButton} onPress={onStoresPress}>
             <Ionicons name="storefront-outline" size={20} color={colors.dark} />
-          </Pressable> */}
+          </Pressable> 
           <Pressable style={styles.iconButton} onPress={onChatPress}>
             <Ionicons name="chatbubble-outline" size={20} color={colors.dark} />
           </Pressable>
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#EEF2F8",
+    borderColor: "#e2e3e6",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#F8FAFC",

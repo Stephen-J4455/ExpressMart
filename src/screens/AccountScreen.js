@@ -297,7 +297,7 @@ export const AccountScreen = ({ navigation }) => {
 
         {/* App Version - Clickable */}
         <Pressable onPress={() => setShowLoadingPreview(true)}>
-          <Text style={styles.versionText}>ExpressMart v1.0.0</Text>
+          <Text style={styles.versionText}>ExpressMart v1.0.1</Text>
         </Pressable>
         <View style={{ height: 30 }} />
       </ScrollView>

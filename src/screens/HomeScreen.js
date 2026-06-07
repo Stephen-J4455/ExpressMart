@@ -10,6 +10,7 @@ import {
   Animated,
   useWindowDimensions,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { AppHeader } from "../components/AppHeader";
 import { CategoryScroller } from "../components/CategoryScroller";
 import { ProductCard } from "../components/ProductCard";
@@ -48,12 +49,10 @@ export const HomeScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [activeFeed, setActiveFeed] = useState("forYou");
   const daySeed = useMemo(() => new Date().toDateString(), []);
-  const homeScrollRef = useRef(null);
   const tabPagesRef = useRef(null);
-  const activeFeedRef = useRef("forYou");
-  const tabScrollOffsets = useRef({});
-  const currentHomeOffsetY = useRef(0);
-  const stickyHeaderStartY = useRef(Number.MAX_SAFE_INTEGER);
+  const feedTabsScrollRef = useRef(null);
+  const [tabsContainerWidth, setTabsContainerWidth] = useState(0);
+  const [tabLayouts, setTabLayouts] = useState({});
   const feedTabs = useMemo(
     () => [
       { key: "forYou", label: "For You" },
@@ -67,12 +66,10 @@ export const HomeScreen = ({ navigation }) => {
     [],
   );
 
-  // Detect scroll near bottom to trigger load-more
-  const handleScroll = useCallback(
+  // Detect scroll near bottom to trigger load-more for the currently visible tab
+  const handlePageScroll = useCallback(
     ({ nativeEvent }) => {
       const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-      currentHomeOffsetY.current = contentOffset.y;
-      tabScrollOffsets.current[activeFeedRef.current] = contentOffset.y;
       const distanceFromBottom =
         contentSize.height - contentOffset.y - layoutMeasurement.height;
       if (distanceFromBottom < 400 && hasMore && !loadingMore && !loading) {
@@ -410,49 +407,125 @@ export const HomeScreen = ({ navigation }) => {
     ],
   );
 
+  const emptyStateConfig = useMemo(
+    () => ({
+      forYou: {
+        icon: "heart-outline",
+        title: "No recommendations yet",
+        subtitle: "Come back soon for personalized product picks.",
+      },
+      flashSales: {
+        icon: "flash-outline",
+        title: "No flash sales right now",
+        subtitle: "We’ll notify you when the next deal goes live.",
+      },
+      topRated: {
+        icon: "star-outline",
+        title: "No top rated products yet",
+        subtitle: "Popular items will appear here once they are available.",
+      },
+      newArrivals: {
+        icon: "sparkles-outline",
+        title: "No new arrivals yet",
+        subtitle: "Fresh products will show up here as soon as they land.",
+      },
+      trending: {
+        icon: "trending-up-outline",
+        title: "Nothing trending yet",
+        subtitle: "Browse products to surface trending picks.",
+      },
+      followedStores: {
+        icon: "people-outline",
+        title: "No followed store products",
+        subtitle: "Follow stores to see their latest arrivals here.",
+        action: {
+          label: "Browse stores",
+          onPress: () => navigation.navigate("Stores"),
+        },
+      },
+      budgetPicks: {
+        icon: "pricetag-outline",
+        title: "No budget picks under 100 GHC",
+        subtitle: "Check back for more wallet-friendly deals soon.",
+      },
+    }),
+    [navigation],
+  );
+
+  const renderEmptyTabState = useCallback(
+    (feedKey) => {
+      const config = emptyStateConfig[feedKey] || {
+        icon: "sad-outline",
+        title: "Nothing to show",
+        subtitle: "Try another tab or refresh the home screen.",
+      };
+
+      return (
+        <View style={styles.emptyState}>
+          <View style={styles.emptyIconWrap}>
+            <Ionicons name={config.icon} size={54} color={colors.muted} />
+          </View>
+          <Text style={styles.emptyTitle}>{config.title}</Text>
+          <Text style={styles.emptySubtitle}>{config.subtitle}</Text>
+          {config.action ? (
+            <Pressable
+              style={styles.emptyAction}
+              onPress={config.action.onPress}
+            >
+              <Text style={styles.emptyActionText}>{config.action.label}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      );
+    },
+    [emptyStateConfig],
+  );
+
+  const scrollActiveTabIntoView = useCallback(
+    (tabKey) => {
+      const layout = tabLayouts[tabKey];
+      if (!layout || tabsContainerWidth === 0 || !feedTabsScrollRef.current) return;
+      const targetX = Math.max(layout.x + layout.width / 2 - tabsContainerWidth / 2, 0);
+      feedTabsScrollRef.current.scrollTo({ x: targetX, animated: true });
+    },
+    [tabLayouts, tabsContainerWidth],
+  );
+
   const switchFeed = useCallback(
     (nextFeed) => {
-      if (nextFeed === activeFeedRef.current) return;
+      if (nextFeed === activeFeed) return;
       const nextTabIndex = feedTabs.findIndex((tab) => tab.key === nextFeed);
       if (nextTabIndex < 0) return;
+      scrollActiveTabIntoView(nextFeed);
       tabPagesRef.current?.scrollTo({
         x: nextTabIndex * screenWidth,
         animated: true,
       });
+      setActiveFeed(nextFeed);
     },
-    [feedTabs, screenWidth],
+    [activeFeed, feedTabs, screenWidth, scrollActiveTabIntoView],
+  );
+
+  const handleTabPagesScroll = useCallback(
+    ({ nativeEvent }) => {
+      const index = Math.round(nativeEvent.contentOffset.x / screenWidth);
+      const tab = feedTabs[index]?.key;
+      if (!tab || tab === activeFeed) return;
+      setActiveFeed(tab);
+      scrollActiveTabIntoView(tab);
+    },
+    [activeFeed, feedTabs, screenWidth, scrollActiveTabIntoView],
   );
 
   const handleTabPagesScrollEnd = useCallback(
     ({ nativeEvent }) => {
       const index = Math.round(nativeEvent.contentOffset.x / screenWidth);
       const tab = feedTabs[index]?.key;
-      if (!tab || tab === activeFeedRef.current) return;
-
-      tabScrollOffsets.current[activeFeedRef.current] = currentHomeOffsetY.current;
-      activeFeedRef.current = tab;
-      const shouldRestoreTabOffset =
-        currentHomeOffsetY.current >= stickyHeaderStartY.current - 8;
+      if (!tab || tab === activeFeed) return;
       setActiveFeed(tab);
-      if (shouldRestoreTabOffset) {
-        const targetY =
-          tab === "forYou"
-            ? tabScrollOffsets.current[tab] || 0
-            : Math.max(
-                stickyHeaderStartY.current - 8,
-                tabScrollOffsets.current[tab] || 0,
-              );
-        if (Math.abs(targetY - currentHomeOffsetY.current) > 12) {
-          requestAnimationFrame(() => {
-            homeScrollRef.current?.scrollTo({
-              y: targetY,
-              animated: true,
-            });
-          });
-        }
-      }
+      scrollActiveTabIntoView(tab);
     },
-    [activeFeed, feedTabs, screenWidth],
+    [activeFeed, feedTabs, screenWidth, scrollActiveTabIntoView],
   );
 
   const handleRefresh = useCallback(async () => {
@@ -474,18 +547,7 @@ export const HomeScreen = ({ navigation }) => {
         },
       ]}
     >
-      <ScrollView
-        ref={homeScrollRef}
-        contentInsetAdjustmentBehavior="automatic"
-        overScrollMode="never"
-        showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[0, 2]}
-        scrollEventThrottle={200}
-        onScroll={handleScroll}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
+      <View style={styles.homeContent}>
         <AppHeader
           onSearchPress={() => navigation.navigate("Search")}
           onStoresPress={() => navigation.navigate("Stores")}
@@ -493,34 +555,13 @@ export const HomeScreen = ({ navigation }) => {
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
 
-       <View style={styles.topAdWrap}>
-          {topCarouselAds.length > 0 ? (
-            <AdRenderer ads={topCarouselAds} />
-          ) : (
-            <View style={styles.topAdPlaceholderWrap}>
-              <AdBannerPlaceholder />
-            </View>
-          )}
-        </View>
-
-        {/* <StatusRow
-          onSelectStatus={(status) => {
-            if (status) {
-              navigation.navigate("StatusViewer", { status });
-            }
-          }}
-        /> */}
-
-
-
         <View
           style={styles.feedStickyHeader}
-          onLayout={(event) => {
-            stickyHeaderStartY.current = event.nativeEvent.layout.y;
-          }}
+          onLayout={({ nativeEvent }) => setTabsContainerWidth(nativeEvent.layout.width)}
         >
           <View style={styles.feedTitleSpacer} />
           <ScrollView
+            ref={feedTabsScrollRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.feedTabsRow}
@@ -528,6 +569,12 @@ export const HomeScreen = ({ navigation }) => {
             {feedTabs.map((tab) => (
               <Pressable
                 key={tab.key}
+                onLayout={({ nativeEvent }) =>
+                  setTabLayouts((prev) => ({
+                    ...prev,
+                    [tab.key]: nativeEvent.layout,
+                  }))
+                }
                 onPress={() => switchFeed(tab.key)}
                 style={[styles.feedTab, activeFeed === tab.key && styles.feedTabActive]}
               >
@@ -551,36 +598,70 @@ export const HomeScreen = ({ navigation }) => {
           scrollEnabled={true}
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
+          onScroll={handleTabPagesScroll}
           onMomentumScrollEnd={handleTabPagesScrollEnd}
           style={styles.tabPagesScroll}
         >
-          {feedTabs.map((tab) => (
-            <View key={tab.key} style={[styles.tabPage, { width: screenWidth }]}>
-              <View style={[styles.gridSection, { paddingBottom: 16 }]}>
-                {(rowsByFeed[tab.key] || []).map((row, rowIndex) => (
-                  <View key={`${tab.key}-row-${rowIndex}`} style={styles.gridRow}>
-                    {row.map((item, colIndex) => (
-                      <View
-                        key={item?.id || `placeholder-${tab.key}-${rowIndex}-${colIndex}`}
-                        style={styles.gridItem}
-                      >
-                        {renderGridItem(item)}
-                      </View>
-                    ))}
-                  </View>
-                ))}
-              </View>
-            </View>
-          ))}
-        </Animated.ScrollView>
-        {loadingMore && (
-          <View style={styles.loadMoreIndicator}>
-            <ActivityIndicator size="small" color={colors.primary} />
-          </View>
-        )}
-      </ScrollView>
+          {feedTabs.map((tab) => {
+            const rows = rowsByFeed[tab.key] || [];
+            const showEmptyState =
+              rows.length === 0 &&
+              (!loading ||
+                (tab.key === "flashSales" && !loadingFlashSales));
 
-      {homeOverlayAds.length > 0 && <AdRenderer ads={homeOverlayAds} />}
+            return (
+              <View key={tab.key} style={[styles.tabPage, { width: screenWidth }]}>
+                <ScrollView
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                  scrollEventThrottle={200}
+                  onScroll={handlePageScroll}
+                  refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+                  }
+                  contentContainerStyle={[styles.tabPageContent, { paddingBottom: 16 }]}
+                >
+
+                  <View style={styles.topAdWrap}>
+                    {topCarouselAds.length > 0 ? (
+                      <AdRenderer ads={topCarouselAds} />
+                    ) : (
+                      <View style={styles.topAdPlaceholderWrap}>
+                        <AdBannerPlaceholder />
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.gridSection}>
+                    {showEmptyState ? (
+                      renderEmptyTabState(tab.key)
+                    ) : (
+                      (rows || []).map((row, rowIndex) => (
+                        <View key={`${tab.key}-row-${rowIndex}`} style={styles.gridRow}>
+                          {row.map((item, colIndex) => (
+                            <View
+                              key={item?.id || `placeholder-${tab.key}-${rowIndex}-${colIndex}`}
+                              style={styles.gridItem}
+                            >
+                              {renderGridItem(item)}
+                            </View>
+                          ))}
+                        </View>
+                      ))
+                    )}
+                  </View>
+                  {loadingMore && activeFeed === tab.key && (
+                    <View style={styles.loadMoreIndicator}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            );
+          })}
+        </Animated.ScrollView>
+        {homeOverlayAds.length > 0 && <AdRenderer ads={homeOverlayAds} />}
+      </View>
     </Animated.View>
   );
 };
@@ -589,6 +670,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  homeContent: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  tabPage: {
+    minHeight: 300,
+    flex: 1,
+  },
+  tabPageContent: {
+    flexGrow: 1,
   },
   topAdWrap: {
     paddingTop: 8,
@@ -606,6 +698,47 @@ const styles = StyleSheet.create({
     width: 165,
     marginRight: 12,
   },
+  emptyState: {
+    minHeight: 240,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: colors.background,
+  },
+  emptyIconWrap: {
+    marginBottom: 16,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "rgba(100, 116, 139, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.dark,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: colors.muted,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  emptyAction: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
+  emptyActionText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
   loadMoreIndicator: {
     paddingVertical: 20,
     alignItems: "center",
@@ -616,7 +749,7 @@ const styles = StyleSheet.create({
   },
   feedStickyHeader: {
     marginTop: 0,
-    paddingTop: 32,
+    paddingTop: 0,
     paddingBottom: 10,
     backgroundColor: colors.background,
   },
@@ -655,6 +788,14 @@ const styles = StyleSheet.create({
   },
   tabPage: {
     minHeight: 300,
+    flex: 1,
+  },
+  homeContent: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  tabPageContent: {
+    flexGrow: 1,
   },
   gridRow: {
     flexDirection: "row",

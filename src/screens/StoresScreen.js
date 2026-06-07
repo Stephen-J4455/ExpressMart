@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   TextInput,
+  Modal,
   RefreshControl,
   Platform,
 } from "react-native";
@@ -24,12 +25,29 @@ export const StoresScreen = () => {
   const { sellers, loading, refreshSellers } = useShop();
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [showSortModal, setShowSortModal] = useState(false);
+  const [sortOption, setSortOption] = useState("");
   const { gridColumns, getItemWidth } = useResponsive();
   const itemWidth = getItemWidth(gridColumns, 16);
 
-  const filteredSellers = sellers.filter((seller) =>
-    seller.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const displayedSellers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    let list = sellers.filter((seller) =>
+      seller.name.toLowerCase().includes(q),
+    );
+
+    if (sortOption === "name-asc") {
+      list = list.slice().sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortOption === "rating-desc") {
+      list = list.slice().sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else if (sortOption === "newest") {
+      list = list
+        .slice()
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    }
+
+    return list;
+  }, [sellers, searchQuery, sortOption]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -65,7 +83,7 @@ export const StoresScreen = () => {
               <Text style={styles.storeCountText}>{sellers.length}</Text>
             </View>
           </View>
-          <Pressable style={styles.filterButton}>
+          <Pressable style={styles.filterButton} onPress={() => setShowSortModal(true)}>
             <Ionicons name="options-outline" size={20} color={colors.dark} />
           </Pressable>
         </View>
@@ -96,9 +114,9 @@ export const StoresScreen = () => {
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading stores...</Text>
         </View>
-      ) : filteredSellers.length > 0 ? (
+      ) : displayedSellers.length > 0 ? (
         <FlatList
-          data={filteredSellers}
+          data={displayedSellers}
           keyExtractor={(item) => item.id}
           renderItem={renderStoreCard}
           numColumns={gridColumns}
@@ -142,6 +160,56 @@ export const StoresScreen = () => {
           )}
         </View>
       )}
+
+      {/* Sort Modal */}
+      <Modal
+        visible={showSortModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSortModal(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowSortModal(false)}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Sort stores</Text>
+            <Pressable
+              style={[styles.sortOption, sortOption === "name-asc" && styles.sortOptionSelected]}
+              onPress={() => {
+                setSortOption("name-asc");
+                setShowSortModal(false);
+              }}
+            >
+              <Text style={styles.sortOptionText}>Name (A-Z)</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.sortOption, sortOption === "rating-desc" && styles.sortOptionSelected]}
+              onPress={() => {
+                setSortOption("rating-desc");
+                setShowSortModal(false);
+              }}
+            >
+              <Text style={styles.sortOptionText}>Highest rated</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.sortOption, sortOption === "newest" && styles.sortOptionSelected]}
+              onPress={() => {
+                setSortOption("newest");
+                setShowSortModal(false);
+              }}
+            >
+              <Text style={styles.sortOptionText}>Newest</Text>
+            </Pressable>
+            <Pressable
+              style={styles.clearSort}
+              onPress={() => {
+                setSortOption("");
+                setShowSortModal(false);
+              }}
+            >
+              <Text style={styles.clearSortText}>Clear sort</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -281,5 +349,54 @@ const styles = StyleSheet.create({
   columnWrapper: {
     gap: 12,
     marginBottom: 12,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: colors.dark,
+    marginBottom: 12,
+  },
+  sortOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  sortOptionSelected: {
+    backgroundColor: "#F1F5F9",
+  },
+  sortOptionText: {
+    fontSize: 15,
+    color: colors.dark,
+    fontWeight: "600",
+  },
+  clearSort: {
+    marginTop: 12,
+    alignSelf: "flex-end",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#FEF3F2",
+  },
+  clearSortText: {
+    color: colors.muted,
+    fontWeight: "700",
   },
 });
