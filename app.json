@@ -12,11 +12,6 @@
       "translucent": true
     },
     "scheme": "expressmart",
-    "splash": {
-      "image": "./assets/express.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "experiments": {
       "baseUrl": "/"
     },
