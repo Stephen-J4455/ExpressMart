@@ -20,6 +20,7 @@ import { useResponsive } from "../hooks/useResponsive";
 import * as Linking from "expo-linking";
 
 import * as WebBrowser from "expo-web-browser";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../lib/supabase";
 import { useToast } from "../context/ToastContext";
 
@@ -371,7 +372,63 @@ export const AuthScreen = ({ navigation, route }) => {
   };
 
   const handleAppleLogin = async () => {
-    await startOAuthLogin("apple", setAppleLoading);
+    setAppleLoading(true);
+    try {
+      if (Platform.OS === "ios") {
+        const isAvailable = await AppleAuthentication.isAvailableAsync();
+        if (!isAvailable) {
+          throw new Error("Apple Authentication is not available on this device");
+        }
+
+        const credential = await AppleAuthentication.signInAsync({
+          requestedScopes: [
+            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+            AppleAuthentication.AppleAuthenticationScope.EMAIL,
+          ],
+        });
+
+        if (credential.identityToken) {
+          const { data, error } = await supabase.auth.signInWithIdToken({
+            provider: "apple",
+            token: credential.identityToken,
+          });
+
+          if (error) throw error;
+
+          // If Apple provided full name on first sign-in, sync profile name
+          if (credential.fullName?.givenName && data?.user?.id) {
+            const fullNameStr = [
+              credential.fullName.givenName,
+              credential.fullName.familyName,
+            ]
+              .filter(Boolean)
+              .join(" ");
+
+            if (fullNameStr) {
+              await supabase
+                .from("express_profiles")
+                .update({ full_name: fullNameStr })
+                .eq("id", data.user.id);
+            }
+          }
+
+          toast.success("Successfully signed in with Apple!");
+        } else {
+          throw new Error("No identity token returned from Apple");
+        }
+      } else {
+        await startOAuthLogin("apple", setAppleLoading);
+      }
+    } catch (error) {
+      if (error.code === "ERR_REQUEST_CANCELED" || error.code === "1001") {
+        // User canceled Apple sign-in
+        return;
+      }
+      console.error("Apple Sign-In Error:", error);
+      toast.error(error.message || "Apple Sign-In failed");
+    } finally {
+      setAppleLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
