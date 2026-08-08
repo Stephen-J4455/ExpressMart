@@ -7,13 +7,14 @@ import {
   TextInput,
   Platform,
 } from "react-native";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors } from "../theme/colors";
+import { colors, getTheme, THEMES } from "../theme/colors";
+import { supabase } from "../lib/supabase";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const ProfileEditScreen = ({ navigation }) => {
@@ -23,6 +24,39 @@ export const ProfileEditScreen = ({ navigation }) => {
   const [phone, setPhone] = useState(profile?.phone || "");
   const [loading, setLoading] = useState(false);
   const { isWide, horizontalPadding } = useResponsive();
+
+  // Store (seller) settings — merged from the Express-Store seller app
+  const [isSeller, setIsSeller] = useState(false);
+  const [sellerId, setSellerId] = useState(null);
+  const [storeDescription, setStoreDescription] = useState("");
+  const [themeColor, setThemeColor] = useState(colors.primary);
+  const THEME_OPTIONS = Object.values(THEMES).map((t) => t.primary);
+
+  useEffect(() => {
+    let active = true;
+    const loadSeller = async () => {
+      if (!supabase || !user) return;
+      try {
+        const { data } = await supabase
+          .from("express_sellers")
+          .select("id, store_description, theme_color")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (active && data) {
+          setIsSeller(true);
+          setSellerId(data.id);
+          setStoreDescription(data.store_description || "");
+          setThemeColor(data.theme_color || colors.primary);
+        }
+      } catch (e) {
+        // Not a seller — store settings simply stay hidden.
+      }
+    };
+    loadSeller();
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   const handleSave = async () => {
     if (!fullName.trim()) {
@@ -38,10 +72,26 @@ export const ProfileEditScreen = ({ navigation }) => {
       });
       if (result.error) {
         toast.error("Failed to update profile");
-      } else {
-        toast.success("Profile updated successfully");
-        navigation.goBack();
+        return;
       }
+
+      // Persist store settings when logged in as a seller (merged from Express-Store)
+      if (isSeller && sellerId) {
+        const { error: sellerErr } = await supabase
+          .from("express_sellers")
+          .update({
+            store_description: storeDescription.trim() || null,
+            theme_color: themeColor,
+          })
+          .eq("id", sellerId);
+        if (sellerErr) {
+          toast.error("Store settings could not be saved");
+          return;
+        }
+      }
+
+      toast.success("Profile updated successfully");
+      navigation.goBack();
     } catch (error) {
       toast.error("Failed to update profile");
     } finally {
@@ -238,6 +288,63 @@ export const ProfileEditScreen = ({ navigation }) => {
             </Pressable>
           </View>
 
+          {/* Store settings — merged from the Express-Store seller app */}
+          {isSeller && (
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Ionicons
+                  name="storefront-outline"
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text style={styles.cardTitle}>Store Settings</Text>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Store Description</Text>
+                <View style={[styles.inputWrap, styles.inputWrapTop]}>
+                  <TextInput
+                    style={[styles.input, styles.textAreaInput]}
+                    value={storeDescription}
+                    onChangeText={setStoreDescription}
+                    placeholder="Tell customers what your store is about"
+                    placeholderTextColor={colors.muted}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    maxLength={600}
+                  />
+                </View>
+                <Text style={styles.helperText}>
+                  Shown on your store profile in the ExpressMart store app.
+                </Text>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Store Theme</Text>
+                <View style={styles.themeSwatchesContainer}>
+                  {THEME_OPTIONS.map((c) => (
+                    <Pressable
+                      key={c}
+                      onPress={() => setThemeColor(c)}
+                      style={[
+                        styles.themeSwatchCircle,
+                        {
+                          backgroundColor: c,
+                          borderWidth: themeColor === c ? 3 : 1,
+                          borderColor: themeColor === c ? "#000" : "#E6EDF3",
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.helperText}>
+                  Applied across your store in the ExpressMart app.
+                </Text>
+              </View>
+            </View>
+          )}
+
           <View style={{ height: 40 }} />
         </View>
       </ScrollView>
@@ -365,4 +472,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionLabel: { fontSize: 15, fontWeight: "600", color: colors.dark },
+  inputWrapTop: { alignItems: "flex-start" },
+  textAreaInput: { height: 96, textAlignVertical: "top" },
+  themeSwatchesContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 4,
+  },
+  themeSwatchCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
 });

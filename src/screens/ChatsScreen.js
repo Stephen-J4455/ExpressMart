@@ -16,9 +16,11 @@ import { supabase } from "../lib/supabase";
 import { useChat } from "../context/ChatContext";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
+import { useAuth } from "../context/AuthContext";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 import { ChatScreen } from "./ChatScreen";
+import { SellerChatScreen } from "./SellerChatScreen";
 
 const mapStoryAdToStatus = (ad) => ({
   id: `ad-story-${ad.id}`,
@@ -44,18 +46,55 @@ export const ChatsScreen = ({ navigation }) => {
   const { isWide } = useResponsive();
   const { conversations, isOnline, isLoading, refreshConversations } =
     useChat();
+  const { user } = useAuth();
   const { followedSellers } = useShop();
   const { fetchAdsByPlacement } = useAds();
   const [refreshing, setRefreshing] = useState(false);
   const [followedStatuses, setFollowedStatuses] = useState([]);
   const [messageStoryAds, setMessageStoryAds] = useState([]);
   const [selectedSeller, setSelectedSeller] = useState(null);
+  const [activeTab, setActiveTab] = useState("customer");
+  const [sellerConversations, setSellerConversations] = useState([]);
+  const [sellerLoading, setSellerLoading] = useState(false);
+  const [selectedSellerConv, setSelectedSellerConv] = useState(null);
+
+  const fetchSellerConversations = async () => {
+    if (!user) {
+      setSellerConversations([]);
+      return;
+    }
+    try {
+      setSellerLoading(true);
+      const { data: sellerRow } = await supabase
+        .from("express_sellers")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!sellerRow) {
+        setSellerConversations([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("express_seller_messages")
+        .select("*")
+        .eq("seller_id", sellerRow.id)
+        .order("last_message_at", { ascending: false });
+      if (error) throw error;
+      setSellerConversations(data || []);
+    } catch (err) {
+      console.error("Error fetching seller conversations:", err);
+      setSellerConversations([]);
+    } finally {
+      setSellerLoading(false);
+    }
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshConversations();
     await fetchFollowedStatuses();
     await fetchMessageStoryAds();
+    await fetchSellerConversations();
     setRefreshing(false);
   };
 
@@ -113,6 +152,10 @@ export const ChatsScreen = ({ navigation }) => {
   useEffect(() => {
     fetchMessageStoryAds();
   }, [fetchAdsByPlacement]);
+
+  useEffect(() => {
+    fetchSellerConversations();
+  }, [user]);
 
   const statusItems = [...messageStoryAds, ...followedStatuses];
 
@@ -195,6 +238,84 @@ export const ChatsScreen = ({ navigation }) => {
     );
   };
 
+  const renderSellerConversation = ({ item }) => {
+    const customerName = item.customer_name || "Customer";
+    const customerAvatar = item.customer_avatar;
+    const timestamp = formatTimestamp(item.last_message_at || item.created_at);
+
+    return (
+      <Pressable
+        style={styles.conversationItem}
+        onPress={() => {
+          if (isWide) {
+            setSelectedSellerConv(item);
+          } else {
+            navigation.navigate("SellerChat", {
+              conversationId: item.id,
+              customer: {
+                id: item.customer_id,
+                name: item.customer_name,
+                avatar: item.customer_avatar,
+              },
+            });
+          }
+        }}
+      >
+        <View style={styles.avatar}>
+          {customerAvatar ? (
+            <Image source={{ uri: customerAvatar }} style={styles.avatarImage} />
+          ) : (
+            <Ionicons name="person" size={24} color={colors.primary} />
+          )}
+        </View>
+        <View style={styles.conversationContent}>
+          <View style={styles.conversationHeader}>
+            <Text style={[styles.userName]} numberOfLines={1}>
+              {customerName}
+            </Text>
+            <Text style={styles.timestamp}>{timestamp}</Text>
+          </View>
+          <Text style={[styles.lastMessage]} numberOfLines={1}>
+            {item.last_message || "No messages yet"}
+          </Text>
+        </View>
+        <View style={styles.rightAction}>
+          {item.unread_count > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>{item.unread_count}</Text>
+            </View>
+          )}
+          {!isWide && (
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          )}
+        </View>
+      </Pressable>
+    );
+  };
+
+  const TABS = [
+    { key: "customer", label: "Customer" },
+    { key: "seller", label: "Seller" },
+  ];
+
+  const renderTabBar = () => (
+    <View style={styles.tabBar}>
+      {TABS.map((t) => (
+        <Pressable
+          key={t.key}
+          style={[styles.tab, activeTab === t.key && styles.tabActive]}
+          onPress={() => setActiveTab(t.key)}
+        >
+          <Text
+            style={[styles.tabText, activeTab === t.key && styles.tabTextActive]}
+          >
+            {t.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
   if (isLoading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
@@ -262,40 +383,73 @@ export const ChatsScreen = ({ navigation }) => {
         )}
       </View>
 
-      <FlatList
-        data={conversations}
-        keyExtractor={(item) => item.id}
-        renderItem={renderConversation}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconContainer}>
-              <Ionicons
-                name="chatbubble-ellipses-outline"
-                size={48}
-                color={colors.primary}
-              />
+      {renderTabBar()}
+
+      {activeTab === "customer" ? (
+        <FlatList
+          data={conversations}
+          keyExtractor={(item) => item.id}
+          renderItem={renderConversation}
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={48}
+                  color={colors.primary}
+                />
+              </View>
+              <Text style={styles.emptyText}>No conversations yet</Text>
+              <Text style={styles.emptySubtext}>
+                Start chatting with sellers{"\n"}to see your messages here.
+              </Text>
+              <Pressable
+                style={styles.exploreButton}
+                onPress={() => navigation.navigate("Main", { screen: "Home" })}
+              >
+                <Text style={styles.exploreButtonText}>Explore Stores</Text>
+              </Pressable>
             </View>
-            <Text style={styles.emptyText}>No conversations yet</Text>
-            <Text style={styles.emptySubtext}>
-              Start chatting with sellers{"\n"}to see your messages here.
-            </Text>
-            <Pressable
-              style={styles.exploreButton}
-              onPress={() => navigation.navigate("Main", { screen: "Home" })}
-            >
-              <Text style={styles.exploreButtonText}>Explore Stores</Text>
-            </Pressable>
-          </View>
-        }
-      />
+          }
+        />
+      ) : (
+        <FlatList
+          data={sellerConversations}
+          keyExtractor={(item) => item.id}
+          renderItem={renderSellerConversation}
+          contentContainerStyle={styles.listContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons
+                  name="storefront-outline"
+                  size={48}
+                  color={colors.primary}
+                />
+              </View>
+              <Text style={styles.emptyText}>No seller messages</Text>
+              <Text style={styles.emptySubtext}>
+                When customers message your store,{"\n"}they'll appear here.
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 
@@ -304,7 +458,32 @@ export const ChatsScreen = ({ navigation }) => {
       <View style={styles.wideLayout}>
         <ConversationList />
         <View style={styles.panelRight}>
-          {selectedSeller ? (
+          {activeTab === "seller" ? (
+            selectedSellerConv ? (
+              <SellerChatScreen
+                conversationId={selectedSellerConv.id}
+                customer={{
+                  id: selectedSellerConv.customer_id,
+                  name: selectedSellerConv.customer_name,
+                  avatar: selectedSellerConv.customer_avatar,
+                }}
+              />
+            ) : (
+              <View style={styles.noChatSelected}>
+                <View style={styles.noChatIcon}>
+                  <Ionicons
+                    name="storefront-outline"
+                    size={56}
+                    color={colors.primary}
+                  />
+                </View>
+                <Text style={styles.noChatTitle}>Select a conversation</Text>
+                <Text style={styles.noChatSubtext}>
+                  Choose a customer message{"\n"}to start replying.
+                </Text>
+              </View>
+            )
+          ) : selectedSeller ? (
             <ChatScreen seller={selectedSeller} />
           ) : (
             <View style={styles.noChatSelected}>
@@ -434,6 +613,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.muted,
     fontWeight: "500",
+  },
+  tabBar: {
+    flexDirection: "row",
+    marginHorizontal: 16,
+    marginTop: 12,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 12,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+    borderRadius: 9,
+  },
+  tabActive: {
+    backgroundColor: colors.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.muted,
+  },
+  tabTextActive: {
+    color: "#fff",
   },
   listContainer: {
     padding: 16,

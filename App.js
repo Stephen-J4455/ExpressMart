@@ -57,6 +57,7 @@ import { StoresScreen } from "./src/screens/StoresScreen";
 import { ForgotPasswordScreen } from "./src/screens/ForgotPasswordScreen";
 import PasswordResetScreen from "./src/screens/PasswordResetScreen";
 import { ProfileEditScreen } from "./src/screens/ProfileEditScreen";
+import { SellerProfileScreen } from "./src/screens/SellerProfileScreen";
 import { ChangePasswordScreen } from "./src/screens/ChangePasswordScreen";
 import { ChangeEmailScreen } from "./src/screens/ChangeEmailScreen";
 import { PrivacySettingsScreen } from "./src/screens/PrivacySettingsScreen";
@@ -64,7 +65,9 @@ import { PrivacyPolicyScreen } from "./src/screens/PrivacyPolicyScreen";
 import { TermsScreen } from "./src/screens/TermsScreen";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ChatsScreen } from "./src/screens/ChatsScreen";
+import { SellerChatScreen } from "./src/screens/SellerChatScreen";
 import { StatusViewer } from "./src/screens/StatusViewer";
+import StatusCreatorScreen from "./src/screens/StatusCreatorScreen";
 import { PaymentWebViewScreen } from "./src/screens/PaymentWebViewScreen";
 import { CustomerLoadingAnimation } from "./src/components/CustomerLoadingAnimation";
 import { colors, getTheme } from "./src/theme/colors";
@@ -708,6 +711,11 @@ const AuthenticatedApp = () => {
     "Login to edit profile",
     "Please sign in to update your profile.",
   );
+  const GuardedSellerProfile = withAuthGate(
+    SellerProfileScreen,
+    "Login to view store profile",
+    "Please sign in to access your store profile.",
+  );
   const GuardedChangePassword = withAuthGate(
     ChangePasswordScreen,
     "Login to change password",
@@ -732,6 +740,11 @@ const AuthenticatedApp = () => {
     ChatsScreen,
     "Login to view chats",
     "Please sign in to access your conversations.",
+  );
+  const GuardedStatusCreator = withAuthGate(
+    StatusCreatorScreen,
+    "Login to post status",
+    "Please sign in to post a store status.",
   );
 
   return (
@@ -764,7 +777,9 @@ const AuthenticatedApp = () => {
         <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
         <Stack.Screen name="Chat" component={GuardedChat} />
         <Stack.Screen name="Chats" component={GuardedChats} />
+        <Stack.Screen name="SellerChat" component={SellerChatScreen} />
         <Stack.Screen name="StatusViewer" component={StatusViewer} />
+        <Stack.Screen name="StatusCreator" component={GuardedStatusCreator} />
         <Stack.Screen name="Checkout" component={GuardedCheckout} />
         <Stack.Screen name="PaymentWebView" component={PaymentWebViewScreen} />
         <Stack.Screen name="Orders" component={GuardedOrders} />
@@ -779,6 +794,7 @@ const AuthenticatedApp = () => {
         <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
         <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="ProfileEdit" component={GuardedProfileEdit} />
+        <Stack.Screen name="SellerProfile" component={GuardedSellerProfile} />
         <Stack.Screen
           name="ChangePassword"
           component={GuardedChangePassword}

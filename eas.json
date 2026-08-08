@@ -25,6 +25,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascApiKeyPath": "./ApiKey_T7HZP5K7V9.p8",
+        "ascApiKeyId": "T7HZP5K7V9",
+        "ascApiKeyIssuerId": "9135cfe1-819d-46a4-810a-f7e32e627525"
+      }
+    }
   }
 }

@@ -555,6 +555,10 @@ export const HomeScreen = ({ navigation }) => {
           onNotificationsPress={() => navigation.navigate("Notifications")}
         />
 
+        <View style={styles.topCarouselWrap}>
+          {topCarouselAds.length > 0 && <AdRenderer ads={topCarouselAds} />}
+        </View>
+
         <View
           style={styles.feedStickyHeader}
           onLayout={({ nativeEvent }) => setTabsContainerWidth(nativeEvent.layout.width)}
@@ -622,16 +626,6 @@ export const HomeScreen = ({ navigation }) => {
                   contentContainerStyle={[styles.tabPageContent, { paddingBottom: 16 }]}
                 >
 
-                  <View style={styles.topAdWrap}>
-                    {topCarouselAds.length > 0 ? (
-                      <AdRenderer ads={topCarouselAds} />
-                    ) : (
-                      <View style={styles.topAdPlaceholderWrap}>
-                        <AdBannerPlaceholder />
-                      </View>
-                    )}
-                  </View>
-
                   <View style={styles.gridSection}>
                     {showEmptyState ? (
                       renderEmptyTabState(tab.key)
@@ -682,12 +676,9 @@ const styles = StyleSheet.create({
   tabPageContent: {
     flexGrow: 1,
   },
-  topAdWrap: {
+  topCarouselWrap: {
     paddingTop: 8,
     paddingBottom: 6,
-  },
-  topAdPlaceholderWrap: {
-    paddingHorizontal: 16,
   },
 
   flashSalesContainer: {
@@ -805,106 +796,5 @@ const styles = StyleSheet.create({
   },
   gridItem: {
     flex: 1,
-  },
-});
-
-// Shimmer skeleton for ad placeholders
-const AdShimmer = () => {
-  const shimmer = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmer, {
-          toValue: 1,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-        Animated.timing(shimmer, {
-          toValue: 0,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  }, [shimmer]);
-  return shimmer;
-};
-
-let _adShimmer = null;
-const getAdShimmer = () => {
-  if (!_adShimmer) _adShimmer = new Animated.Value(0);
-  Animated.loop(
-    Animated.sequence([
-      Animated.timing(_adShimmer, {
-        toValue: 1,
-        duration: 900,
-        useNativeDriver: true,
-      }),
-      Animated.timing(_adShimmer, {
-        toValue: 0,
-        duration: 900,
-        useNativeDriver: true,
-      }),
-    ]),
-  ).start();
-  return _adShimmer;
-};
-
-const AdBannerPlaceholder = () => {
-  const shimmer = getAdShimmer();
-  const opacity = shimmer.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.5, 1],
-  });
-  return (
-    <Animated.View style={[adPlaceholderStyles.card, { opacity }]}>
-      <Animated.View style={adPlaceholderStyles.image} />
-      <View style={adPlaceholderStyles.body}>
-        <Animated.View style={adPlaceholderStyles.titleLine} />
-        <Animated.View style={adPlaceholderStyles.subtitleLine} />
-        <Animated.View style={adPlaceholderStyles.button} />
-      </View>
-    </Animated.View>
-  );
-};
-
-const adPlaceholderStyles = StyleSheet.create({
-  card: {
-    width: 300,
-    height: 180,
-    borderRadius: 16,
-    backgroundColor: "#e8ecf0",
-    overflow: "hidden",
-    flexDirection: "row",
-  },
-  image: {
-    width: 120,
-    height: "100%",
-    backgroundColor: "#d0d7df",
-  },
-  body: {
-    flex: 1,
-    padding: 16,
-    gap: 10,
-    justifyContent: "center",
-  },
-  titleLine: {
-    height: 14,
-    borderRadius: 6,
-    backgroundColor: "#d0d7df",
-    width: "80%",
-  },
-  subtitleLine: {
-    height: 10,
-    borderRadius: 6,
-    backgroundColor: "#d0d7df",
-    width: "60%",
-  },
-  button: {
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: "#d0d7df",
-    width: "70%",
-    marginTop: 4,
   },
 });

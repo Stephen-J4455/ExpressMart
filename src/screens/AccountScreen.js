@@ -21,6 +21,8 @@ import { AdRenderer } from "../components/AdBanner";
 import { colors } from "../theme/colors";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
 import { useResponsive } from "../hooks/useResponsive";
+import { supabase } from "../lib/supabase";
+import { SellerAdminScreen } from "./SellerAdminScreen";
 
 const quickActions = [
   {
@@ -101,9 +103,50 @@ export const AccountScreen = ({ navigation }) => {
   const [profileAds, setProfileAds] = useState([]);
   const { isWide, contentMaxWidth } = useResponsive();
 
+  const [sellerRecord, setSellerRecord] = useState(
+    // If auth profile already indicates seller role, show seller UI immediately
+    profile?.role === "seller" ? {} : undefined,
+  ); // undefined=checking, null=not seller, object=seller
+
   useEffect(() => {
     fetchAdsByPlacement("profile").then((ads) => setProfileAds(ads || []));
   }, [fetchAdsByPlacement]);
+
+  // Detect whether the signed-in user is also a seller
+  useEffect(() => {
+    // If profile indicates seller role we already opened seller UI synchronously.
+    if (!isAuthenticated || !user) {
+      setSellerRecord(null);
+      return;
+    }
+    if (profile?.role === "seller") {
+      // Only set once when we haven't determined seller status yet.
+      if (sellerRecord === undefined) {
+        setSellerRecord({});
+      }
+      return;
+    }
+
+    // Only query DB when we don't already know seller status.
+    if (sellerRecord !== undefined) return;
+
+    let active = true;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("express_sellers")
+          .select("id")
+          .eq("user_id", user.id)
+          .single();
+        if (active) setSellerRecord(data || null);
+      } catch {
+        if (active) setSellerRecord(null);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, user, profile?.role, sellerRecord]);
 
   const activeOrders = orders.filter((o) =>
     ["processing", "packed", "shipped"].includes(o.status),
@@ -169,6 +212,21 @@ export const AccountScreen = ({ navigation }) => {
         </View>
       </View>
     );
+  }
+
+  // While we determine whether the user is a seller, show a loader
+  // (prevents a flash of the normal customer account screen).
+  if (sellerRecord === undefined) {
+    return (
+      <View style={[styles.container, styles.centerContainer]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  // Sellers get a dedicated seller admin page (Facebook-style)
+  if (sellerRecord !== null) {
+    return <SellerAdminScreen navigation={navigation} seller={sellerRecord && sellerRecord.id ? sellerRecord : undefined} />;
   }
 
   return (

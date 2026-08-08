@@ -1,7 +1,7 @@
 // Notification Service Helper for ExpressMart
 // Provides helper functions to send notifications via Supabase Edge Function
 
-import { supabase } from './supabase';
+import { supabase } from '../lib/supabase';
 
 /**
  * Send a push notification to a specific user

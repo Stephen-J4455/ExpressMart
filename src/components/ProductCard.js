@@ -210,10 +210,12 @@ export const ProductCard = ({
     gradientEnd: colors.primaryLight,
     accent: colors.primary,
   };
-  const accent = themeObj.primary;
+  const accent = (themeObj && themeObj.accent) || (themeObj && themeObj.primary) || colors.accent;
   const accentEnd =
-    themeObj.gradientEnd || themeObj.gradientStart || colors.primary;
-  const accentColor = themeObj.accent || themeObj.primary;
+    (themeObj && themeObj.gradientEnd) ||
+    (themeObj && themeObj.gradientStart) ||
+    colors.primary;
+  const accentColor = accent;
 
   if (variant === "list") {
     return (

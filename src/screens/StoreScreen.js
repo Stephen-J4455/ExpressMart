@@ -143,13 +143,17 @@ export const StoreScreen = ({ route, navigation }) => {
   const itemWidth = getItemWidth(gridColumns, 12, 12);
 
   // Resolve a theme object from seller.theme_color only if seller allows it for customers
-  const theme = sellerDetail?.theme_apply_customer
-    ? getTheme(
-        sellerDetail?.theme_color || sellerDetail?.theme || colors.primary,
-      )
-    : getTheme(colors.primary);
-  const accent = theme.primary;
-  const accentGradient = [theme.gradientStart, theme.gradientEnd];
+  const theme =
+    (sellerDetail?.theme_apply_customer
+      ? getTheme(
+          sellerDetail?.theme_color || sellerDetail?.theme || colors.primary,
+        )
+      : getTheme(colors.primary)) || getTheme(colors.primary);
+  const accent = (theme && theme.accent) || (theme && theme.primary) || colors.accent;
+  const accentGradient = [
+    (theme && theme.gradientStart) || colors.primary,
+    (theme && theme.gradientEnd) || colors.primary,
+  ];
   const { refresh, loading, followSeller, unfollowSeller, isFollowing } =
     useShop();
   const { user } = useAuth();

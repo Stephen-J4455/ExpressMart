@@ -49,8 +49,47 @@ export const StatusViewer = ({ navigation, route }) => {
 
   useEffect(() => {
     const fetchStatuses = async () => {
-      if (!initialStatus) return;
+      // ── Direct store-status view (e.g. "My Statuses" from the store menu) ──
+      const menuSellerId = route?.params?.sellerId;
+      if (!initialStatus && menuSellerId) {
+        const isUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            String(menuSellerId || ""),
+          );
+        if (!isUuid) {
+          setStatuses([]);
+          setLoading(false);
+          return;
+        }
+        setLoading(true);
+        try {
+          const now = new Date().toISOString();
+          const { data, error } = await supabase
+            .from("express_seller_statuses")
+            .select("*, seller:express_sellers(id, name, avatar)")
+            .eq("seller_id", menuSellerId)
+            .eq("is_active", true)
+            .gt("expires_at", now)
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          if (data && data.length > 0) {
+            setStatuses(data);
+            setCurrentIndex(0);
+          }
+        } catch (err) {
+          console.error("Error loading statuses", err);
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
 
+      if (!initialStatus) {
+        setLoading(false);
+        return;
+      }
+
+      // ── Single status view (existing behaviour) ──
       // Ad stories are standalone items and do not have seller UUID rows.
       if (initialStatus?.is_ad_story) {
         setStatuses([initialStatus]);
@@ -66,7 +105,7 @@ export const StatusViewer = ({ navigation, route }) => {
         );
 
       if (!isUuid) {
-        setStatuses(initialStatus ? [initialStatus] : []);
+        setStatuses([initialStatus]);
         setCurrentIndex(0);
         setLoading(false);
         return;
@@ -108,7 +147,7 @@ export const StatusViewer = ({ navigation, route }) => {
     };
 
     fetchStatuses();
-  }, [initialStatus]);
+  }, [initialStatus, route]);
 
   const handleNext = () => {
     if (currentIndex < statuses.length - 1) {
