@@ -602,6 +602,31 @@ const linking = {
   },
 };
 
+const guardedScreenCache = new Map();
+const withAuthGate = (Component, title, message) => {
+  if (!guardedScreenCache.has(Component)) {
+    const GuardedScreen = (props) => {
+      const { isAuthenticated } = useAuth();
+      if (isAuthenticated) {
+        return <Component {...props} />;
+      }
+
+      return (
+        <LoginRequiredScreen
+          navigation={props.navigation}
+          routeName={props.route?.name}
+          routeParams={props.route?.params}
+          title={title}
+          message={message}
+        />
+      );
+    };
+    guardedScreenCache.set(Component, GuardedScreen);
+  }
+
+  return guardedScreenCache.get(Component);
+};
+
 const AuthenticatedApp = () => {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
   const [updateInfo, setUpdateInfo] = React.useState(null);
@@ -635,26 +660,6 @@ const AuthenticatedApp = () => {
   if (authLoading) {
     return <CustomerLoadingAnimation />;
   }
-
-  const withAuthGate = (Component, title, message) => {
-    const GuardedScreen = (props) => {
-      if (isAuthenticated) {
-        return <Component {...props} />;
-      }
-
-      return (
-        <LoginRequiredScreen
-          navigation={props.navigation}
-          routeName={props.route?.name}
-          routeParams={props.route?.params}
-          title={title}
-          message={message}
-        />
-      );
-    };
-
-    return GuardedScreen;
-  };
 
   const GuardedCheckout = withAuthGate(
     CheckoutScreen,

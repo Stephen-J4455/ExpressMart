@@ -21,7 +21,7 @@ import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
 import { colors, getTheme, THEMES } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
-import { getImageContentType, getWebUploadPayload } from "../utils/webUpload";
+import { getImageContentType } from "../utils/webUpload";
 
 // Supabase storage bucket for seller profile images (mirrors Express-Store)
 const PROFILE_BUCKET = "profile";
@@ -88,6 +88,7 @@ export const SellerProfileScreen = ({ navigation }) => {
 
   const activeTheme = getTheme(seller?.theme_color || colors.primary);
   const heroUri = seller ? resolveProfileImageUri(getProfileAvatarValue(seller)) : "";
+  const displayUri = editing && editAvatar ? editAvatar : heroUri;
 
   const loadSeller = async () => {
     if (!supabase || !user) return;
@@ -159,26 +160,39 @@ export const SellerProfileScreen = ({ navigation }) => {
   }, [user]);
 
   const pickImage = async () => {
-    if (Platform.OS !== "web") {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        toast.error("Gallery permission is required");
-        return;
+    try {
+      if (Platform.OS !== "web") {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          toast.error("Gallery permission is required");
+          return;
+        }
       }
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1,
-    });
-    if (!result.canceled) {
-      const selected = result.assets[0];
-      setEditAvatar(selected.uri);
-      if (Platform.OS === "web") {
-        setEditAvatarFile(selected.file || null);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 1,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selected = result.assets[0];
+        setEditAvatar(selected.uri);
+        setEditAvatarFile(
+          selected.file instanceof Blob ? selected.file : null,
+        );
       }
+    } catch (e) {
+      console.error("pickImage error", e);
+      toast.error("Could not open image picker");
     }
+  };
+
+  // Read the picked asset into a Blob — the reliable cross-platform upload
+  // payload for supabase-js v2 (works on both native and web).
+  const getBlobFromAsset = async (uri, pickedFile) => {
+    if (pickedFile instanceof Blob) return pickedFile;
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    if (!blob) throw new Error("Could not read the selected image");
+    return blob;
   };
 
   const uploadImage = async (uri, pickedFile = null) => {
@@ -189,7 +203,7 @@ export const SellerProfileScreen = ({ navigation }) => {
       return ext === "jpeg" ? "jpg" : ext;
     };
     const ext = getExt(uri);
-    const fileName = `avatar.${ext}`;
+    const fileName = `avatar-${Date.now()}.${ext}`;
     const objectPath = sellerId ? `${sellerId}/${fileName}` : fileName;
     const contentType = getImageContentType(uri);
 
@@ -208,27 +222,14 @@ export const SellerProfileScreen = ({ navigation }) => {
       }
     }
 
-    let uploadRes;
-    if (Platform.OS === "web") {
-      const { fileBody, contentType: resolved } = await getWebUploadPayload({
-        uri,
-        pickedFile,
-        preferredContentType: contentType,
+    const fileBody = await getBlobFromAsset(uri, pickedFile);
+    const uploadRes = await supabase.storage
+      .from(PROFILE_BUCKET)
+      .upload(objectPath, fileBody, {
+        contentType: fileBody.type || contentType,
+        cacheControl: "3600",
+        upsert: true,
       });
-      uploadRes = await supabase.storage
-        .from(PROFILE_BUCKET)
-        .upload(objectPath, fileBody, {
-          contentType: resolved,
-          cacheControl: "3600",
-          upsert: true,
-        });
-    } else {
-      const fd = new FormData();
-      fd.append("file", { uri, type: contentType, name: fileName });
-      uploadRes = await supabase.storage
-        .from(PROFILE_BUCKET)
-        .upload(objectPath, fd, { contentType, upsert: true });
-    }
     if (uploadRes.error) throw uploadRes.error;
     const { data: urlData } = supabase.storage
       .from(PROFILE_BUCKET)
@@ -310,8 +311,8 @@ export const SellerProfileScreen = ({ navigation }) => {
     >
       {/* Cover — full page width, shows the profile image */}
       <View style={[styles.hero, { marginHorizontal: isWide ? -horizontalPadding : -16 }]}>
-        {heroUri ? (
-          <Image source={{ uri: heroUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        {displayUri ? (
+          <Image source={{ uri: displayUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         ) : (
           <LinearGradient
             colors={[activeTheme.primary, activeTheme.accent || activeTheme.primary]}
@@ -565,7 +566,7 @@ export const SellerProfileScreen = ({ navigation }) => {
       <Modal visible={previewVisible} transparent animationType="fade" onRequestClose={() => setPreviewVisible(false)}>
         <Pressable style={styles.previewOverlay} onPress={() => setPreviewVisible(false)}>
           <View style={styles.previewWrap}>
-            {heroUri ? <Image source={{ uri: heroUri }} style={styles.previewImage} /> : null}
+            {displayUri ? <Image source={{ uri: displayUri }} style={styles.previewImage} /> : null}
           </View>
         </Pressable>
       </Modal>

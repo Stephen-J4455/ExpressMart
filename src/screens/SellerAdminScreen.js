@@ -534,38 +534,39 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     const objectPath = `products/${folder}/${fileName}`;
     const contentType = getImageContentType(uri);
 
-    let uploadRes;
+    // Read the asset into a Blob — the reliable cross-platform upload payload
+    // for supabase-js v2 (the old FormData/{uri,type,name} approach fails on
+    // React Native). Mirrors the avatar upload fix.
+    let fileBody;
+    let finalContentType = contentType;
     if (Platform.OS === "web") {
       const picked = imageFiles?.[uri]?.file || null;
       const pickedType = imageFiles?.[uri]?.type || null;
-      const { fileBody, contentType: resolved } = await getWebUploadPayload({
+      const payload = await getWebUploadPayload({
         uri,
         pickedFile: picked,
         preferredContentType: pickedType || contentType,
       });
-      uploadRes = await Promise.race([
-        supabase.storage
-          .from("express-products")
-          .upload(objectPath, fileBody, {
-            contentType: resolved,
-            cacheControl: "3600",
-            upsert: false,
-          }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Upload timed out")), 45000),
-        ),
-      ]);
+      fileBody = payload.fileBody;
+      finalContentType = payload.contentType || contentType;
     } else {
-      const fd = new FormData();
-      fd.append("file", { uri, type: contentType, name: fileName });
-      uploadRes = await supabase.storage
-        .from("express-products")
-        .upload(objectPath, fd, {
-          contentType,
-          cacheControl: "3600",
-          upsert: false,
-        });
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      if (!blob) throw new Error("Could not read the selected image");
+      fileBody = blob;
+      finalContentType = blob.type || contentType;
     }
+
+    const uploadRes = await Promise.race([
+      supabase.storage.from("express-products").upload(objectPath, fileBody, {
+        contentType: finalContentType,
+        cacheControl: "3600",
+        upsert: false,
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Upload timed out")), 45000),
+      ),
+    ]);
     if (uploadRes.error) throw uploadRes.error;
     const { data: urlData } = supabase.storage
       .from("express-products")
@@ -1648,6 +1649,51 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               )}
             </View>
 
+            <Text style={styles.label}>Specifications</Text>
+            <View style={styles.specList}>
+              {specifications.map((spec, index) => (
+                <View key={index} style={styles.specRow}>
+                  <TextInput
+                    style={[styles.input, styles.specKey]}
+                    value={spec.key}
+                    onChangeText={(text) => {
+                      const updated = [...specifications];
+                      updated[index].key = text;
+                      setSpecifications(updated);
+                    }}
+                    placeholder="Name (e.g. Material)"
+                    placeholderTextColor={colors.muted}
+                  />
+                  <TextInput
+                    style={[styles.input, styles.specValue]}
+                    value={spec.value}
+                    onChangeText={(text) => {
+                      const updated = [...specifications];
+                      updated[index].value = text;
+                      setSpecifications(updated);
+                    }}
+                    placeholder="Value (e.g. Cotton)"
+                    placeholderTextColor={colors.muted}
+                  />
+                  <Pressable
+                    style={styles.specRemove}
+                    onPress={() =>
+                      setSpecifications(specifications.filter((_, i) => i !== index))
+                    }
+                  >
+                    <Ionicons name="close-circle" size={22} color="#EF4444" />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.addSpecButton}
+              onPress={() => setSpecifications([...specifications, { key: "", value: "" }])}
+            >
+              <Ionicons name="add" size={18} color={accent} />
+              <Text style={[styles.addSpecText, { color: accent }]}>Add Specification</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.submitButton, { backgroundColor: accent }, submitting && { opacity: 0.6 }]}
               onPress={submitProduct}
@@ -2115,6 +2161,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#E2E8F0",
     width: "80%",
   },
+  specList: { gap: 12, marginTop: 4 },
+  specRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  specKey: { flex: 1 },
+  specValue: { flex: 1 },
+  specRemove: { padding: 2 },
+  addSpecButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    alignSelf: "flex-start",
+  },
+  addSpecText: { fontSize: 14, fontWeight: "700" },
 });
 
 export default SellerAdminScreen;
