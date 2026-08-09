@@ -14,6 +14,7 @@ export const colors = {
   surface: "#E2E6E9", // Cool Grey canvas
   border: "#E2E6E9",
   background: "#E2E6E9", // Cool Grey canvas
+  splashback: "#B7B8BF",
 };
 
 // Shared border-radius scale — use these tokens instead of hard-coded

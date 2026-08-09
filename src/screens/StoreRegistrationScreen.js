@@ -10,6 +10,7 @@ import {
   Image,
   Platform,
   Animated,
+  StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -25,6 +26,24 @@ import { generatePaymentReference } from "../services/payment";
 
 const PROFILE_BUCKET = "profile";
 const REGISTRATION_FEE = 150; // GHC 150
+const COUNTRY_CODE = "+233";
+
+// Normalize a locally-entered phone number into international format with
+// the Ghana country code. Returns null when no number is provided so the
+// backend still receives a null rather than a placeholder.
+const normalizePhone = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (raw.startsWith("+")) return raw;
+  const stripped = raw.replace(/^0/, "");
+  return `${COUNTRY_CODE}${stripped}`;
+};
+
+// Friendly display of the phone number with the country code shown.
+const formatPhone = (value) => {
+  const normalized = normalizePhone(value);
+  return normalized || "—";
+};
 
 const STORE_REG_STEPS = [
   { key: "details", label: "Store Details" },
@@ -190,7 +209,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
 
   const createSeller = async (avatarUrl, sellerData = {}) => {
     const sellerName = String(sellerData.name || name || "").trim();
-    const sellerPhone = String(sellerData.phone || phone || "").trim();
+    const sellerPhone = normalizePhone(sellerData.phone || phone || "");
     const sellerDescription = String(
       sellerData.description || description || "",
     ).trim();
@@ -257,10 +276,10 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
     if (busy) return;
     setBusy(true);
     try {
-      const registrationData = {
-        name: restoredData.name || name,
-        phone: restoredData.phone || phone,
-        description: restoredData.description || description,
+        const registrationData = {
+          name: restoredData.name || name,
+          phone: normalizePhone(restoredData.phone || phone),
+          description: restoredData.description || description,
         payType: restoredData.payType || payType,
         bankCode: restoredData.bankCode || bankCode,
         mobileProvider: restoredData.mobileProvider || mobileProvider,
@@ -377,7 +396,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
         // when this screen re-mounts after the payment callback.
         const registrationData = {
           name: name.trim(),
-          phone: phone.trim(),
+          phone: normalizePhone(phone),
           description: description.trim(),
           payType,
           bankCode,
@@ -457,6 +476,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
                     active && styles.stepDotTextActive,
                   ]}
                 >
+                o
                   {num}
                 </Text>
               )}
@@ -476,35 +496,74 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
     if (step === 1) {
       return (
         <View style={styles.card}>
+          <View style={styles.introWrap}>
+            <View style={styles.introIcon}>
+              <Ionicons name="storefront-outline" size={26} color="#fff" />
+            </View>
+            <Text style={styles.introTitle}>Store Details</Text>
+            <Text style={styles.introSub}>
+              Tell us about your shop. Customers will see this on your store page.
+            </Text>
+          </View>
+
           <Text style={styles.label}>Store Name</Text>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Nova Retail"
-            placeholderTextColor={colors.muted}
-          />
+          <View style={styles.inputWrap}>
+            <Ionicons
+              name="storefront-outline"
+              size={18}
+              color={colors.muted}
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={[styles.input, styles.inputWithIcon]}
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Nova Retail"
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+
           <Text style={styles.label}>Phone Number</Text>
-          <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            placeholder="e.g. 0241234567"
-            placeholderTextColor={colors.muted}
-          />
+          <View style={styles.phoneRow}>
+            <View style={styles.countryCode}>
+              <Text style={styles.countryCodeText}>{COUNTRY_CODE}</Text>
+            </View>
+            <View style={[styles.inputWrap, { flex: 1, marginBottom: 0 }]}>
+              <Ionicons
+                name="call-outline"
+                size={18}
+                color={colors.muted}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={[styles.input, styles.inputWithIcon, styles.phoneInput]}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                maxLength={9}
+                placeholder="e.g. 241234567"
+                placeholderTextColor={colors.muted}
+              />
+            </View>
+          </View>
+          <Text style={styles.phoneHint}>
+            Ghana numbers are saved with {COUNTRY_CODE} automatically.
+          </Text>
+
           <Text style={styles.label}>Description</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Tell customers about your store"
-            placeholderTextColor={colors.muted}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            maxLength={600}
-          />
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={[styles.input, styles.textArea, styles.inputWithIcon]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Tell customers about your store"
+              placeholderTextColor={colors.muted}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              maxLength={600}
+            />
+          </View>
         </View>
       );
     }
@@ -688,7 +747,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
         </View>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryKey}>Phone</Text>
-          <Text style={styles.summaryVal}>{phone.trim() || "—"}</Text>
+          <Text style={styles.summaryVal}>{formatPhone(phone)}</Text>
         </View>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryKey}>Payout</Text>
@@ -797,6 +856,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       <View style={styles.header}>
         <Pressable
           style={styles.backButton}
@@ -809,6 +869,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
       </View>
 
       <ScrollView
+        style={styles.scrollArea}
         contentContainerStyle={[
           styles.scrollContent,
           isWide && { maxWidth: contentMaxWidth || 700, alignSelf: "center", width: "100%" },
@@ -836,6 +897,10 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  scrollArea: {
     flex: 1,
     backgroundColor: colors.background,
   },
@@ -930,6 +995,79 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: -4,
     marginBottom: 12,
+  },
+  introWrap: {
+    alignItems: "center",
+    backgroundColor: colors.light,
+    borderRadius: 16,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    marginBottom: 18,
+  },
+  introIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  introTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: colors.dark,
+    marginBottom: 6,
+  },
+  introSub: {
+    fontSize: 13,
+    color: colors.muted,
+    textAlign: "center",
+    lineHeight: 19,
+    paddingHorizontal: 8,
+  },
+  inputWrap: {
+    position: "relative",
+    marginBottom: 12,
+  },
+  inputIcon: {
+    position: "absolute",
+    left: 14,
+    top: 15,
+    zIndex: 1,
+  },
+  inputWithIcon: {
+    paddingLeft: 42,
+  },
+  phoneRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  countryCode: {
+    alignItems: "center",
+    justifyContent: "center",
+    height: 48,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#EEF1F6",
+  },
+  countryCodeText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.dark,
+  },
+  phoneInput: {
+    height: 48,
+    marginBottom: 0,
+  },
+  phoneHint: {
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: 12,
+    marginTop: -4,
   },
   input: {
     borderWidth: 1.5,

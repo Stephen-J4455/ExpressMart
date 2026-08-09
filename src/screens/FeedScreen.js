@@ -1,146 +1,263 @@
+// ReelsScreen (formerly FeedScreen)
+// ---------------------------------------------------------------------------
+// A low-data vertical "Reels" short-video page for product showcases.
+// Each item is a vertical 9:16 video stored on Cloudflare R2 and rendered with
+// react-native-video. A FAB lets sellers capture/select a video and upload it
+// via the `uploadReel` service (compress -> presigned PUT -> DB insert).
+// ---------------------------------------------------------------------------
+
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Platform,
-  RefreshControl,
+  Pressable,
   StyleSheet,
+  Text,
   View,
+  Dimensions,
 } from "react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ProductCard } from "../components/ProductCard";
-import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
-import { AdRenderer } from "../components/AdBanner";
-import { InlineAdProductCard } from "../components/InlineAdProductCard";
-import { useShop } from "../context/ShopContext";
-import { useAds } from "../context/AdsContext";
+import { Video } from "react-native-video";
+import * as ImagePicker from "expo-image-picker";
+import { useFocusEffect } from "@react-navigation/native";
 import { colors } from "../theme/colors";
-import { useResponsive } from "../hooks/useResponsive";
-import { injectAdsIntoProducts } from "../utils/adPlacement";
+import { uploadReel, fetchReels } from "../services/uploadReel";
 
-const PLACEHOLDER_COUNT_PER_PAGE = 4;
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+const REEL_ASPECT = 9 / 16; // width / height
 
 export const FeedScreen = ({ route, navigation }) => {
-  const { products, refresh, loading, loadMore, hasMore, loadingMore } =
-    useShop();
-  const { fetchAdsByPlacement } = useAds();
-  const { gridColumns, getItemWidth } = useResponsive();
-  const itemWidth = getItemWidth(gridColumns, 12, 12);
-  const [feedAds, setFeedAds] = useState([]);
-  const category = route?.params?.category;
-  const daySeed = useMemo(() => new Date().toDateString(), []);
+  const [reels, setReels] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState(null);
+  const videoRefs = useRef({});
+
+  const loadReels = useCallback(async () => {
+    setLoading(true);
+    const data = await fetchReels(30);
+    setReels(data);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    fetchAdsByPlacement("feed").then((ads) => setFeedAds(ads || []));
-  }, [fetchAdsByPlacement]);
+    loadReels();
+  }, [loadReels]);
 
-  const filtered = useMemo(
-    () =>
-      category ? products.filter((p) => p.category === category) : products,
-    [products, category],
-  );
-
-  const overlayAds = useMemo(
-    () =>
-      (feedAds || []).filter((ad) =>
-        ["popup", "fullscreen", "sticky_footer"].includes(
-          String(ad?.style || "").toLowerCase(),
-        ),
-      ),
-    [feedAds],
-  );
-
-  const feedItems = useMemo(() => {
-    if (loading && filtered.length === 0) {
-      return Array(gridColumns * PLACEHOLDER_COUNT_PER_PAGE).fill(null);
-    }
-
-    return injectAdsIntoProducts({
-      products: filtered,
-      ads: feedAds,
-      seed: `feed-${category || "all"}-${daySeed}-${filtered.length}`,
-      minInterval: 5,
-      maxInterval: 8,
-      maxAds: 3,
-    });
-  }, [loading, filtered, gridColumns, feedAds, category, daySeed]);
-
-  const handleScroll = useCallback(
-    ({ nativeEvent }) => {
-      const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-      const distanceFromBottom =
-        contentSize.height - contentOffset.y - layoutMeasurement.height;
-      if (
-        distanceFromBottom < 400 &&
-        hasMore &&
-        !loadingMore &&
-        !loading &&
-        !category
-      ) {
-        loadMore();
+  // Refresh when navigating to this screen with a refresh param.
+  useFocusEffect(
+    useCallback(() => {
+      if (route?.params?.refresh) {
+        loadReels();
+        navigation.setParams({ refresh: false });
       }
-    },
-    [hasMore, loadingMore, loading, loadMore, category],
+    }, [route?.params?.refresh, loadReels, navigation]),
   );
 
-  const renderItem = useCallback(
-    ({ item }) => {
-      if (item?.__type === "injected_ad") {
-        return (
-          <View style={{ flex: 1, maxWidth: itemWidth }}>
-            <InlineAdProductCard ad={item.ad} />
-          </View>
-        );
+  // ── Seller: pick a local video and upload it as a product reel ───────────────
+  const handleCreateReel = useCallback(async () => {
+    try {
+      const pickerResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: true,
+        videoMaxDuration: 60,
+        quality: 0.6,
+      });
+
+      if (pickerResult.canceled || !pickerResult.assets?.length) return;
+
+      const asset = pickerResult.assets[0];
+      const localUri = asset.uri; // RN uses file:// / content:// URIs
+
+      // Gather minimal product metadata. Alert.prompt is unavailable on web,
+      // so fall back to sensible defaults there.
+      let title = "Featured product";
+      let priceText = "0";
+      if (Platform.OS !== "web" && Alert.prompt) {
+        const enteredTitle = await new Promise((resolve) => {
+          Alert.prompt(
+            "Reel title",
+            "Name the product shown in this reel",
+            [
+              { text: "Cancel", style: "cancel", onPress: () => resolve(null) },
+              { text: "OK", onPress: (text) => resolve(text) },
+            ],
+            "plain-text",
+            "Featured product",
+          );
+        });
+        if (!enteredTitle) return;
+        title = enteredTitle || title;
+
+        const enteredPrice = await new Promise((resolve) => {
+          Alert.prompt(
+            "Price (GH₵)",
+            "Enter the product price",
+            [
+              { text: "Cancel", style: "cancel", onPress: () => resolve(null) },
+              { text: "OK", onPress: (text) => resolve(text) },
+            ],
+            "plain-text",
+            "0",
+          );
+        });
+        if (enteredPrice === null) return;
+        priceText = enteredPrice;
       }
 
-      return (
-        <View style={{ flex: 1, maxWidth: itemWidth }}>
-          {item ? (
-            <ProductCard
-              product={item}
-              onPress={() =>
-                navigation.navigate("ProductDetail", { product: item })
-              }
-            />
-          ) : (
-            <ProductCardPlaceholder />
-          )}
-        </View>
+      setUploading(true);
+      setUploadPhase("compress");
+      setUploadProgress(0);
+
+      const result = await uploadReel(
+        localUri,
+        {
+          title: title || "Untitled product",
+          price: Number(priceText) || 0,
+          category: route?.params?.category || null,
+          tags: ["new"],
+        },
+        (p) => {
+          setUploadPhase(p.phase);
+          setUploadProgress(p.progress);
+        },
       );
-    },
-    [itemWidth, navigation],
+
+      Alert.alert("Success", "Your product reel was published!");
+      // Prepend the new reel to the feed.
+      setReels((prev) => [
+        {
+          id: result.reelId,
+          video_url: result.publicUrl,
+          title: title || "Untitled product",
+          price: Number(priceText) || 0,
+        },
+        ...prev,
+      ]);
+    } catch (err) {
+      console.error("Upload reel failed:", err);
+      Alert.alert("Upload failed", err?.message || "Something went wrong");
+    } finally {
+      setUploading(false);
+      setUploadPhase(null);
+      setUploadProgress(0);
+    }
+  }, [route?.params?.category]);
+
+  const togglePlay = useCallback((id) => {
+    const ref = videoRefs.current[id];
+    if (!ref) return;
+    // Simple toggle: we keep a muted/playing map lightly via ref state.
+    if (!videoRefs.current[`_playing_${id}`]) {
+      ref.resume?.();
+      ref.play?.();
+      videoRefs.current[`_playing_${id}`] = true;
+    } else {
+      ref.pause?.();
+      videoRefs.current[`_playing_${id}`] = false;
+    }
+  }, []);
+
+  const renderReel = useCallback(
+    ({ item }) => (
+      <View style={styles.reelContainer}>
+        <Pressable
+          style={styles.videoWrap}
+          onPress={() => togglePlay(item.id)}
+        >
+          <Video
+            ref={(r) => {
+              if (r) videoRefs.current[item.id] = r;
+            }}
+            source={{ uri: item.video_url }}
+            style={styles.video}
+            resizeMode="cover"
+            repeat
+            muted
+            paused
+            poster={item.thumbnail_url || null}
+            posterResizeMode="cover"
+          />
+          {/* Lightweight overlay with product info (low-data) */}
+          <View style={styles.overlay}>
+            <Text style={styles.reelTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+            {item.price != null && (
+              <Text style={styles.reelPrice}>GH₵ {item.price}</Text>
+            )}
+            {item.description ? (
+              <Text style={styles.reelDesc} numberOfLines={2}>
+                {item.description}
+              </Text>
+            ) : null}
+            <Pressable
+              style={styles.shopBtn}
+              onPress={() =>
+                item.product_id
+                  ? navigation.navigate("ProductDetail", {
+                      product: { id: item.product_id },
+                    })
+                  : null
+              }
+            >
+              <Text style={styles.shopBtnText}>View product</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </View>
+    ),
+    [navigation, togglePlay],
   );
 
   return (
     <View style={styles.wrapper}>
-      <FlatList
-        data={feedItems}
-        key={`${gridColumns}-${category || "all"}`}
-        keyExtractor={(item, index) =>
-          item?.id?.toString?.() || `feed-${index}`
-        }
-        numColumns={gridColumns}
-        columnWrapperStyle={styles.gridRow}
-        renderItem={renderItem}
-        contentContainerStyle={styles.container}
-        showsVerticalScrollIndicator={false}
-        scrollEventThrottle={200}
-        onScroll={handleScroll}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={refresh} />
-        }
-        ListFooterComponent={
-          <>
-            {loadingMore && (
-              <View style={styles.loadMoreIndicator}>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-            )}
-            <View style={{ height: 32 }} />
-          </>
-        }
-      />
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={reels}
+          keyExtractor={(item) => item.id?.toString?.() || Math.random()}
+          renderItem={renderReel}
+          pagingEnabled
+          showsVerticalScrollIndicator={false}
+          getItemLayout={(data, index) => ({
+            length: SCREEN_HEIGHT,
+            offset: SCREEN_HEIGHT * index,
+            index,
+          })}
+          initialNumToRender={2}
+          maxToRenderPerBatch={2}
+          windowSize={3}
+        />
+      )}
 
-      {overlayAds.length > 0 && <AdRenderer ads={overlayAds} />}
+      {/* Upload progress overlay */}
+      {uploading && (
+        <View style={styles.uploadOverlay}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.uploadText}>
+            {uploadPhase === "compress" && "Compressing video…"}
+            {uploadPhase === "upload" && "Uploading to R2…"}
+            {uploadPhase === "save" && "Saving reel…"}{" "}
+            {Math.round(uploadProgress * 100)}%
+          </Text>
+        </View>
+      )}
+
+      {/* Create reel FAB (seller) */}
+      <Pressable style={styles.fab} onPress={handleCreateReel}>
+        <Text style={styles.fabText}>+</Text>
+      </Pressable>
     </View>
   );
 };
@@ -148,23 +265,98 @@ export const FeedScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: "#000",
     paddingTop: Platform.OS === "web" ? 0 : 50,
   },
-  container: {
-    paddingTop: 8,
-    paddingBottom: 8,
-    gap: 12,
-    backgroundColor: colors.background,
-  },
-  gridRow: {
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 12,
-    justifyContent: "flex-start",
-  },
-  loadMoreIndicator: {
-    paddingVertical: 20,
+  center: {
+    flex: 1,
     alignItems: "center",
+    justifyContent: "center",
+  },
+  reelContainer: {
+    height: SCREEN_HEIGHT,
+    width: SCREEN_WIDTH,
+    backgroundColor: "#000",
+  },
+  videoWrap: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  video: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH / REEL_ASPECT,
+  },
+  overlay: {
+    padding: 16,
+    paddingBottom: 40,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  reelTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  reelPrice: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+  reelDesc: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 13,
+    marginTop: 4,
+  },
+  shopBtn: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    backgroundColor: colors.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  shopBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  fab: {
+    position: "absolute",
+    right: 16,
+    bottom: 90,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 5,
+  },
+  fabText: {
+    color: "#fff",
+    fontSize: 30,
+    fontWeight: "700",
+    lineHeight: 34,
+  },
+  uploadOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  uploadText: {
+    color: "#fff",
+    marginTop: 12,
+    fontSize: 14,
   },
 });
+
+export default FeedScreen;

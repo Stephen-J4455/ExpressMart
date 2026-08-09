@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "ExpressMart",
-    "slug": "ExpressMart",
+    "name": "tagit",
+    "slug": "tagit",
     "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/express.png",
     "userInterfaceStyle": "light",
     "androidStatusBar": {
       "barStyle": "dark-content",
-      "backgroundColor": "#ffffff",
+      "backgroundColor": "#B7B8BF",
       "translucent": true
     },
-    "scheme": "expressmart",
+    "scheme": "tagit",
     "experiments": {
       "baseUrl": "/"
     },
@@ -41,7 +41,7 @@
           "action": "VIEW",
           "data": [
             {
-              "scheme": "expressmart"
+              "scheme": "tagit"
             }
           ],
           "category": [
@@ -62,14 +62,25 @@
           "icon": "./assets/express.png",
           "color": "#ffffff",
           "androidMode": "default",
-          "androidCollapsedTitle": "ExpressMart"
+          "androidCollapsedTitle": "tagit"
         }
       ],
       "expo-font",
       "expo-apple-authentication",
       "expo-web-browser",
       "expo-asset",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#B7B8BF",
+          "darkMode": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
       "expo-status-bar"
     ],
     "extra": {
