@@ -437,7 +437,7 @@ export const SellerChatScreen = ({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { backgroundColor: "#fff", paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: "#f0f0f0" },
+  header: { backgroundColor: colors.background, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: "#f0f0f0" },
   headerContent: { flexDirection: "row", alignItems: "center" },
   backButton: { padding: 8, marginRight: 8, borderRadius: 20, backgroundColor: colors.light },
   headerInfo: { flex: 1, flexDirection: "row", alignItems: "center" },

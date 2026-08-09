@@ -761,7 +761,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,

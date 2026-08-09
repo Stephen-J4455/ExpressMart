@@ -1,38 +1,55 @@
 export const colors = {
-  primary: "#2563EB",
-  primaryLight: "#EEF2FF",
-  accent: "#06B6D4",
+  // Tagit brand palette
+  primary: "#FF5A79", // Coral Pink
+  primaryDark: "#F03A70", // Vibrant Magenta
+  accent: "#00E2C8", // Bright Cyan / Teal
+  warmCoral: "#FF6F61", // Warm Coral ("it" in tagit)
+  gradientStart: "#FF5A79", // Coral Pink
+  gradientEnd: "#F03A70", // Vibrant Magenta
   dark: "#0F172A",
   light: "#FFFFFF",
   muted: "#64748B",
   success: "#10B981",
-  info: "#06B6D4",
-  surface: "#F6F8FB",
-  border: "#E6EEF8",
-  background: "#ffffff",
+  info: "#00E2C8",
+  surface: "#E2E6E9", // Cool Grey canvas
+  border: "#E2E6E9",
+  background: "#E2E6E9", // Cool Grey canvas
+};
+
+// Shared border-radius scale — use these tokens instead of hard-coded
+// values so corner rounding stays consistent across the app (e.g. the
+// home page cards and header controls).
+export const radius = {
+  xxs: 4,
+  xs: 8,
+  sm: 10,
+  md: 14,
+  lg: 20,
+  xl: 24,
+  pill: 40,
 };
 
 export const THEMES = {
   blue: {
     id: "blue",
-    primary: "#2563EB",
-    gradientStart: "#2563EB",
-    gradientEnd: "#4DA3FF",
-    accent: "#3B82F6",
+    primary: "#FF5A79",
+    gradientStart: "#FF5A79",
+    gradientEnd: "#F03A70",
+    accent: "#00E2C8",
   },
   indigo: {
     id: "indigo",
-    primary: "#4F46E5",
-    gradientStart: "#6366F1",
-    gradientEnd: "#7C3AED",
-    accent: "#8B5CF6",
+    primary: "#F03A70",
+    gradientStart: "#FF5A79",
+    gradientEnd: "#F03A70",
+    accent: "#00E2C8",
   },
   cyan: {
     id: "cyan",
-    primary: "#06B6D4",
-    gradientStart: "#06B6D4",
+    primary: "#00E2C8",
+    gradientStart: "#00E2C8",
     gradientEnd: "#67E8F9",
-    accent: "#06B6D4",
+    accent: "#00E2C8",
   },
   teal: {
     id: "teal",
@@ -155,8 +172,8 @@ export const getTheme = (keyOrHex) => {
   return {
     id: hex,
     primary: hex,
-    gradientStart: hex,
-    gradientEnd: hex,
-    accent: hex,
+    gradientStart: colors.gradientStart,
+    gradientEnd: colors.gradientEnd,
+    accent: colors.accent,
   };
 };

@@ -120,14 +120,20 @@ export const AccountScreen = ({ navigation }) => {
       return;
     }
     if (profile?.role === "seller") {
-      // Only set once when we haven't determined seller status yet.
-      if (sellerRecord === undefined) {
+      if (sellerRecord === undefined || sellerRecord === null) {
         setSellerRecord({});
       }
       return;
     }
 
-    // Only query DB when we don't already know seller status.
+    // If profile explicitly says customer, always show customer UI.
+    // The role in express_profiles is the source of truth — do NOT query express_sellers.
+    if (profile?.role === "customer") {
+      setSellerRecord(null);
+      return;
+    }
+
+    // Only query DB when profile role is not yet loaded/known.
     if (sellerRecord !== undefined) return;
 
     let active = true;
@@ -281,6 +287,34 @@ export const AccountScreen = ({ navigation }) => {
             <AdRenderer ads={profileAds} />
           </View>
         )}
+
+        {/* Register a Store Banner */}
+        <View style={styles.registerStoreSection}>
+          <LinearGradient
+            colors={[colors.primary, colors.accent]}
+            style={styles.registerStoreGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.registerStoreTextWrap}>
+              <Text style={styles.registerStoreTitle}>
+                Sell on ExpressMart
+              </Text>
+              <Text style={styles.registerStoreSubtitle}>
+                Open your own store and reach thousands of customers.
+              </Text>
+            </View>
+            <Pressable
+              style={styles.registerStoreButton}
+              onPress={() => navigation.navigate("StoreRegistration")}
+            >
+              <Ionicons name="storefront" size={18} color={colors.primary} />
+              <Text style={styles.registerStoreButtonText}>
+                Register a Store
+              </Text>
+            </Pressable>
+          </LinearGradient>
+        </View>
 
         {/* Quick Actions */}
         <View style={styles.quickActionsSection}>
@@ -464,7 +498,7 @@ const styles = StyleSheet.create({
 
   // Profile Header
   profileHeader: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
     paddingHorizontal: 20,
     paddingBottom: 20,
     borderBottomLeftRadius: 28,
@@ -604,6 +638,48 @@ const styles = StyleSheet.create({
     width: 1,
     height: 30,
     backgroundColor: "#E2E8F0",
+  },
+
+  // Register a Store Banner
+  registerStoreSection: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+  },
+  registerStoreGradient: {
+    borderRadius: 20,
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  registerStoreTextWrap: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  registerStoreTitle: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "800",
+  },
+  registerStoreSubtitle: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 12,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  registerStoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  registerStoreButtonText: {
+    color: colors.primary,
+    fontWeight: "800",
+    fontSize: 13,
   },
 
   // Quick Actions

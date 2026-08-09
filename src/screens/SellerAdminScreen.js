@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "../lib/supabase";
+import { supabase, callEdgeFunction } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { notifyOrderStatusUpdate } from "../services/notificationService";
@@ -179,21 +179,18 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     if (existing) return existing;
     const baseName =
       customerProfile?.full_name || user.email?.split("@")[0] || "Seller";
-    const { data: created, error } = await supabase
-      .from("express_sellers")
-      .insert({
-        user_id: user.id,
-        name: baseName,
-        email: user.email,
-        phone: customerProfile?.phone || null,
-      })
-      .select("id, name, theme_color, avatar, badges, store_description")
-      .single();
-    if (error) {
-      console.error("create seller error", error);
+    const created = await callEdgeFunction("create_seller", {
+      name: baseName,
+      email: user.email,
+      phone: customerProfile?.phone || null,
+      store_description: customerProfile?.full_name || null,
+      avatar: customerProfile?.avatar_url || null,
+    });
+    if (!created || !created.success || !created.data?.seller) {
+      console.error("create seller error", created?.error || created);
       return null;
     }
-    return created;
+    return created.data.seller;
   }, [user, customerProfile]);
 
   const loadData = useCallback(async () => {

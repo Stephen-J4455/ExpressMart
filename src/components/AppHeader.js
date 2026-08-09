@@ -1,14 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors } from "../theme/colors";
-import { SearchBar } from "./SearchBar";
+import { colors, radius } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const AppHeader = ({
   onSearchPress,
   onChatPress,
-  onStoresPress,
   onNotificationsPress,
 }) => {
   const { isWide, horizontalPadding } = useResponsive();
@@ -25,28 +23,29 @@ export const AppHeader = ({
       ]}
     >
       <View style={styles.topRow}>
-       
-          <View style={styles.searchWrap}>
-            <SearchBar
-              editable={false}
-              onPress={onSearchPress}
-              placeholder="Search ExpressMart"
-              style={{ paddingVertical: 14 }}
-            />
-          </View>
-       
+        <Pressable
+          style={styles.iconButton}
+          onPress={onSearchPress}
+          accessibilityRole="button"
+        >
+          <Ionicons name="search-outline" size={20} color={colors.light} />
+        </Pressable>
+
+        <View style={styles.brandWrap}>
+          <Text style={styles.brandTag}>
+            tag<Text style={styles.brandTagAccent}>it</Text>
+          </Text>
+        </View>
+
         <View style={styles.iconRow}>
-           <Pressable style={styles.iconButton} onPress={onStoresPress}>
-            <Ionicons name="storefront-outline" size={20} color={colors.dark} />
-          </Pressable> 
           <Pressable style={styles.iconButton} onPress={onChatPress}>
-            <Ionicons name="chatbubble-outline" size={20} color={colors.dark} />
+            <Ionicons name="chatbubble-outline" size={20} color={colors.light} />
           </Pressable>
           <Pressable style={styles.iconButton} onPress={onNotificationsPress}>
             <Ionicons
               name="notifications-outline"
               size={20}
-              color={colors.dark}
+              color={colors.light}
             />
           </Pressable>
         </View>
@@ -58,7 +57,7 @@ export const AppHeader = ({
 const styles = StyleSheet.create({
   container: {
     paddingBottom: 16,
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: "#EEF2F8",
   },
@@ -70,35 +69,36 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  caption: {
-    color: colors.muted,
-    fontSize: 12,
-  },
-  locationRow: {
-    flexDirection: "row",
+  brandWrap: {
+    flex: 1,
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
   },
-  location: {
-    color: colors.dark,
-    fontSize: 18,
-    fontWeight: "700",
+  brandTag: {
+    color: colors.light,
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
-  searchWrap: {
-    marginTop: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+  brandTagAccent: {
+    color: colors.warmCoral,
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   iconButton: {
     width: 44,
     height: 44,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e2e3e6",
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.primary,
   },
   iconRow: {
     flexDirection: "row",

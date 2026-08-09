@@ -16,6 +16,7 @@ import * as Linking from "expo-linking";
 import { useIsFocused } from "@react-navigation/native";
 import { useAds } from "../context/AdsContext";
 import { useResponsive } from "../hooks/useResponsive";
+import { radius } from "../theme/colors";
 
 const { width } = Dimensions.get("window");
 
@@ -1390,16 +1391,17 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   carouselCta: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: radius.md,
     alignItems: "center",
     marginTop: 6,
+    alignSelf: "flex-start",
   },
   carouselCtaText: {
     color: "#fff",
     fontWeight: "600",
-    fontSize: 13,
+    fontSize: 12,
   },
   carouselDots: {
     flexDirection: "row",

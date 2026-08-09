@@ -193,6 +193,174 @@ serve(async (req) => {
       );
     }
 
+    // Initialize store-registration payment (GH₵150 one-time activation fee)
+    if (action === "initialize-store-registration") {
+      const { amount, reference, email } = body || {};
+      if (!amount || !reference) {
+        throw new Error("amount and reference are required");
+      }
+      if (!email) {
+        throw new Error("email is required");
+      }
+
+      const initPayload: any = {
+        email,
+        amount: Math.round(amount * 100), // pesewas
+        currency: "GHS",
+        reference,
+        metadata: { type: "store_registration" },
+      };
+
+      const initRes = await fetch(
+        "https://api.paystack.co/transaction/initialize",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${paystackSecretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(initPayload),
+        },
+      );
+      const initData = await initRes.json();
+      if (!initRes.ok || initData.status !== true) {
+        throw new Error(initData?.message || "Paystack initialize failed");
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            ...initData.data,
+            paystack_public_key: paystackPublicKey || null,
+          },
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
+    // Verify store-registration payment
+    if (action === "verify-store-registration") {
+      const { reference, seller_id } = body || {};
+      if (!reference) throw new Error("reference is required");
+
+      const paystackResponse = await fetch(
+        `https://api.paystack.co/transaction/verify/${reference}`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${paystackSecretKey}` },
+        },
+      );
+      const paystackData = await paystackResponse.json();
+      if (
+        !paystackResponse.ok ||
+        !paystackData?.status ||
+        paystackData?.data?.status !== "success"
+      ) {
+        return new Response(
+          JSON.stringify({ success: true, verified: false }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      // Record the registration fee payment in express_payments
+      // Use service-role client to bypass RLS for this privileged write
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (serviceRoleKey) {
+        const writeClient = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          serviceRoleKey,
+        );
+
+        // Get the authenticated user
+        const supabaseClient = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+          {
+            global: {
+              headers: { Authorization: req.headers.get("Authorization") ?? "" },
+            },
+          },
+        );
+        const {
+          data: { user },
+        } = await supabaseClient.auth.getUser();
+
+        // Check if a registration fee record already exists for this reference
+        const { data: existingFee } = await writeClient
+          .from("express_payments")
+          .select("id")
+          .eq("reference", reference)
+          .eq("payment_type", "store_registration")
+          .maybeSingle();
+
+        if (!existingFee) {
+          try {
+            const { error: feeError } = await writeClient
+              .from("express_payments")
+              .insert({
+                order_id: null,
+                user_id: user?.id ?? null,
+                seller_id: seller_id ?? null,
+                amount: (paystackData.data.amount ?? 0) / 100,
+                currency: paystackData.data.currency ?? "GHS",
+                provider: "paystack",
+                reference: reference,
+                authorization_code:
+                  paystackData.data.authorization?.authorization_code ??
+                  paystackData.data.authorization_code ??
+                  null,
+                channel: paystackData.data.channel ?? null,
+                status: "success",
+                gateway_response: paystackData.data.gateway_response ?? null,
+                payment_type: "store_registration",
+                metadata: {
+                  type: "store_registration",
+                  original: paystackData.data,
+                  seller_id: seller_id ?? null,
+                },
+                paid_at: paystackData.data.paid_at ?? new Date().toISOString(),
+              });
+
+            if (feeError) {
+              console.error(
+                "❌ Failed to record store registration fee:",
+                feeError,
+              );
+            } else {
+              console.log(
+                "✅ Store registration fee recorded for reference:",
+                reference,
+              );
+            }
+          } catch (feeErr) {
+            console.error(
+              "❌ Error recording store registration fee:",
+              feeErr,
+            );
+          }
+        }
+      } else {
+        console.warn(
+          "⚠️ SUPABASE_SERVICE_ROLE_KEY not configured — cannot record registration fee",
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, verified: true }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
     // Initialize payment (create Paystack transaction with subaccount splits)
     if (action === "initialize-payment") {
       const { amount, reference, orderData } = body || {};

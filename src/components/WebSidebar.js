@@ -7,7 +7,7 @@ import { colors } from "../theme/colors";
 
 const NAV_ITEMS = [
   { name: "Home", icon: "home-outline", iconFocused: "home" },
-  { name: "Categories", icon: "grid-outline", iconFocused: "grid" },
+  { name: "Stores", icon: "storefront-outline", iconFocused: "storefront" },
   { name: "Feed", icon: "compass-outline", iconFocused: "compass" },
   { name: "Cart", icon: "cart-outline", iconFocused: "cart" },
   { name: "Account", icon: "person-outline", iconFocused: "person" },

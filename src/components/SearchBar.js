@@ -7,7 +7,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { colors } from "../theme/colors";
+import { colors, radius } from "../theme/colors";
 
 export const SearchBar = ({
   value,
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   wrapper: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 16,
+    borderRadius: radius.xl,
     backgroundColor: "#fff",
     paddingHorizontal: 14,
     paddingVertical: 8,

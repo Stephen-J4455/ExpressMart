@@ -1962,7 +1962,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     marginTop: -24,
@@ -2325,7 +2325,7 @@ const styles = StyleSheet.create({
   footer: {
     padding: 16,
     paddingBottom: 24,
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
     borderTopWidth: 1,
     borderTopColor: colors.light,
     flexDirection: "row",
@@ -2405,7 +2405,8 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
+    paddingTop: 24,
   },
   modalHeader: {
     flexDirection: "row",
@@ -2662,7 +2663,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   variantModal: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingHorizontal: 16,

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors } from "../theme/colors";
+import { colors, radius } from "../theme/colors";
 
 export const FlashSaleCountdown = ({ endTime, startTime, onExpire, compact = false, withProgressBar = false, mini = false, availableQty = null }) => {
   const [timeLeft, setTimeLeft] = useState({
@@ -217,7 +217,7 @@ export const FlashSaleCountdown = ({ endTime, startTime, onExpire, compact = fal
 const styles = StyleSheet.create({
   container: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: 12,
     borderWidth: 1,
     borderColor: "#FEE2E2",
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   iconGradient: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   timeBox: {
-    borderRadius: 8,
+    borderRadius: radius.xs,
     overflow: "hidden",
   },
   timeBoxGradient: {
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF2F2",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: radius.xs,
   },
   compactText: {
     fontSize: 11,
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   },
   progressBarContainer: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: 12,
     borderWidth: 1,
     borderColor: "#FEE2E2",
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   progressIconGradient: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -332,12 +332,12 @@ const styles = StyleSheet.create({
   progressBarBackground: {
     height: 8,
     backgroundColor: "#FEE2E2",
-    borderRadius: 4,
+    borderRadius: radius.xxs,
     overflow: "hidden",
   },
   progressBarFill: {
     height: "100%",
-    borderRadius: 4,
+    borderRadius: radius.xxs,
   },
   progressBarLabels: {
     flexDirection: "row",
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
   // Mini progress bar styles for product cards
   miniProgressBarContainer: {
     backgroundColor: "#FEF2F2",
-    borderRadius: 8,
+    borderRadius: radius.xs,
     padding: 6,
     paddingBottom: 8,
     gap: 4,
@@ -394,12 +394,12 @@ const styles = StyleSheet.create({
   miniProgressBarBackground: {
     height: 4,
     backgroundColor: "#FEE2E2",
-    borderRadius: 2,
+    borderRadius: radius.xxs,
     overflow: "hidden",
   },
   miniProgressBarFill: {
     height: "100%",
-    borderRadius: 2,
+    borderRadius: radius.xxs,
   },
   availableText: {
     marginTop: 6,

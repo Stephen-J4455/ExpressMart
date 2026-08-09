@@ -121,6 +121,52 @@ export const CartScreen = ({ navigation }) => {
     );
   }
 
+  const summaryContent = (
+    <>
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryLabel}>Subtotal</Text>
+        <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>
+      </View>
+      <View style={styles.shippingHintContainer}>
+        <Ionicons
+          name="information-circle-outline"
+          size={14}
+          color={colors.primary}
+        />
+        <Text style={styles.shippingHint}>
+          Shipping & service fees calculated at checkout
+        </Text>
+      </View>
+      {hasOutOfStockItems && (
+        <View style={styles.stockWarningContainer}>
+          <Ionicons name="alert-circle-outline" size={14} color="#B91C1C" />
+          <Text style={styles.stockWarningText}>
+            Some items are out of stock. Remove them before checkout.
+          </Text>
+        </View>
+      )}
+      <Pressable style={styles.checkout} onPress={handleCheckout}>
+        <LinearGradient
+          colors={
+            hasOutOfStockItems
+              ? [colors.muted, colors.muted]
+              : [colors.primary, colors.accent]
+          }
+          style={styles.checkoutGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+        >
+          <Ionicons name="lock-closed" size={18} color="#fff" />
+          <Text style={styles.checkoutText}>Proceed to Checkout</Text>
+        </LinearGradient>
+      </Pressable>
+    </>
+  );
+
+  const summaryStyle = isWide
+    ? styles.summaryWide
+    : [styles.summary, { paddingBottom: insets.bottom + 100 }];
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
@@ -306,53 +352,10 @@ export const CartScreen = ({ navigation }) => {
             );
           })}
           <View style={{ height: 20 }} />
+          {!isWide && <View style={summaryStyle}>{summaryContent}</View>}
         </ScrollView>
 
-        <View
-          style={
-            isWide
-              ? styles.summaryWide
-              : [styles.summary, { paddingBottom: 32 + insets.bottom }]
-          }
-        >
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>
-          </View>
-          <View style={styles.shippingHintContainer}>
-            <Ionicons
-              name="information-circle-outline"
-              size={14}
-              color={colors.primary}
-            />
-            <Text style={styles.shippingHint}>
-              Shipping & service fees calculated at checkout
-            </Text>
-          </View>
-          {hasOutOfStockItems && (
-            <View style={styles.stockWarningContainer}>
-              <Ionicons name="alert-circle-outline" size={14} color="#B91C1C" />
-              <Text style={styles.stockWarningText}>
-                Some items are out of stock. Remove them before checkout.
-              </Text>
-            </View>
-          )}
-          <Pressable style={styles.checkout} onPress={handleCheckout}>
-            <LinearGradient
-              colors={
-                hasOutOfStockItems
-                  ? [colors.muted, colors.muted]
-                  : [colors.primary, colors.accent]
-              }
-              style={styles.checkoutGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              <Ionicons name="lock-closed" size={18} color="#fff" />
-              <Text style={styles.checkoutText}>Proceed to Checkout</Text>
-            </LinearGradient>
-          </Pressable>
-        </View>
+        {isWide && <View style={summaryStyle}>{summaryContent}</View>}
       </View>
     </View>
   );

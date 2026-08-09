@@ -14,7 +14,6 @@ import {
   StyleSheet,
   Animated,
   Pressable,
-  Image,
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -32,7 +31,6 @@ import { ChatProvider } from "./src/context/ChatContext";
 import { AdsProvider } from "./src/context/AdsContext";
 import { NotificationProvider } from "./src/context/NotificationContext";
 import { HomeScreen } from "./src/screens/HomeScreen";
-import { CategoriesScreen } from "./src/screens/CategoriesScreen";
 import { FeedScreen } from "./src/screens/FeedScreen";
 import { CartScreen } from "./src/screens/CartScreen";
 import { AccountScreen } from "./src/screens/AccountScreen";
@@ -69,7 +67,7 @@ import { SellerChatScreen } from "./src/screens/SellerChatScreen";
 import { StatusViewer } from "./src/screens/StatusViewer";
 import StatusCreatorScreen from "./src/screens/StatusCreatorScreen";
 import { PaymentWebViewScreen } from "./src/screens/PaymentWebViewScreen";
-import { CustomerLoadingAnimation } from "./src/components/CustomerLoadingAnimation";
+import { StoreRegistrationScreen } from "./src/screens/StoreRegistrationScreen";
 import { colors, getTheme } from "./src/theme/colors";
 // PasswordResetScreen handles recovery links on both web and native.
 
@@ -83,14 +81,6 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-const tabIcon =
-  (name) =>
-  ({ color, size, focused }) => {
-    return <Ionicons name={name} size={size} color={color} />;
-  };
-
-const MOBILE_TAB_BAR_HEIGHT = 70;
-const MOBILE_TAB_BAR_PADDING_TOP = 10;
 const MOBILE_TAB_BAR_PADDING_BOTTOM = 10;
 
 const TabNavigator = () => {
@@ -105,15 +95,17 @@ const TabNavigator = () => {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.muted,
-        tabBarLabelPosition: "below-icon",
         tabBarPosition: isWide ? "left" : "bottom",
         tabBarStyle: isWide
           ? { width: sidebarWidth, borderRightWidth: 0 }
           : {
-              height: 70,
-              paddingBottom: 10,
-              paddingTop: 10,
-              backgroundColor: "#fff",
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 0,
+              backgroundColor: "transparent",
+              borderTopWidth: 0,
             },
       }}
       tabBar={(props) =>
@@ -132,48 +124,39 @@ const TabNavigator = () => {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) =>
-            focused ? (
-              <Image
-                source={require("./assets/express.png")}
-                style={{ width: size + 10, height: size + 10 }}
-                resizeMode="contain"
-              />
-            ) : (
-              <Ionicons name="home-outline" size={size} color={color} />
-            ),
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "home" : "home-outline"}
+              size={size}
+              color={color}
+            />
+          ),
         }}
       />
       <Tab.Screen
-        name="Categories"
-        component={CategoriesScreen}
+        name="Stores"
+        component={StoresScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) =>
-            focused ? (
-              <Image
-                source={require("./assets/express.png")}
-                style={{ width: size + 10, height: size + 10 }}
-                resizeMode="contain"
-              />
-            ) : (
-              <Ionicons name="grid-outline" size={size} color={color} />
-            ),
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "storefront" : "storefront-outline"}
+              size={size}
+              color={color}
+            />
+          ),
         }}
       />
       <Tab.Screen
         name="Feed"
         component={FeedScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) =>
-            focused ? (
-              <Image
-                source={require("./assets/express.png")}
-                style={{ width: size + 10, height: size + 10 }}
-                resizeMode="contain"
-              />
-            ) : (
-              <Ionicons name="compass-outline" size={size} color={color} />
-            ),
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "compass" : "compass-outline"}
+              size={size}
+              color={color}
+            />
+          ),
         }}
       />
       <Tab.Screen
@@ -181,27 +164,11 @@ const TabNavigator = () => {
         component={CartScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
-            <View>
-              {focused ? (
-                <Image
-                  source={require("./assets/express.png")}
-                  style={{ width: size + 10, height: size + 10 }}
-                  resizeMode="contain"
-                />
-              ) : (
-                <Ionicons name="cart-outline" size={size} color={color} />
-              )}
-              {cartCount > 0 && (
-                <View
-                  style={[
-                    tabStyles.badge,
-                    { backgroundColor: defaultTheme.primary || "#0B6EFE" },
-                  ]}
-                >
-                  <Text style={tabStyles.badgeText}>{cartCount}</Text>
-                </View>
-              )}
-            </View>
+            <Ionicons
+              name={focused ? "cart" : "cart-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -209,23 +176,20 @@ const TabNavigator = () => {
         name="Account"
         component={AccountScreen}
         options={{
-          tabBarIcon: ({ color, size, focused }) =>
-            focused ? (
-              <Image
-                source={require("./assets/express.png")}
-                style={{ width: size + 10, height: size + 10 }}
-                resizeMode="contain"
-              />
-            ) : (
-              <Ionicons name="person-outline" size={size} color={color} />
-            ),
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "person" : "person-outline"}
+              size={size}
+              color={color}
+            />
+          ),
         }}
       />
     </Tab.Navigator>
   );
 };
 
-/** Default mobile bottom tab bar */
+/** Floating, rounded, icon-only, theme-colored mobile bottom tab bar */
 const DefaultTabBar = ({
   state,
   descriptors,
@@ -234,22 +198,14 @@ const DefaultTabBar = ({
   defaultTheme,
 }) => {
   const insets = useSafeAreaInsets();
-  const androidBottomInset = Platform.OS === "android" ? insets.bottom : 0;
+  const bottomInset = insets.bottom > 0 ? insets.bottom : 0;
 
-  return (
-    <View
-      style={[
-        tabStyles.mobileBar,
-        androidBottomInset > 0 && {
-          height: MOBILE_TAB_BAR_HEIGHT + androidBottomInset,
-          paddingBottom: MOBILE_TAB_BAR_PADDING_BOTTOM + androidBottomInset,
-        },
-      ]}
-    >
+  const pill = (
+    <View style={tabStyles.pill}>
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
-        const color = isFocused ? colors.primary : colors.muted;
+        const color = isFocused ? colors.primary : "rgba(255,255,255,0.75)";
         const onPress = () => {
           const event = navigation.emit({
             type: "tabPress",
@@ -263,54 +219,123 @@ const DefaultTabBar = ({
           <Pressable
             key={route.key}
             onPress={onPress}
-            style={tabStyles.mobileTab}
+            style={({ pressed }) => [
+              tabStyles.mobileTab,
+              pressed && tabStyles.mobileTabPressed,
+            ]}
           >
-            {options.tabBarIcon({ color, size: 24, focused: isFocused })}
-            <Text style={[tabStyles.mobileTabLabel, { color }]}>
-              {route.name}
-            </Text>
+            <View
+              style={[
+                tabStyles.iconWrap,
+                isFocused && tabStyles.mobileTabIconBg,
+              ]}
+            >
+              {options.tabBarIcon({ color, size: 24, focused: isFocused })}
+              {route.name === "Cart" && cartCount > 0 && (
+                <View
+                  style={[
+                    tabStyles.badge,
+                    {
+                      backgroundColor: defaultTheme.primary || colors.primary,
+                    },
+                  ]}
+                >
+                  <Text style={tabStyles.badgeText}>{cartCount}</Text>
+                </View>
+              )}
+            </View>
           </Pressable>
         );
       })}
     </View>
   );
+
+  return (
+    <View
+      style={[
+        tabStyles.floatingWrapper,
+        { bottom: bottomInset + MOBILE_TAB_BAR_PADDING_BOTTOM },
+      ]}
+      pointerEvents="box-none"
+    >
+      <LinearGradient
+        colors={[defaultTheme.primary, defaultTheme.gradientEnd || defaultTheme.primary]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={tabStyles.blurContainer}
+      >
+        {pill}
+      </LinearGradient>
+    </View>
+  );
 };
 
 const tabStyles = StyleSheet.create({
+  floatingWrapper: {
+    position: "absolute",
+    left: 26,
+    right: 26,
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  blurContainer: {
+    width: "100%",
+    borderRadius: 40,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  mobileTab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 40,
+     
+  },
+  
+  mobileTabIconBg: {
+    backgroundColor: "rgba(255,255,255,0.85)",
+    borderRadius: 40,
+    padding: 8,
+  },
+  mobileTabPressed: {
+    opacity: 0.7,
+  },
+  iconWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   badge: {
     position: "absolute",
-    top: -4,
-    right: -8,
+    top: -6,
+    right: -10,
     borderRadius: 10,
     minWidth: 18,
     height: 18,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: "#fff",
   },
   badgeText: {
     color: "#fff",
     fontSize: 10,
     fontWeight: "700",
-  },
-  mobileBar: {
-    flexDirection: "row",
-    height: MOBILE_TAB_BAR_HEIGHT,
-    paddingBottom: MOBILE_TAB_BAR_PADDING_BOTTOM,
-    paddingTop: MOBILE_TAB_BAR_PADDING_TOP,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
-  },
-  mobileTab: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
-  },
-  mobileTabLabel: {
-    fontSize: 10,
-    fontWeight: "600",
   },
 });
 
@@ -581,7 +606,7 @@ const linking = {
       Main: {
         screens: {
           Home: "home",
-          Categories: "categories",
+          Stores: "stores",
           // ...
         },
       },
@@ -628,7 +653,7 @@ const withAuthGate = (Component, title, message) => {
 };
 
 const AuthenticatedApp = () => {
-  const { isAuthenticated, loading: authLoading, user } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [updateInfo, setUpdateInfo] = React.useState(null);
   const [updateVisible, setUpdateVisible] = React.useState(false);
 
@@ -656,10 +681,6 @@ const AuthenticatedApp = () => {
     if (Platform.OS === "web") return;
     SplashScreen.hideAsync().catch(() => {});
   }, []);
-
-  if (authLoading) {
-    return <CustomerLoadingAnimation />;
-  }
 
   const GuardedCheckout = withAuthGate(
     CheckoutScreen,
@@ -787,6 +808,7 @@ const AuthenticatedApp = () => {
         <Stack.Screen name="StatusCreator" component={GuardedStatusCreator} />
         <Stack.Screen name="Checkout" component={GuardedCheckout} />
         <Stack.Screen name="PaymentWebView" component={PaymentWebViewScreen} />
+        <Stack.Screen name="StoreRegistration" component={StoreRegistrationScreen} />
         <Stack.Screen name="Orders" component={GuardedOrders} />
         <Stack.Screen name="OrderDetail" component={GuardedOrderDetail} />
         <Stack.Screen name="Wishlist" component={GuardedWishlist} />

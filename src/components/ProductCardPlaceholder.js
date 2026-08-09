@@ -1,6 +1,5 @@
-import { StyleSheet, View, Animated } from "react-native";
-import { useContext } from "react";
-import { colors } from "../theme/colors";
+import { StyleSheet, View, Image, Animated } from "react-native";
+import { radius } from "../theme/colors";
 
 // Global shimmer animation context to share single animation across all skeletons
 let globalShimmerValue = null;
@@ -47,29 +46,29 @@ const Skeleton = ({ style }) => {
   );
 };
 
+// Placeholder card that mirrors the ProductCard layout, using placeholder.png
+// for the image section so the loading state matches the real card form.
 export const ProductCardPlaceholder = () => {
   return (
     <View style={styles.card}>
-      {/* Image placeholder */}
-      <Skeleton style={styles.image} />
-
-      {/* Content section */}
+      <View style={styles.imageContainer}>
+        <Image
+          source={require("../../assets/placeholder/placeholder.png")}
+          style={styles.image}
+          resizeMode="cover"
+        />
+        <View style={styles.ratingPill}>
+          <Skeleton style={styles.ratingPillText} />
+        </View>
+      </View>
       <View style={styles.content}>
-        {/* Vendor name */}
-        <Skeleton style={styles.vendor} />
-
-        {/* Title lines */}
-        <Skeleton style={[styles.title, { marginTop: 8 }]} />
-        <Skeleton style={[styles.title, { marginTop: 6, width: "80%" }]} />
-
-        {/* Price and rating row */}
+        <View style={styles.vendorRow}>
+          <Skeleton style={styles.vendor} />
+        </View>
+        <Skeleton style={[styles.title, { marginTop: 6 }]} />
         <View style={styles.metaRow}>
           <Skeleton style={styles.price} />
-          <Skeleton style={styles.rating} />
         </View>
-
-        {/* CTA Button */}
-        <Skeleton style={styles.button} />
       </View>
     </View>
   );
@@ -77,13 +76,10 @@ export const ProductCardPlaceholder = () => {
 
 const styles = StyleSheet.create({
   card: {
-    minWidth: 160,
-    height: 296,
     backgroundColor: "#fff",
-    borderRadius: 24,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: "#EAF0F7",
-    marginBottom: 16,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOpacity: 0.08,
@@ -91,15 +87,41 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 5,
   },
+  imageContainer: {
+    position: "relative",
+    width: "100%",
+    height: 140,
+    backgroundColor: "#F1F5F9",
+  },
   image: {
     width: "100%",
     height: 140,
+  },
+  ratingPill: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 44,
+    height: 20,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ratingPillText: {
+    width: 24,
+    height: 10,
+    borderRadius: 999,
   },
   content: {
     padding: 14,
     paddingTop: 12,
     flex: 1,
-    justifyContent: "space-between",
+  },
+  vendorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   vendor: {
     height: 9,
@@ -108,6 +130,7 @@ const styles = StyleSheet.create({
   },
   title: {
     height: 14,
+    width: "90%",
     borderRadius: 8,
   },
   metaRow: {
@@ -120,16 +143,5 @@ const styles = StyleSheet.create({
     height: 20,
     width: 76,
     borderRadius: 8,
-  },
-  rating: {
-    height: 22,
-    width: 70,
-    borderRadius: 999,
-  },
-  button: {
-    height: 40,
-    width: "100%",
-    borderRadius: 14,
-    marginTop: 10,
   },
 });

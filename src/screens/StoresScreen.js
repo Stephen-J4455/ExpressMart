@@ -12,10 +12,11 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShop } from "../context/ShopContext";
-import { colors } from "../theme/colors";
+import { colors, radius } from "../theme/colors";
 import { SellerCard } from "../components/SellerCard";
 import { useResponsive } from "../hooks/useResponsive";
 
@@ -27,8 +28,11 @@ export const StoresScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [showSortModal, setShowSortModal] = useState(false);
   const [sortOption, setSortOption] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
   const { gridColumns, getItemWidth } = useResponsive();
   const itemWidth = getItemWidth(gridColumns, 16);
+
+  const searchVisible = showSearch || searchQuery.length > 0;
 
   const displayedSellers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -51,8 +55,13 @@ export const StoresScreen = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    if (refreshSellers) await refreshSellers();
-    setRefreshing(false);
+    try {
+      if (refreshSellers) {
+        await refreshSellers();
+      }
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const renderStoreCard = ({ item }) => (
@@ -66,16 +75,28 @@ export const StoresScreen = () => {
     </View>
   );
 
+  const sortOptions = [
+    { key: "", label: "Default", icon: "apps-outline" },
+    { key: "name-asc", label: "Name (A-Z)", icon: "text-outline" },
+    { key: "rating-desc", label: "Highest rated", icon: "star-outline" },
+    { key: "newest", label: "Newest", icon: "time-outline" },
+  ];
+
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+      <LinearGradient
+        colors={[colors.primary, colors.accent]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.header, { paddingTop: insets.top + 18 }]}
+      >
         <View style={styles.headerTop}>
           <Pressable
-            style={styles.backButton}
+            style={styles.glassButton}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="arrow-back" size={22} color={colors.dark} />
+            <Ionicons name="arrow-back" size={22} color="#fff" />
           </Pressable>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>All Stores</Text>
@@ -83,36 +104,58 @@ export const StoresScreen = () => {
               <Text style={styles.storeCountText}>{sellers.length}</Text>
             </View>
           </View>
-          <Pressable style={styles.filterButton} onPress={() => setShowSortModal(true)}>
-            <Ionicons name="options-outline" size={20} color={colors.dark} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              style={styles.glassButton}
+              onPress={() => setShowSearch((v) => !v)}
+            >
+              <Ionicons name="search" size={20} color="#fff" />
+            </Pressable>
+            <Pressable
+              style={styles.glassButton}
+              onPress={() => setShowSortModal(true)}
+            >
+              <Ionicons name="options-outline" size={20} color="#fff" />
+            </Pressable>
+          </View>
         </View>
 
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
+        <Text style={styles.headerSubtitle}>
+          Find and follow your favorite stores
+        </Text>
+
+        {/* Search Bar (revealed on search icon tap) */}
+        {searchVisible && (
           <View style={styles.searchBar}>
-            <Ionicons name="search" size={18} color={colors.muted} />
+            <Ionicons name="search" size={16} color={colors.muted} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search stores..."
               placeholderTextColor={colors.muted}
               value={searchQuery}
               onChangeText={setSearchQuery}
+              autoFocus={showSearch}
             />
-            {searchQuery.length > 0 && (
-              <Pressable onPress={() => setSearchQuery("")}>
-                <Ionicons name="close-circle" size={18} color={colors.muted} />
-              </Pressable>
-            )}
+            <Pressable
+              onPress={() => {
+                setSearchQuery("");
+                setShowSearch(false);
+              }}
+            >
+              <Ionicons name="close-circle" size={18} color={colors.muted} />
+            </Pressable>
           </View>
-        </View>
-      </View>
+        )}
+      </LinearGradient>
 
+     
       {/* Store Grid */}
       {loading && !refreshing ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading stores...</Text>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading stores...</Text>
+          </View>
         </View>
       ) : displayedSellers.length > 0 ? (
         <FlatList
@@ -137,13 +180,12 @@ export const StoresScreen = () => {
         />
       ) : (
         <View style={styles.centerContainer}>
-          <View style={styles.emptyIconContainer}>
-            <Ionicons
-              name="storefront-outline"
-              size={48}
-              color={colors.primary}
-            />
-          </View>
+          <LinearGradient
+            colors={[colors.primary + "22", colors.accent + "22"]}
+            style={styles.emptyIconContainer}
+          >
+            <Ionicons name="storefront-outline" size={48} color={colors.primary} />
+          </LinearGradient>
           <Text style={styles.emptyTitle}>No stores found</Text>
           <Text style={styles.emptySubtitle}>
             {searchQuery
@@ -168,46 +210,56 @@ export const StoresScreen = () => {
         animationType="fade"
         onRequestClose={() => setShowSortModal(false)}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowSortModal(false)}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Sort stores</Text>
-            <Pressable
-              style={[styles.sortOption, sortOption === "name-asc" && styles.sortOptionSelected]}
-              onPress={() => {
-                setSortOption("name-asc");
-                setShowSortModal(false);
-              }}
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setShowSortModal(false)}
+        >
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <LinearGradient
+              colors={[colors.primary, colors.accent]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.modalHeader}
             >
-              <Text style={styles.sortOptionText}>Name (A-Z)</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.sortOption, sortOption === "rating-desc" && styles.sortOptionSelected]}
-              onPress={() => {
-                setSortOption("rating-desc");
-                setShowSortModal(false);
-              }}
-            >
-              <Text style={styles.sortOptionText}>Highest rated</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.sortOption, sortOption === "newest" && styles.sortOptionSelected]}
-              onPress={() => {
-                setSortOption("newest");
-                setShowSortModal(false);
-              }}
-            >
-              <Text style={styles.sortOptionText}>Newest</Text>
-            </Pressable>
-            <Pressable
-              style={styles.clearSort}
-              onPress={() => {
-                setSortOption("");
-                setShowSortModal(false);
-              }}
-            >
-              <Text style={styles.clearSortText}>Clear sort</Text>
-            </Pressable>
-          </View>
+              <Ionicons name="swap-vertical-outline" size={20} color="#fff" />
+              <Text style={styles.modalTitle}>Sort stores</Text>
+            </LinearGradient>
+            {sortOptions.map((opt) => {
+              const selected = sortOption === opt.key;
+              return (
+                <Pressable
+                  key={opt.key || "default"}
+                  style={[
+                    styles.sortOption,
+                    selected && styles.sortOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setSortOption(opt.key);
+                    setShowSortModal(false);
+                  }}
+                >
+                  <View style={styles.sortOptionLeft}>
+                    <Ionicons
+                      name={opt.icon}
+                      size={18}
+                      color={selected ? colors.primary : colors.muted}
+                    />
+                    <Text
+                      style={[
+                        styles.sortOptionText,
+                        selected && styles.sortOptionTextSelected,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </View>
+                  {selected && (
+                    <Ionicons name="checkmark" size={18} color={colors.primary} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </Pressable>
         </Pressable>
       </Modal>
     </View>
@@ -220,71 +272,79 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    backgroundColor: "#fff",
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 5,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
   },
   headerTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "#F8FAFC",
+  glassButton: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
   },
   headerTitleContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "800",
-    color: colors.dark,
+    color: "#fff",
     letterSpacing: -0.5,
   },
+  headerSubtitle: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "500",
+    marginBottom: 16,
+  },
   storeCountBadge: {
-    backgroundColor: colors.primary,
+    backgroundColor: "rgba(255,255,255,0.25)",
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.4)",
   },
   storeCountText: {
     fontSize: 12,
     fontWeight: "700",
     color: "#fff",
   },
-  filterButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "#F8FAFC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  searchContainer: {
-    marginTop: 4,
-  },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F8FAFC",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
+    backgroundColor: "#fff",
+    borderRadius: radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 8,
+    marginTop: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 6,
   },
   searchInput: {
     flex: 1,
@@ -293,30 +353,56 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
+  sectionHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 4,
+  },
+  sectionTitleWrap: {
+    flexDirection: "column",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: colors.dark,
+    letterSpacing: -0.3,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: colors.muted,
+    fontWeight: "500",
+    marginTop: 2,
+  },
   centerContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 32,
   },
+  loadingCard: {
+    backgroundColor: "#fff",
+    borderRadius: radius.xl,
+    paddingVertical: 36,
+    paddingHorizontal: 48,
+    alignItems: "center",
+    shadowColor: colors.primary,
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 5,
+  },
   loadingText: {
-    marginTop: 12,
+    marginTop: 14,
     fontSize: 15,
     color: colors.muted,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   emptyIconContainer: {
     width: 100,
     height: 100,
-    borderRadius: 35,
-    backgroundColor: "#fff",
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.1,
-    shadowRadius: 15,
-    elevation: 5,
   },
   emptyTitle: {
     fontSize: 20,
@@ -335,7 +421,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 20,
+    borderRadius: radius.pill,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
   },
   clearSearchText: {
     color: "#fff",
@@ -344,7 +434,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingTop: 24,
+    paddingTop: 8,
   },
   columnWrapper: {
     gap: 12,
@@ -352,7 +442,7 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(15,23,42,0.45)",
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
@@ -361,42 +451,49 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 420,
     backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 18,
+    borderRadius: radius.xl,
+    overflow: "hidden",
     shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
   },
   modalTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: colors.dark,
-    marginBottom: 12,
+    color: "#fff",
   },
   sortOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
   },
   sortOptionSelected: {
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#FFF5F7",
+  },
+  sortOptionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   sortOptionText: {
     fontSize: 15,
     color: colors.dark,
     fontWeight: "600",
   },
-  clearSort: {
-    marginTop: 12,
-    alignSelf: "flex-end",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: "#FEF3F2",
-  },
-  clearSortText: {
-    color: colors.muted,
+  sortOptionTextSelected: {
+    color: colors.primary,
     fontWeight: "700",
   },
 });

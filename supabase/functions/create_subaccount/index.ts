@@ -771,7 +771,18 @@ serve(async (req) => {
           .eq("id", sellerId);
 
         if (updateErr) {
-          dbUpdate.error = String(updateErr);
+          dbUpdate.error = String(updateErr.message || updateErr);
+          console.error(
+            "[create_subaccount] failed to update express_sellers row",
+            {
+              request_id: requestId,
+              seller_id: sellerId,
+              error: dbUpdate.error,
+            },
+          );
+          throw new Error(
+            `Failed to update seller payout details: ${dbUpdate.error}`,
+          );
         } else {
           dbUpdate.updated = true;
         }

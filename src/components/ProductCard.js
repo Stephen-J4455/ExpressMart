@@ -7,7 +7,7 @@ import {
   ScrollView,
   Modal,
 } from "react-native";
-import { useState } from "react";
+import { useState, useContext, useEffect, useRef, useCallback } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -15,9 +15,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors } from "../theme/colors";
+import { colors, radius } from "../theme/colors";
 import { FlashSaleBadge } from "./FlashSaleBadge";
 import { FlashSaleCountdown } from "./FlashSaleCountdown";
+import { LazyImage } from "./LazyImage";
 
 const SELLER_BADGE_CONFIG = {
   verified: {
@@ -64,6 +65,7 @@ export const ProductCard = ({
   compact,
   flashSale,
   theme,
+  hidePrice,
   priceLabelOverride,
   priceLabelLines = 2,
 }) => {
@@ -272,7 +274,7 @@ export const ProductCard = ({
                 </View>
               </>
             ) : (
-              <Image source={{ uri: images[0] }} style={styles.listImage} />
+              <LazyImage source={{ uri: images[0] }} style={styles.listImage} />
             )}
             {isOutOfStock && (
               <View style={styles.outOfStockOverlay}>
@@ -532,7 +534,7 @@ export const ProductCard = ({
         onPress={onPress}
       >
         <View style={styles.imageContainer}>
-          <Image source={{ uri: images[0] }} style={styles.image} />
+          <LazyImage source={{ uri: images[0] }} style={styles.image} />
           <LinearGradient
             colors={["rgba(15, 23, 42, 0)", "rgba(15, 23, 42, 0.2)"]}
             style={styles.imageFade}
@@ -593,34 +595,36 @@ export const ProductCard = ({
           >
             {product.title}
           </Text>
-          <View style={styles.metaRow}>
-            <View style={{ flex: 1 }}>
-              {hasFlashSale && (
-                <Text style={styles.originalPrice}>
-                  GH₵
-                  {Number(
-                    flashSale.original_price || product.price,
-                  ).toLocaleString()}
-                </Text>
-              )}
-              {priceLabelOverride ? (
-                <Text
-                  numberOfLines={priceLabelLines}
-                  style={
-                    compact
-                      ? styles.metaDescriptionCompact
-                      : styles.metaDescription
-                  }
-                >
-                  {priceLabelOverride}
-                </Text>
-              ) : (
-                <Text style={compact ? styles.priceCompact : styles.price}>
-                  {formatPrice(product.price, product.discount)}
-                </Text>
-              )}
+          {!hidePrice && (
+            <View style={styles.metaRow}>
+              <View style={{ flex: 1 }}>
+                {hasFlashSale && (
+                  <Text style={styles.originalPrice}>
+                    GH₵
+                    {Number(
+                      flashSale.original_price || product.price,
+                    ).toLocaleString()}
+                  </Text>
+                )}
+                {priceLabelOverride ? (
+                  <Text
+                    numberOfLines={priceLabelLines}
+                    style={
+                      compact
+                        ? styles.metaDescriptionCompact
+                        : styles.metaDescription
+                    }
+                  >
+                    {priceLabelOverride}
+                  </Text>
+                ) : (
+                  <Text style={compact ? styles.priceCompact : styles.price}>
+                    {formatPrice(product.price, product.discount)}
+                  </Text>
+                )}
+              </View>
             </View>
-          </View>
+          )}
           {hasFlashSale && (
             <FlashSaleCountdown
               endTime={flashSale.end_time}
@@ -764,7 +768,7 @@ export const ProductCard = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: "#fff",
-    borderRadius: 24,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: "#EAF0F7",
     overflow: "hidden",
@@ -781,7 +785,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     height: 150,
     alignItems: "stretch",
-    borderRadius: 20,
+    borderRadius: radius.lg,
   },
   imageContainer: {
     position: "relative",
@@ -835,7 +839,7 @@ const styles = StyleSheet.create({
     position: "relative",
     width: 130,
     marginRight: 12,
-    borderRadius: 18,
+    borderRadius: radius.lg,
     overflow: "hidden",
     backgroundColor: "#F1F5F9",
   },
@@ -1111,13 +1115,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: radius.sm,
   },
   discountBadgeList: {
     backgroundColor: "#EF4444",
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: radius.xs,
     marginLeft: 8,
   },
   discountText: {
@@ -1132,7 +1136,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: radius.xs,
   },
   originalPriceList: {
     fontSize: 12,

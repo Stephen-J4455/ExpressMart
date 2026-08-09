@@ -36,6 +36,7 @@ export const supabase =
 // Edge function URLs
 export const EDGE_FUNCTIONS = {
   payment: `${supabaseUrl}/functions/v1/payment`,
+  create_seller: `${supabaseUrl}/functions/v1/create_seller`,
 };
 
 // Helper to call edge functions

@@ -117,6 +117,39 @@ export const ShopProvider = ({ children }) => {
     }
   }, []);
 
+  const readCacheProducts = useCallback(async () => {
+    try {
+      const cached = await AsyncStorage.getItem(CACHE_KEYS.products);
+      if (!cached) return null;
+      const { data } = JSON.parse(cached);
+      if (Array.isArray(data) && data.length > 0) return data;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }, []);
+
+  // Fetch products from the Upstash-backed edge function with a hard timeout
+  // so a slow network fails fast and we can fall back to the local cache.
+  const fetchFromUpstash = useCallback(
+    async (offset, limit) => {
+      if (!supabase) throw new Error("Supabase not initialized");
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Upstash request timed out")),
+          4000,
+        ),
+      );
+      const call = supabase.functions.invoke("cached-products", {
+        body: { offset, limit },
+      });
+      const { data, error } = await Promise.race([call, timeoutPromise]);
+      if (error) throw error;
+      return data;
+    },
+    [supabase],
+  );
+
   const fetchProducts = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     setError(null);
@@ -186,18 +219,39 @@ export const ShopProvider = ({ children }) => {
       );
 
       let productsData = [];
+      let fromLocalCache = false;
       if (redisProductsCacheEnabled) {
-        const { data: cachedData, error: cachedError } =
-          await supabase.functions.invoke("cached-products", {
-            body: { offset: 0, limit: PAGE_SIZE },
-          });
-
-        if (cachedError) throw cachedError;
-        const cacheSource = cachedData?.cache?.source || "database";
-        console.info(
-          `[ShopContext] Network sync fetched products from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}`,
-        );
-        productsData = cachedData?.products || [];
+        // Upstash Redis first; fall back to local cache, then database on failure or slow network
+        try {
+          const cachedData = await fetchFromUpstash(0, PAGE_SIZE);
+          const cacheSource = cachedData?.cache?.source || "database";
+          console.info(
+            `[ShopContext] Network sync fetched products from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}`,
+          );
+          productsData = cachedData?.products || [];
+        } catch (upstashErr) {
+          console.warn(
+            "[ShopContext] Upstash fetch failed or timed out, falling back to local cache:",
+            upstashErr?.message || JSON.stringify(upstashErr),
+          );
+          const localProducts = await readCacheProducts();
+          if (localProducts && localProducts.length > 0) {
+            productsData = localProducts;
+            fromLocalCache = true;
+          } else {
+            const { data, error: productError } = await supabase
+              .from("express_products")
+              .select(
+                "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+              )
+              .eq("status", "active")
+              .or("quantity.gt.0,is_preorder.eq.true")
+              .order("created_at", { ascending: false })
+              .range(0, PAGE_SIZE - 1);
+            if (productError) throw productError;
+            productsData = data || [];
+          }
+        }
       } else {
         console.info(
           "[ShopContext] Network sync fetched products from database (cache disabled)",
@@ -216,7 +270,10 @@ export const ShopProvider = ({ children }) => {
         productsData = data || [];
       }
 
-      const mappedProducts = (productsData || []).map(mapProduct);
+      // Local cache already stores mapped products, so skip re-mapping there.
+      const mappedProducts = fromLocalCache
+        ? productsData || []
+        : (productsData || []).map(mapProduct);
       setProducts(mappedProducts);
       setHasMore(mappedProducts.length === PAGE_SIZE);
 
@@ -279,7 +336,7 @@ export const ShopProvider = ({ children }) => {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [products.length, saveCache]);
+  }, [products.length, saveCache, fetchFromUpstash, readCacheProducts]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || loadingMore || loading) return;
@@ -290,16 +347,31 @@ export const ShopProvider = ({ children }) => {
 
       let rows = [];
       if (isTruthySetting(settings.redis_products_cache_enabled)) {
-        const { data: cachedData, error: cachedError } =
-          await supabase.functions.invoke("cached-products", {
-            body: { offset: start, limit: PAGE_SIZE },
-          });
-        if (cachedError) throw cachedError;
-        const cacheSource = cachedData?.cache?.source || "database";
-        console.info(
-          `[ShopContext] loadMore products fetched from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"} (offset=${start})`,
-        );
-        rows = cachedData?.products || [];
+        // Upstash Redis first; fall back to database on failure or slow network
+        try {
+          const cachedData = await fetchFromUpstash(start, PAGE_SIZE);
+          const cacheSource = cachedData?.cache?.source || "database";
+          console.info(
+            `[ShopContext] loadMore products fetched from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"} (offset=${start})`,
+          );
+          rows = cachedData?.products || [];
+        } catch (upstashErr) {
+          console.warn(
+            `[ShopContext] loadMore failed from Upstash, falling back to database (offset=${start})`,
+            upstashErr?.message || JSON.stringify(upstashErr),
+          );
+          const { data, error: fetchError } = await supabase
+            .from("express_products")
+            .select(
+              "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+            )
+            .eq("status", "active")
+            .or("quantity.gt.0,is_preorder.eq.true")
+            .order("created_at", { ascending: false })
+            .range(start, end);
+          if (fetchError) throw fetchError;
+          rows = data || [];
+        }
       } else {
         console.info(
           `[ShopContext] loadMore products fetched from database (cache disabled, offset=${start})`,
@@ -328,7 +400,11 @@ export const ShopProvider = ({ children }) => {
     } finally {
       setLoadingMore(false);
     }
-  }, [hasMore, loadingMore, loading, products, saveCache, settings]);
+  }, [hasMore, loadingMore, loading, products, saveCache, settings, fetchFromUpstash]);
+
+  const refreshSellers = useCallback(async () => {
+    await fetchProducts({ silent: true });
+  }, [fetchProducts]);
 
   const followSeller = useCallback(async (sellerId) => {
     if (!supabase) return;
@@ -508,6 +584,7 @@ export const ShopProvider = ({ children }) => {
       hasMore,
       error,
       refresh: fetchProducts,
+      refreshSellers,
       loadMore,
       followedSellers,
       followSeller,
@@ -523,6 +600,7 @@ export const ShopProvider = ({ children }) => {
       loadingMore,
       hasMore,
       error,
+      refreshSellers,
       loadMore,
       followedSellers,
       followSeller,

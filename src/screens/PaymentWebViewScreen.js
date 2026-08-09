@@ -402,16 +402,31 @@ export const PaymentWebViewScreen = () => {
     </html>
   `;
 
+  // Route payment result back to the originating screen (Checkout or StoreRegistration)
+  const routeName = route.params?.returnTo || "Checkout";
+
+  const routePaymentBack = (reference, orderData) => {
+    if (routeName === "StoreRegistration") {
+      navigation.replace("StoreRegistration", {
+        payment: "success",
+        reference,
+        orderData,
+      });
+    } else {
+      navigation.replace("Checkout", {
+        payment: "success",
+        reference,
+        orderData,
+      });
+    }
+  };
+
   // Shared handler — accepts parsed data object
   const processPaymentMessage = (data) => {
     if (!data || paymentProcessed) return;
     if (data.event === "payment_success") {
       setPaymentProcessed(true);
-      navigation.replace("Checkout", {
-        payment: "success",
-        reference: data.reference,
-        orderData: data.orderData,
-      });
+      routePaymentBack(data.reference, data.orderData);
     } else if (data.event === "payment_cancelled") {
       setPaymentProcessed(true);
       navigation.goBack();
@@ -447,11 +462,7 @@ export const PaymentWebViewScreen = () => {
             clearInterval(interval);
             const ref = decodeURIComponent(match[1]);
             setPaymentProcessed(true);
-            navigation.replace("Checkout", {
-              payment: "success",
-              reference: ref,
-              orderData,
-            });
+            routePaymentBack(ref, orderData);
           }
         }
       } catch (_e) {
@@ -479,11 +490,7 @@ export const PaymentWebViewScreen = () => {
       if (match && match[1]) {
         const referenceFromUrl = decodeURIComponent(match[1]);
         setPaymentProcessed(true);
-        navigation.replace("Checkout", {
-          payment: "success",
-          reference: referenceFromUrl,
-          orderData,
-        });
+        routePaymentBack(referenceFromUrl, orderData);
       }
     } catch (e) {
       console.warn("Nav parse error", e);
