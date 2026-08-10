@@ -970,7 +970,7 @@ export default function App() {
                   <AdsProvider>
                     <DeepLinkHandler />
                     <NavigationContainer theme={navTheme} linking={linking}>
-                      <StatusBar style="dark" />
+                      <StatusBar style="light" />
                       <AuthenticatedApp />
                     </NavigationContainer>
                   </AdsProvider>

@@ -13,9 +13,14 @@ import {
   Platform,
   TouchableOpacity,
 } from "react-native";
+import { Video } from "react-native-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
+// expo-file-system v57 deprecated createUploadTask on the main entry (it now
+// throws). The working implementation lives in the legacy subpath, which is
+// exactly what we need to stream the raw video bytes to R2 via a binary PUT.
+import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase, callEdgeFunction } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -67,6 +72,91 @@ const AVAILABLE_COLORS = [
 ];
 
 const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
+
+const PRODUCT_FORM_STEPS = [
+  { key: "basics", label: "Basics" },
+  { key: "inventory", label: "Inventory" },
+  { key: "media", label: "Media" },
+  { key: "details", label: "Details" },
+];
+
+const getVideoUploadDetails = (uri, pickedFile = null) => {
+  const nameSource = String(pickedFile?.name || uri || "").split("?")[0];
+  const fileName = nameSource.split("/").pop() || "video.mp4";
+  const rawExt = fileName.includes(".") ? fileName.split(".").pop() : "";
+  const ext = rawExt ? rawExt.toLowerCase() : "mp4";
+  const rawMimeType = String(
+    pickedFile?.type || pickedFile?.mimeType || "",
+  ).trim();
+  const mimeType = rawMimeType.includes("/") ? rawMimeType : "";
+
+  if (mimeType) {
+    return {
+      contentType: mimeType,
+      extension:
+        mimeType === "video/quicktime"
+          ? "mov"
+          : mimeType.split("/")[1] || ext || "mp4",
+    };
+  }
+
+  if (ext === "mov" || ext === "qt" || ext === "m4v") {
+    return {
+      contentType: ext === "mov" || ext === "qt" ? "video/quicktime" : "video/mp4",
+      extension: ext === "qt" ? "mov" : ext,
+    };
+  }
+
+  return { contentType: "video/mp4", extension: ext || "mp4" };
+};
+
+const normalizePickedVideoType = (asset) => {
+  const mimeType = String(asset?.mimeType || asset?.file?.type || "").trim();
+  if (mimeType.includes("/")) return mimeType;
+
+  const name = String(asset?.fileName || asset?.uri || "").split("?")[0];
+  const ext = name.includes(".") ? name.split(".").pop()?.toLowerCase() : "";
+  if (ext === "mov" || ext === "qt") return "video/quicktime";
+  return "video/mp4";
+};
+
+const getBlobFromUri = async (uri, timeoutMs = 30000) => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    if (blob) return blob;
+  } catch (fetchError) {
+    // Fall back to XHR for Android/content:// and similar local URIs.
+  }
+
+  return await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const timer = setTimeout(() => {
+      xhr.abort();
+      reject(new Error("Reading selected video timed out"));
+    }, timeoutMs);
+
+    xhr.open("GET", uri, true);
+    xhr.responseType = "blob";
+    xhr.onload = () => {
+      clearTimeout(timer);
+      if (xhr.status === 200 || xhr.status === 0) {
+        resolve(xhr.response);
+        return;
+      }
+      reject(new Error(`Failed to read selected video (status ${xhr.status})`));
+    };
+    xhr.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("Failed to read selected video"));
+    };
+    xhr.onabort = () => {
+      clearTimeout(timer);
+      reject(new Error("Reading selected video was aborted"));
+    };
+    xhr.send();
+  });
+};
 
 // Hamburger menu — mirrors the Express-Store seller/store settings surface
 // (Dashboard, Catalog, Orders, Chats, Profile/theme, Paystack, StatusCreator, etc.)
@@ -136,13 +226,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [vendor, setVendor] = useState("");
   const [compareAtPrice, setCompareAtPrice] = useState("");
   const [costPrice, setCostPrice] = useState("");
-  const [tags, setTags] = useState("");
   const [trackInventory, setTrackInventory] = useState(true);
   const [allowBackorder, setAllowBackorder] = useState(false);
   const [isPreorder, setIsPreorder] = useState(false);
   const [weightUnit, setWeightUnit] = useState("kg");
   const [slug, setSlug] = useState("");
   const [specifications, setSpecifications] = useState([]);
+  const [productFormStep, setProductFormStep] = useState(1);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -161,12 +251,31 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
 
+  // ── Product video (attached to a product, uploaded to Cloudflare R2) ────
+  const [videoUri, setVideoUri] = useState(null);
+  const [videoFile, setVideoFile] = useState(null); // { file, type, name } (web)
+  const [existingVideoUrl, setExistingVideoUrl] = useState(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [removingVideo, setRemovingVideo] = useState(false);
+
   // ── Orders UI state ─────────────────────────────────────────────────────
   const [orderFilter, setOrderFilter] = useState("processing");
   const [orderSearch, setOrderSearch] = useState("");
 
+  // ── Reels UI state (seller reels stored on Cloudflare R2) ──────────────
+  const [reels, setReels] = useState([]);
+  const [reelsLoading, setReelsLoading] = useState(false);
+  const [deletingReelId, setDeletingReelId] = useState(null);
+
   // ── Tabs ────────────────────────────────────────────────────────────────
-  const TABS = ["catalog", "orders", "flash", "insights"];
+  const TABS = ["catalog", "orders", "flash", "reels", "insights"];
+  const TAB_ICONS = {
+    catalog: "grid-outline",
+    orders: "receipt-outline",
+    flash: "flash-outline",
+    reels: "videocam-outline",
+    insights: "bar-chart-outline",
+  };
   const [activeTab, setActiveTab] = useState("catalog");
 
   const fetchSellerId = useCallback(async () => {
@@ -249,6 +358,19 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       setCategories(catRes.data?.length ? catRes.data : DEFAULT_CATEGORIES);
       setProducts(prodRes.data || []);
       setOrders(ordRes.data || []);
+
+      // ── Load this seller's reels (stored on Cloudflare R2) ────────────────
+      try {
+        const { data: reelData, error: reelErr } = await supabase
+          .from("reels")
+          .select("*")
+          .eq("seller_id", s.id)
+          .order("created_at", { ascending: false });
+        if (reelErr) throw reelErr;
+        setReels(reelData || []);
+      } catch (re) {
+        console.warn("reels load failed", re);
+      }
     } catch (err) {
       console.error("SellerAdmin load error:", err);
       toast.error("Failed to load", err.message || "Please try again");
@@ -268,7 +390,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       if (!sellerId) throw new Error("Seller profile missing");
       const { data: created, error } = await supabase
         .from("express_products")
-        .insert({ ...data, seller_id: sellerId, status: "pending" })
+        .insert({ ...data, seller_id: sellerId, status: "active" })
         .select()
         .single();
       if (error) throw error;
@@ -307,6 +429,38 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     if (error) throw error;
     setProducts((prev) => prev.filter((p) => p.id !== id));
   }, []);
+
+  // Remove a seller reel: delete the R2 object (best-effort) then the DB row.
+  const deleteReel = useCallback(
+    async (id) => {
+      const reel = reels.find((r) => r.id === id);
+      if (!reel || deletingReelId) return;
+      setDeletingReelId(id);
+      try {
+        if (reel.r2_key) {
+          try {
+            await supabase.functions.invoke("delete-r2-object", {
+              body: { key: reel.r2_key },
+            });
+          } catch (e) {
+            console.warn("R2 object delete failed (continuing)", e);
+          }
+        }
+        const { error } = await supabase
+          .from("reels")
+          .delete()
+          .eq("id", id);
+        if (error) throw error;
+        setReels((prev) => prev.filter((r) => r.id !== id));
+        toast.success("Reel deleted", "Removed from your store");
+      } catch (e) {
+        toast.error("Delete failed", e.message || "Could not delete reel");
+      } finally {
+        setDeletingReelId(null);
+      }
+    },
+    [reels, deletingReelId, toast],
+  );
 
   const advanceOrderStatus = useCallback(
     async (orderId, status) => {
@@ -366,13 +520,18 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setVendor("");
     setCompareAtPrice("");
     setCostPrice("");
-    setTags("");
     setTrackInventory(true);
     setAllowBackorder(false);
     setIsPreorder(false);
     setWeightUnit("kg");
     setSlug("");
     setSpecifications([]);
+    setProductFormStep(1);
+    setVideoUri(null);
+    setVideoFile(null);
+    setExistingVideoUrl(null);
+    setUploadingVideo(false);
+    setRemovingVideo(false);
     setEditingProduct(null);
   };
 
@@ -396,7 +555,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setVendor(product.vendor || "");
     setCompareAtPrice(product.compare_at_price?.toString() || "");
     setCostPrice(product.cost_price?.toString() || "");
-    setTags(product.tags?.join(", ") || "");
     setSelectedSizes(product.sizes || []);
     setSelectedColors(product.colors || []);
     setWeightUnit(product.weight_unit || "kg");
@@ -404,6 +562,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setTrackInventory(product.track_inventory ?? true);
     setAllowBackorder(product.allow_backorder ?? false);
     setIsPreorder(!!product.is_preorder);
+    setProductFormStep(1);
     if (product.specifications && typeof product.specifications === "object") {
       setSpecifications(
         Object.entries(product.specifications).map(([k, v]) => ({
@@ -424,6 +583,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setRemovingImageUrl(null);
     setImageUris([]);
     setImageFiles({});
+    setVideoUri(null);
+    setVideoFile(null);
+    setExistingVideoUrl(product.video_url || null);
     setModalVisible(true);
   };
 
@@ -457,7 +619,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       await updateProduct(editingProduct.id, {
         thumbnail: next[0] || null,
         thumbnails: next.length ? next : null,
-        status: "pending",
+        status: "active",
       });
       setExistingImageUrls(next);
       setEditingProduct((p) =>
@@ -465,7 +627,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       );
       setViewingProduct((p) =>
         p && p.id === editingProduct.id
-          ? { ...p, thumbnail: next[0] || null, thumbnails: next, status: "pending" }
+          ? { ...p, thumbnail: next[0] || null, thumbnails: next, status: "active" }
           : p,
       );
       toast.success("Image removed", "Image deleted from storage");
@@ -573,6 +735,182 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
   const uploadImages = async (uris) =>
     Promise.all(uris.map((u) => uploadImage(u)));
+
+  // ── Product video: pick + upload to Cloudflare R2 ──────────────────────
+  const pickVideo = async () => {
+    if (Platform.OS !== "web") {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        toast.error("Permission needed", "Please grant camera roll permissions");
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      allowsEditing: true,
+      videoMaxDuration: 180,
+      quality: 1,
+    });
+    if (!result.canceled && result.assets?.length) {
+      const asset = result.assets[0];
+      setVideoUri(asset.uri);
+      if (Platform.OS === "web") {
+        const type = normalizePickedVideoType(asset);
+        setVideoFile({
+          file: asset.file || null,
+          type,
+          name: asset.fileName || asset.uri?.split("/").pop() || "video.mp4",
+        });
+      } else {
+        setVideoFile(null);
+      }
+    }
+  };
+
+  // Uploads a local video file to Cloudflare R2 via the get-r2-upload-url edge
+  // function, then returns the public URL + R2 object key.
+  //
+  // On native we use expo-file-system's createUploadTask with BINARY_CONTENT so
+  // the raw file bytes are streamed straight to R2 (the reliable React Native
+  // path — reading a local file into a Blob via fetch/XHR is unsupported and was
+  // silently storing empty/garbage objects). On web we PUT the picked Blob.
+  const uploadVideoToR2 = async (uri, pickedFile) => {
+    const { contentType, extension } = getVideoUploadDetails(uri, pickedFile);
+    const fileName = `product-video-${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(7)}.${extension}`;
+
+    // ── 1. Request a presigned PUT URL from the edge function ────────────────
+    let presigned;
+    try {
+      const { data, error } = await supabase.functions.invoke("get-r2-upload-url", {
+        body: { fileName, fileType: contentType, folder: `products/${sellerId}` },
+      });
+      if (error) throw new Error(error.message || "Failed to get upload URL");
+      if (!data?.uploadUrl || !data?.publicUrl) {
+        throw new Error("Edge function returned an invalid response");
+      }
+      presigned = data;
+    } catch (err) {
+      console.error("[uploadVideoToR2] get-r2-upload-url failed:", err);
+      throw new Error(`Could not prepare video upload: ${err.message}`);
+    }
+
+    const { uploadUrl, publicUrl, key } = presigned;
+
+    // ── 2. PUT the video bytes directly to R2 ────────────────────────────────
+    try {
+      if (Platform.OS === "web") {
+        const body =
+          pickedFile instanceof Blob ? pickedFile : await getBlobFromUri(uri);
+        if (!body) throw new Error("Could not read the selected video file");
+
+        const putRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": contentType },
+          body,
+        });
+        if (!putRes.ok) {
+          const detail = await putRes.text().catch(() => "");
+          console.error(
+            "[uploadVideoToR2] R2 PUT failed:",
+            putRes.status,
+            detail,
+          );
+          throw new Error(`R2 video upload failed with status ${putRes.status}`);
+        }
+      } else {
+        // expo-file-system v57 no longer exposes `FileSystemUploadType` on the
+        // default namespace (it was renamed to `UploadType` in the new types and
+        // is not re-exported), so use the underlying enum value directly:
+        // BINARY_CONTENT === 0.
+        const uploadTask = FileSystem.createUploadTask(
+          uploadTaskUrl(uploadUrl),
+          uri,
+          {
+            httpMethod: "PUT",
+            headers: { "Content-Type": contentType },
+            uploadType: 0, // FileSystemUploadType.BINARY_CONTENT
+          },
+          () => {},
+        );
+        const result = await uploadTask.uploadAsync();
+        if (result.status !== 200) {
+          console.error(
+            "[uploadVideoToR2] R2 upload failed:",
+            result.status,
+            result.body,
+          );
+          throw new Error(`R2 video upload failed with status ${result.status}`);
+        }
+      }
+    } catch (err) {
+      console.error("[uploadVideoToR2] upload to R2 failed:", err);
+      throw err;
+    }
+
+    return { publicUrl, key };
+  };
+
+  // expo-file-system expects a string URL; guard against accidental undefined.
+  const uploadTaskUrl = (url) => {
+    if (!url || typeof url !== "string") {
+      throw new Error("Missing R2 upload URL");
+    }
+    return url;
+  };
+
+  const goToNextProductStep = () => {
+    if (productFormStep === 1) {
+      if (!title || !price || !category) {
+        toast.warning(
+          "Missing info",
+          "Please fill title, price, and category before continuing.",
+        );
+        return;
+      }
+    }
+
+    if (productFormStep === 2 && !isPreorder && !quantity) {
+      toast.warning(
+        "Missing info",
+        "Please add a quantity or mark the product as preorder.",
+      );
+      return;
+    }
+
+    setProductFormStep((current) =>
+      Math.min(PRODUCT_FORM_STEPS.length, current + 1),
+    );
+  };
+
+  const goToPreviousProductStep = () => {
+    setProductFormStep((current) => Math.max(1, current - 1));
+  };
+
+  // Remove an existing (already-saved) product video from R2-backed URL.
+  // The R2 key is stored on the product so we can delete the object later;
+  // for now we simply clear the reference and let it be overwritten.
+  const handleRemoveExistingVideo = async () => {
+    if (!editingProduct || removingVideo || !existingVideoUrl) return;
+    setRemovingVideo(true);
+    try {
+      await updateProduct(editingProduct.id, {
+        video_url: null,
+        r2_video_key: null,
+        status: "active",
+      });
+      setExistingVideoUrl(null);
+      setEditingProduct((p) =>
+        p ? { ...p, video_url: null, r2_video_key: null } : p,
+      );
+      toast.success("Video removed", "Product video cleared");
+    } catch (e) {
+      toast.error("Remove failed", e.message || "Could not remove video");
+    } finally {
+      setRemovingVideo(false);
+    }
+  };
 
   const handleActionSheet = (action) => {
     setActionSheetVisible(false);
@@ -692,6 +1030,25 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         ? [...existingImageUrls, ...imageUrls]
         : imageUrls;
 
+      // Upload an attached product video to Cloudflare R2 (if chosen).
+      let finalVideoUrl = editingProduct ? existingVideoUrl || null : null;
+      let finalVideoKey = editingProduct
+        ? editingProduct.r2_video_key || null
+        : null;
+      if (videoUri) {
+        setUploadingVideo(true);
+        try {
+          const { publicUrl, key } = await uploadVideoToR2(
+            videoUri,
+            videoFile?.file || null,
+          );
+          finalVideoUrl = publicUrl;
+          finalVideoKey = key;
+        } finally {
+          setUploadingVideo(false);
+        }
+      }
+
       const specsObj = {};
       specifications.forEach((s) => {
         if (s.key && s.value) specsObj[s.key] = s.value;
@@ -726,12 +1083,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         slug: slug || null,
         compare_at_price: compareAtPrice ? parseFloat(compareAtPrice) : null,
         cost_price: costPrice ? parseFloat(costPrice) : null,
-        tags: tags
-          ? tags
-              .split(",")
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : [],
         track_inventory: trackInventory,
         allow_backorder: allowBackorder,
         is_preorder: isPreorder,
@@ -739,15 +1090,40 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       };
       productData.thumbnail = merged[0] || null;
       productData.thumbnails = merged.length ? merged : null;
+      productData.video_url = finalVideoUrl;
+      productData.r2_video_key = finalVideoKey;
+
+      let savedProductId = editingProduct?.id ?? null;
 
       if (editingProduct) {
-        productData.status = "pending";
+        productData.status = "active";
         await updateProduct(editingProduct.id, productData);
-        toast.success("Updated", "Product submitted for review");
+        toast.success("Updated", "Product updated and is now live");
       } else {
-        await createProduct(productData);
-        toast.success("Created", "Product submitted for review");
+        const created = await createProduct(productData);
+        savedProductId = created?.id ?? null;
+        toast.success("Created", "Product created and is now live");
       }
+
+      // Enqueue a server-side HLS transcode job for the uploaded product video
+      // so viewers get adaptive-bitrate streaming (best-effort; never blocks
+      // the product save). Runs after the row exists so the worker can write
+      // the resulting master playlist URL back to it.
+      if (videoUri && key && savedProductId) {
+        try {
+          await supabase.functions.invoke("transcode-reel", {
+            body: {
+              sourceKey: key,
+              ownerTable: "express_products",
+              ownerId: savedProductId,
+              hlsUrlColumn: "video_hls_url",
+            },
+          });
+        } catch (transcodeErr) {
+          console.warn("Failed to enqueue product video transcode:", transcodeErr);
+        }
+      }
+
       resetProductFormState();
       setModalVisible(false);
     } catch (e) {
@@ -1293,6 +1669,59 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     </View>
   );
 
+  // ── Reels tab (seller reels stored on Cloudflare R2) ─────────────────────
+  const renderReels = () => (
+    <View>
+      <Text style={styles.sectionTitle}>Store Reels</Text>
+      {reelsLoading ? (
+        <Text style={styles.emptyNote}>Loading reels…</Text>
+      ) : reels.length === 0 ? (
+        <Text style={styles.emptyNote}>
+          No reels yet. Create reels from the app to showcase your products.
+        </Text>
+      ) : (
+        <View style={styles.reelsGrid}>
+          {reels.map((reel) => (
+            <View key={reel.id} style={styles.reelCard}>
+              {reel.thumbnail_url ? (
+                <Image source={{ uri: reel.thumbnail_url }} style={styles.reelThumb} />
+              ) : (
+                <Video
+                  source={{ uri: reel.video_url }}
+                  style={styles.reelThumb}
+                  resizeMode="cover"
+                  paused
+                  muted
+                />
+              )}
+              <View style={styles.reelOverlay}>
+                <Text style={styles.reelTitle} numberOfLines={1}>
+                  {reel.title}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.reelDelete}
+                onPress={() => {
+                  if (deletingReelId) return;
+                  deleteReel(reel.id).catch((e) =>
+                    toast.error("Delete failed", e.message),
+                  );
+                }}
+                disabled={deletingReelId === reel.id}
+              >
+                {deletingReelId === reel.id ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="trash-outline" size={18} color="#fff" />
+                )}
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+
   // ── Hamburger menu drawer ───────────────────────────────────────────────
   const renderMenuDrawer = () => (
     <Modal
@@ -1438,31 +1867,32 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         </View>
 
         <View style={styles.tabBar}>
-          {TABS.map((tab) => (
-            <Pressable
-              key={tab}
-              style={[
-                styles.tab,
-                activeTab === tab && { backgroundColor: accent + "14" },
-              ]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab;
+            return (
+              <Pressable
+                key={tab}
                 style={[
-                  styles.tabText,
-                  activeTab === tab && { color: accent, fontWeight: "800" },
+                  styles.tab,
+                  isActive && { backgroundColor: accent + "14" },
                 ]}
+                onPress={() => setActiveTab(tab)}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </Text>
-            </Pressable>
-          ))}
+                <Ionicons
+                  name={TAB_ICONS[tab]}
+                  size={22}
+                  color={isActive ? accent : colors.muted}
+                />
+              </Pressable>
+            );
+          })}
         </View>
 
         <View style={styles.tabContent}>
           {activeTab === "catalog" && renderCatalog()}
           {activeTab === "orders" && renderOrders()}
           {activeTab === "flash" && renderFlash()}
+          {activeTab === "reels" && renderReels()}
           {activeTab === "insights" && renderInsights()}
         </View>
 
@@ -1486,54 +1916,155 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </Pressable>
             </View>
 
-            <Text style={styles.label}>Title *</Text>
-            <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="Product title" placeholderTextColor={colors.muted} />
-
-            <View style={styles.row}>
-              <View style={styles.col}>
-                <Text style={styles.label}>Price (GH₵) *</Text>
-                <TextInput style={styles.input} value={price} onChangeText={setPrice} keyboardType="numeric" placeholder="0.00" placeholderTextColor={colors.muted} />
-              </View>
-              <View style={styles.col}>
-                <Text style={styles.label}>Shipping (GH₵)</Text>
-                <TextInput style={styles.input} value={shippingFee} onChangeText={setShippingFee} keyboardType="numeric" placeholder="0.00" placeholderTextColor={colors.muted} />
-              </View>
+            <View style={styles.stepper}>
+              {PRODUCT_FORM_STEPS.map((step, index) => {
+                const stepNumber = index + 1;
+                const isActive = productFormStep === stepNumber;
+                const isCompleted = productFormStep > stepNumber;
+                return (
+                  <View key={step.key} style={styles.stepperItem}>
+                    <View
+                      style={[
+                        styles.stepperCircle,
+                        isActive && styles.stepperCircleActive,
+                        isCompleted && styles.stepperCircleDone,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.stepperCircleText,
+                          (isActive || isCompleted) && styles.stepperCircleTextActive,
+                        ]}
+                      >
+                        {stepNumber}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.stepperLabel,
+                        isActive && styles.stepperLabelActive,
+                      ]}
+                    >
+                      {step.label}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
 
-            <Text style={styles.label}>Category *</Text>
-            <View style={styles.categoryRow}>
-              {categories.map((c) => (
-                <Pressable
-                  key={c.id}
-                  style={[
-                    styles.catChip,
-                    category === c.name && { backgroundColor: accent, borderColor: accent },
-                  ]}
-                  onPress={() => setCategory(c.name)}
-                >
-                  <Text
-                    style={[
-                      styles.catChipText,
-                      category === c.name && { color: "#fff" },
-                    ]}
+            <Text style={styles.stepHint}>
+              Step {productFormStep} of {PRODUCT_FORM_STEPS.length}
+            </Text>
+
+            {productFormStep === 1 && (
+              <>
+                <Text style={styles.label}>Title *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder="Product title"
+                  placeholderTextColor={colors.muted}
+                />
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Price (GH₵) *</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={price}
+                      onChangeText={setPrice}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+                  <View style={styles.col}>
+                    <Text style={styles.label}>Shipping (GH₵)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={shippingFee}
+                      onChangeText={setShippingFee}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                      placeholderTextColor={colors.muted}
+                    />
+                  </View>
+                </View>
+
+                <Text style={styles.label}>Category *</Text>
+                <View style={styles.categoryRow}>
+                  {categories.map((c) => (
+                    <Pressable
+                      key={c.id}
+                      style={[
+                        styles.catChip,
+                        category === c.name && {
+                          backgroundColor: accent,
+                          borderColor: accent,
+                        },
+                      ]}
+                      onPress={() => setCategory(c.name)}
+                    >
+                      <Text
+                        style={[
+                          styles.catChipText,
+                          category === c.name && { color: "#fff" },
+                        ]}
+                      >
+                        {c.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Text style={styles.label}>Description</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholder="Describe the product..."
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  numberOfLines={4}
+                />
+
+                <View style={styles.stepActions}>
+                  <View style={styles.stepSpacer} />
+                  <TouchableOpacity
+                    style={[styles.stepButton, { backgroundColor: accent }]}
+                    onPress={goToNextProductStep}
                   >
-                    {c.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+                    <Text style={styles.stepButtonText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
 
-            <Text style={styles.label}>Description</Text>
-            <TextInput style={[styles.input, styles.textArea]} value={description} onChangeText={setDescription} placeholder="Describe the product..." placeholderTextColor={colors.muted} multiline numberOfLines={4} />
-
-            <View style={styles.row}>
+            {productFormStep === 2 && (
+              <>
+                <View style={styles.row}>
               <View style={styles.col}>
                 <Text style={styles.label}>Quantity *</Text>
-                <TextInput style={styles.input} value={quantity} onChangeText={setQuantity} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} />
+                <TextInput
+                  style={styles.input}
+                  value={quantity}
+                  onChangeText={setQuantity}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={colors.muted}
+                />
               </View>
               <View style={styles.col}>
                 <Text style={styles.label}>Discount %</Text>
-                <TextInput style={styles.input} value={String(discount)} onChangeText={(t) => setDiscount(Number(t) || 0)} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} />
+                <TextInput
+                  style={styles.input}
+                  value={String(discount)}
+                  onChangeText={(t) => setDiscount(Number(t) || 0)}
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor={colors.muted}
+                />
               </View>
             </View>
 
@@ -1614,6 +2145,25 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </Pressable>
             </View>
 
+                <View style={styles.stepActions}>
+                  <TouchableOpacity
+                    style={[styles.stepButton, styles.stepButtonSecondary]}
+                    onPress={goToPreviousProductStep}
+                  >
+                    <Text style={styles.stepButtonSecondaryText}>Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.stepButton, { backgroundColor: accent }]}
+                    onPress={goToNextProductStep}
+                  >
+                    <Text style={styles.stepButtonText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {productFormStep === 3 && (
+              <>
             <Text style={styles.label}>Images (max 5)</Text>
             <View style={styles.imageGrid}>
               {existingImageUrls.map((u) => (
@@ -1646,60 +2196,163 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               )}
             </View>
 
-            <Text style={styles.label}>Specifications</Text>
-            <View style={styles.specList}>
-              {specifications.map((spec, index) => (
-                <View key={index} style={styles.specRow}>
-                  <TextInput
-                    style={[styles.input, styles.specKey]}
-                    value={spec.key}
-                    onChangeText={(text) => {
-                      const updated = [...specifications];
-                      updated[index].key = text;
-                      setSpecifications(updated);
-                    }}
-                    placeholder="Name (e.g. Material)"
-                    placeholderTextColor={colors.muted}
-                  />
-                  <TextInput
-                    style={[styles.input, styles.specValue]}
-                    value={spec.value}
-                    onChangeText={(text) => {
-                      const updated = [...specifications];
-                      updated[index].value = text;
-                      setSpecifications(updated);
-                    }}
-                    placeholder="Value (e.g. Cotton)"
-                    placeholderTextColor={colors.muted}
-                  />
+            <Text style={styles.label}>Product Video (optional)</Text>
+            <View style={styles.videoGrid}>
+              {existingVideoUrl || videoUri ? (
+                <View style={styles.videoWrap}>
+                  {videoUri ? (
+                    <Video
+                      source={{ uri: videoUri }}
+                      style={styles.videoThumb}
+                      resizeMode="cover"
+                      repeat
+                      muted
+                      paused
+                    />
+                  ) : (
+                    <Video
+                      source={{ uri: existingVideoUrl }}
+                      style={styles.videoThumb}
+                      resizeMode="cover"
+                      repeat
+                      muted
+                      paused
+                    />
+                  )}
                   <Pressable
-                    style={styles.specRemove}
-                    onPress={() =>
-                      setSpecifications(specifications.filter((_, i) => i !== index))
+                    style={styles.videoRemove}
+                    onPress={
+                      videoUri
+                        ? () => setVideoUri(null)
+                        : handleRemoveExistingVideo
                     }
+                    disabled={removingVideo}
                   >
-                    <Ionicons name="close-circle" size={22} color="#EF4444" />
+                    <Ionicons name="close-circle" size={20} color="#EF4444" />
                   </Pressable>
+                  <View style={styles.videoBadge}>
+                    <Ionicons name="videocam" size={14} color="#fff" />
+                    <Text style={styles.videoBadgeText}>
+                      {videoUri ? "New video" : "Current video"}
+                    </Text>
+                  </View>
                 </View>
-              ))}
+              ) : null}
+              {!videoUri && (
+                <Pressable
+                  style={styles.videoAdd}
+                  onPress={pickVideo}
+                  disabled={uploadingVideo}
+                >
+                  {uploadingVideo ? (
+                    <ActivityIndicator size="small" color={accent} />
+                  ) : (
+                    <>
+                      <Ionicons name="videocam-outline" size={28} color={accent} />
+                      <Text style={[styles.videoAddText, { color: accent }]}>
+                        Add video
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              )}
             </View>
-            <TouchableOpacity
-              style={styles.addSpecButton}
-              onPress={() => setSpecifications([...specifications, { key: "", value: "" }])}
-            >
-              <Ionicons name="add" size={18} color={accent} />
-              <Text style={[styles.addSpecText, { color: accent }]}>Add Specification</Text>
-            </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.submitButton, { backgroundColor: accent }, submitting && { opacity: 0.6 }]}
-              onPress={submitProduct}
-              disabled={submitting}
-            >
-              <Text style={styles.submitButtonText}>
-                {submitting ? "Saving..." : editingProduct ? "Save Changes" : "Create Product"}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.stepActions}>
+              <TouchableOpacity
+                style={[styles.stepButton, styles.stepButtonSecondary]}
+                onPress={goToPreviousProductStep}
+              >
+                <Text style={styles.stepButtonSecondaryText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.stepButton, { backgroundColor: accent }]}
+                onPress={goToNextProductStep}
+              >
+                <Text style={styles.stepButtonText}>Next</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
+            {productFormStep === 4 && (
+              <>
+                <Text style={styles.label}>Specifications</Text>
+                <View style={styles.specList}>
+                  {specifications.map((spec, index) => (
+                    <View key={index} style={styles.specRow}>
+                      <TextInput
+                        style={[styles.input, styles.specKey]}
+                        value={spec.key}
+                        onChangeText={(text) => {
+                          const updated = [...specifications];
+                          updated[index].key = text;
+                          setSpecifications(updated);
+                        }}
+                        placeholder="Name (e.g. Material)"
+                        placeholderTextColor={colors.muted}
+                      />
+                      <TextInput
+                        style={[styles.input, styles.specValue]}
+                        value={spec.value}
+                        onChangeText={(text) => {
+                          const updated = [...specifications];
+                          updated[index].value = text;
+                          setSpecifications(updated);
+                        }}
+                        placeholder="Value (e.g. Cotton)"
+                        placeholderTextColor={colors.muted}
+                      />
+                      <Pressable
+                        style={styles.specRemove}
+                        onPress={() =>
+                          setSpecifications(
+                            specifications.filter((_, i) => i !== index),
+                          )
+                        }
+                      >
+                        <Ionicons name="close-circle" size={22} color="#EF4444" />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+                <TouchableOpacity
+                  style={styles.addSpecButton}
+                  onPress={() =>
+                    setSpecifications([...specifications, { key: "", value: "" }])
+                  }
+                >
+                  <Ionicons name="add" size={18} color={accent} />
+                  <Text style={[styles.addSpecText, { color: accent }]}>Add Specification</Text>
+                </TouchableOpacity>
+
+                <View style={styles.stepActions}>
+                  <TouchableOpacity
+                    style={[styles.stepButton, styles.stepButtonSecondary]}
+                    onPress={goToPreviousProductStep}
+                  >
+                    <Text style={styles.stepButtonSecondaryText}>Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.stepButton,
+                      { backgroundColor: accent },
+                      submitting && { opacity: 0.6 },
+                    ]}
+                    onPress={submitProduct}
+                    disabled={submitting}
+                  >
+                    <Text style={styles.stepButtonText}>
+                      {submitting
+                        ? "Saving..."
+                        : editingProduct
+                          ? "Save Changes"
+                          : "Create Product"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -1852,9 +2505,41 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 4,
   },
-  tab: { flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 10 },
-  tabText: { fontSize: 13, fontWeight: "700", color: colors.muted },
+  tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 10 },
   tabContent: { marginTop: 16, paddingHorizontal: 16 },
+  reelsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  reelCard: {
+    width: "47%",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    height: 200,
+    position: "relative",
+  },
+  reelThumb: { width: "100%", height: "100%" },
+  reelOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  reelTitle: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  reelDelete: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "rgba(239,68,68,0.92)",
+    borderRadius: 18,
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   sectionTitle: { fontSize: 18, fontWeight: "800", color: colors.dark, marginBottom: 12 },
   sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   primaryButton: {
@@ -1985,6 +2670,44 @@ const styles = StyleSheet.create({
   modalContent: { padding: 16, paddingBottom: 40 },
   modalHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   modalTitle: { fontSize: 20, fontWeight: "800", color: colors.dark },
+  stepper: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 10,
+  },
+  stepperItem: {
+    alignItems: "center",
+    minWidth: 68,
+  },
+  stepperCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepperCircleActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  stepperCircleDone: {
+    backgroundColor: colors.dark,
+    borderColor: colors.dark,
+  },
+  stepperCircleText: { fontSize: 11, fontWeight: "800", color: colors.muted },
+  stepperCircleTextActive: { color: "#fff" },
+  stepperLabel: { fontSize: 10, fontWeight: "700", color: colors.muted, marginTop: 4, textAlign: "center" },
+  stepperLabelActive: { color: colors.dark },
+  stepHint: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.muted,
+    marginBottom: 8,
+  },
   label: { fontSize: 13, fontWeight: "700", color: colors.dark, marginBottom: 6, marginTop: 12 },
   input: {
     backgroundColor: "#fff",
@@ -2035,6 +2758,69 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  videoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 },
+  videoWrap: {
+    position: "relative",
+    width: 140,
+    height: 140,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: colors.dark,
+  },
+  videoThumb: { width: "100%", height: "100%" },
+  videoRemove: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+  },
+  videoBadge: {
+    position: "absolute",
+    left: 6,
+    bottom: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  videoBadgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
+  videoAdd: {
+    width: 140,
+    height: 140,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: colors.muted,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  videoAddText: { fontSize: 13, fontWeight: "700" },
+  stepActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 18,
+  },
+  stepSpacer: { flex: 1 },
+  stepButton: {
+    minWidth: 110,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  stepButtonSecondary: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  stepButtonText: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  stepButtonSecondaryText: { color: colors.dark, fontWeight: "800", fontSize: 15 },
   submitButton: { marginTop: 20, paddingVertical: 14, borderRadius: 14, alignItems: "center" },
   submitButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   detailImage: { width: "100%", height: 200, borderRadius: 14, marginBottom: 12 },

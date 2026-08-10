@@ -10,8 +10,11 @@
 // ---------------------------------------------------------------------------
 
 import { supabase } from "../lib/supabase";
-import { VideoCompressor } from "react-native-video-compressor";
-import * as FileSystem from "expo-file-system";
+import { Video } from "react-native-compressor";
+// expo-file-system v57 deprecated getInfoAsync/readAsStringAsync on the main
+// entry (they now throw). The working implementation lives in the legacy
+// subpath, which is exactly what we need for reading local file sizes/bytes.
+import * as FileSystem from "expo-file-system/legacy";
 
 // ── Type definitions ─────────────────────────────────────────────────────────
 
@@ -44,10 +47,46 @@ export type ReelProgressCallback = (p: ReelUploadProgress) => void;
 // ── Configuration ───────────────────────────────────────────────────────────
 
 const UPLOAD_URL_FUNCTION = "get-r2-upload-url";
+const TRANSCODE_FUNCTION = "transcode-reel";
 const REELS_TABLE = "reels";
-const TARGET_WIDTH = 540;
-const TARGET_HEIGHT = 960; // 9:16 vertical
-const TARGET_BITRATE = 1_200_000; // ~1.2 Mbps
+
+// Compression presets (Strategy 1: client-side pre-upload compression).
+// Videos are scaled down before upload to cut egress + storage, and encoded
+// with H.264 (max device compatibility) and AAC-LC @ 128 kbps audio.
+//
+//  - "short" (1080x1920) for short-form reels — higher fidelity.
+//  - "standard" (720x1280) for general user uploads — lighter, ~1 Mbps.
+export type ReelCompressionPreset = "short" | "standard";
+
+interface CompressionConfig {
+  width: number;
+  height: number; // 9:16 vertical
+  videoBitRate: number; // bits/sec
+  audioBitRate: number; // bits/sec (AAC-LC)
+  codec: "h264" | "hevc";
+}
+
+const COMPRESSION_PRESETS: Record<ReelCompressionPreset, CompressionConfig> = {
+  // Short-form reels: 1080p @ 2–4 Mbps, H.264 for universal compatibility.
+  short: {
+    width: 1080,
+    height: 1920,
+    videoBitRate: 3_000_000, // 3 Mbps (within the 2–4 Mbps target band)
+    audioBitRate: 128_000, // AAC-LC @ 128 kbps
+    codec: "h264",
+  },
+  // General uploads: 720p @ 1–2 Mbps.
+  standard: {
+    width: 720,
+    height: 1280,
+    videoBitRate: 1_500_000, // 1.5 Mbps (within the 1–2 Mbps target band)
+    audioBitRate: 128_000, // AAC-LC @ 128 kbps
+    codec: "h264",
+  },
+};
+
+// Default preset used when the caller does not specify one.
+const DEFAULT_PRESET: ReelCompressionPreset = "standard";
 
 // ── Helper: invoke the presigned-URL edge function ───────────────────────────
 
@@ -60,6 +99,7 @@ interface PresignedResponse {
 async function fetchPresignedUrl(
   fileName: string,
   fileType: string,
+  folder: string = "reels",
 ): Promise<PresignedResponse> {
   if (!supabase) {
     throw new Error("Supabase client is not configured");
@@ -68,7 +108,7 @@ async function fetchPresignedUrl(
   const { data, error } = await supabase.functions.invoke(
     UPLOAD_URL_FUNCTION,
     {
-      body: { fileName, fileType, folder: "reels" },
+      body: { fileName, fileType, folder },
     },
   );
 
@@ -155,43 +195,40 @@ export async function uploadReel(
   localUri: string,
   productMeta: ReelProductMeta,
   onProgress?: ReelProgressCallback,
+  preset: ReelCompressionPreset = DEFAULT_PRESET,
 ): Promise<UploadReelResult> {
   if (!localUri) throw new Error("A local video URI is required");
 
-  // ── 1. Compress on device hardware to 540x960 @ ~1.2 Mbps ──────────────────
+  const cfg = COMPRESSION_PRESETS[preset] ?? COMPRESSION_PRESETS[DEFAULT_PRESET];
+
+  // ── 1. Compress on device hardware (H.264 @ 720p/1080p, AAC-LC 128k) ───────
+  // react-native-compressor's Video.compress accepts a `bitrate` (total) and a
+  // `maxSize` (longest edge in px). It does not expose separate audio bitrate,
+  // fps, or codec fields, so we approximate the target by summing the video +
+  // audio bitrate and sizing to the longest preset dimension.
   onProgress?.({ phase: "compress", progress: 0, message: "Compressing…" });
-  const compressedUri = await VideoCompressor.compress(localUri, {
-    compressionMethod: "manual",
-    videoBitRate: TARGET_BITRATE,
-    width: TARGET_WIDTH,
-    height: TARGET_HEIGHT,
-    fps: 30,
-    maxFileSize: 0,
-    onProgress: (p) => {
-      // VideoCompressor reports 0..100.
+  const compressedUri = await Video.compress(
+    localUri,
+    {
+      compressionMethod: "manual",
+      bitrate: cfg.videoBitRate + cfg.audioBitRate,
+      maxSize: Math.max(cfg.width, cfg.height),
+    } as any,
+    (p) => {
+      // react-native-compressor reports progress 0..100.
       onProgress?.({
         phase: "compress",
         progress: Math.min(1, (p ?? 0) / 100),
       });
     },
-  } as any);
+  );
 
   const fileType = "video/mp4";
   const fileName = `reel-${Date.now()}.mp4`;
 
-  // ── 2. Fetch a presigned PUT URL from the edge function ────────────────────
+  // ── 2. Resolve the authenticated user + owning seller BEFORE any network
+  //        call (the upload folder and DB insert both depend on these). ───────
   onProgress?.({ phase: "upload", progress: 0, message: "Preparing upload…" });
-  const { uploadUrl, publicUrl, key } = await fetchPresignedUrl(
-    fileName,
-    fileType,
-  );
-
-  // ── 3. Upload the compressed file directly to R2 ───────────────────────────
-  await uploadToR2(compressedUri, uploadUrl, fileType, onProgress);
-
-  // ── 4. Persist metadata to the `reels` table ──────────────────────────────
-  onProgress?.({ phase: "save", progress: 0, message: "Saving reel…" });
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -203,6 +240,19 @@ export async function uploadReel(
         .maybeSingle()
     : null;
   const sellerId = sellerRes?.data?.id ?? null;
+
+  // ── 3. Fetch a presigned PUT URL from the edge function ────────────────────
+  const { uploadUrl, publicUrl, key } = await fetchPresignedUrl(
+    fileName,
+    fileType,
+    `reels/${sellerId || user?.id || "unknown"}`,
+  );
+
+  // ── 4. Upload the compressed file directly to R2 ───────────────────────────
+  await uploadToR2(compressedUri, uploadUrl, fileType, onProgress);
+
+  // ── 5. Persist metadata to the `reels` table ──────────────────────────────
+  onProgress?.({ phase: "save", progress: 0, message: "Saving reel…" });
 
   const insertPayload = {
     video_url: publicUrl,
@@ -228,11 +278,31 @@ export async function uploadReel(
     throw new Error(insertError.message || "Failed to save reel metadata");
   }
 
+  const reelId = (inserted as { id: string }).id;
+
+  // ── 5. Enqueue a server-side HLS transcode job (Strategy 2) ───────────────
+  // The raw compressed MP4 is uploaded; a transcoder worker will later produce
+  // multi-bitrate HLS segments (.m3u8 + .ts) for adaptive playback. This call
+  // is best-effort: a failure here must NOT block the upload that already
+  // succeeded, so we only log and continue.
+  try {
+    await supabase.functions.invoke(TRANSCODE_FUNCTION, {
+      body: {
+        sourceKey: key,
+        ownerTable: REELS_TABLE,
+        ownerId: reelId,
+        hlsUrlColumn: "hls_url",
+      },
+    });
+  } catch (transcodeErr) {
+    console.warn("Failed to enqueue transcode job:", transcodeErr);
+  }
+
   onProgress?.({ phase: "save", progress: 1 });
   return {
     publicUrl,
     r2Key: key,
-    reelId: (inserted as { id: string }).id,
+    reelId,
   };
 }
 
@@ -252,4 +322,84 @@ export async function fetchReels(limit = 20): Promise<any[]> {
     return [];
   }
   return data ?? [];
+}
+
+/**
+ * Fetch product reels: active products that have an attached showcase video
+ * (`video_url`). Each product is normalised into the reel shape consumed by
+ * FeedScreen so product videos can be browsed in the vertical reels feed.
+ */
+export async function fetchProductReels(limit = 30): Promise<any[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("express_products")
+    .select(
+      "id, title, price, description, video_url, video_hls_url, thumbnail, thumbnails, category, tags, view_count, total_ratings, seller_id(id,name,avatar)",
+    )
+    .eq("status", "active")
+    .not("video_url", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("fetchProductReels error:", error);
+    return [];
+  }
+
+  const products = data ?? [];
+  const productIds = products.map((product: any) => product.id).filter(Boolean);
+
+  let likesByProductId: Record<string, number> = {};
+  let commentsByProductId: Record<string, number> = {};
+
+  if (productIds.length > 0) {
+    const [{ data: wishlistRows }, { data: reviewRows }] = await Promise.all([
+      supabase
+        .from("express_wishlists")
+        .select("product_id")
+        .in("product_id", productIds),
+      supabase
+        .from("express_reviews")
+        .select("product_id, comment")
+        .in("product_id", productIds)
+        .eq("is_approved", true),
+    ]);
+
+    likesByProductId = (wishlistRows ?? []).reduce(
+      (acc: Record<string, number>, row: { product_id?: string | null }) => {
+        if (!row?.product_id) return acc;
+        acc[row.product_id] = (acc[row.product_id] || 0) + 1;
+        return acc;
+      },
+      {},
+    );
+
+    commentsByProductId = (reviewRows ?? []).reduce(
+      (acc: Record<string, number>, row: { product_id?: string | null; comment?: string | null }) => {
+        if (!row?.product_id) return acc;
+        if (!String(row.comment || "").trim()) return acc;
+        acc[row.product_id] = (acc[row.product_id] || 0) + 1;
+        return acc;
+      },
+      {},
+    );
+  }
+
+  return products.map((product: any) => ({
+    id: product.id,
+    video_url: product.video_url,
+    hls_url: product.video_hls_url || null,
+    thumbnail_url: product.thumbnail || product.thumbnails?.[0] || null,
+    title: product.title,
+    price: product.price,
+    description: product.description,
+    product_id: product.id,
+    seller: product.seller_id,
+    category: product.category || null,
+    tags: product.tags || [],
+    view_count: product.view_count || 0,
+    total_ratings: product.total_ratings || 0,
+    likes_count: likesByProductId[product.id] || 0,
+    comments_count: commentsByProductId[product.id] || 0,
+  }));
 }

@@ -6,12 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/express.png",
     "userInterfaceStyle": "light",
-    "androidStatusBar": {
-      "barStyle": "dark-content",
-      "backgroundColor": "#B7B8BF",
-      "translucent": true
-    },
-    "scheme": "tagit",
+    "scheme": "expressmart",
     "experiments": {
       "baseUrl": "/"
     },
@@ -36,20 +31,21 @@
         "android.permission.WAKE_LOCK",
         "com.google.android.c2dm.permission.RECEIVE"
       ],
-      "intentFilters": [
-        {
-          "action": "VIEW",
-          "data": [
+          "intentFilters": [
             {
-              "scheme": "tagit"
+              "action": "VIEW",
+              "data": [
+               
+                {
+                  "scheme": "expressmart"
+                }
+              ],
+              "category": [
+                "BROWSABLE",
+                "DEFAULT"
+              ]
             }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
           ]
-        }
-      ]
     },
     "web": {
       "output": "single",
@@ -69,6 +65,7 @@
       "expo-apple-authentication",
       "expo-web-browser",
       "expo-asset",
+      "expo-build-properties",
       [
         "expo-splash-screen",
         {
@@ -81,7 +78,14 @@
           }
         }
       ],
-      "expo-status-bar"
+      [
+        "expo-status-bar",
+        {
+          "style": "dark",
+          "backgroundColor": "#B7B8BF",
+          "translucent": true
+        }
+      ]
     ],
     "extra": {
       "eas": {
