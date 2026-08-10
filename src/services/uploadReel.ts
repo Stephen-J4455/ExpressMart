@@ -10,11 +10,45 @@
 // ---------------------------------------------------------------------------
 
 import { supabase } from "../lib/supabase";
-import { Video } from "react-native-compressor";
 // expo-file-system v57 deprecated getInfoAsync/readAsStringAsync on the main
 // entry (they now throw). The working implementation lives in the legacy
 // subpath, which is exactly what we need for reading local file sizes/bytes.
 import * as FileSystem from "expo-file-system/legacy";
+
+const DEBUG_REEL_UPLOADS = typeof __DEV__ !== "undefined" ? __DEV__ : true;
+const ENABLE_SERVER_TRANSCODE_FALLBACK = false;
+
+const logReelUpload = (...args: any[]) => {
+  if (DEBUG_REEL_UPLOADS) {
+    console.log("[uploadReel]", ...args);
+  }
+};
+
+const getVideoUploadDetails = (uri: string) => {
+  const cleanUri = String(uri || "").split("?")[0];
+  const fileName = cleanUri.split("/").pop() || "video.mp4";
+  const rawExt = fileName.includes(".") ? fileName.split(".").pop() : "";
+  const ext = String(rawExt || "mp4").toLowerCase();
+
+  if (ext === "mov" || ext === "qt") {
+    return {
+      fileName: fileName.endsWith(".mov") ? fileName : `${fileName}.mov`,
+      contentType: "video/quicktime",
+    };
+  }
+
+  if (ext === "m4v") {
+    return {
+      fileName: fileName.endsWith(".m4v") ? fileName : `${fileName}.m4v`,
+      contentType: "video/mp4",
+    };
+  }
+
+  return {
+    fileName: fileName.endsWith(".mp4") ? fileName : `${fileName}.mp4`,
+    contentType: "video/mp4",
+  };
+};
 
 // ── Type definitions ─────────────────────────────────────────────────────────
 
@@ -47,46 +81,19 @@ export type ReelProgressCallback = (p: ReelUploadProgress) => void;
 // ── Configuration ───────────────────────────────────────────────────────────
 
 const UPLOAD_URL_FUNCTION = "get-r2-upload-url";
-const TRANSCODE_FUNCTION = "transcode-reel";
 const REELS_TABLE = "reels";
 
-// Compression presets (Strategy 1: client-side pre-upload compression).
-// Videos are scaled down before upload to cut egress + storage, and encoded
-// with H.264 (max device compatibility) and AAC-LC @ 128 kbps audio.
+// Live transcoding server (Node/Express). Kept here for later re-enable, but
+// the temporary path below stays on-device so uploads do not depend on it.
 //
-//  - "short" (1080x1920) for short-form reels — higher fidelity.
-//  - "standard" (720x1280) for general user uploads — lighter, ~1 Mbps.
-export type ReelCompressionPreset = "short" | "standard";
+//   e.g. "https://flmrp9wx-8080.uks1.devtunnels.ms"
+//
+// Leave empty to use the legacy on-device compression + R2 presigned flow only.
+export const TRANSCODE_SERVER_URL = "https://flmrp9wx-8080.uks1.devtunnels.ms";
 
-interface CompressionConfig {
-  width: number;
-  height: number; // 9:16 vertical
-  videoBitRate: number; // bits/sec
-  audioBitRate: number; // bits/sec (AAC-LC)
-  codec: "h264" | "hevc";
-}
-
-const COMPRESSION_PRESETS: Record<ReelCompressionPreset, CompressionConfig> = {
-  // Short-form reels: 1080p @ 2–4 Mbps, H.264 for universal compatibility.
-  short: {
-    width: 1080,
-    height: 1920,
-    videoBitRate: 3_000_000, // 3 Mbps (within the 2–4 Mbps target band)
-    audioBitRate: 128_000, // AAC-LC @ 128 kbps
-    codec: "h264",
-  },
-  // General uploads: 720p @ 1–2 Mbps.
-  standard: {
-    width: 720,
-    height: 1280,
-    videoBitRate: 1_500_000, // 1.5 Mbps (within the 1–2 Mbps target band)
-    audioBitRate: 128_000, // AAC-LC @ 128 kbps
-    codec: "h264",
-  },
-};
-
-// Default preset used when the caller does not specify one.
-const DEFAULT_PRESET: ReelCompressionPreset = "standard";
+// When true, skip on-device compression entirely and always send the original
+// video to the transcode server. The temporary client-only path ignores this.
+export const FORCE_SERVER_TRANSCODE = false;
 
 // ── Helper: invoke the presigned-URL edge function ───────────────────────────
 
@@ -174,7 +181,10 @@ async function uploadToR2(
     },
   );
 
-  const result = await uploadTask;
+  const result = await uploadTask.uploadAsync();
+  if (!result) {
+    throw new Error("R2 upload failed: no response returned");
+  }
   if (result.status !== 200) {
     throw new Error(`R2 upload failed with status ${result.status}`);
   }
@@ -195,40 +205,14 @@ export async function uploadReel(
   localUri: string,
   productMeta: ReelProductMeta,
   onProgress?: ReelProgressCallback,
-  preset: ReelCompressionPreset = DEFAULT_PRESET,
 ): Promise<UploadReelResult> {
   if (!localUri) throw new Error("A local video URI is required");
 
-  const cfg = COMPRESSION_PRESETS[preset] ?? COMPRESSION_PRESETS[DEFAULT_PRESET];
+  const { fileName, contentType } = getVideoUploadDetails(localUri);
 
-  // ── 1. Compress on device hardware (H.264 @ 720p/1080p, AAC-LC 128k) ───────
-  // react-native-compressor's Video.compress accepts a `bitrate` (total) and a
-  // `maxSize` (longest edge in px). It does not expose separate audio bitrate,
-  // fps, or codec fields, so we approximate the target by summing the video +
-  // audio bitrate and sizing to the longest preset dimension.
-  onProgress?.({ phase: "compress", progress: 0, message: "Compressing…" });
-  const compressedUri = await Video.compress(
-    localUri,
-    {
-      compressionMethod: "manual",
-      bitrate: cfg.videoBitRate + cfg.audioBitRate,
-      maxSize: Math.max(cfg.width, cfg.height),
-    } as any,
-    (p) => {
-      // react-native-compressor reports progress 0..100.
-      onProgress?.({
-        phase: "compress",
-        progress: Math.min(1, (p ?? 0) / 100),
-      });
-    },
-  );
-
-  const fileType = "video/mp4";
-  const fileName = `reel-${Date.now()}.mp4`;
-
-  // ── 2. Resolve the authenticated user + owning seller BEFORE any network
-  //        call (the upload folder and DB insert both depend on these). ───────
+  // ── Resolve the authenticated user + owning seller BEFORE any network call.
   onProgress?.({ phase: "upload", progress: 0, message: "Preparing upload…" });
+  logReelUpload("start", { localUri, fileName, contentType });
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -241,35 +225,63 @@ export async function uploadReel(
     : null;
   const sellerId = sellerRes?.data?.id ?? null;
 
-  // ── 3. Fetch a presigned PUT URL from the edge function ────────────────────
+  // ── 1. Fetch a presigned PUT URL from the edge function ────────────────────
+  onProgress?.({ phase: "upload", progress: 0, message: "Uploading original video…" });
   const { uploadUrl, publicUrl, key } = await fetchPresignedUrl(
     fileName,
-    fileType,
+    contentType,
     `reels/${sellerId || user?.id || "unknown"}`,
   );
 
-  // ── 4. Upload the compressed file directly to R2 ───────────────────────────
-  await uploadToR2(compressedUri, uploadUrl, fileType, onProgress);
+  // ── 2. Upload the original file directly to R2 ─────────────────────────────
+  await uploadToR2(localUri, uploadUrl, contentType, onProgress);
 
-  // ── 5. Persist metadata to the `reels` table ──────────────────────────────
+  // ── 3. Persist metadata to the `reels` table ──────────────────────────────
   onProgress?.({ phase: "save", progress: 0, message: "Saving reel…" });
 
-  const insertPayload = {
+  const { reelId } = await insertReelRow({
     video_url: publicUrl,
     r2_key: key,
-    title: productMeta.title,
-    description: productMeta.description ?? null,
-    price: productMeta.price,
-    product_id: productMeta.product_id ?? null,
-    category: productMeta.category ?? null,
-    tags: productMeta.tags ?? [],
-    seller_id: sellerId,
-    user_id: user?.id ?? null,
-  };
+    productMeta,
+    sellerId,
+    userId: user?.id ?? null,
+  });
 
+  // Server transcode stays disabled for now while we debug client playback.
+  logReelUpload("saved reel", { reelId, key, publicUrl });
+
+  onProgress?.({ phase: "save", progress: 1 });
+  return { publicUrl, r2Key: key, reelId };
+}
+
+// Insert a reel row and return its new id.
+async function insertReelRow({
+  video_url,
+  r2_key,
+  productMeta,
+  sellerId,
+  userId,
+}: {
+  video_url: string;
+  r2_key: string;
+  productMeta: ReelProductMeta;
+  sellerId: string | null;
+  userId: string | null;
+}): Promise<{ reelId: string }> {
   const { data: inserted, error: insertError } = await supabase
     .from(REELS_TABLE)
-    .insert(insertPayload)
+    .insert({
+      video_url,
+      r2_key,
+      title: productMeta.title,
+      description: productMeta.description ?? null,
+      price: productMeta.price,
+      product_id: productMeta.product_id ?? null,
+      category: productMeta.category ?? null,
+      tags: productMeta.tags ?? [],
+      seller_id: sellerId,
+      user_id: userId,
+    })
     .select("id")
     .single();
 
@@ -277,33 +289,48 @@ export async function uploadReel(
     console.error("Failed to insert reel:", insertError);
     throw new Error(insertError.message || "Failed to save reel metadata");
   }
+  return { reelId: (inserted as { id: string }).id };
+}
 
-  const reelId = (inserted as { id: string }).id;
+// Fallback path: send the ORIGINAL video to the live transcode server.
+async function uploadViaServer(
+  localUri: string,
+  fileType: string,
+  fileName: string,
+  userId: string | null,
+  sellerId: string | null,
+  productMeta: ReelProductMeta,
+  onProgress?: ReelProgressCallback,
+): Promise<UploadReelResult> {
+  // Insert the reel row first so we have an ownerId for the transcode server.
+  onProgress?.({ phase: "save", progress: 0, message: "Saving reel…" });
+  const { reelId } = await insertReelRow({
+    video_url: "",
+    r2_key: "",
+    productMeta,
+    sellerId,
+    userId,
+  });
 
-  // ── 5. Enqueue a server-side HLS transcode job (Strategy 2) ───────────────
-  // The raw compressed MP4 is uploaded; a transcoder worker will later produce
-  // multi-bitrate HLS segments (.m3u8 + .ts) for adaptive playback. This call
-  // is best-effort: a failure here must NOT block the upload that already
-  // succeeded, so we only log and continue.
-  try {
-    await supabase.functions.invoke(TRANSCODE_FUNCTION, {
-      body: {
-        sourceKey: key,
-        ownerTable: REELS_TABLE,
-        ownerId: reelId,
-        hlsUrlColumn: "hls_url",
-      },
-    });
-  } catch (transcodeErr) {
-    console.warn("Failed to enqueue transcode job:", transcodeErr);
-  }
+  // Upload the original video; server stores source to R2 + transcodes.
+  const { publicUrl, r2Key } = await uploadToTranscodeServer(
+    localUri,
+    fileType,
+    fileName,
+    REELS_TABLE,
+    reelId,
+    onProgress,
+  );
+
+  // Persist the server-returned source URL/key on the reel row.
+  const { error: patchError } = await supabase
+    .from(REELS_TABLE)
+    .update({ video_url: publicUrl, r2_key: r2Key })
+    .eq("id", reelId);
+  if (patchError) console.warn("Failed to patch reel source:", patchError);
 
   onProgress?.({ phase: "save", progress: 1 });
-  return {
-    publicUrl,
-    r2Key: key,
-    reelId,
-  };
+  return { publicUrl, r2Key, reelId };
 }
 
 /**

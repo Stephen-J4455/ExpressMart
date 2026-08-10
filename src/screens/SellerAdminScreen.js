@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Video } from "react-native-video";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -72,6 +73,8 @@ const AVAILABLE_COLORS = [
 ];
 
 const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
+
+const MAX_VIDEO_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 const PRODUCT_FORM_STEPS = [
   { key: "basics", label: "Basics" },
@@ -156,6 +159,26 @@ const getBlobFromUri = async (uri, timeoutMs = 30000) => {
     };
     xhr.send();
   });
+};
+
+const formatBytes = (bytes) => {
+  const value = Number(bytes || 0);
+  if (!value) return "0 MB";
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const getVideoSizeBytes = async (uri, pickedFile = null) => {
+  const pickedSize = Number(pickedFile?.size || pickedFile?.fileSize || 0);
+  if (pickedSize > 0) return pickedSize;
+
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    if (info?.size) return info.size;
+  } catch (e) {
+    console.warn("Failed to read video size", e);
+  }
+
+  return 0;
 };
 
 // Hamburger menu — mirrors the Express-Store seller/store settings surface
@@ -257,6 +280,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [existingVideoUrl, setExistingVideoUrl] = useState(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [removingVideo, setRemovingVideo] = useState(false);
+  const [videoUploadJobs, setVideoUploadJobs] = useState([]);
+  const [attachTargetProductId, setAttachTargetProductId] = useState(null);
+  const [showVideoDeleteModal, setShowVideoDeleteModal] = useState(false);
 
   // ── Orders UI state ─────────────────────────────────────────────────────
   const [orderFilter, setOrderFilter] = useState("processing");
@@ -277,6 +303,14 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     insights: "bar-chart-outline",
   };
   const [activeTab, setActiveTab] = useState("catalog");
+
+  useEffect(() => {
+    if (attachTargetProductId || products.length === 0) return;
+    const firstProduct = products.find((product) => product.status === "active") || products[0];
+    if (firstProduct?.id) {
+      setAttachTargetProductId(firstProduct.id);
+    }
+  }, [attachTargetProductId, products]);
 
   const fetchSellerId = useCallback(async () => {
     if (!supabase || !user) return null;
@@ -460,6 +494,35 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       }
     },
     [reels, deletingReelId, toast],
+  );
+
+  const deleteProductVideo = useCallback(
+    async (product) => {
+      if (!product?.video_url || deletingReelId) return;
+      const key = product.r2_video_key || getStoragePathFromUrl(product.video_url);
+      if (!key) {
+        throw new Error("Could not determine product video key");
+      }
+      setDeletingReelId(`product-${product.id}`);
+      try {
+        try {
+          await supabase.functions.invoke("delete-r2-object", {
+            body: { key },
+          });
+        } catch (e) {
+          console.warn("R2 object delete failed (continuing)", e);
+        }
+
+        await updateProduct(product.id, {
+          video_url: null,
+          r2_video_key: null,
+        });
+        toast.success("Video deleted", "Removed from R2 and product listing");
+      } finally {
+        setDeletingReelId(null);
+      }
+    },
+    [deletingReelId, toast, updateProduct],
   );
 
   const advanceOrderStatus = useCallback(
@@ -753,6 +816,14 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     });
     if (!result.canceled && result.assets?.length) {
       const asset = result.assets[0];
+      const sizeBytes = Number(asset?.fileSize || asset?.size || asset?.file?.size || 0);
+      if (sizeBytes > MAX_VIDEO_UPLOAD_BYTES) {
+        toast.error(
+          "Video too large",
+          `Choose a video smaller than ${formatBytes(MAX_VIDEO_UPLOAD_BYTES)}.`,
+        );
+        return;
+      }
       setVideoUri(asset.uri);
       if (Platform.OS === "web") {
         const type = normalizePickedVideoType(asset);
@@ -767,6 +838,53 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     }
   };
 
+  const pickVideoForProductAttach = async () => {
+    if (!attachTargetProductId) {
+      toast.warning("Select a product", "Choose the product to attach the video to first.");
+      return;
+    }
+
+    if (Platform.OS !== "web") {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        toast.error("Permission needed", "Please grant camera roll permissions");
+        return;
+      }
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      allowsEditing: true,
+      videoMaxDuration: 180,
+      quality: 1,
+    });
+
+    if (result.canceled || !result.assets?.length) return;
+
+    const asset = result.assets[0];
+    const sizeBytes = Number(asset?.fileSize || asset?.size || asset?.file?.size || 0);
+    if (sizeBytes > MAX_VIDEO_UPLOAD_BYTES) {
+      toast.error(
+        "Video too large",
+        `Choose a video smaller than ${formatBytes(MAX_VIDEO_UPLOAD_BYTES)}.`,
+      );
+      return;
+    }
+
+    const targetProduct = products.find((product) => product.id === attachTargetProductId);
+    if (!targetProduct) {
+      toast.error("Missing product", "Select a product before attaching a video.");
+      return;
+    }
+
+    void startBackgroundVideoUpload({
+      productId: targetProduct.id,
+      productTitle: targetProduct.title,
+      uri: asset.uri,
+      pickedFile: Platform.OS === "web" ? asset.file || null : null,
+    });
+  };
+
   // Uploads a local video file to Cloudflare R2 via the get-r2-upload-url edge
   // function, then returns the public URL + R2 object key.
   //
@@ -774,17 +892,21 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // the raw file bytes are streamed straight to R2 (the reliable React Native
   // path — reading a local file into a Blob via fetch/XHR is unsupported and was
   // silently storing empty/garbage objects). On web we PUT the picked Blob.
-  const uploadVideoToR2 = async (uri, pickedFile) => {
+  const uploadVideoToR2 = async (uri, pickedFile, onProgress) => {
     const { contentType, extension } = getVideoUploadDetails(uri, pickedFile);
     const fileName = `product-video-${Date.now()}-${Math.random()
       .toString(36)
       .substring(7)}.${extension}`;
+    const uploadFolderOwnerId = sellerId || user?.id;
+    if (!uploadFolderOwnerId) {
+      throw new Error("Could not resolve upload folder owner id");
+    }
 
     // ── 1. Request a presigned PUT URL from the edge function ────────────────
     let presigned;
     try {
       const { data, error } = await supabase.functions.invoke("get-r2-upload-url", {
-        body: { fileName, fileType: contentType, folder: `products/${sellerId}` },
+        body: { fileName, fileType: contentType, folder: `products/${uploadFolderOwnerId}` },
       });
       if (error) throw new Error(error.message || "Failed to get upload URL");
       if (!data?.uploadUrl || !data?.publicUrl) {
@@ -805,25 +927,29 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           pickedFile instanceof Blob ? pickedFile : await getBlobFromUri(uri);
         if (!body) throw new Error("Could not read the selected video file");
 
-        const putRes = await fetch(uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": contentType },
-          body,
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", uploadUrl, true);
+          xhr.setRequestHeader("Content-Type", contentType);
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              onProgress?.(Math.min(1, event.loaded / event.total));
+            }
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              onProgress?.(1);
+              resolve();
+              return;
+            }
+            reject(new Error(`R2 video upload failed with status ${xhr.status}`));
+          };
+          xhr.onerror = () => reject(new Error("R2 video upload failed"));
+          xhr.send(body);
         });
-        if (!putRes.ok) {
-          const detail = await putRes.text().catch(() => "");
-          console.error(
-            "[uploadVideoToR2] R2 PUT failed:",
-            putRes.status,
-            detail,
-          );
-          throw new Error(`R2 video upload failed with status ${putRes.status}`);
-        }
       } else {
-        // expo-file-system v57 no longer exposes `FileSystemUploadType` on the
-        // default namespace (it was renamed to `UploadType` in the new types and
-        // is not re-exported), so use the underlying enum value directly:
-        // BINARY_CONTENT === 0.
+        // expo-file-system progress callback gives us upload progress on native.
+        const totalBytes = await getVideoSizeBytes(uri, pickedFile);
         const uploadTask = FileSystem.createUploadTask(
           uploadTaskUrl(uploadUrl),
           uri,
@@ -832,9 +958,16 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             headers: { "Content-Type": contentType },
             uploadType: 0, // FileSystemUploadType.BINARY_CONTENT
           },
-          () => {},
+          (event) => {
+            if (event?.totalBytesSent && totalBytes > 0) {
+              onProgress?.(Math.min(1, event.totalBytesSent / totalBytes));
+            }
+          },
         );
         const result = await uploadTask.uploadAsync();
+        if (!result) {
+          throw new Error("R2 video upload failed: no response returned");
+        }
         if (result.status !== 200) {
           console.error(
             "[uploadVideoToR2] R2 upload failed:",
@@ -843,6 +976,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           );
           throw new Error(`R2 video upload failed with status ${result.status}`);
         }
+        onProgress?.(1);
       }
     } catch (err) {
       console.error("[uploadVideoToR2] upload to R2 failed:", err);
@@ -1012,6 +1146,92 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     }
   };
 
+  const upsertVideoUploadJob = useCallback((jobId, patch) => {
+    setVideoUploadJobs((prev) => {
+      const next = prev.some((job) => job.id === jobId)
+        ? prev.map((job) => (job.id === jobId ? { ...job, ...patch } : job))
+        : [{ id: jobId, ...patch }, ...prev];
+      return next.slice(0, 8);
+    });
+  }, []);
+
+  const startBackgroundVideoUpload = useCallback(
+    async ({ productId, productTitle, uri, pickedFile }) => {
+      const jobId = `video-upload-${productId || Date.now()}`;
+      upsertVideoUploadJob(jobId, {
+        productId,
+        title: productTitle || "Product video",
+        progress: 0,
+        status: "queued",
+        message: "Queued for upload",
+      });
+
+      try {
+        const sizeBytes = await getVideoSizeBytes(uri, pickedFile);
+        if (sizeBytes > MAX_VIDEO_UPLOAD_BYTES) {
+          throw new Error(
+            `Video is ${formatBytes(sizeBytes)}. Limit is ${formatBytes(MAX_VIDEO_UPLOAD_BYTES)}.`,
+          );
+        }
+
+        upsertVideoUploadJob(jobId, {
+          status: "uploading",
+          message: "Preparing upload URL",
+        });
+
+        const { publicUrl, key } = await uploadVideoToR2(uri, pickedFile, (progress) => {
+          upsertVideoUploadJob(jobId, {
+            status: "uploading",
+            progress,
+            message:
+              progress >= 1 ? "Finalizing upload" : `Uploading ${Math.round(progress * 100)}%`,
+          });
+        });
+
+        upsertVideoUploadJob(jobId, {
+          status: "saving",
+          progress: 1,
+          message: "Saving video reference",
+        });
+
+        await updateProduct(productId, {
+          video_url: publicUrl,
+          r2_video_key: key,
+        });
+
+        try {
+          await supabase.functions.invoke("transcode-reel", {
+            body: {
+              sourceKey: key,
+              ownerTable: "express_products",
+              ownerId: productId,
+              hlsUrlColumn: "video_hls_url",
+            },
+          });
+        } catch (transcodeErr) {
+          console.warn("Failed to enqueue product video transcode:", transcodeErr);
+        }
+
+        upsertVideoUploadJob(jobId, {
+          status: "done",
+          progress: 1,
+          message: "Uploaded and saved",
+          publicUrl,
+          r2Key: key,
+        });
+        toast.success("Video uploaded", `${productTitle || "Product"} video is now live`);
+      } catch (error) {
+        upsertVideoUploadJob(jobId, {
+          status: "error",
+          progress: 0,
+          message: error.message || "Upload failed",
+        });
+        toast.error("Video upload failed", error.message || "Could not upload the video");
+      }
+    },
+    [toast, updateProduct, upsertVideoUploadJob],
+  );
+
   const submitProduct = async () => {
     if (!title || !price || !category || (!isPreorder && !quantity)) {
       toast.warning(
@@ -1029,25 +1249,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       const merged = editingProduct
         ? [...existingImageUrls, ...imageUrls]
         : imageUrls;
-
-      // Upload an attached product video to Cloudflare R2 (if chosen).
-      let finalVideoUrl = editingProduct ? existingVideoUrl || null : null;
-      let finalVideoKey = editingProduct
-        ? editingProduct.r2_video_key || null
-        : null;
-      if (videoUri) {
-        setUploadingVideo(true);
-        try {
-          const { publicUrl, key } = await uploadVideoToR2(
-            videoUri,
-            videoFile?.file || null,
-          );
-          finalVideoUrl = publicUrl;
-          finalVideoKey = key;
-        } finally {
-          setUploadingVideo(false);
-        }
-      }
 
       const specsObj = {};
       specifications.forEach((s) => {
@@ -1090,8 +1291,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       };
       productData.thumbnail = merged[0] || null;
       productData.thumbnails = merged.length ? merged : null;
-      productData.video_url = finalVideoUrl;
-      productData.r2_video_key = finalVideoKey;
+      productData.video_url = editingProduct ? existingVideoUrl || null : null;
+      productData.r2_video_key = editingProduct ? editingProduct.r2_video_key || null : null;
 
       let savedProductId = editingProduct?.id ?? null;
 
@@ -1105,23 +1306,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         toast.success("Created", "Product created and is now live");
       }
 
-      // Enqueue a server-side HLS transcode job for the uploaded product video
-      // so viewers get adaptive-bitrate streaming (best-effort; never blocks
-      // the product save). Runs after the row exists so the worker can write
-      // the resulting master playlist URL back to it.
-      if (videoUri && key && savedProductId) {
-        try {
-          await supabase.functions.invoke("transcode-reel", {
-            body: {
-              sourceKey: key,
-              ownerTable: "express_products",
-              ownerId: savedProductId,
-              hlsUrlColumn: "video_hls_url",
-            },
-          });
-        } catch (transcodeErr) {
-          console.warn("Failed to enqueue product video transcode:", transcodeErr);
-        }
+      if (videoUri && savedProductId) {
+        void startBackgroundVideoUpload({
+          productId: savedProductId,
+          productTitle: title,
+          uri: videoUri,
+          pickedFile: videoFile?.file || null,
+        });
       }
 
       resetProductFormState();
@@ -1669,57 +1860,279 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     </View>
   );
 
+  const videoGallery = useMemo(() => {
+    const reelItems = reels.map((reel) => ({
+      id: `reel-${reel.id}`,
+      kind: "reel",
+      title: reel.title || "Reel",
+      created_at: reel.created_at,
+      thumbnail_url: reel.thumbnail_url || null,
+      video_url: reel.video_url || null,
+      r2_key: reel.r2_key || null,
+      source: reel,
+    }));
+
+    const productItems = products
+      .filter((product) => product.video_url)
+      .map((product) => ({
+        id: `product-${product.id}`,
+        kind: "product",
+        title: product.title || "Product video",
+        created_at: product.created_at,
+        thumbnail_url: product.thumbnail || product.thumbnails?.[0] || null,
+        video_url: product.video_url || null,
+        r2_key: product.r2_video_key || null,
+        source: product,
+      }));
+
+    return [...reelItems, ...productItems].sort((a, b) => {
+      const aTime = new Date(a.created_at || 0).getTime();
+      const bTime = new Date(b.created_at || 0).getTime();
+      return bTime - aTime;
+    });
+  }, [products, reels]);
+
+  const renderUploadJobs = () =>
+    videoUploadJobs.length > 0 ? (
+      <View style={styles.uploadQueueSection}>
+        <View style={styles.uploadQueueHeader}>
+          <Text style={styles.uploadQueueTitle}>Video uploads</Text>
+          <Text style={styles.uploadQueueSub}>{videoUploadJobs.length} queued</Text>
+        </View>
+        {videoUploadJobs.map((job) => (
+          <View key={job.id} style={styles.uploadJobCard}>
+            <View style={styles.uploadJobTopRow}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.uploadJobTitle} numberOfLines={1}>
+                  {job.title}
+                </Text>
+                <Text style={styles.uploadJobMeta} numberOfLines={1}>
+                  {job.message}
+                </Text>
+              </View>
+              <Text style={styles.uploadJobPct}>
+                {job.status === "error" ? "!" : `${Math.round((job.progress || 0) * 100)}%`}
+              </Text>
+            </View>
+            <View style={styles.uploadJobBarTrack}>
+              <View
+                style={[
+                  styles.uploadJobBarFill,
+                  {
+                    width:
+                      job.status === "error"
+                        ? "100%"
+                        : `${Math.max(4, Math.round((job.progress || 0) * 100))}%`,
+                    backgroundColor:
+                      job.status === "error"
+                        ? "#EF4444"
+                        : job.status === "done"
+                          ? colors.success
+                          : accent,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        ))}
+      </View>
+    ) : null;
+
+  const renderVideoAttachPanel = () => (
+    <View style={styles.attachVideoCard}>
+      <View style={styles.attachVideoHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.attachVideoTitle}>Attach video to a product</Text>
+          <Text style={styles.attachVideoSubtitle}>
+            Pick a product, then choose a video. Uploads continue in the background.
+          </Text>
+        </View>
+        <View style={styles.attachVideoActions}>
+          <Pressable
+            style={[styles.attachVideoButton, { backgroundColor: accent }]}
+            onPress={pickVideoForProductAttach}
+          >
+            <Ionicons name="videocam-outline" size={18} color="#fff" />
+            <Text style={styles.attachVideoButtonText}>Add video</Text>
+          </Pressable>
+          <Pressable
+            style={styles.deleteVideosButton}
+            onPress={() => setShowVideoDeleteModal(true)}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.primary} />
+            <Text style={styles.deleteVideosButtonText}>Delete videos</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <Text style={styles.attachVideoLabel}>Target product</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.attachProductRow}
+      >
+        {products.length === 0 ? (
+          <Text style={styles.emptyNote}>No products available yet.</Text>
+        ) : (
+          products.map((product) => {
+            const isSelected = attachTargetProductId === product.id;
+            const thumb = product.thumbnail || product.thumbnails?.[0] || null;
+            return (
+              <Pressable
+                key={product.id}
+                style={[
+                  styles.attachProductChip,
+                  isSelected && { backgroundColor: accent + "16", borderColor: accent },
+                ]}
+                onPress={() => setAttachTargetProductId(product.id)}
+              >
+                {thumb ? (
+                  <Image source={{ uri: thumb }} style={styles.attachProductThumb} />
+                ) : (
+                  <View style={styles.attachProductThumbFallback}>
+                    <Ionicons name="cube-outline" size={18} color={colors.muted} />
+                  </View>
+                )}
+                <Text
+                  style={[
+                    styles.attachProductChipText,
+                    isSelected && { color: accent },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {product.title}
+                </Text>
+                <Text style={styles.attachProductChipMeta} numberOfLines={1}>
+                  {product.status || "active"}
+                </Text>
+              </Pressable>
+            );
+          })
+        )}
+      </ScrollView>
+    </View>
+  );
+
   // ── Reels tab (seller reels stored on Cloudflare R2) ─────────────────────
   const renderReels = () => (
     <View>
       <Text style={styles.sectionTitle}>Store Reels</Text>
+      {renderVideoAttachPanel()}
+      {renderUploadJobs()}
       {reelsLoading ? (
         <Text style={styles.emptyNote}>Loading reels…</Text>
-      ) : reels.length === 0 ? (
+      ) : videoGallery.length === 0 ? (
         <Text style={styles.emptyNote}>
           No reels yet. Create reels from the app to showcase your products.
         </Text>
       ) : (
         <View style={styles.reelsGrid}>
-          {reels.map((reel) => (
-            <View key={reel.id} style={styles.reelCard}>
-              {reel.thumbnail_url ? (
-                <Image source={{ uri: reel.thumbnail_url }} style={styles.reelThumb} />
-              ) : (
-                <Video
-                  source={{ uri: reel.video_url }}
-                  style={styles.reelThumb}
-                  resizeMode="cover"
-                  paused
-                  muted
-                />
-              )}
-              <View style={styles.reelOverlay}>
-                <Text style={styles.reelTitle} numberOfLines={1}>
-                  {reel.title}
-                </Text>
-              </View>
-              <Pressable
-                style={styles.reelDelete}
-                onPress={() => {
-                  if (deletingReelId) return;
-                  deleteReel(reel.id).catch((e) =>
-                    toast.error("Delete failed", e.message),
-                  );
-                }}
-                disabled={deletingReelId === reel.id}
-              >
-                {deletingReelId === reel.id ? (
-                  <ActivityIndicator size="small" color="#fff" />
+          {videoGallery.map((item) => {
+            return (
+              <View key={item.id} style={styles.reelCard}>
+                {item.thumbnail_url ? (
+                  <Image source={{ uri: item.thumbnail_url }} style={styles.reelThumb} />
                 ) : (
-                  <Ionicons name="trash-outline" size={18} color="#fff" />
+                  <Video
+                    source={{ uri: item.video_url }}
+                    style={styles.reelThumb}
+                    resizeMode="cover"
+                    paused
+                    muted
+                  />
                 )}
-              </Pressable>
-            </View>
-          ))}
+                <View style={styles.reelOverlay}>
+                  <Text style={styles.reelTitle} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
         </View>
       )}
     </View>
+  );
+
+  const renderVideoDeleteModal = () => (
+    <Modal
+      visible={showVideoDeleteModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowVideoDeleteModal(false)}
+    >
+      <Pressable
+        style={styles.modalBackdrop}
+        onPress={() => setShowVideoDeleteModal(false)}
+      >
+        <Pressable style={styles.modalCard} onPress={() => {}}>
+          <LinearGradient
+            colors={[colors.primary, colors.accent]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.modalHeader}
+          >
+            <Ionicons name="trash-outline" size={20} color="#fff" />
+            <Text style={styles.modalTitle}>Delete videos</Text>
+          </LinearGradient>
+          <ScrollView style={styles.videoDeleteList} showsVerticalScrollIndicator={false}>
+            {videoGallery.length === 0 ? (
+              <Text style={styles.videoDeleteEmpty}>No videos available.</Text>
+            ) : (
+              videoGallery.map((item) => {
+                const deletingId = item.kind === "reel" ? item.source.id : `product-${item.source.id}`;
+                const isDeleting = deletingReelId === deletingId;
+                const thumb = item.thumbnail_url || null;
+                return (
+                  <Pressable
+                    key={item.id}
+                    style={[
+                      styles.sortOption,
+                      isDeleting && styles.sortOptionSelected,
+                    ]}
+                    onPress={() => {
+                      if (isDeleting) return;
+                      if (item.kind === "reel") {
+                        deleteReel(item.source.id).catch((e) =>
+                          toast.error("Delete failed", e.message),
+                        );
+                      } else {
+                        deleteProductVideo(item.source).catch((e) =>
+                          toast.error("Delete failed", e.message),
+                        );
+                      }
+                    }}
+                  >
+                      <View style={styles.sortOptionLeft}>
+                      {thumb ? (
+                        <Image source={{ uri: thumb }} style={styles.videoDeleteThumb} />
+                      ) : (
+                        <View style={styles.videoDeleteThumbFallback}>
+                          <Ionicons name="videocam-outline" size={16} color={colors.primary} />
+                        </View>
+                      )}
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.sortOptionText} numberOfLines={1}>
+                          {item.title}
+                        </Text>
+                        <Text style={styles.videoDeleteMeta} numberOfLines={1}>
+                          {item.kind === "reel" ? "Reel video" : "Product video"}
+                        </Text>
+                      </View>
+                    </View>
+                    {isDeleting ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+                    )}
+                  </Pressable>
+                );
+              })
+            )}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 
   // ── Hamburger menu drawer ───────────────────────────────────────────────
@@ -2461,6 +2874,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         </View>
       </Modal>
       {renderMenuDrawer()}
+      {renderVideoDeleteModal()}
     </View>
   );
 };
@@ -2540,18 +2954,196 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sectionTitle: { fontSize: 18, fontWeight: "800", color: colors.dark, marginBottom: 12 },
-  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  primaryButton: {
+  uploadQueueSection: {
+    marginBottom: 14,
+    gap: 10,
+  },
+  uploadQueueHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "space-between",
+  },
+  uploadQueueTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.dark,
+  },
+  uploadQueueSub: {
+    fontSize: 12,
+    color: colors.muted,
+  },
+  uploadJobCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 12,
+    gap: 8,
+  },
+  uploadJobTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  uploadJobTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.dark,
+  },
+  uploadJobMeta: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  uploadJobPct: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: colors.primary,
+  },
+  uploadJobBarTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  uploadJobBarFill: {
+    height: "100%",
+    borderRadius: 999,
+  },
+  attachVideoCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 14,
+    marginBottom: 14,
+    gap: 12,
+  },
+  attachVideoHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  attachVideoActions: {
+    gap: 8,
+    alignItems: "flex-end",
+  },
+  attachVideoTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.dark,
+  },
+  attachVideoSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 17,
+  },
+  attachVideoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
   },
+  attachVideoButtonText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  attachVideoLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  attachProductRow: {
+    gap: 10,
+  },
+  attachProductChip: {
+    width: 140,
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+    gap: 8,
+  },
+  attachProductChipText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: colors.dark,
+  },
+  attachProductChipMeta: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 4,
+  },
+  deleteVideosButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: "#fff",
+  },
+  deleteVideosButtonText: {
+    color: colors.primary,
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  attachProductChipMeta: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 4,
+  },
+  attachProductThumb: {
+    width: "100%",
+    height: 84,
+    borderRadius: 10,
+    backgroundColor: "#E2E8F0",
+  },
+  attachProductThumbFallback: {
+    width: "100%",
+    height: 84,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E2E8F0",
+  },
+  primaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   primaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 13 },
   chipRow: { marginBottom: 12 },
+  videoDeleteList: {
+    maxHeight: 420,
+  },
+  videoDeleteEmpty: {
+    padding: 18,
+    color: colors.muted,
+  },
+  videoDeleteThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: "#E2E8F0",
+  },
+  videoDeleteThumbFallback: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FDE8E8",
+  },
   summaryChip: {
     backgroundColor: "#fff",
     borderRadius: 12,

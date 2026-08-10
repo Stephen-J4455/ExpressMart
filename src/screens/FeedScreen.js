@@ -11,6 +11,8 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Animated,
+  Easing,
   Platform,
   Pressable,
   StyleSheet,
@@ -18,12 +20,12 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { Video } from "react-native-video";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/colors";
 import { fetchProductReels } from "../services/uploadReel";
-import { getLocalVideoUri, cacheReelVideo } from "../services/reelVideoCache";
+import { getReelSource, preloadReel } from "../services/reelVideoCache";
 import { useResponsive } from "../hooks/useResponsive";
 import { supabase } from "../lib/supabase";
 
@@ -63,12 +65,18 @@ export const FeedScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [activeId, setActiveId] = useState(null);
   const [paused, setPaused] = useState(false);
+  const screenIsFocused = useIsFocused();
   const { isWide } = useResponsive();
-  const videoRefs = useRef({});
+  const logFeed = useCallback((...args) => {
+    if (typeof __DEV__ === "undefined" || __DEV__) {
+      console.log("[FeedScreen]", ...args);
+    }
+  }, []);
 
   // Read the cached reels payload (if fresh enough) so we can paint instantly.
   const loadReelsFromCache = useCallback(async () => {
     try {
+      logFeed("reading cached reels payload");
       const raw = await AsyncStorage.getItem(REELS_CACHE_KEY);
       const tsRaw = await AsyncStorage.getItem(REELS_CACHE_TS_KEY);
       if (!raw || !tsRaw) return null;
@@ -84,6 +92,7 @@ export const FeedScreen = ({ route, navigation }) => {
 
   const saveReelsToCache = useCallback(async (data) => {
     try {
+      logFeed("saving reels cache", Array.isArray(data) ? data.length : 0);
       await AsyncStorage.setItem(REELS_CACHE_KEY, JSON.stringify(data));
       await AsyncStorage.setItem(REELS_CACHE_TS_KEY, Date.now().toString());
     } catch (e) {
@@ -92,9 +101,11 @@ export const FeedScreen = ({ route, navigation }) => {
   }, []);
 
   const loadReels = useCallback(async () => {
+    logFeed("loading reels");
     // 1. Paint immediately from local cache (no network, saves data).
     const cached = await loadReelsFromCache();
     if (cached) {
+      logFeed("using cached reels", cached.length);
       setReels(cached);
       setActiveId(cached?.[0]?.id ?? null);
       setPaused(false);
@@ -107,6 +118,7 @@ export const FeedScreen = ({ route, navigation }) => {
     try {
       const data = await fetchProductReels(30);
       if (Array.isArray(data) && data.length > 0) {
+        logFeed("network reels loaded", data.length);
         setReels(data);
         setActiveId(data?.[0]?.id ?? null);
         setPaused(false);
@@ -120,32 +132,24 @@ export const FeedScreen = ({ route, navigation }) => {
   }, [loadReelsFromCache, saveReelsToCache]);
 
   useEffect(() => {
+    logFeed("mount load reels");
     loadReels();
   }, [loadReels]);
 
   useFocusEffect(
     useCallback(() => {
       if (route?.params?.refresh) {
+        logFeed("route refresh requested");
         loadReels();
         navigation.setParams({ refresh: false });
       }
     }, [route?.params?.refresh, loadReels, navigation]),
   );
 
-  // Pause all videos when the feed is not focused (e.g. user navigated away).
-  useFocusEffect(
-    useCallback(() => {
-      const ref = activeId ? videoRefs.current[activeId] : null;
-      if (ref && !paused) ref.play?.();
-      return () => {
-        Object.values(videoRefs.current).forEach((r) => r?.pause?.());
-      };
-    }, [activeId, paused]),
-  );
-
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     const centred = viewableItems.find((v) => v.isViewable);
     if (centred) {
+      logFeed("viewable item active", centred.item?.id);
       setActiveId(centred.item.id);
       setPaused(false);
     }
@@ -157,68 +161,133 @@ export const FeedScreen = ({ route, navigation }) => {
   }).current;
 
   useEffect(() => {
-    Object.entries(videoRefs.current).forEach(([id, ref]) => {
-      if (!ref) return;
-      if (id === activeId) {
-        ref.play?.();
-      } else {
-        ref.pause?.();
-      }
-    });
-  }, [activeId]);
+    if (!screenIsFocused) {
+      // Auto-pause for performance while the feed is backgrounded (e.g. when
+      // the user opened a product/store page from a reel).
+      setPaused(true);
+    } else {
+      // Resume when returning to the feed so the play button doesn't linger
+      // from the backgrounded auto-pause.
+      setPaused(false);
+    }
+  }, [screenIsFocused]);
 
   const togglePlay = useCallback(() => {
-    const ref = activeId ? videoRefs.current[activeId] : null;
-    if (!ref) return;
     if (paused) {
-      ref.play?.();
+      logFeed("toggle play", activeId);
       setPaused(false);
     } else {
-      ref.pause?.();
+      logFeed("toggle pause", activeId);
       setPaused(true);
     }
   }, [activeId, paused]);
+
+  // Warm the local cache for the neighbouring reels (one ahead, one behind) so
+  // the next swipe plays from disk instead of re-streaming. The download runs
+  // in the background and never blocks the active video.
+  useEffect(() => {
+    if (!activeId || reels.length === 0) return;
+    const idx = reels.findIndex((r) => r.id === activeId);
+    if (idx < 0) return;
+    for (let offset = -1; offset <= 1; offset += 1) {
+      const neighbour = reels[idx + offset];
+      if (neighbour) {
+        const url = neighbour.video_url || neighbour.hls_url;
+        if (url) preloadReel(url);
+      }
+    }
+  }, [activeId, reels]);
 
   // A single reel. Owns its own video source so it can resolve/swap to a
   // locally-cached file: on mount it checks disk (instant if previously
   // watched), and when it becomes the active item it downloads the MP4 to the
   // local cache so scrolling up and back plays from disk instead of re-streaming.
   const ReelItem = React.memo(
-    ({ item, isActive, navigation, paused, togglePlay, videoRefs }) => {
+    ({ item, isActive, navigation, paused, togglePlay, screenIsFocused }) => {
       const itemId = item.id;
+      const streamUrl = item.video_url || item.hls_url;
+      // Resolve the best source: prefer a locally-cached copy (downloaded once)
+      // and fall back to the streaming URL so playback never waits on the
+      // download. When the cache finishes we swap to the local file URI.
       const [source, setSource] = useState(() => ({
-        uri: item.hls_url || item.video_url,
+        uri: streamUrl,
+        isNetwork: true,
       }));
+      const videoRef = useRef(null);
+      // Looping pulse that only plays when the video is *user-paused* (so it
+      // never flashes while scrolling or while the feed is backgrounded).
+      const pulseAnim = useRef(new Animated.Value(0)).current;
+      // One-shot ripple that fires on every center tap for tactile feedback.
+      const tapAnim = useRef(new Animated.Value(0)).current;
 
-      // Resolve a cached local file immediately (no network) on first paint.
-      useEffect(() => {
-        let cancelled = false;
-        (async () => {
-          const local = await getLocalVideoUri(itemId);
-          if (!cancelled && local) setSource({ uri: local });
-        })();
-        return () => {
-          cancelled = true;
-        };
-      }, [itemId]);
+      const fireTapPulse = useCallback(() => {
+        tapAnim.stopAnimation();
+        tapAnim.setValue(0);
+        Animated.timing(tapAnim, {
+          toValue: 1,
+          duration: 450,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }).start();
+      }, [tapAnim]);
 
-      // When the user is actually watching this reel, cache its video locally
-      // (once) so future views don't re-fetch from R2. HLS is preferred because
-      // it is adaptive and far smaller than the full-bitrate MP4.
+      const logReel = useCallback(
+        (...args) => {
+          if (typeof __DEV__ === "undefined" || __DEV__) {
+            console.log("[FeedScreen][Reel]", itemId, ...args);
+          }
+        },
+        [itemId],
+      );
+
+      // Resolve the source (cached local file if present, else stream) once on
+      // mount, then upgrade to the local copy when the background download
+      // completes — without interrupting playback if it's already streaming.
       useEffect(() => {
-        if (!isActive) return;
-        let cancelled = false;
-        (async () => {
-          const local = await cacheReelVideo(itemId, {
-            hlsUrl: item.hls_url,
-            videoUrl: item.video_url,
-          });
-          if (!cancelled && local) setSource({ uri: local });
-        })();
+        let mounted = true;
+        getReelSource(streamUrl).then(({ uri, cached }) => {
+          if (!mounted) return;
+          setSource({ uri, isNetwork: !cached });
+        });
         return () => {
-          cancelled = true;
+          mounted = false;
         };
-      }, [isActive, itemId, item.hls_url, item.video_url]);
+      }, [streamUrl]);
+
+      useEffect(() => {
+        // The looping pulse + play button only appear when the user has
+        // explicitly paused. This prevents the button from flashing during a
+        // scroll (where the outgoing item is briefly !isActive) or lingering
+        // after returning from a product/store page (where the feed was
+        // backgrounded and auto-paused).
+        if (!paused) {
+          pulseAnim.stopAnimation();
+          pulseAnim.setValue(0);
+          return;
+        }
+
+        const loop = Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 900,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 0,
+              duration: 900,
+              easing: Easing.in(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]),
+        );
+
+        loop.start();
+        return () => {
+          loop.stop();
+        };
+      }, [isActive, paused, pulseAnim, screenIsFocused]);
 
       const storeName = item.seller?.name || "Store";
       const storeAvatar = resolveAvatarUri(item.seller?.avatar);
@@ -244,27 +313,99 @@ export const FeedScreen = ({ route, navigation }) => {
               pointerEvents="box-none" so only its interactive children
               (store, product, actions) capture touches; taps elsewhere
               fall through to this layer. */}
-          <Pressable style={styles.videoWrap} onPress={togglePlay}>
+          <Pressable
+            style={styles.videoWrap}
+            onPress={() => {
+              fireTapPulse();
+              togglePlay();
+            }}
+          >
             <Video
-              ref={(ref) => {
-                if (ref) videoRefs.current[item.id] = ref;
-              }}
+              ref={videoRef}
               source={source}
               style={styles.video}
               resizeMode="cover"
               repeat
-              paused={!isActive || paused}
-              poster={item.thumbnail_url || null}
-              posterResizeMode="cover"
+              muted={Platform.OS === "web"}
+              paused={!screenIsFocused || !isActive || paused}
+              onLoad={(meta) => logReel("onLoad", meta?.duration, source?.uri)}
+              onReadyForDisplay={() => logReel("onReadyForDisplay", source?.uri)}
+              onBuffer={(event) => logReel("onBuffer", event?.isBuffering, source?.uri)}
+              onError={(error) => logReel("onError", error, source?.uri)}
+              onProgress={(progress) => {
+                if (progress?.currentTime != null) {
+                  logReel("onProgress", progress.currentTime, progress.playableDuration);
+                }
+              }}
               // ABR: keep a modest forward buffer so rendition switches are
               // smooth without over-fetching data on metered connections.
               bufferConfig={{
-                minBufferMs: 5000,
-                maxBufferMs: 15000,
-                bufferForPlaybackMs: 1500,
-                bufferForPlaybackAfterRebufferMs: 3000,
+                minBufferMs: 10000,
+                maxBufferMs: 30000,
+                bufferForPlaybackMs: 2500,
+                bufferForPlaybackAfterRebufferMs: 5000,
               }}
             />
+
+            {/* One-shot ripple that fires on every center tap for tactile
+                feedback, regardless of play/pause state. */}
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.centerTapRipple,
+                {
+                  opacity: tapAnim.interpolate({
+                    inputRange: [0, 0.25, 1],
+                    outputRange: [0, 0.55, 0],
+                  }),
+                  transform: [
+                    {
+                      scale: tapAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.6, 1.6],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <View style={styles.centerTapRing} />
+            </Animated.View>
+
+            {/* The play/pulse button only shows when the video is paused
+                (never while scrolling or after navigating away/back). */}
+            {paused ? (
+              <Pressable
+                style={styles.centerPlayHitTarget}
+                onPress={() => {
+                  fireTapPulse();
+                  togglePlay();
+                }}
+              >
+                <Animated.View
+                  style={[
+                    styles.centerPlayPulse,
+                    {
+                      opacity: pulseAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.22, 0.62],
+                      }),
+                      transform: [
+                        {
+                          scale: pulseAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [1, 1.5],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+                <View style={styles.centerPlayButton}>
+                  <Ionicons name="play" size={26} color="#fff" />
+                </View>
+              </Pressable>
+            ) : null}
           </Pressable>
 
           <View
@@ -366,10 +507,10 @@ export const FeedScreen = ({ route, navigation }) => {
         navigation={navigation}
         paused={paused}
         togglePlay={togglePlay}
-        videoRefs={videoRefs}
+        screenIsFocused={screenIsFocused}
       />
     ),
-    [activeId, navigation, paused, togglePlay, videoRefs],
+    [activeId, navigation, paused, screenIsFocused, togglePlay],
   );
 
   return (
@@ -386,6 +527,9 @@ export const FeedScreen = ({ route, navigation }) => {
             renderItem={renderReel}
             pagingEnabled
             showsVerticalScrollIndicator={false}
+            snapToInterval={ITEM_HEIGHT}
+            snapToAlignment="start"
+            decelerationRate="fast"
             getItemLayout={(data, index) => ({
               length: ITEM_HEIGHT,
               offset: ITEM_HEIGHT * index,
@@ -393,7 +537,8 @@ export const FeedScreen = ({ route, navigation }) => {
             })}
             initialNumToRender={2}
             maxToRenderPerBatch={2}
-            windowSize={3}
+            windowSize={2}
+            removeClippedSubviews={false}
             onViewableItemsChanged={onViewableItemsChanged}
             viewabilityConfig={viewabilityConfig}
           />
@@ -425,6 +570,51 @@ const styles = StyleSheet.create({
   videoWrap: {
     flex: 1,
     justifyContent: "flex-end",
+  },
+  centerPlayHitTarget: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  centerPlayPulse: {
+    position: "absolute",
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  centerPlayButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.42)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.28)",
+  },
+  centerTapRipple: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    // A simple expanding ring centred on the video for tap feedback.
+  },
+  centerTapRing: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.9)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   video: {
     position: "absolute",

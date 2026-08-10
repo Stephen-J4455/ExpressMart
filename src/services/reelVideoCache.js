@@ -1,213 +1,119 @@
-// Reel video caching
 // ---------------------------------------------------------------------------
-// Caches each reel's video locally so it is only fetched from Cloudflare R2
-// once. On subsequent views (e.g. scroll up and back) the video plays from the
-// device, avoiding repeated data usage on metered connections.
-//
-// HLS (.m3u8) is preferred over the plain MP4 because it is adaptive and much
-// smaller per-rendition. We download the playlist and all of its segment files
-// into a per-reel cache directory, then rewrite the playlist to reference the
-// local segment paths so the native player can serve it fully offline.
-//
-// For reels that only expose a plain MP4 (video_url), we fall back to
-// downloading that single file.
+// reelVideoCache.js
+// Caches reel MP4s locally (one download per URL) so the feed plays from disk
+// instead of re-streaming the remote source every time the user scrolls back to
+// a video or navigates away and returns. Falls back to the streaming URL when
+// a download hasn't finished or fails, so playback never blocks on the cache.
 // ---------------------------------------------------------------------------
-
-// expo-file-system v57 deprecated getInfoAsync/downloadAsync/makeDirectoryAsync/
-// writeAsStringAsync on the main entry (they now throw). The working
-// implementation lives in the legacy subpath, which is what we need here.
 import * as FileSystem from "expo-file-system/legacy";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform } from "react-native";
 
-const CACHE_MAP_KEY = "expressmart.cache.reels.videos";
+const REEL_CACHE_DIR = `${FileSystem.documentDirectory}reel_cache/`;
 
-// ── helpers ────────────────────────────────────────────────────────────────
-const extFromUrl = (url) => {
-  const clean = String(url || "").split("?")[0];
-  const seg = clean.split("/").pop() || "";
-  const ext = seg.includes(".") ? seg.split(".").pop().toLowerCase() : "";
-  if (["mp4", "mov", "m4v", "webm"].includes(ext)) return ext;
-  return "mp4";
-};
+// In-flight downloads keyed by cache key so we don't start the same download
+// twice (e.g. when the feed mounts multiple reel rows for the same video).
+const _downloads = new Map();
 
-const resolveUrl = (uri, base) => {
-  if (/^https?:\/\//i.test(uri)) return uri;
-  const baseDir = base.split("?")[0].substring(0, base.lastIndexOf("/") + 1);
-  return baseDir + uri;
-};
-
-const fetchText = async (url) => {
-  const res = await fetch(url);
-  return res.text();
-};
-
-const isMasterPlaylist = (text) => /#EXT-X-STREAM-INF/.test(text);
-
-// From a master playlist, pick the lowest-bandwidth rendition (smallest to
-// download/cache) and return its absolute URL.
-const pickLowestVariant = (text, baseUrl) => {
-  const lines = text.split("\n");
-  const variants = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (line.startsWith("#EXT-X-STREAM-INF")) {
-      const m = line.match(/BANDWIDTH=(\d+)/);
-      const bw = m ? parseInt(m[1], 10) : 0;
-      const uri = lines[i + 1]?.trim();
-      if (uri && !uri.startsWith("#")) {
-        variants.push({ bw, uri: resolveUrl(uri, baseUrl) });
-      }
-    }
+// Build a safe, unique filename for a reel URL.
+const keyForUrl = (url) => {
+  try {
+    const clean = String(url || "").split("?")[0];
+    let name = clean.split("/").pop() || "reel.mp4";
+    if (!name.includes(".")) name = `${name}.mp4`;
+    // strip anything that isn't filesystem friendly
+    return name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  } catch (e) {
+    return "reel.mp4";
   }
-  if (!variants.length) return null;
-  variants.sort((a, b) => a.bw - b.bw);
-  return variants[0].uri;
 };
 
-// Download every segment in a variant playlist into `dir`, rewriting each
-// segment line to a relative local filename. Returns the rewritten playlist text.
-const downloadVariantSegments = async (variantText, variantUrl, dir) => {
-  const lines = variantText.split("\n");
-  const base = variantUrl.split("?")[0].substring(0, variantUrl.lastIndexOf("/") + 1);
-  let segIndex = 0;
-  const out = [];
-  for (const raw of lines) {
-    const line = raw.trim();
-    // Keep tags/comments as-is; only rewrite actual media/playlist URLs.
-    if (!line || line.startsWith("#")) {
-      out.push(raw);
-      continue;
+const localUriForUrl = (url) => `${REEL_CACHE_DIR}${keyForUrl(url)}`;
+
+let _dirReady = null;
+const ensureDir = () => {
+  if (!_dirReady) {
+    _dirReady = FileSystem.makeDirectoryAsync(REEL_CACHE_DIR, {
+      intermediates: true,
+    })
+      .then(() => true)
+      .catch(() => true);
+  }
+  return _dirReady;
+};
+
+/**
+ * Returns the best available source for a reel:
+ *  - If a local cached copy exists, returns its file:// URI.
+ *  - Otherwise kicks off a background download (fire-and-forget) and returns
+ *    the streaming URL so playback starts immediately without waiting.
+ *
+ * @param {string} streamUrl  The remote CDN/R2 URL.
+ * @returns {Promise<{uri: string, cached: boolean}>}
+ */
+export async function getReelSource(streamUrl) {
+  if (!streamUrl) return { uri: "", cached: false };
+  const localUri = localUriForUrl(streamUrl);
+  try {
+    await ensureDir();
+    const info = await FileSystem.getInfoAsync(localUri);
+    if (info?.exists && info?.size > 0) {
+      return { uri: localUri, cached: true };
     }
-    // Skip nested playlists (already resolved to a single variant above).
-    if (line.endsWith(".m3u8")) {
-      out.push(raw);
-      continue;
-    }
-    const segUrl = /^https?:\/\//i.test(line) ? line : base + line;
-    const segExt = (segUrl.split("?")[0].split(".").pop() || "ts").split(/[^a-z0-9]/i)[0];
-    const localName = `seg${String(segIndex).padStart(4, "0")}.${segExt}`;
-    segIndex++;
-    const dest = dir + localName;
+  } catch (e) {
+    // fall through to streaming + start download
+  }
+  // Not cached yet — start a background download and stream for now.
+  downloadReel(streamUrl).catch(() => {});
+  return { uri: streamUrl, cached: false };
+}
+
+/**
+ * Downloads the reel MP4 to local storage (idempotent). Resolves with the
+ * local file URI when done. Failures resolve to null so callers keep using
+ * the streaming URL.
+ */
+export async function downloadReel(streamUrl) {
+  if (!streamUrl) return null;
+  const localUri = localUriForUrl(streamUrl);
+
+  if (_downloads.has(streamUrl)) {
+    return _downloads.get(streamUrl);
+  }
+
+  const task = (async () => {
     try {
-      const dl = await FileSystem.downloadAsync(segUrl, dest);
-      if (dl.status !== 200) {
-        out.push(line); // fallback to remote if a segment fails
-        continue;
+      await ensureDir();
+      const info = await FileSystem.getInfoAsync(localUri);
+      if (info?.exists && info?.size > 0) return localUri;
+
+      const download = FileSystem.createDownloadResumable(
+        streamUrl,
+        localUri,
+        { headers: { Range: "bytes=0-" } },
+      );
+      const result = await download.downloadAsync();
+      if (result?.status === 200 || result?.status === 206) {
+        return localUri;
       }
-    } catch {
-      out.push(line); // fallback to remote if a segment fails
-      continue;
+      return null;
+    } catch (e) {
+      return null;
     }
-    out.push(localName);
-  }
-  return out.join("\n");
-};
+  })();
 
-// ── cache map (reel id -> local file URI) ──────────────────────────────────
-const readMap = async () => {
-  try {
-    const raw = await AsyncStorage.getItem(CACHE_MAP_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-};
+  _downloads.set(streamUrl, task);
+  const result = await task;
+  // Keep the cached promise so repeated calls reuse it, but allow re-download
+  // attempts if it failed.
+  if (!result) _downloads.delete(streamUrl);
+  return result;
+}
 
-const writeMap = async (map) => {
-  try {
-    await AsyncStorage.setItem(CACHE_MAP_KEY, JSON.stringify(map));
-  } catch (e) {
-    console.warn("Failed to persist reel video cache map:", e);
-  }
-};
-
-// Returns the local file URI for a reel if already cached and still on disk.
-export const getLocalVideoUri = async (reelId) => {
-  if (Platform.OS === "web") return null;
-  try {
-    const map = await readMap();
-    const uri = map[reelId];
-    if (!uri) return null;
-    const info = await FileSystem.getInfoAsync(uri);
-    if (info.exists) return uri;
-    delete map[reelId];
-    await writeMap(map);
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-// Cache a plain MP4 (fallback when no HLS is available).
-export const cacheVideo = async (reelId, remoteUrl) => {
-  if (Platform.OS === "web" || !remoteUrl) return null;
-  try {
-    const ext = extFromUrl(remoteUrl);
-    const dest = `${FileSystem.cacheDirectory}reel-${reelId}.${ext}`;
-    const info = await FileSystem.getInfoAsync(dest);
-    if (!info.exists) {
-      const dl = await FileSystem.downloadAsync(remoteUrl, dest);
-      if (dl.status !== 200) return null;
-    }
-    const map = await readMap();
-    map[reelId] = dest;
-    await writeMap(map);
-    return dest;
-  } catch (e) {
-    console.warn("Reel MP4 cache failed:", e);
-    return null;
-  }
-};
-
-// Cache an HLS reel: download the playlist + all segment files locally and
-// return the local .m3u8 URI. Picks the lowest-bandwidth rendition to keep the
-// cache small (smaller than a single full-bitrate MP4).
-export const cacheHls = async (reelId, hlsUrl) => {
-  if (Platform.OS === "web" || !hlsUrl) return null;
-  try {
-    const dir = `${FileSystem.cacheDirectory}reel-${reelId}/`;
-    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-    const localPlaylist = `${dir}index.m3u8`;
-
-    const map = await readMap();
-    const existing = await FileSystem.getInfoAsync(localPlaylist);
-    if (existing.exists) {
-      map[reelId] = localPlaylist;
-      await writeMap(map);
-      return localPlaylist;
-    }
-
-    let targetUrl = hlsUrl;
-    let targetText = await fetchText(hlsUrl);
-
-    // If this is a master playlist, resolve to the smallest rendition only.
-    if (isMasterPlaylist(targetText)) {
-      const variant = pickLowestVariant(targetText, hlsUrl);
-      if (variant) {
-        targetUrl = variant;
-        targetText = await fetchText(variant);
-      }
-    }
-
-    const rewritten = await downloadVariantSegments(targetText, targetUrl, dir);
-    await FileSystem.writeAsStringAsync(localPlaylist, rewritten);
-
-    map[reelId] = localPlaylist;
-    await writeMap(map);
-    return localPlaylist;
-  } catch (e) {
-    console.warn("Reel HLS cache failed:", e);
-    return null;
-  }
-};
-
-// Convenience: cache whichever source is available, preferring HLS (smaller).
-export const cacheReelVideo = async (reelId, { hlsUrl, videoUrl }) => {
-  if (hlsUrl) {
-    const local = await cacheHls(reelId, hlsUrl);
-    if (local) return local;
-  }
-  if (videoUrl) return cacheVideo(reelId, videoUrl);
-  return null;
-};
+/**
+ * Preload (download) a reel into local storage without blocking. Safe to call
+ * for upcoming feed items so they can play from disk.
+ */
+export function preloadReel(streamUrl) {
+  if (!streamUrl) return;
+  if (_downloads.has(streamUrl)) return;
+  downloadReel(streamUrl).catch(() => {});
+}
