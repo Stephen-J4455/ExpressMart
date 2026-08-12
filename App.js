@@ -19,6 +19,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import * as Linking from "expo-linking";
 import { useResponsive } from "./src/hooks/useResponsive";
 import { WebSidebar } from "./src/components/WebSidebar";
@@ -607,7 +608,9 @@ const linking = {
         screens: {
           Home: "home",
           Stores: "stores",
-          // ...
+          Feed: "feed",
+          Cart: "cart",
+          Account: "account",
         },
       },
       Auth: "login",
@@ -623,6 +626,59 @@ const linking = {
       },
       PaymentWebView: "payment",
       Orders: "orders",
+      OrderDetail: {
+        path: "orders/:orderId",
+        parse: {
+          orderId: (orderId) => orderId,
+        },
+      },
+      ProductDetail: {
+        path: "product/:productId",
+        parse: {
+          productId: (productId) => productId,
+        },
+      },
+      Store: {
+        path: "store/:sellerId",
+        parse: {
+          sellerId: (sellerId) => sellerId,
+        },
+      },
+      CategoryProducts: {
+        path: "category/:categoryId",
+        parse: {
+          categoryId: (categoryId) => categoryId,
+        },
+      },
+      Chat: {
+        path: "chat/:sellerId",
+        parse: {
+          sellerId: (sellerId) => sellerId,
+        },
+      },
+      SearchResults: {
+        path: "search",
+        parse: {
+          query: (query) => query,
+        },
+      },
+      Notifications: "notifications",
+      Wishlist: "wishlist",
+      Addresses: "addresses",
+      Payments: "payments",
+      Following: "following",
+      Settings: "settings",
+      Security: "security",
+      ProfileEdit: "profile/edit",
+      SellerProfile: "seller/profile",
+      StatusViewer: "status/:sellerId",
+      StoreRegistration: "store-registration",
+      HelpSupport: "help",
+      Terms: "terms",
+      PrivacyPolicy: "privacy",
+      PrivacySettings: "privacy/settings",
+      ChangePassword: "change-password",
+      ChangeEmail: "change-email",
     },
   },
 };
@@ -961,25 +1017,27 @@ const authPromptStyles = StyleSheet.create({
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <ToastProvider>
-          <CartProvider>
-            <ShopProvider>
-              <OrderProvider>
-                <ChatProvider>
-                  <AdsProvider>
-                    <DeepLinkHandler />
-                    <NavigationContainer theme={navTheme} linking={linking}>
-                      <StatusBar style="light" />
-                      <AuthenticatedApp />
-                    </NavigationContainer>
-                  </AdsProvider>
-                </ChatProvider>
-              </OrderProvider>
-            </ShopProvider>
-          </CartProvider>
-        </ToastProvider>
-      </AuthProvider>
+      <KeyboardProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <CartProvider>
+              <ShopProvider>
+                <OrderProvider>
+                  <ChatProvider>
+                    <AdsProvider>
+                      <DeepLinkHandler />
+                      <NavigationContainer theme={navTheme} linking={linking}>
+                        <StatusBar style="light" />
+                        <AuthenticatedApp />
+                      </NavigationContainer>
+                    </AdsProvider>
+                  </ChatProvider>
+                </OrderProvider>
+              </ShopProvider>
+            </CartProvider>
+          </ToastProvider>
+        </AuthProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

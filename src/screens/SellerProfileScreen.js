@@ -19,7 +19,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
-import { colors, getTheme, THEMES } from "../theme/colors";
+import { colors, getTheme, THEMES, radius } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 import { getImageContentType } from "../utils/webUpload";
 
@@ -581,22 +581,22 @@ const styles = StyleSheet.create({
   hero: { position: "relative", height: 180, justifyContent: "flex-end", paddingBottom: 16 },
   heroOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.28)" },
   coverPress: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  coverCamera: { position: "absolute", top: 12, right: 16, zIndex: 5, backgroundColor: "rgba(0,0,0,0.35)", padding: 8, borderRadius: 20 },
-  backFloating: { position: "absolute", top: 12, left: 16, zIndex: 5, backgroundColor: "rgba(0,0,0,0.3)", padding: 8, borderRadius: 20 },
+  coverCamera: { position: "absolute", top: 12, right: 16, zIndex: 5, width: 36, height: 36, borderRadius: radius.full, backgroundColor: "rgba(0,0,0,0.35)", alignItems: "center", justifyContent: "center" },
+  backFloating: { position: "absolute", top: 12, left: 16, zIndex: 5, width: 36, height: 36, borderRadius: radius.full, backgroundColor: "rgba(0,0,0,0.3)", alignItems: "center", justifyContent: "center" },
   heroBottom: { alignItems: "center", gap: 10, paddingHorizontal: 16 },
   heroName: { color: "#fff", fontSize: 22, fontWeight: "800", textShadowColor: "rgba(0,0,0,0.4)", textShadowRadius: 4 },
   actionRow: { flexDirection: "row", gap: 12, paddingHorizontal: 16, marginTop: 4 },
-  cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.3)", alignItems: "center" },
+  cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: radius.md, backgroundColor: "rgba(255,255,255,0.3)", alignItems: "center" },
   cancelText: { fontWeight: "700", color: "#fff" },
-  saveBtn: { flex: 2, paddingVertical: 13, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  saveBtn: { flex: 2, paddingVertical: 13, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
   saveText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  editBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 11, paddingHorizontal: 20, borderRadius: 12, marginTop: 4 },
+  editBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 11, paddingHorizontal: 20, borderRadius: radius.md, marginTop: 4 },
   editText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   statsCard: {
     backgroundColor: "#fff",
     marginHorizontal: 16,
     marginTop: -28,
-    borderRadius: 20,
+    borderRadius: radius.lg,
     paddingVertical: 6,
     shadowColor: "#000",
     shadowOpacity: 0.06,
@@ -630,7 +630,7 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1.5,
     borderColor: "#E2E8F0",
-    borderRadius: 12,
+    borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 13,
     fontSize: 15,
@@ -641,10 +641,10 @@ const styles = StyleSheet.create({
   },
   textArea: { height: 96, textAlignVertical: "top" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1.5, borderColor: "#E2E8F0", backgroundColor: "#FAFBFC" },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.md, borderWidth: 1.5, borderColor: "#E2E8F0", backgroundColor: "#FAFBFC" },
   chipText: { fontWeight: "600", color: colors.muted, fontSize: 13 },
   themeSwatches: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 8, paddingHorizontal: 12 },
-  themeSwatch: { width: 36, height: 36, borderRadius: 18 },
+  themeSwatch: { width: 36, height: 36, borderRadius: radius.full },
   switchRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -657,6 +657,6 @@ const styles = StyleSheet.create({
   switchLabel: { fontSize: 15, fontWeight: "600", color: colors.dark },
   switchSub: { fontSize: 12, color: colors.muted, marginTop: 2 },
   previewOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center" },
-  previewWrap: { borderRadius: 20, overflow: "hidden", backgroundColor: "#fff", padding: 6 },
-  previewImage: { width: 260, height: 260, borderRadius: 16 },
+  previewWrap: { borderRadius: radius.lg, overflow: "hidden", backgroundColor: "#fff", padding: 6 },
+  previewImage: { width: 260, height: 260, borderRadius: radius.md },
 });

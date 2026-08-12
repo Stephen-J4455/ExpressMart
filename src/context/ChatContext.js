@@ -23,9 +23,25 @@ export const useChat = () => {
   return context;
 };
 
+// Read the cached conversations synchronously so the UI can render instantly
+// (before any network request) on first paint.
+const readCachedConversations = () => {
+  try {
+    const cached = AsyncStorage.getItem(CACHE_KEY);
+    if (cached && typeof cached.then === "function") {
+      // AsyncStorage.getItem returns a promise; we can't await here, so fall
+      // back to an empty array and let loadFromCache populate it.
+      return [];
+    }
+  } catch (e) {
+    // ignore
+  }
+  return [];
+};
+
 export const ChatProvider = ({ children }) => {
   const { user } = useAuth();
-  const [conversations, setConversations] = useState([]);
+  const [conversations, setConversations] = useState(readCachedConversations());
   const [isOnline, setIsOnline] = useState(true);
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -65,6 +81,14 @@ export const ChatProvider = ({ children }) => {
       console.error("Error saving to cache:", error);
     }
   }, []);
+
+  // Persist conversations to local storage whenever they change so the list
+  // opens instantly from cache on the next launch (before any server sync).
+  useEffect(() => {
+    if (conversations.length > 0) {
+      saveToCache(conversations);
+    }
+  }, [conversations, saveToCache]);
 
   // Sync conversations with server
   const syncWithServer = useCallback(async () => {

@@ -28,7 +28,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { notifyOrderStatusUpdate } from "../services/notificationService";
 import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
-import { colors, getTheme } from "../theme/colors";
+import { colors, getTheme, radius } from "../theme/colors";
 import { getImageContentType, getWebUploadPayload } from "../utils/webUpload";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
@@ -281,8 +281,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [removingVideo, setRemovingVideo] = useState(false);
   const [videoUploadJobs, setVideoUploadJobs] = useState([]);
-  const [attachTargetProductId, setAttachTargetProductId] = useState(null);
-  const [showVideoDeleteModal, setShowVideoDeleteModal] = useState(false);
+  // When a video is picked for attach, we hold it here and show a product
+  // picker so the seller chooses the target product from a modal.
+  const [pendingVideo, setPendingVideo] = useState(null); // { uri, pickedFile, title }
+  const [productSelectModalVisible, setProductSelectModalVisible] = useState(false);
+  // Per-video popup menu (kebab) — holds the reel being acted on.
+  const [cardMenu, setCardMenu] = useState(null); // reel object or null
 
   // ── Orders UI state ─────────────────────────────────────────────────────
   const [orderFilter, setOrderFilter] = useState("processing");
@@ -305,12 +309,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [activeTab, setActiveTab] = useState("catalog");
 
   useEffect(() => {
-    if (attachTargetProductId || products.length === 0) return;
-    const firstProduct = products.find((product) => product.status === "active") || products[0];
-    if (firstProduct?.id) {
-      setAttachTargetProductId(firstProduct.id);
-    }
-  }, [attachTargetProductId, products]);
+    // reserved
+  }, []);
 
   const fetchSellerId = useCallback(async () => {
     if (!supabase || !user) return null;
@@ -469,7 +469,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     async (id) => {
       const reel = reels.find((r) => r.id === id);
       if (!reel || deletingReelId) return;
-      setDeletingReelId(id);
+      setDeletingReelId(`reel-${id}`);
       try {
         if (reel.r2_key) {
           try {
@@ -839,11 +839,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   };
 
   const pickVideoForProductAttach = async () => {
-    if (!attachTargetProductId) {
-      toast.warning("Select a product", "Choose the product to attach the video to first.");
-      return;
-    }
-
     if (Platform.OS !== "web") {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
@@ -871,19 +866,31 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       return;
     }
 
-    const targetProduct = products.find((product) => product.id === attachTargetProductId);
-    if (!targetProduct) {
-      toast.error("Missing product", "Select a product before attaching a video.");
-      return;
-    }
-
-    void startBackgroundVideoUpload({
-      productId: targetProduct.id,
-      productTitle: targetProduct.title,
+    // Hold the picked video and show the product picker so the seller can
+    // choose which product to attach it to from a modal.
+    setPendingVideo({
       uri: asset.uri,
       pickedFile: Platform.OS === "web" ? asset.file || null : null,
+      title: asset.fileName || asset.uri?.split("/").pop() || "Product video",
     });
+    setProductSelectModalVisible(true);
   };
+
+  // Attach the previously picked video to the chosen product.
+  const attachPendingVideoToProduct = useCallback(
+    (product) => {
+      if (!pendingVideo || !product) return;
+      setProductSelectModalVisible(false);
+      void startBackgroundVideoUpload({
+        productId: product.id,
+        productTitle: product.title,
+        uri: pendingVideo.uri,
+        pickedFile: pendingVideo.pickedFile,
+      });
+      setPendingVideo(null);
+    },
+    [pendingVideo],
+  );
 
   // Uploads a local video file to Cloudflare R2 via the get-r2-upload-url edge
   // function, then returns the public URL + R2 object key.
@@ -1860,6 +1867,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     </View>
   );
 
+  // The reels grid shows store reels AND product videos. Product videos are
+  // attached from the "Add video" flow where a product is chosen from a modal
+  // after the video is selected. Both kinds are deletable from the card menu.
   const videoGallery = useMemo(() => {
     const reelItems = reels.map((reel) => ({
       id: `reel-${reel.id}`,
@@ -1944,7 +1954,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         <View style={{ flex: 1 }}>
           <Text style={styles.attachVideoTitle}>Attach video to a product</Text>
           <Text style={styles.attachVideoSubtitle}>
-            Pick a product, then choose a video. Uploads continue in the background.
+            Choose a video, then pick the product to attach it to. Uploads continue in the background.
           </Text>
         </View>
         <View style={styles.attachVideoActions}>
@@ -1955,63 +1965,29 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <Ionicons name="videocam-outline" size={18} color="#fff" />
             <Text style={styles.attachVideoButtonText}>Add video</Text>
           </Pressable>
-          <Pressable
-            style={styles.deleteVideosButton}
-            onPress={() => setShowVideoDeleteModal(true)}
-          >
-            <Ionicons name="trash-outline" size={18} color={colors.primary} />
-            <Text style={styles.deleteVideosButtonText}>Delete videos</Text>
-          </Pressable>
         </View>
       </View>
-
-      <Text style={styles.attachVideoLabel}>Target product</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.attachProductRow}
-      >
-        {products.length === 0 ? (
-          <Text style={styles.emptyNote}>No products available yet.</Text>
-        ) : (
-          products.map((product) => {
-            const isSelected = attachTargetProductId === product.id;
-            const thumb = product.thumbnail || product.thumbnails?.[0] || null;
-            return (
-              <Pressable
-                key={product.id}
-                style={[
-                  styles.attachProductChip,
-                  isSelected && { backgroundColor: accent + "16", borderColor: accent },
-                ]}
-                onPress={() => setAttachTargetProductId(product.id)}
-              >
-                {thumb ? (
-                  <Image source={{ uri: thumb }} style={styles.attachProductThumb} />
-                ) : (
-                  <View style={styles.attachProductThumbFallback}>
-                    <Ionicons name="cube-outline" size={18} color={colors.muted} />
-                  </View>
-                )}
-                <Text
-                  style={[
-                    styles.attachProductChipText,
-                    isSelected && { color: accent },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {product.title}
-                </Text>
-                <Text style={styles.attachProductChipMeta} numberOfLines={1}>
-                  {product.status || "active"}
-                </Text>
-              </Pressable>
-            );
-          })
-        )}
-      </ScrollView>
     </View>
   );
+
+  // Delete confirmation popup (triggered from a video card's menu icon).
+  // Routes to the correct deleter based on the card kind:
+  //  - "reel"      → deleteReel (removes R2 object + reels row)
+  //  - "product"   → deleteProductVideo (removes R2 object + clears product link)
+  const confirmDeleteCard = useCallback(() => {
+    const target = cardMenu;
+    setCardMenu(null);
+    if (!target) return;
+    if (target.kind === "product") {
+      deleteProductVideo(target.source).catch((e) =>
+        toast.error("Delete failed", e.message || "Could not delete video"),
+      );
+    } else {
+      deleteReel(target.source.id).catch((e) =>
+        toast.error("Delete failed", e.message || "Could not delete reel"),
+      );
+    }
+  }, [cardMenu, deleteReel, deleteProductVideo, toast]);
 
   // ── Reels tab (seller reels stored on Cloudflare R2) ─────────────────────
   const renderReels = () => (
@@ -2028,6 +2004,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       ) : (
         <View style={styles.reelsGrid}>
           {videoGallery.map((item) => {
+            const isDeleting = deletingReelId === item.id;
             return (
               <View key={item.id} style={styles.reelCard}>
                 {item.thumbnail_url ? (
@@ -2046,24 +2023,85 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     {item.title}
                   </Text>
                 </View>
+                <Pressable
+                  style={styles.reelMenuButton}
+                  hitSlop={10}
+                  disabled={isDeleting}
+                  onPress={() => setCardMenu(item)}
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="ellipsis-vertical" size={18} color="#fff" />
+                  )}
+                </Pressable>
               </View>
             );
           })}
         </View>
       )}
+      {renderCardMenu()}
     </View>
   );
 
-  const renderVideoDeleteModal = () => (
+  // Per-video popup menu (shown above the reels grid) with a delete option.
+  const renderCardMenu = () => (
     <Modal
-      visible={showVideoDeleteModal}
+      visible={Boolean(cardMenu)}
       transparent
       animationType="fade"
-      onRequestClose={() => setShowVideoDeleteModal(false)}
+      onRequestClose={() => setCardMenu(null)}
+    >
+      <Pressable style={styles.menuBackdrop} onPress={() => setCardMenu(null)}>
+        <Pressable style={styles.menuCard} onPress={() => {}}>
+          <Text style={styles.menuTitle} numberOfLines={1}>
+            {cardMenu?.title || "Reel"}
+          </Text>
+          <Pressable
+            style={styles.menuItemRow}
+            disabled={deletingReelId === cardMenu?.id}
+            onPress={confirmDeleteCard}
+          >
+            <Ionicons
+              name="trash-outline"
+              size={20}
+              color={deletingReelId === cardMenu?.id ? colors.muted : "#EF4444"}
+            />
+            <Text
+              style={[
+                styles.menuItemText,
+                deletingReelId === cardMenu?.id && { color: colors.muted },
+              ]}
+            >
+              {deletingReelId === cardMenu?.id ? "Deleting…" : "Delete"}
+            </Text>
+          </Pressable>
+          <Pressable style={styles.menuItemRow} onPress={() => setCardMenu(null)}>
+            <Ionicons name="close-outline" size={20} color={colors.dark} />
+            <Text style={styles.menuItemText}>Cancel</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+
+  // ── Product picker modal (shown after picking a video to attach) ────────
+  const renderProductSelectModal = () => (
+    <Modal
+      visible={productSelectModalVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => {
+        setProductSelectModalVisible(false);
+        setPendingVideo(null);
+      }}
     >
       <Pressable
         style={styles.modalBackdrop}
-        onPress={() => setShowVideoDeleteModal(false)}
+        onPress={() => {
+          setProductSelectModalVisible(false);
+          setPendingVideo(null);
+        }}
       >
         <Pressable style={styles.modalCard} onPress={() => {}}>
           <LinearGradient
@@ -2072,59 +2110,39 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             end={{ x: 1, y: 1 }}
             style={styles.modalHeader}
           >
-            <Ionicons name="trash-outline" size={20} color="#fff" />
-            <Text style={styles.modalTitle}>Delete videos</Text>
+            <Ionicons name="cube-outline" size={20} color="#fff" />
+            <Text style={styles.modalHeaderTitle}>Select a product</Text>
           </LinearGradient>
           <ScrollView style={styles.videoDeleteList} showsVerticalScrollIndicator={false}>
-            {videoGallery.length === 0 ? (
-              <Text style={styles.videoDeleteEmpty}>No videos available.</Text>
+            {products.length === 0 ? (
+              <Text style={styles.videoDeleteEmpty}>No products available yet.</Text>
             ) : (
-              videoGallery.map((item) => {
-                const deletingId = item.kind === "reel" ? item.source.id : `product-${item.source.id}`;
-                const isDeleting = deletingReelId === deletingId;
-                const thumb = item.thumbnail_url || null;
+              products.map((product) => {
+                const thumb = product.thumbnail || product.thumbnails?.[0] || null;
                 return (
                   <Pressable
-                    key={item.id}
-                    style={[
-                      styles.sortOption,
-                      isDeleting && styles.sortOptionSelected,
-                    ]}
-                    onPress={() => {
-                      if (isDeleting) return;
-                      if (item.kind === "reel") {
-                        deleteReel(item.source.id).catch((e) =>
-                          toast.error("Delete failed", e.message),
-                        );
-                      } else {
-                        deleteProductVideo(item.source).catch((e) =>
-                          toast.error("Delete failed", e.message),
-                        );
-                      }
-                    }}
+                    key={product.id}
+                    style={styles.sortOption}
+                    onPress={() => attachPendingVideoToProduct(product)}
                   >
-                      <View style={styles.sortOptionLeft}>
+                    <View style={styles.sortOptionLeft}>
                       {thumb ? (
                         <Image source={{ uri: thumb }} style={styles.videoDeleteThumb} />
                       ) : (
                         <View style={styles.videoDeleteThumbFallback}>
-                          <Ionicons name="videocam-outline" size={16} color={colors.primary} />
+                          <Ionicons name="cube-outline" size={16} color={colors.primary} />
                         </View>
                       )}
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.sortOptionText} numberOfLines={1}>
-                          {item.title}
+                          {product.title}
                         </Text>
                         <Text style={styles.videoDeleteMeta} numberOfLines={1}>
-                          {item.kind === "reel" ? "Reel video" : "Product video"}
+                          {product.status || "active"}
                         </Text>
                       </View>
                     </View>
-                    {isDeleting ? (
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    ) : (
-                      <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-                    )}
+                    <Ionicons name="chevron-forward" size={18} color={colors.muted} />
                   </Pressable>
                 );
               })
@@ -2874,7 +2892,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         </View>
       </Modal>
       {renderMenuDrawer()}
-      {renderVideoDeleteModal()}
+      {renderProductSelectModal()}
     </View>
   );
 };
@@ -2883,7 +2901,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { alignItems: "center", justifyContent: "center" },
   scrollContent: { flexGrow: 1, paddingBottom: 20 },
-  cover: { height: 160, position: "relative", overflow: "hidden" },
+  cover: {
+    borderRadius: radius.lg, height: 160, position: "relative", overflow: "hidden" },
   coverImage: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   coverOverlay: {
     position: "absolute",
@@ -2893,9 +2912,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "rgba(0,0,0,0.25)",
   },
-  profileBlock: { alignItems: "center", marginTop: -50, paddingHorizontal: 20 },
+  profileBlock: {
+    borderRadius: radius.lg, alignItems: "center", marginTop: -50, paddingHorizontal: 20 },
   avatarWrap: {
-    borderRadius: 64,
+    borderRadius: radius.full,
     borderWidth: 4,
     backgroundColor: "#fff",
     shadowColor: "#000",
@@ -2904,7 +2924,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
-  avatar: { width: 100, height: 100, borderRadius: 60 },
+  avatar: { width: 100, height: 100, borderRadius: radius.full },
   avatarPlaceholder: {
     alignItems: "center",
     justifyContent: "center",
@@ -2916,16 +2936,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 16,
     backgroundColor: "#EEF2FF",
-    borderRadius: 14,
+    borderRadius: radius.full,
     padding: 4,
   },
-  tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: 10 },
-  tabContent: { marginTop: 16, paddingHorizontal: 16 },
+  tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: radius.full },
+  tabContent: {
+    borderRadius: radius.lg, marginTop: 16, paddingHorizontal: 16 },
   reelsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   reelCard: {
     width: "47%",
     backgroundColor: "#fff",
-    borderRadius: 14,
+    borderRadius: radius.md,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "#F1F5F9",
@@ -2948,12 +2969,57 @@ const styles = StyleSheet.create({
     top: 8,
     right: 8,
     backgroundColor: "rgba(239,68,68,0.92)",
-    borderRadius: 18,
+    borderRadius: radius.lg,
     width: 34,
     height: 34,
     alignItems: "center",
     justifyContent: "center",
   },
+  reelMenuButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 34,
+    height: 34,
+    borderRadius: radius.full,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  menuCard: {
+    width: "80%",
+    maxWidth: 320,
+    backgroundColor: "#fff",
+    borderRadius: radius.lg,
+    padding: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  menuTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: colors.dark,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  menuItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: radius.sm,
+  },
+  menuItemText: { fontSize: 15, fontWeight: "600", color: colors.dark },
   uploadQueueSection: {
     marginBottom: 14,
     gap: 10,
@@ -2974,7 +3040,7 @@ const styles = StyleSheet.create({
   },
   uploadJobCard: {
     backgroundColor: "#fff",
-    borderRadius: 14,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     padding: 12,
@@ -3002,17 +3068,17 @@ const styles = StyleSheet.create({
   },
   uploadJobBarTrack: {
     height: 8,
-    borderRadius: 999,
+    borderRadius: radius.full,
     backgroundColor: "#E2E8F0",
     overflow: "hidden",
   },
   uploadJobBarFill: {
     height: "100%",
-    borderRadius: 999,
+    borderRadius: radius.full,
   },
   attachVideoCard: {
     backgroundColor: "#fff",
-    borderRadius: 18,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     padding: 14,
@@ -3045,7 +3111,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   attachVideoButtonText: {
     color: "#fff",
@@ -3065,7 +3131,7 @@ const styles = StyleSheet.create({
   attachProductChip: {
     width: 140,
     padding: 10,
-    borderRadius: 14,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     backgroundColor: "#F8FAFC",
@@ -3087,7 +3153,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.primary,
     backgroundColor: "#fff",
@@ -3105,13 +3171,13 @@ const styles = StyleSheet.create({
   attachProductThumb: {
     width: "100%",
     height: 84,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     backgroundColor: "#E2E8F0",
   },
   attachProductThumbFallback: {
     width: "100%",
     height: 84,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#E2E8F0",
@@ -3120,33 +3186,110 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: radius.pill,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
   },
   primaryButtonText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  chipRow: { marginBottom: 12 },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    borderRadius: radius.md,
+  },
+  chipRow: {
+    borderRadius: radius.md, marginBottom: 12 },
   videoDeleteList: {
-    maxHeight: 420,
+    maxHeight: 460,
   },
   videoDeleteEmpty: {
-    padding: 18,
+    padding: 24,
+    textAlign: "center",
     color: colors.muted,
+    fontSize: 14,
   },
   videoDeleteThumb: {
     width: 56,
     height: 56,
-    borderRadius: 12,
+    borderRadius: radius.md,
     backgroundColor: "#E2E8F0",
   },
   videoDeleteThumbFallback: {
     width: 56,
     height: 56,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FDE8E8",
   },
+  // ── Select-a-product sheet (video attach flow) ─────────────────────────
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    maxHeight: "88%",
+    paddingBottom: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+  },
+  modalHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  sortOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  sortOptionLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
+  },
+  sortOptionText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.dark,
+  },
+  videoDeleteMeta: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+    textTransform: "capitalize",
+  },
   summaryChip: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: radius.md,
     paddingHorizontal: 14,
     paddingVertical: 8,
     marginRight: 8,
@@ -3157,16 +3300,16 @@ const styles = StyleSheet.create({
   summaryChipValue: { fontWeight: "900", color: colors.dark, fontSize: 16, marginTop: 2 },
   flashBanner: {
     backgroundColor: "#FFF5F5",
-    borderRadius: 14,
+    borderRadius: radius.md,
     padding: 12,
     marginBottom: 12,
   },
   flashBannerHead: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
   flashBannerTitle: { fontWeight: "800", color: "#EF4444", fontSize: 14 },
-  flashCountPill: { backgroundColor: "#EF4444", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  flashCountPill: { backgroundColor: "#EF4444", borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 2 },
   flashCountText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  flashCard: { width: 120, marginRight: 10, backgroundColor: "#fff", borderRadius: 12, padding: 8, borderWidth: 1, borderColor: "#F1F5F9" },
-  flashThumb: { width: "100%", height: 70, borderRadius: 8 },
+  flashCard: { width: 120, marginRight: 10, backgroundColor: "#fff", borderRadius: radius.md, padding: 8, borderWidth: 1, borderColor: "#F1F5F9" },
+  flashThumb: { width: "100%", height: 70, borderRadius: radius.xs },
   flashThumbPlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
   flashName: { fontSize: 12, fontWeight: "700", color: colors.dark, marginTop: 6 },
   flashPrice: { fontSize: 13, fontWeight: "800", color: "#EF4444", marginTop: 2 },
@@ -3175,7 +3318,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 12,
@@ -3186,7 +3329,7 @@ const styles = StyleSheet.create({
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#F1F5F9",
@@ -3197,12 +3340,12 @@ const styles = StyleSheet.create({
   filterChipTextActive: { color: "#fff", fontWeight: "700" },
   sortRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   sortLabel: { fontSize: 12, fontWeight: "700", color: colors.muted },
-  sortChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: "#fff", borderWidth: 1, borderColor: "#F1F5F9" },
+  sortChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.xs, backgroundColor: "#fff", borderWidth: 1, borderColor: "#F1F5F9" },
   sortChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   sortChipText: { fontSize: 11, fontWeight: "600", color: colors.muted },
   sortChipTextActive: { color: "#fff", fontWeight: "700" },
   productGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  productCard: { width: "47%", backgroundColor: "#fff", borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "#F1F5F9" },
+  productCard: { width: "47%", backgroundColor: "#fff", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: "#F1F5F9" },
   productImage: { width: "100%", height: 110 },
   productImagePlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
   productBody: { padding: 10 },
@@ -3212,7 +3355,7 @@ const styles = StyleSheet.create({
   productStatus: { fontSize: 10, fontWeight: "700", textTransform: "capitalize", color: colors.muted },
   emptyNote: { textAlign: "center", color: colors.muted, fontSize: 14, marginTop: 20 },
   pipeline: { marginBottom: 12 },
-  pipelineBar: { flexDirection: "row", height: 8, borderRadius: 6, overflow: "hidden", backgroundColor: "#F1F5F9" },
+  pipelineBar: { flexDirection: "row", height: 8, borderRadius: radius.xxs, overflow: "hidden", backgroundColor: "#F1F5F9" },
   pipelineSegment: { height: "100%" },
   pipelineLegend: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 6 },
   legendText: { fontSize: 11, color: colors.muted, fontWeight: "600" },
@@ -3221,7 +3364,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexWrap: "wrap",
     backgroundColor: "#fff",
-    borderRadius: 14,
+    borderRadius: radius.md,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
@@ -3230,7 +3373,7 @@ const styles = StyleSheet.create({
   orderIconBox: {
     width: 40,
     height: 40,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     backgroundColor: "#EEF2FF",
     alignItems: "center",
     justifyContent: "center",
@@ -3240,7 +3383,7 @@ const styles = StyleSheet.create({
   orderMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
   orderTotal: { fontSize: 14, fontWeight: "800", color: colors.dark },
   orderStatus: { fontSize: 11, fontWeight: "700", textTransform: "capitalize", marginTop: 2 },
-  progressButton: { marginTop: 10, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
+  progressButton: { marginTop: 10, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.sm },
   progressText: { fontWeight: "700", fontSize: 13 },
   successBadge: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10 },
   successText: { color: colors.success, fontWeight: "700", fontSize: 13 },
@@ -3248,7 +3391,7 @@ const styles = StyleSheet.create({
   insightCard: {
     flex: 1,
     backgroundColor: "#fff",
-    borderRadius: 14,
+    borderRadius: radius.md,
     padding: 14,
     alignItems: "center",
     borderWidth: 1,
@@ -3256,26 +3399,30 @@ const styles = StyleSheet.create({
   },
   insightValue: { fontSize: 18, fontWeight: "900", color: colors.dark, marginTop: 6 },
   insightLabel: { fontSize: 11, color: colors.muted, marginTop: 4, fontWeight: "600", textAlign: "center" },
-  insightSummary: { fontSize: 13, color: colors.muted, marginTop: 14, lineHeight: 19, textAlign: "center" },
+  insightSummary: {
+    borderRadius: radius.md, fontSize: 13, color: colors.muted, marginTop: 14, lineHeight: 19, textAlign: "center" },
   modalContainer: { flex: 1, backgroundColor: colors.background, paddingTop: 40 },
   modalScroll: { flex: 1 },
-  modalContent: { padding: 16, paddingBottom: 40 },
+  modalContent: {
+    borderRadius: radius.md, padding: 16, paddingBottom: 40 },
   modalHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   modalTitle: { fontSize: 20, fontWeight: "800", color: colors.dark },
   stepper: {
+    borderRadius: radius.md,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
     marginBottom: 10,
   },
   stepperItem: {
+    borderRadius: radius.sm,
     alignItems: "center",
     minWidth: 68,
   },
   stepperCircle: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: "#CBD5E1",
     backgroundColor: "#fff",
@@ -3305,45 +3452,53 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#F1F5F9",
-    borderRadius: 10,
+    borderRadius: radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
     color: colors.dark,
   },
   textArea: { height: 90, textAlignVertical: "top" },
-  row: { flexDirection: "row", gap: 12 },
-  col: { flex: 1 },
-  categoryRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  row: {
+    borderRadius: radius.md, flexDirection: "row", gap: 12 },
+  col: {
+    borderRadius: radius.md, flex: 1 },
+  categoryRow: {
+    borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 8 },
   catChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#F1F5F9",
   },
   catChipText: { fontSize: 12, fontWeight: "600", color: colors.muted },
-  colorRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  colorRow: {
+    borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 10 },
   colorDot: {
     width: 30,
     height: 30,
-    borderRadius: 15,
+    borderRadius: radius.md,
     borderWidth: 2,
     borderColor: "transparent",
   },
   colorDotActive: { borderColor: colors.dark, transform: [{ scale: 1.1 }] },
-  checkRow: { flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 12 },
-  checkbox: { flexDirection: "row", alignItems: "center", gap: 6 },
+  checkRow: {
+    borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 12 },
+  checkbox: {
+    borderRadius: radius.sm, flexDirection: "row", alignItems: "center", gap: 6 },
   checkLabel: { fontSize: 13, fontWeight: "600", color: colors.dark },
-  imageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 },
-  imageWrap: { position: "relative" },
-  imageThumb: { width: 80, height: 80, borderRadius: 10 },
-  imageRemove: { position: "absolute", top: -6, right: -6, backgroundColor: "#fff", borderRadius: 12 },
+  imageGrid: {
+    borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 },
+  imageWrap: {
+    borderRadius: radius.sm, position: "relative" },
+  imageThumb: { width: 80, height: 80, borderRadius: radius.sm },
+  imageRemove: { position: "absolute", top: -6, right: -6, backgroundColor: "#fff", borderRadius: radius.md },
   imageAdd: {
     width: 80,
     height: 80,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     borderWidth: 2,
     borderStyle: "dashed",
     borderColor: colors.muted,
@@ -3355,7 +3510,7 @@ const styles = StyleSheet.create({
     position: "relative",
     width: 140,
     height: 140,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     overflow: "hidden",
     backgroundColor: colors.dark,
   },
@@ -3365,7 +3520,7 @@ const styles = StyleSheet.create({
     top: 6,
     right: 6,
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   videoBadge: {
     position: "absolute",
@@ -3375,7 +3530,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     backgroundColor: "rgba(0,0,0,0.55)",
-    borderRadius: 8,
+    borderRadius: radius.xs,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
@@ -3383,7 +3538,7 @@ const styles = StyleSheet.create({
   videoAdd: {
     width: 140,
     height: 140,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     borderWidth: 2,
     borderStyle: "dashed",
     borderColor: colors.muted,
@@ -3403,7 +3558,7 @@ const styles = StyleSheet.create({
     minWidth: 110,
     paddingVertical: 13,
     paddingHorizontal: 16,
-    borderRadius: 14,
+    borderRadius: radius.md,
     alignItems: "center",
   },
   stepButtonSecondary: {
@@ -3413,9 +3568,9 @@ const styles = StyleSheet.create({
   },
   stepButtonText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   stepButtonSecondaryText: { color: colors.dark, fontWeight: "800", fontSize: 15 },
-  submitButton: { marginTop: 20, paddingVertical: 14, borderRadius: 14, alignItems: "center" },
+  submitButton: { marginTop: 20, paddingVertical: 14, borderRadius: radius.md, alignItems: "center" },
   submitButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  detailImage: { width: "100%", height: 200, borderRadius: 14, marginBottom: 12 },
+  detailImage: { width: "100%", height: 200, borderRadius: radius.md, marginBottom: 12 },
   detailPrice: { fontSize: 20, fontWeight: "800", color: colors.accent, marginBottom: 4 },
   detailStatus: { fontSize: 14, color: colors.muted, marginBottom: 8 },
   detailDesc: { fontSize: 14, color: colors.dark, lineHeight: 20 },
@@ -3437,7 +3592,7 @@ const styles = StyleSheet.create({
   sheetItemDanger: { borderTopWidth: 1, borderTopColor: "#F1F5F9" },
   innerModal: {
     backgroundColor: "#fff",
-    borderRadius: 16,
+    borderRadius: radius.lg,
     padding: 20,
     margin: 24,
   },
@@ -3445,9 +3600,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 16,
     zIndex: 5,
-    padding: 6,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: radius.full,
     backgroundColor: "rgba(0,0,0,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   drawerOverlay: {
     flex: 1,
@@ -3455,6 +3613,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   drawer: {
+    borderRadius: radius.lg,
     width: "78%",
     maxWidth: 320,
     backgroundColor: "#fff",
@@ -3467,6 +3626,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   drawerHeader: {
+    borderRadius: radius.md,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -3476,7 +3636,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F1F5F9",
   },
   drawerTitle: { fontSize: 18, fontWeight: "800", color: colors.dark },
-  drawerScroll: { flex: 1, paddingHorizontal: 8, paddingTop: 8 },
+  drawerScroll: {
+    borderRadius: radius.md, flex: 1, paddingHorizontal: 8, paddingTop: 8 },
   menuSection: {
     fontSize: 11,
     fontWeight: "800",
@@ -3492,7 +3653,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: radius.sm,
   },
   menuItemText: { fontSize: 15, fontWeight: "600", color: colors.dark },
   statRow: {
@@ -3501,11 +3662,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 14,
     backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 16,
+    borderRadius: radius.lg,
     paddingVertical: 10,
     paddingHorizontal: 22,
   },
-  statItemSeller: { alignItems: "center", paddingHorizontal: 14 },
+  statItemSeller: {
+    borderRadius: radius.sm, alignItems: "center", paddingHorizontal: 14 },
   statValueSeller: { fontSize: 18, fontWeight: "900", color: colors.dark },
   statLabelSeller: {
     fontSize: 12,
@@ -3518,7 +3680,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    borderRadius: 14,
+    borderRadius: radius.md,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
@@ -3527,25 +3689,31 @@ const styles = StyleSheet.create({
   orderSkeletonIcon: {
     width: 40,
     height: 40,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     backgroundColor: "#E2E8F0",
   },
   orderSkeletonLine: {
     height: 12,
-    borderRadius: 6,
+    borderRadius: radius.xxs,
     backgroundColor: "#E2E8F0",
     width: "80%",
   },
-  specList: { gap: 12, marginTop: 4 },
+  specList: {
+    borderRadius: radius.md, gap: 12, marginTop: 4 },
   specRow: {
+    borderRadius: radius.sm,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  specKey: { flex: 1 },
-  specValue: { flex: 1 },
-  specRemove: { padding: 2 },
+  specKey: {
+    borderRadius: radius.sm, flex: 1 },
+  specValue: {
+    borderRadius: radius.sm, flex: 1 },
+  specRemove: {
+    borderRadius: radius.sm, padding: 2 },
   addSpecButton: {
+    borderRadius: radius.sm,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,

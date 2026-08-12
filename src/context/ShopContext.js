@@ -68,27 +68,18 @@ export const ShopProvider = ({ children }) => {
 
   const loadCache = useCallback(async () => {
     try {
-      const [cachedProducts, cachedCategories, cachedSellers, cachedSettings] =
+      const [cachedCategories, cachedSellers, cachedSettings] =
         await Promise.all([
-          AsyncStorage.getItem(CACHE_KEYS.products),
           AsyncStorage.getItem(CACHE_KEYS.categories),
           AsyncStorage.getItem(CACHE_KEYS.sellers),
           AsyncStorage.getItem(CACHE_KEYS.settings),
         ]);
 
-      let hasHydratedProducts = false;
-
-      if (cachedProducts) {
-        const { data } = JSON.parse(cachedProducts);
-        if (Array.isArray(data) && data.length > 0) {
-          setProducts(data);
-          setHasMore(data.length >= PAGE_SIZE);
-          hasHydratedProducts = true;
-          console.info(
-            `[ShopContext] Initial products hydrated from local cache (count=${data.length})`,
-          );
-        }
-      }
+      // NOTE: Products are intentionally NOT pre-hydrated from the local cache.
+      // The "For You" feed must load from Upstash first; the local cache is only
+      // used as a fallback inside fetchProducts() when Upstash fails. Pre-loading
+      // products from disk here would show stale local data before the Upstash
+      // response arrives, which is exactly what we want to avoid.
       if (cachedCategories) {
         const { data } = JSON.parse(cachedCategories);
         if (Array.isArray(data)) setCategories(data);
@@ -102,7 +93,9 @@ export const ShopProvider = ({ children }) => {
         if (data && typeof data === "object") setSettings(data);
       }
 
-      return hasHydratedProducts;
+      // Products are no longer pre-hydrated from cache (see note above), so we
+      // always let the network/Upstash call drive the first paint.
+      return false;
     } catch (e) {
       // Cache read failure is non-fatal
       return false;
@@ -234,11 +227,21 @@ export const ShopProvider = ({ children }) => {
             "[ShopContext] Upstash fetch failed or timed out, falling back to local cache:",
             upstashErr?.message || JSON.stringify(upstashErr),
           );
+          // The "For You" feed is served from Upstash only. On a cache miss /
+          // timeout we keep the user's view stable by using the existing local
+          // cache and deliberately NOT re-querying the live database — a direct
+          // DB read would reshuffle/replace the products the user is looking at.
           const localProducts = await readCacheProducts();
           if (localProducts && localProducts.length > 0) {
             productsData = localProducts;
             fromLocalCache = true;
-          } else {
+          } else if (products.length === 0) {
+            // Only fall back to the database on a brand-new device with no
+            // cached snapshot yet AND no products currently rendered, so first
+            // launch still shows something without disrupting an existing view.
+            console.warn(
+              "[ShopContext] No local cache available, falling back to database (first launch).",
+            );
             const { data, error: productError } = await supabase
               .from("express_products")
               .select(
@@ -250,24 +253,15 @@ export const ShopProvider = ({ children }) => {
               .range(0, PAGE_SIZE - 1);
             if (productError) throw productError;
             productsData = data || [];
+          } else {
+            // We already have products on screen and no cache snapshot — keep the
+            // current "For You" view exactly as-is instead of querying the DB
+            // (which would change the products the user is viewing).
+            console.warn(
+              "[ShopContext] Upstash failed and no local cache; keeping current feed to avoid changing the user's view.",
+            );
           }
         }
-      } else {
-        console.info(
-          "[ShopContext] Network sync fetched products from database (cache disabled)",
-        );
-        const { data, error: productError } = await supabase
-          .from("express_products")
-          .select(
-            "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-          )
-          .eq("status", "active")
-          .or("quantity.gt.0,is_preorder.eq.true")
-          .order("created_at", { ascending: false })
-          .range(0, PAGE_SIZE - 1);
-
-        if (productError) throw productError;
-        productsData = data || [];
       }
 
       // Local cache already stores mapped products, so skip re-mapping there.
@@ -356,21 +350,15 @@ export const ShopProvider = ({ children }) => {
           );
           rows = cachedData?.products || [];
         } catch (upstashErr) {
+          // Upstash is the source of truth for the feed. On failure we stop
+          // here and keep the existing products instead of re-querying the
+          // database, which would change the items the user is currently
+          // viewing in the "For You" section.
           console.warn(
-            `[ShopContext] loadMore failed from Upstash, falling back to database (offset=${start})`,
+            `[ShopContext] loadMore failed from Upstash; keeping current feed (offset=${start})`,
             upstashErr?.message || JSON.stringify(upstashErr),
           );
-          const { data, error: fetchError } = await supabase
-            .from("express_products")
-            .select(
-              "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-            )
-            .eq("status", "active")
-            .or("quantity.gt.0,is_preorder.eq.true")
-            .order("created_at", { ascending: false })
-            .range(start, end);
-          if (fetchError) throw fetchError;
-          rows = data || [];
+          rows = [];
         }
       } else {
         console.info(
@@ -458,18 +446,15 @@ export const ShopProvider = ({ children }) => {
 
   useEffect(() => {
     const bootstrap = async () => {
-      const hydratedFromCache = await loadCache();
-      if (hydratedFromCache) {
-        setLoading(false);
-        console.info(
-          "[ShopContext] Bootstrap order: local cache -> Upstash Redis -> database fallback",
-        );
-      } else {
-        console.info(
-          "[ShopContext] No local product cache found, starting network fetch",
-        );
-      }
-      await fetchProducts({ silent: hydratedFromCache });
+      // Categories/sellers/settings are pre-hydrated from local cache for a
+      // fast first paint, but PRODUCTS are NOT — the "For You" feed must load
+      // from Upstash first, with the local cache only used as a fallback when
+      // Upstash fails (handled inside fetchProducts).
+      await loadCache();
+      console.info(
+        "[ShopContext] Bootstrap order: Upstash Redis first -> local cache fallback",
+      );
+      await fetchProducts();
     };
     bootstrap();
   }, [fetchProducts, loadCache]);

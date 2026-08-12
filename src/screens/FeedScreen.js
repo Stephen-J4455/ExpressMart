@@ -13,10 +13,15 @@ import {
   Image,
   Animated,
   Easing,
+  KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,7 +32,11 @@ import { colors } from "../theme/colors";
 import { fetchProductReels } from "../services/uploadReel";
 import { getReelSource, preloadReel } from "../services/reelVideoCache";
 import { useResponsive } from "../hooks/useResponsive";
+import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
+import { shareReel } from "../utils/shareUtils";
 
 // Cache the reels feed locally so it loads instantly from disk on every mount
 // instead of re-streaming the list from the network (saves data on metered
@@ -67,6 +76,7 @@ export const FeedScreen = ({ route, navigation }) => {
   const [paused, setPaused] = useState(false);
   const screenIsFocused = useIsFocused();
   const { isWide } = useResponsive();
+  const { user } = useAuth();
   const logFeed = useCallback((...args) => {
     if (typeof __DEV__ === "undefined" || __DEV__) {
       console.log("[FeedScreen]", ...args);
@@ -760,6 +770,60 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(0,0,0,0.85)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  reelTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingTop: 8,
+    paddingHorizontal: 4,
+  },
+  reelMenuButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  menuCard: {
+    width: "80%",
+    maxWidth: 320,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  menuTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.dark,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#EEF2F6",
+  },
+  menuItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#EF4444",
   },
 });
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Image,
   ActivityIndicator,
   ScrollView,
+  TextInput,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,7 +19,7 @@ import { useChat } from "../context/ChatContext";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
 import { useAuth } from "../context/AuthContext";
-import { colors } from "../theme/colors";
+import { colors, radius } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 import { ChatScreen } from "./ChatScreen";
 import { SellerChatScreen } from "./SellerChatScreen";
@@ -52,11 +54,31 @@ export const ChatsScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [followedStatuses, setFollowedStatuses] = useState([]);
   const [messageStoryAds, setMessageStoryAds] = useState([]);
-  const [selectedSeller, setSelectedSeller] = useState(null);
-  const [activeTab, setActiveTab] = useState("customer");
+  const [selectedItem, setSelectedItem] = useState(null);
   const [sellerConversations, setSellerConversations] = useState([]);
   const [sellerLoading, setSellerLoading] = useState(false);
-  const [selectedSellerConv, setSelectedSellerConv] = useState(null);
+  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchVisible, setSearchVisible] = useState(false);
+
+  // Entrance animation — mirrors HomeScreen's fade + slide
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 450,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
 
   const fetchSellerConversations = async () => {
     if (!user) {
@@ -75,12 +97,33 @@ export const ChatsScreen = ({ navigation }) => {
         return;
       }
       const { data, error } = await supabase
-        .from("express_seller_messages")
-        .select("*")
+        .from("express_chat_conversations")
+        .select(
+          `
+          id,
+          user_id,
+          seller_id,
+          last_message,
+          last_message_at,
+          created_at,
+          express_profiles!user_id(id, full_name, avatar_url, email)
+        `,
+        )
         .eq("seller_id", sellerRow.id)
         .order("last_message_at", { ascending: false });
       if (error) throw error;
-      setSellerConversations(data || []);
+      const mapped = (data || []).map((conv) => ({
+        ...conv,
+        customer: {
+          id: conv.express_profiles?.id,
+          name:
+            conv.express_profiles?.full_name ||
+            conv.express_profiles?.email ||
+            "Customer",
+          avatar: conv.express_profiles?.avatar_url || null,
+        },
+      }));
+      setSellerConversations(mapped);
     } catch (err) {
       console.error("Error fetching seller conversations:", err);
       setSellerConversations([]);
@@ -184,7 +227,7 @@ export const ChatsScreen = ({ navigation }) => {
     const sellerName = item.seller?.name || "Seller";
     const sellerAvatar = item.seller?.avatar;
     const timestamp = formatTimestamp(item.last_message_at || item.created_at);
-    const isSelected = isWide && selectedSeller?.id === item.seller?.id;
+    const isSelected = isWide && selectedConversation?.id === item.id;
 
     return (
       <Pressable
@@ -194,7 +237,7 @@ export const ChatsScreen = ({ navigation }) => {
         ]}
         onPress={() => {
           if (isWide) {
-            setSelectedSeller(item.seller);
+            setSelectedConversation({ ...item, kind: "customer" });
           } else {
             navigation.navigate("Chat", { seller: item.seller });
           }
@@ -239,8 +282,8 @@ export const ChatsScreen = ({ navigation }) => {
   };
 
   const renderSellerConversation = ({ item }) => {
-    const customerName = item.customer_name || "Customer";
-    const customerAvatar = item.customer_avatar;
+    const customerName = item.customer?.name || "Customer";
+    const customerAvatar = item.customer?.avatar;
     const timestamp = formatTimestamp(item.last_message_at || item.created_at);
 
     return (
@@ -248,15 +291,11 @@ export const ChatsScreen = ({ navigation }) => {
         style={styles.conversationItem}
         onPress={() => {
           if (isWide) {
-            setSelectedSellerConv(item);
+            setSelectedConversation({ ...item, kind: "seller" });
           } else {
             navigation.navigate("SellerChat", {
               conversationId: item.id,
-              customer: {
-                id: item.customer_id,
-                name: item.customer_name,
-                avatar: item.customer_avatar,
-              },
+              customer: item.customer,
             });
           }
         }}
@@ -293,28 +332,40 @@ export const ChatsScreen = ({ navigation }) => {
     );
   };
 
-  const TABS = [
-    { key: "customer", label: "Customer" },
-    { key: "seller", label: "Seller" },
-  ];
+  const mergedConversations = useMemo(() => {
+    const customerItems = (conversations || []).map((c) => ({
+      ...c,
+      kind: "customer",
+    }));
+    const sellerItems = (sellerConversations || []).map((c) => ({
+      ...c,
+      kind: "seller",
+    }));
+    const merged = [...customerItems, ...sellerItems].sort((a, b) => {
+      const ta = new Date(a.last_message_at || a.created_at || 0).getTime();
+      const tb = new Date(b.last_message_at || b.created_at || 0).getTime();
+      return tb - ta;
+    });
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return merged;
+    return merged.filter((c) => {
+      const name =
+        c.kind === "seller"
+          ? c.customer?.name || "Customer"
+          : c.seller?.name || "Seller";
+      const msg = c.last_message || "";
+      return (
+        name.toLowerCase().includes(q) || msg.toLowerCase().includes(q)
+      );
+    });
+  }, [conversations, sellerConversations, searchQuery]);
 
-  const renderTabBar = () => (
-    <View style={styles.tabBar}>
-      {TABS.map((t) => (
-        <Pressable
-          key={t.key}
-          style={[styles.tab, activeTab === t.key && styles.tabActive]}
-          onPress={() => setActiveTab(t.key)}
-        >
-          <Text
-            style={[styles.tabText, activeTab === t.key && styles.tabTextActive]}
-          >
-            {t.label}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
+  const renderMergedConversation = ({ item }) => {
+    if (item.kind === "seller") {
+      return renderSellerConversation({ item });
+    }
+    return renderConversation({ item });
+  };
 
   if (isLoading && !refreshing) {
     return (
@@ -326,20 +377,67 @@ export const ChatsScreen = ({ navigation }) => {
   }
 
   const ConversationList = () => (
-    <View style={[styles.container, isWide && styles.panelLeft]}>
+    <Animated.View
+      style={[
+        styles.container,
+        isWide && styles.panelLeft,
+        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+      ]}
+    >
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerRow}>
-          <Text style={styles.headerTitle}>Messages</Text>
-          {!isOnline && (
-            <View style={styles.offlineBadge}>
-              <Ionicons name="cloud-offline" size={14} color="#ff6b6b" />
-            </View>
-          )}
+          <Pressable
+            style={styles.searchBackButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={22} color={colors.light} />
+          </Pressable>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Messages</Text>
+            {!isOnline && (
+              <View style={styles.offlineBadge}>
+                <Ionicons name="cloud-offline" size={14} color="#ff6b6b" />
+              </View>
+            )}
+          </View>
+          <View style={styles.headerActions}>
+            <Pressable
+              style={styles.searchIconButton}
+              onPress={() => setSearchVisible((v) => !v)}
+            >
+              <Ionicons
+                name={searchVisible ? "close" : "search"}
+                size={20}
+                color={colors.light}
+              />
+            </Pressable>
+          </View>
         </View>
-        <View style={styles.headerSubtitleRow}>
-          <View style={styles.onlineDot} />
-          <Text style={styles.headerSubtitle}>Customer Support</Text>
-        </View>
+        {!searchVisible && (
+          <View style={styles.headerSubtitleRow}>
+            <View style={styles.onlineDot} />
+            <Text style={styles.headerSubtitle}>Customer Support</Text>
+          </View>
+        )}
+
+        {searchVisible && (
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={16} color={colors.muted} />
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search messages"
+              placeholderTextColor={colors.muted}
+              autoFocus
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery("")}>
+                <Ionicons name="close-circle" size={18} color={colors.muted} />
+              </Pressable>
+            )}
+          </View>
+        )}
 
         {statusItems.length > 0 && (
           <View style={styles.headerStatusSection}>
@@ -383,108 +481,62 @@ export const ChatsScreen = ({ navigation }) => {
         )}
       </View>
 
-      {renderTabBar()}
-
-      {activeTab === "customer" ? (
-        <FlatList
-          data={conversations}
-          keyExtractor={(item) => item.id}
-          renderItem={renderConversation}
-          contentContainerStyle={styles.listContainer}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconContainer}>
-                <Ionicons
-                  name="chatbubble-ellipses-outline"
-                  size={48}
-                  color={colors.primary}
-                />
-              </View>
-              <Text style={styles.emptyText}>No conversations yet</Text>
-              <Text style={styles.emptySubtext}>
-                Start chatting with sellers{"\n"}to see your messages here.
-              </Text>
-              <Pressable
-                style={styles.exploreButton}
-                onPress={() => navigation.navigate("Main", { screen: "Home" })}
-              >
-                <Text style={styles.exploreButtonText}>Explore Stores</Text>
-              </Pressable>
+      <FlatList
+        data={mergedConversations}
+        keyExtractor={(item) => `${item.kind}-${item.id}`}
+        renderItem={renderMergedConversation}
+        contentContainerStyle={styles.listContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconContainer}>
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={48}
+                color={colors.primary}
+              />
             </View>
-          }
-        />
-      ) : (
-        <FlatList
-          data={sellerConversations}
-          keyExtractor={(item) => item.id}
-          renderItem={renderSellerConversation}
-          contentContainerStyle={styles.listContainer}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconContainer}>
-                <Ionicons
-                  name="storefront-outline"
-                  size={48}
-                  color={colors.primary}
-                />
-              </View>
-              <Text style={styles.emptyText}>No seller messages</Text>
-              <Text style={styles.emptySubtext}>
-                When customers message your store,{"\n"}they'll appear here.
-              </Text>
-            </View>
-          }
-        />
-      )}
-    </View>
+            <Text style={styles.emptyText}>No conversations yet</Text>
+            <Text style={styles.emptySubtext}>
+              Start chatting with sellers{"\n"}to see your messages here.
+            </Text>
+            <Pressable
+              style={styles.exploreButton}
+              onPress={() => navigation.navigate("Main", { screen: "Home" })}
+            >
+              <Text style={styles.exploreButtonText}>Explore Stores</Text>
+            </Pressable>
+          </View>
+        }
+      />
+    </Animated.View>
   );
 
   if (isWide) {
     return (
-      <View style={styles.wideLayout}>
+      <Animated.View
+        style={[
+          styles.wideLayout,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+        ]}
+      >
         <ConversationList />
         <View style={styles.panelRight}>
-          {activeTab === "seller" ? (
-            selectedSellerConv ? (
+          {selectedConversation ? (
+            selectedConversation.kind === "seller" ? (
               <SellerChatScreen
-                conversationId={selectedSellerConv.id}
-                customer={{
-                  id: selectedSellerConv.customer_id,
-                  name: selectedSellerConv.customer_name,
-                  avatar: selectedSellerConv.customer_avatar,
-                }}
+                conversationId={selectedConversation.id}
+                customer={selectedConversation.customer}
               />
             ) : (
-              <View style={styles.noChatSelected}>
-                <View style={styles.noChatIcon}>
-                  <Ionicons
-                    name="storefront-outline"
-                    size={56}
-                    color={colors.primary}
-                  />
-                </View>
-                <Text style={styles.noChatTitle}>Select a conversation</Text>
-                <Text style={styles.noChatSubtext}>
-                  Choose a customer message{"\n"}to start replying.
-                </Text>
-              </View>
+              <ChatScreen seller={selectedConversation.seller} />
             )
-          ) : selectedSeller ? (
-            <ChatScreen seller={selectedSeller} />
           ) : (
             <View style={styles.noChatSelected}>
               <View style={styles.noChatIcon}>
@@ -501,7 +553,7 @@ export const ChatsScreen = ({ navigation }) => {
             </View>
           )}
         </View>
-      </View>
+      </Animated.View>
     );
   }
 
@@ -512,17 +564,17 @@ const styles = StyleSheet.create({
   wideLayout: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   panelLeft: {
     width: 360,
     borderRightWidth: 1,
-    borderRightColor: "#EEF2F8",
-    backgroundColor: "#fff",
+    borderRightColor: colors.border,
+    backgroundColor: colors.light,
   },
   panelRight: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
   },
   noChatSelected: {
     flex: 1,
@@ -534,11 +586,18 @@ const styles = StyleSheet.create({
   noChatIcon: {
     width: 110,
     height: 110,
-    borderRadius: 35,
-    backgroundColor: "#EFF6FF",
+    borderRadius: radius.xl,
+    backgroundColor: colors.light,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
   },
   noChatTitle: {
     fontSize: 22,
@@ -559,7 +618,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
     gap: 12,
   },
   loadingText: {
@@ -570,18 +629,25 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: colors.background,
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    paddingBottom: 16,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
     shadowColor: "#000",
     shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowRadius: 12,
+    elevation: 6,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  headerTitleContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginLeft: 10,
   },
   headerTitle: {
     fontSize: 28,
@@ -592,7 +658,7 @@ const styles = StyleSheet.create({
   offlineBadge: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: radius.pill,
     backgroundColor: "#ffeaea",
     alignItems: "center",
     justifyContent: "center",
@@ -606,27 +672,67 @@ const styles = StyleSheet.create({
   onlineDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-    backgroundColor: "#10B981",
+    borderRadius: radius.pill,
+    backgroundColor: colors.success,
   },
   headerSubtitle: {
     fontSize: 13,
     color: colors.muted,
     fontWeight: "500",
   },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchBackButton: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.dark,
+    fontWeight: "500",
+    paddingVertical: 0,
+  },
   tabBar: {
     flexDirection: "row",
     marginHorizontal: 16,
     marginTop: 12,
-    backgroundColor: "#EEF2FF",
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     padding: 4,
   },
   tab: {
     flex: 1,
     alignItems: "center",
     paddingVertical: 8,
-    borderRadius: 9,
+    borderRadius: radius.sm,
   },
   tabActive: {
     backgroundColor: colors.primary,
@@ -641,23 +747,16 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 16,
-    paddingTop: 24,
+    paddingTop: 16,
   },
   conversationItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.7)",
-    borderRadius: 0,
+    backgroundColor: colors.background,
     padding: 14,
-    marginBottom: 0,
-    borderWidth: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 0, 0, 0.05)",
-    borderColor: "rgba(255, 255, 255, 0.8)",
-    backdropFilter: "blur(10px)",
   },
   conversationItemActive: {
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    backgroundColor: "#FFF1F4",
     borderBottomColor: colors.primary,
     borderBottomWidth: 1,
   },
@@ -670,14 +769,14 @@ const styles = StyleSheet.create({
   avatar: {
     width: 54,
     height: 54,
-    borderRadius: 27,
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 14,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(59, 130, 246, 0.3)",
+    borderColor: colors.border,
   },
   avatarImage: {
     width: "100%",
@@ -717,7 +816,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     minWidth: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 6,
@@ -732,10 +831,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   statusSection: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.light,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: colors.border,
   },
   statusSectionTitle: {
     fontSize: 14,
@@ -755,13 +854,13 @@ const styles = StyleSheet.create({
   statusAvatar: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: radius.pill,
     borderWidth: 2.5,
     borderColor: colors.primary,
     marginBottom: 6,
   },
   statusAvatarFallback: {
-    backgroundColor: "#F1F5F9",
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -771,10 +870,10 @@ const styles = StyleSheet.create({
     right: 0,
     width: 14,
     height: 14,
-    borderRadius: 7,
+    borderRadius: radius.pill,
     backgroundColor: colors.primary,
     borderWidth: 2,
-    borderColor: "#fff",
+    borderColor: colors.light,
   },
   statusSellerName: {
     fontSize: 11,
@@ -790,11 +889,13 @@ const styles = StyleSheet.create({
   emptyIconContainer: {
     width: 100,
     height: 100,
-    borderRadius: 35,
-    backgroundColor: "#fff",
+    borderRadius: radius.xl,
+    backgroundColor: colors.light,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
     shadowColor: colors.primary,
     shadowOpacity: 0.1,
     shadowRadius: 15,
@@ -817,7 +918,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     paddingHorizontal: 24,
     paddingVertical: 14,
-    borderRadius: 25,
+    borderRadius: radius.pill,
     shadowColor: colors.primary,
     shadowOpacity: 0.3,
     shadowRadius: 8,

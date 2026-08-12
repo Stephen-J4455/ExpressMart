@@ -31,6 +31,7 @@ import { FlashSaleCountdown } from "../components/FlashSaleCountdown";
 import { useAds } from "../context/AdsContext";
 import { flashSaleService } from "../services/flashSaleService";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
+import { shareProduct } from "../utils/shareUtils";
 
 const SELLER_BADGE_CONFIG = {
   verified: {
@@ -693,6 +694,20 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     });
   };
 
+  const handleShareProduct = async () => {
+    try {
+      const result = await shareProduct(product.id, product.title);
+      if (result.success) {
+        toast.success('Product shared!', 'Share link copied to clipboard');
+      } else {
+        toast.error('Failed to share', result.error || 'Please try again');
+      }
+    } catch (error) {
+      toast.error('Error', 'Failed to share product');
+      console.error('Error sharing product:', error);
+    }
+  };
+
   const handleAddToCart = () => {
     if (!user) {
       toast.info("Login required", "Please sign in to add items to your cart");
@@ -850,6 +865,12 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           onPress={() => navigation.goBack()}
         >
           <Ionicons name="arrow-back" size={24} color={colors.dark} />
+        </Pressable>
+        <Pressable
+          style={styles.shareButton}
+          onPress={() => handleShareProduct()}
+        >
+          <Ionicons name="share-outline" size={24} color={colors.dark} />
         </Pressable>
         <Pressable
           style={styles.wishlistButton}

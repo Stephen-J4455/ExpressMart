@@ -11,7 +11,7 @@ import {
 import * as Linking from "expo-linking";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { colors } from "../theme/colors";
+import { colors, radius } from "../theme/colors";
 import { supabase } from "../lib/supabase";
 
 export const StatusViewer = ({ navigation, route }) => {
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: radius.full,
     backgroundColor: "rgba(255,255,255,0.15)",
   },
   avatarPlaceholder: {
@@ -346,14 +346,14 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: radius.full,
     backgroundColor: "rgba(0,0,0,0.35)",
     alignItems: "center",
     justifyContent: "center",
   },
   captionBox: {
     backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: 12,
     marginTop: 16,
     maxWidth: "90%",
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginTop: 14,
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: radius.md,
     paddingHorizontal: 14,
     paddingVertical: 10,
     flexDirection: "row",
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     backgroundColor: "#fff",
   },
   closeText: {

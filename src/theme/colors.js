@@ -28,6 +28,7 @@ export const radius = {
   lg: 20,
   xl: 24,
   pill: 40,
+  full: 999,
 };
 
 export const THEMES = {

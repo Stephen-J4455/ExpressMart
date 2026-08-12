@@ -6,14 +6,18 @@ import {
   FlatList,
   TextInput,
   Pressable,
-  KeyboardAvoidingView,
   Platform,
   Image,
   ActivityIndicator,
   Keyboard,
   Dimensions,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  KeyboardAwareScrollView,
+  KeyboardStickyView,
+} from "react-native-keyboard-controller";
 
 const CARD_WIDTH = Math.min(Dimensions.get("window").width * 0.65, 260);
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,7 +25,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useChat } from "../context/ChatContext";
 import { useToast } from "../context/ToastContext";
-import { colors } from "../theme/colors";
+import { colors, radius } from "../theme/colors";
 
 const getDateLabel = (dateStr) => {
   const date = new Date(dateStr);
@@ -82,6 +86,30 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   const sellerLastSeenChannelRef = useRef(null);
   const isNearBottomRef = useRef(true);
   const didInitialAutoScrollRef = useRef(false);
+  const instanceIdRef = useRef(
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}`,
+  );
+
+  // Entrance animation — mirrors HomeScreen's fade + slide
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(24)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 450,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
 
   const BOTTOM_AUTO_SCROLL_THRESHOLD = 120;
 
@@ -99,13 +127,6 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     requestAnimationFrame(() => {
       flatListRef.current?.scrollToEnd({ animated });
     });
-  };
-
-  const handleMessageImageLoad = () => {
-    scrollToBottom(false);
-    setTimeout(() => {
-      scrollToBottom(false);
-    }, 60);
   };
 
   // keyboard visibility listeners were removed; not required anymore
@@ -188,7 +209,9 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   const setupPresence = () => {
     if (!sellerData?.id) return;
 
-    const channel = supabase.channel(`presence:seller:${sellerData.id}`);
+    const channel = supabase.channel(
+      `presence:seller:${sellerData.id}-${instanceIdRef.current}`,
+    );
 
     const syncSellerPresence = () => {
       const state = channel.presenceState();
@@ -235,7 +258,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     if (!sellerData?.id) return;
 
     const channel = supabase
-      .channel(`seller-last-seen:${sellerData.id}`)
+      .channel(`seller-last-seen:${sellerData.id}-${instanceIdRef.current}`)
       .on(
         "postgres_changes",
         {
@@ -304,9 +327,15 @@ export const ChatScreen = ({ route, navigation, seller }) => {
       if (error) throw error;
       setMessages(data || []);
 
-      // Auto scroll to bottom after messages are loaded
+      // Only force-scroll on the very first load; afterwards respect the
+      // user's scroll position so we don't yank them down while reading.
       setTimeout(() => {
-        scrollToBottom(false, true);
+        if (!didInitialAutoScrollRef.current) {
+          didInitialAutoScrollRef.current = true;
+          scrollToBottom(false, true);
+        } else {
+          scrollToBottom(false);
+        }
       }, 100);
     } catch (error) {
       console.error("Error fetching messages:", error);
@@ -319,7 +348,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     if (!conversation) return;
 
     const channel = supabase
-      .channel(`chat-${conversation.id}`)
+      .channel(`chat-${conversation.id}-${instanceIdRef.current}`)
       .on(
         "postgres_changes",
         {
@@ -361,6 +390,9 @@ export const ChatScreen = ({ route, navigation, seller }) => {
             last_message_at: payload.new.created_at,
           };
           updateConversation(updatedConv);
+
+          // Only auto-scroll if the user is already near the bottom.
+          setTimeout(() => scrollToBottom(false), 50);
         },
       )
       .subscribe();
@@ -523,8 +555,6 @@ export const ChatScreen = ({ route, navigation, seller }) => {
                 source={{ uri: productData.image }}
                 style={styles.productCardImage}
                 resizeMode="cover"
-                onLoadEnd={handleMessageImageLoad}
-                onError={handleMessageImageLoad}
               />
             )}
             <View style={styles.productCardBody}>
@@ -594,10 +624,11 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={insets.top + 70}
+    <Animated.View
+      style={[
+        styles.container,
+        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+      ]}
     >
       <View
         style={[
@@ -633,7 +664,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
                 <View
                   style={[
                     styles.statusDot,
-                    { backgroundColor: sellerOnline ? "#10B981" : "#9CA3AF" },
+                    { backgroundColor: sellerOnline ? colors.success : "#9CA3AF" },
                   ]}
                 />
                 <Text style={styles.headerSubtitle}>
@@ -648,53 +679,42 @@ export const ChatScreen = ({ route, navigation, seller }) => {
         </View>
       </View>
 
-      <View style={styles.chatContainer}>
-        <FlatList
-          ref={flatListRef}
-          data={enrichedMessages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.messagesList,
-            {
-              paddingBottom: Math.max(insets.bottom, 8),
-            },
-          ]}
-          onContentSizeChange={() => scrollToBottom(true)}
-          onLayout={() => {
-            if (!didInitialAutoScrollRef.current) {
-              didInitialAutoScrollRef.current = true;
-              scrollToBottom(false, true);
-            }
-          }}
-          onScroll={updateNearBottomState}
-          scrollEventThrottle={16}
-          ListEmptyComponent={
-            <View style={styles.emptyChat}>
-              <View style={styles.emptyChatIcon}>
-                <Ionicons
-                  name="chatbubbles-outline"
-                  size={40}
-                  color={colors.primary}
-                />
-              </View>
-              <Text style={styles.emptyChatText}>No messages yet</Text>
-              <Text style={styles.emptyChatSubtext}>
-                Send a message to start the conversation
-              </Text>
-            </View>
+      <KeyboardAwareScrollView
+        ref={flatListRef}
+        style={styles.chatContainer}
+        contentContainerStyle={styles.messagesList}
+        onLayout={() => {
+          if (!didInitialAutoScrollRef.current) {
+            didInitialAutoScrollRef.current = true;
+            scrollToBottom(false, true);
           }
-        />
-      </View>
-
-      <View
-        onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
-        style={[
-          styles.inputContainer,
-          { marginBottom: keyboardHeight + insets.bottom },
-        ]}
+        }}
+        onScroll={updateNearBottomState}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={8}
       >
+        {enrichedMessages.length === 0 ? (
+          <View style={styles.emptyChat}>
+            <View style={styles.emptyChatIcon}>
+              <Ionicons
+                name="chatbubbles-outline"
+                size={40}
+                color={colors.primary}
+              />
+            </View>
+            <Text style={styles.emptyChatText}>No messages yet</Text>
+            <Text style={styles.emptyChatSubtext}>
+              Send a message to start the conversation
+            </Text>
+          </View>
+        ) : (
+          enrichedMessages.map((item) => renderMessage({ item }))
+        )}
+      </KeyboardAwareScrollView>
+
+      <KeyboardStickyView style={styles.inputSticky}>
         {pendingProduct && (
           <View style={styles.productAttachment}>
             {pendingProduct.image ? (
@@ -726,32 +746,34 @@ export const ChatScreen = ({ route, navigation, seller }) => {
           </View>
         )}
         <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.textInput}
-            value={newMessage}
-            onChangeText={setNewMessage}
-            placeholder="Type a message..."
-            placeholderTextColor={colors.muted}
-            multiline
-            maxLength={1000}
-          />
-          <Pressable
-            style={[
-              styles.sendButton,
-              (!newMessage.trim() || sending) && styles.sendButtonDisabled,
-            ]}
-            onPress={sendMessage}
-            disabled={(!newMessage.trim() && !pendingProduct) || sending}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons name="send" size={20} color="#fff" />
-            )}
-          </Pressable>
+          <View style={styles.inputField}>
+            <TextInput
+              style={styles.textInput}
+              value={newMessage}
+              onChangeText={setNewMessage}
+              placeholder="Type a message..."
+              placeholderTextColor={colors.muted}
+              multiline
+              maxLength={1000}
+            />
+            <Pressable
+              style={[
+                styles.sendButton,
+                (!newMessage.trim() || sending) && styles.sendButtonDisabled,
+              ]}
+              onPress={sendMessage}
+              disabled={(!newMessage.trim() && !pendingProduct) || sending}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="send" size={20} color="#fff" />
+              )}
+            </Pressable>
+          </View>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardStickyView>
+    </Animated.View>
   );
 };
 
@@ -765,7 +787,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+    zIndex: 2,
   },
   headerContent: {
     flexDirection: "row",
@@ -774,8 +802,8 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
     marginRight: 8,
-    borderRadius: 20,
-    backgroundColor: colors.light,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
   },
   headerInfo: {
     flex: 1,
@@ -785,12 +813,14 @@ const styles = StyleSheet.create({
   sellerAvatar: {
     width: 44,
     height: 44,
-    borderRadius: 15,
-    backgroundColor: colors.light,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   avatarImage: {
     width: "100%",
@@ -809,7 +839,7 @@ const styles = StyleSheet.create({
   statusDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
+    borderRadius: radius.pill,
   },
   headerSubtitle: {
     fontSize: 12,
@@ -820,12 +850,13 @@ const styles = StyleSheet.create({
   },
   chatContainer: {
     flex: 1,
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.light,
+    backgroundColor: colors.background,
     gap: 12,
   },
   loadingText: {
@@ -835,7 +866,9 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     padding: 16,
-    paddingBottom: 0,
+    paddingBottom: 16,
+    flexGrow: 1,
+    justifyContent: "flex-end",
   },
   messageWrapper: {
     marginBottom: 16,
@@ -850,7 +883,7 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     padding: 12,
-    borderRadius: 20,
+    borderRadius: radius.lg,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -862,7 +895,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   sellerMessage: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.light,
     borderBottomLeftRadius: 4,
   },
   messageText: {
@@ -887,11 +920,13 @@ const styles = StyleSheet.create({
   emptyChatIcon: {
     width: 80,
     height: 80,
-    borderRadius: 25,
-    backgroundColor: "#fff",
+    borderRadius: radius.xl,
+    backgroundColor: colors.light,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
     shadowColor: colors.primary,
     shadowOpacity: 0.1,
     shadowRadius: 10,
@@ -907,24 +942,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.muted,
   },
-  inputContainer: {
-    backgroundColor: "#fff",
-    paddingHorizontal: 16,
-    padding: 16,
+  inputSticky: {
+    backgroundColor: colors.background,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
     borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    // keep input in normal layout flow to avoid overflow
+    borderTopColor: colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -3 },
+    elevation: 6,
   },
   inputWrapper: {
     flexDirection: "row",
     alignItems: "flex-end",
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
     gap: 8,
+  },
+  inputField: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   textInput: {
     flex: 1,
@@ -936,12 +981,13 @@ const styles = StyleSheet.create({
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
     backgroundColor: colors.primary,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 2,
   },
   sendButtonDisabled: {
     backgroundColor: colors.muted,
@@ -952,7 +998,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: colors.light,
-    borderRadius: 14,
+    borderRadius: radius.md,
     marginBottom: 8,
     padding: 10,
     borderWidth: 1,
@@ -961,13 +1007,13 @@ const styles = StyleSheet.create({
   productAttachmentImage: {
     width: 48,
     height: 48,
-    borderRadius: 10,
-    backgroundColor: "#F3F4F6",
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
   },
   productAttachmentImagePlaceholder: {
     width: 48,
     height: 48,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     backgroundColor: colors.light,
     alignItems: "center",
     justifyContent: "center",
@@ -994,7 +1040,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   productCardBubble: {
-    borderRadius: 16,
+    borderRadius: radius.lg,
     overflow: "hidden",
     width: CARD_WIDTH,
     shadowColor: "#000",
@@ -1008,13 +1054,13 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   productCardBubbleSeller: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.light,
     borderBottomLeftRadius: 4,
   },
   productCardImage: {
     width: CARD_WIDTH,
     height: 160,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: colors.surface,
   },
   productCardBody: {
     padding: 12,
@@ -1046,7 +1092,7 @@ const styles = StyleSheet.create({
   dateDividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#E5E9F0",
+    backgroundColor: colors.border,
   },
   dateDividerText: {
     fontSize: 12,

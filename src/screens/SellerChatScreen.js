@@ -6,7 +6,6 @@ import {
   FlatList,
   TextInput,
   Pressable,
-  KeyboardAvoidingView,
   Platform,
   Image,
   ActivityIndicator,
@@ -14,11 +13,15 @@ import {
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  KeyboardAwareScrollView,
+  KeyboardStickyView,
+} from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors, getTheme } from "../theme/colors";
+import { colors, getTheme, radius } from "../theme/colors";
 
 const CARD_WIDTH = Math.min(Dimensions.get("window").width * 0.65, 260);
 
@@ -56,18 +59,42 @@ export const SellerChatScreen = ({
   navigation,
   embedded = false,
   conversation: embeddedConversation,
+  conversationId: embeddedConversationId,
+  customer: embeddedCustomer,
 }) => {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const toast = useToast();
-  const conversation = embeddedConversation || route?.params?.conversation;
-  const sellerId = route?.params?.sellerId || user?.id;
-  const seller = route?.params?.seller;
+  const routeParams = route?.params || {};
+  const conversationId = embeddedConversationId || routeParams.conversationId;
+  const customer = embeddedCustomer || routeParams.customer;
+
+  // Normalize the conversation object from the id + customer that callers pass.
+  const conversation =
+    embeddedConversation ||
+    (conversationId
+      ? {
+          id: conversationId,
+          user: {
+            id: customer?.id,
+            full_name: customer?.name,
+            email: customer?.email,
+            avatar_url: customer?.avatar,
+            last_seen_at: customer?.last_seen_at,
+          },
+        }
+      : null);
+
+  const sellerId = routeParams.sellerId || user?.id;
+  const seller = routeParams.seller;
 
   const theme = getTheme(seller?.theme_color || colors.primary);
 
   const userName =
-    conversation?.user?.full_name || conversation?.user?.email || "Customer";
+    conversation?.user?.full_name ||
+    conversation?.user?.email ||
+    customer?.name ||
+    "Customer";
 
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
@@ -107,7 +134,7 @@ export const SellerChatScreen = ({
   };
 
   useEffect(() => {
-    if (conversation) {
+    if (conversationId) {
       fetchMessages();
       fetchCustomerLastSeen();
       setupCustomerLastSeenSubscription();
@@ -124,7 +151,7 @@ export const SellerChatScreen = ({
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversation]);
+  }, [conversationId]);
 
   useEffect(() => {
     const showEvent =
@@ -151,7 +178,16 @@ export const SellerChatScreen = ({
         .order("created_at", { ascending: true });
       if (error) throw error;
       setMessages(data || []);
-      setTimeout(() => scrollToBottom(false, true), 100);
+      // Only force-scroll on the very first load; afterwards respect the
+      // user's scroll position so we don't yank them down while reading.
+      setTimeout(() => {
+        if (!didInitialAutoScrollRef.current) {
+          didInitialAutoScrollRef.current = true;
+          scrollToBottom(false, true);
+        } else {
+          scrollToBottom(false);
+        }
+      }, 100);
     } catch (error) {
       console.error("Error fetching messages:", error);
     } finally {
@@ -238,6 +274,8 @@ export const SellerChatScreen = ({
             if (prev.some((m) => m.id === payload.new.id)) return prev;
             return [...prev, payload.new];
           });
+          // Only auto-scroll if the user is already near the bottom.
+          setTimeout(() => scrollToBottom(false), 50);
         },
       )
       .subscribe();
@@ -249,7 +287,7 @@ export const SellerChatScreen = ({
       if (ch) supabase.removeChannel(ch);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversation]);
+  }, [conversationId]);
 
   useEffect(() => {
     if (messages.length > 0) markAsRead();
@@ -317,6 +355,69 @@ export const SellerChatScreen = ({
       );
     }
     const isSeller = item.sender_type === "seller";
+    const isProductCard = item.message?.startsWith("PRODUCT_CARD:");
+
+    if (isProductCard) {
+      let productData = null;
+      try {
+        productData = JSON.parse(item.message.slice("PRODUCT_CARD:".length));
+      } catch (e) {}
+      const finalPrice =
+        productData?.discount > 0
+          ? productData.price * (1 - productData.discount / 100)
+          : productData?.price || 0;
+
+      return (
+        <View style={[styles.messageWrapper, isSeller ? styles.sellerWrapper : styles.userWrapper]}>
+          <View
+            style={[
+              styles.productCardBubble,
+              isSeller
+                ? styles.productCardBubbleSeller
+                : styles.productCardBubbleUser,
+            ]}
+          >
+            {productData?.image && (
+              <Image
+                source={{ uri: productData.image }}
+                style={styles.productCardImage}
+                resizeMode="cover"
+              />
+            )}
+            <View style={styles.productCardBody}>
+              <Text
+                style={[
+                  styles.productCardTitle,
+                  isSeller
+                    ? styles.productCardTitleSeller
+                    : styles.productCardTitleUser,
+                ]}
+                numberOfLines={2}
+              >
+                {productData?.title || "Product"}
+              </Text>
+              <Text
+                style={[
+                  styles.productCardPrice,
+                  isSeller
+                    ? styles.productCardPriceSeller
+                    : styles.productCardPriceUser,
+                ]}
+              >
+                GH₵{Number(finalPrice).toLocaleString()}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.messageTime}>
+            {new Date(item.created_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
+      );
+    }
+
     return (
       <View style={[styles.messageWrapper, isSeller ? styles.sellerWrapper : styles.userWrapper]}>
         <View
@@ -383,33 +484,28 @@ export const SellerChatScreen = ({
         </View>
       </View>
 
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
+        ref={flatListRef}
         style={[styles.chatContainer]}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={insets.top + 70}
+        contentContainerStyle={styles.messagesList}
+        onLayout={() => {
+          if (!didInitialAutoScrollRef.current) {
+            didInitialAutoScrollRef.current = true;
+            scrollToBottom(false, true);
+          }
+        }}
+        onScroll={updateNearBottomState}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={8}
       >
-        <FlatList
-          ref={flatListRef}
-          data={enrichedMessages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          contentContainerStyle={[styles.messagesList, { paddingBottom: inputHeight + insets.bottom + keyboardHeight + 16 }]}
-          onContentSizeChange={() => scrollToBottom(true)}
-          onLayout={() => {
-            if (!didInitialAutoScrollRef.current) {
-              didInitialAutoScrollRef.current = true;
-              scrollToBottom(false, true);
-            }
-          }}
-          onScroll={updateNearBottomState}
-          scrollEventThrottle={16}
-        />
+        {enrichedMessages.map((item) => renderMessage({ item }))}
+      </KeyboardAwareScrollView>
 
-        <View
-          onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
-          style={[styles.inputContainer, { marginBottom: keyboardHeight + insets.bottom }]}
-        >
-          <View style={styles.inputWrapper}>
+      <KeyboardStickyView style={styles.inputSticky}>
+        <View style={styles.inputWrapper}>
+          <View style={styles.inputField}>
             <TextInput
               style={styles.textInput}
               value={newMessage}
@@ -419,16 +515,16 @@ export const SellerChatScreen = ({
               multiline
               maxLength={1000}
             />
-            <Pressable
-              style={[styles.sendButton, { backgroundColor: theme.primary }, (!newMessage.trim() || sending) && styles.sendButtonDisabled]}
-              onPress={sendMessage}
-              disabled={!newMessage.trim() || sending}
-            >
-              {sending ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={20} color="#fff" />}
-            </Pressable>
           </View>
+          <Pressable
+            style={[styles.sendButton, { backgroundColor: theme.primary }, (!newMessage.trim() || sending) && styles.sendButtonDisabled]}
+            onPress={sendMessage}
+            disabled={!newMessage.trim() || sending}
+          >
+            {sending ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="send" size={20} color="#fff" />}
+          </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardStickyView>
     </View>
   );
 
@@ -437,36 +533,81 @@ export const SellerChatScreen = ({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { backgroundColor: colors.background, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: "#f0f0f0" },
+  header: { backgroundColor: colors.background, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3, zIndex: 2 },
   headerContent: { flexDirection: "row", alignItems: "center" },
-  backButton: { padding: 8, marginRight: 8, borderRadius: 20, backgroundColor: colors.light },
+  backButton: { width: 36, height: 36, marginRight: 8, borderRadius: radius.pill, backgroundColor: colors.surface, justifyContent: "center", alignItems: "center" },
   headerInfo: { flex: 1, flexDirection: "row", alignItems: "center" },
-  userAvatar: { width: 44, height: 44, borderRadius: 15, backgroundColor: colors.light, justifyContent: "center", alignItems: "center", marginRight: 12, overflow: "hidden" },
+  userAvatar: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.surface, justifyContent: "center", alignItems: "center", marginRight: 12, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
   avatarImg: { width: "100%", height: "100%" },
   headerTitle: { fontSize: 17, fontWeight: "700", color: colors.dark },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusDot: { width: 6, height: 6, borderRadius: radius.pill },
   headerSubtitle: { fontSize: 12, color: colors.muted },
   headerAction: { padding: 8 },
-  chatContainer: { flex: 1 },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.light, gap: 8 },
+  chatContainer: { flex: 1, backgroundColor: colors.background },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background, gap: 8 },
   loadingText: { color: colors.muted, fontSize: 15 },
-  messagesList: { padding: 16, paddingBottom: 32 },
+  messagesList: { padding: 16, paddingBottom: 16, flexGrow: 1, justifyContent: "flex-end" },
   messageWrapper: { marginBottom: 16, maxWidth: "85%" },
   userWrapper: { alignSelf: "flex-start" },
   sellerWrapper: { alignSelf: "flex-end", alignItems: "flex-end" },
-  messageContainer: { padding: 12, borderRadius: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  userMessage: { backgroundColor: "#fff", borderBottomLeftRadius: 4 },
+  messageContainer: { padding: 12, borderRadius: radius.lg, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  userMessage: { backgroundColor: colors.light, borderBottomLeftRadius: 4 },
   sellerMessage: { borderBottomRightRadius: 4 },
   messageText: { fontSize: 16, lineHeight: 22, color: colors.dark },
   sellerMessageText: { color: "#fff" },
   messageTime: { fontSize: 11, color: colors.muted, marginTop: 4, marginHorizontal: 4 },
+  productCardBubble: {
+    borderRadius: radius.lg,
+    overflow: "hidden",
+    width: CARD_WIDTH,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  productCardBubbleUser: {
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: 4,
+  },
+  productCardBubbleSeller: {
+    backgroundColor: colors.light,
+    borderBottomLeftRadius: 4,
+  },
+  productCardImage: {
+    width: CARD_WIDTH,
+    height: 160,
+    backgroundColor: colors.surface,
+  },
+  productCardBody: {
+    padding: 12,
+  },
+  productCardTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.dark,
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  productCardTitleUser: {
+    color: "#fff",
+  },
+  productCardPrice: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  productCardPriceUser: {
+    color: "rgba(255,255,255,0.9)",
+  },
   dateDivider: { flexDirection: "row", alignItems: "center", marginVertical: 12, paddingHorizontal: 4 },
-  dateDividerLine: { flex: 1, height: 1, backgroundColor: "#E5E7EB" },
+  dateDividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
   dateDividerText: { fontSize: 12, color: colors.muted, marginHorizontal: 10, fontWeight: "600", backgroundColor: colors.background, paddingHorizontal: 4 },
-  inputContainer: { backgroundColor: "#fff", paddingHorizontal: 16, padding: 16, borderTopWidth: 1, borderTopColor: "#f0f0f0" },
-  inputWrapper: { flexDirection: "row", alignItems: "flex-end", backgroundColor: colors.light, borderRadius: 25, paddingHorizontal: 16, paddingVertical: 8, gap: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
+  inputSticky: { backgroundColor: colors.background, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, borderTopWidth: 1, borderTopColor: colors.border, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, elevation: 6 },
+  inputWrapper: { flexDirection: "row", alignItems: "flex-end", gap: 8, justifyContent: "space-between" },
+  inputField: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: radius.pill, paddingHorizontal: 16, paddingVertical: 4, borderWidth: 1, borderColor: colors.border, minHeight: 44 },
   textInput: { flex: 1, fontSize: 16, maxHeight: 120, paddingTop: 8, paddingBottom: 8, color: colors.dark, ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}) },
-  sendButton: { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center" },
+  sendButton: { width: 44, height: 44, borderRadius: radius.pill, justifyContent: "center", alignItems: "center" },
   sendButtonDisabled: { backgroundColor: colors.muted, opacity: 0.5 },
 });

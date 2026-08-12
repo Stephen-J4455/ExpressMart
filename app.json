@@ -31,21 +31,20 @@
         "android.permission.WAKE_LOCK",
         "com.google.android.c2dm.permission.RECEIVE"
       ],
-          "intentFilters": [
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
             {
-              "action": "VIEW",
-              "data": [
-               
-                {
-                  "scheme": "expressmart"
-                }
-              ],
-              "category": [
-                "BROWSABLE",
-                "DEFAULT"
-              ]
+              "scheme": "expressmart"
             }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
           ]
+        }
+      ]
     },
     "web": {
       "output": "single",
@@ -89,7 +88,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "d2e5bd63-b4f5-4a61-b288-f7549e59d7c9"
+        "projectId": "aac19ddf-69df-45d7-a714-78f42558b146"
       },
       "firebaseApiKey": "AIzaSyBqrV1yGWsLj17JXFwfIWRP-sqX6hp8vLk",
       "firebaseAuthDomain": "expressmart-7d550.firebaseapp.com",
@@ -98,7 +97,10 @@
       "firebaseMessagingSenderId": "499123636329",
       "firebaseAppId": "1:499123636329:web:9a96c3d4b6ed11c3f57af8",
       "firebaseVapidKey": "YOUR_VAPID_KEY",
-      "measurementId": "G-Q63D7TJQRK"
+      "measurementId": "G-Q63D7TJQRK",
+      "expo-status-bar": {
+        "style": "dark"
+      }
     }
   }
 }
