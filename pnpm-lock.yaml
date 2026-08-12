@@ -4,9 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@expo/dom-webview': 56.0.0
-
 importers:
 
   .:
@@ -626,7 +623,7 @@ packages:
   '@expo/log-box@57.0.2':
     resolution: {integrity: sha512-ZsFyfIR7YCbQAdVLzuTUmMHofZC7ZS9ywYCJNPlLc78x59cI8GwXFEIVbRjjC0uJERpNtXx/tsNNnkhexXlzMw==}
     peerDependencies:
-      '@expo/dom-webview': 56.0.0
+      '@expo/dom-webview': ^57.0.1
       expo: '*'
       react: '*'
       react-native: '*'
@@ -1855,7 +1852,7 @@ packages:
     resolution: {integrity: sha512-sVgXaMjh5uapBvBkik3QibxbKI2g1zNtNeHntjRfixWAI3tlQZbaK4ACdInY4+jUBVymkf8u9BXJUaSes9jdtA==}
     hasBin: true
     peerDependencies:
-      '@expo/dom-webview': 56.0.0
+      '@expo/dom-webview': '*'
       '@expo/metro-runtime': '*'
       react: '*'
       react-dom: '*'

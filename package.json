@@ -65,9 +65,7 @@
     "typescript": "~6.0.3"
   },
   "pnpm": {
-    "overrides": {
-      "@expo/dom-webview": "56.0.0"
-    }
+   
   },
   "expo": {
     "doctor": {
