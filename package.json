@@ -65,7 +65,9 @@
     "typescript": "~6.0.3"
   },
   "pnpm": {
-   
+    "onlyBuiltDependencies": [
+      "protobufjs"
+    ]
   },
   "expo": {
     "doctor": {
