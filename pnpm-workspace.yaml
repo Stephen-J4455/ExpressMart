@@ -4,3 +4,8 @@
 # frequently, so freshly-pinned versions trip the age check and fail EAS builds with
 # ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION.
 minimumReleaseAge: 0
+
+# Allow build scripts for these dependencies (moved here from package.json "pnpm"
+# field, which pnpm v11+ no longer reads).
+onlyBuiltDependencies:
+  - protobufjs

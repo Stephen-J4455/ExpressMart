@@ -74,10 +74,5 @@
         "enabled": false
       }
     }
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "protobufjs"
-    ]
   }
 }
