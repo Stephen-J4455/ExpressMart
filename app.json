@@ -4,7 +4,7 @@
     "slug": "tagit",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/express.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "expressmart",
     "experiments": {
@@ -16,9 +16,7 @@
       "bundleIdentifier": "com.stephenj3.ExpressMart",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "remote-notification"
-        ],
+        "UIBackgroundModes": ["remote-notification"],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -39,22 +37,19 @@
               "scheme": "expressmart"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/express.png"
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
       [
         "expo-notifications",
         {
-          "icon": "./assets/express.png",
+          "icon": "./assets/icon.png",
           "color": "#ffffff",
           "androidMode": "default",
           "androidCollapsedTitle": "tagit"
@@ -89,18 +84,8 @@
     "extra": {
       "eas": {
         "projectId": "aac19ddf-69df-45d7-a714-78f42558b146"
-      },
-      "firebaseApiKey": "AIzaSyBqrV1yGWsLj17JXFwfIWRP-sqX6hp8vLk",
-      "firebaseAuthDomain": "expressmart-7d550.firebaseapp.com",
-      "firebaseProjectId": "expressmart-7d550",
-      "firebaseStorageBucket": "expressmart-7d550.firebasestorage.app",
-      "firebaseMessagingSenderId": "499123636329",
-      "firebaseAppId": "1:499123636329:web:9a96c3d4b6ed11c3f57af8",
-      "firebaseVapidKey": "YOUR_VAPID_KEY",
-      "measurementId": "G-Q63D7TJQRK",
-      "expo-status-bar": {
-        "style": "dark"
       }
     }
   }
+    
 }
