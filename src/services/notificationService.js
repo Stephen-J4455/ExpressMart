@@ -1,4 +1,4 @@
-// Notification Service Helper for ExpressMart
+// Notification Service Helper for tagit
 // Provides helper functions to send notifications via Supabase Edge Function
 
 import { supabase } from '../lib/supabase';

@@ -8,13 +8,13 @@ const LAST_UPDATED = "March 1, 2026";
 const sections = [
   {
     title: "1. Acceptance of Terms",
-    body: `By downloading, installing, or using the ExpressMart app, you agree to be bound by these Terms & Policies. If you do not agree to these terms, please do not use our services.
+    body: `By downloading, installing, or using the tagit app, you agree to be bound by these Terms & Policies. If you do not agree to these terms, please do not use our services.
 
 These terms apply to all users of the platform, including buyers and sellers. We reserve the right to update these terms at any time, and your continued use of the app constitutes acceptance of any changes.`,
   },
   {
     title: "2. Use of the Platform",
-    body: `ExpressMart is an e-commerce marketplace connecting buyers and sellers. You agree to:
+    body: `tagit is an e-commerce marketplace connecting buyers and sellers. You agree to:
 
 • Provide accurate, current and complete information when creating an account
 • Maintain the security of your account credentials
@@ -26,7 +26,7 @@ We reserve the right to suspend or terminate accounts that violate these terms w
   },
   {
     title: "3. Orders & Payments",
-    body: `When you place an order on ExpressMart:
+    body: `When you place an order on tagit:
 
 • You enter into a direct contract with the seller for the supply of the item
 • Prices displayed include applicable taxes unless stated otherwise
@@ -34,11 +34,11 @@ We reserve the right to suspend or terminate accounts that violate these terms w
 • A service fee may be applied to cover platform costs — this will always be shown before you confirm payment
 • Orders are confirmed only after successful payment authorization
 
-ExpressMart acts as an intermediary and is not responsible for disputes arising directly between buyers and sellers, though we will assist in resolution where possible.`,
+tagit acts as an intermediary and is not responsible for disputes arising directly between buyers and sellers, though we will assist in resolution where possible.`,
   },
   {
     title: "4. Delivery & Shipping",
-    body: `Delivery timelines and shipping fees are set by individual sellers and displayed at checkout. ExpressMart is not liable for:
+    body: `Delivery timelines and shipping fees are set by individual sellers and displayed at checkout. tagit is not liable for:
 
 • Delays caused by third-party logistics providers
 • Loss or damage during transit beyond our reasonable control
@@ -54,11 +54,11 @@ If an order is not delivered within the estimated timeframe, please contact the 
 • Items must be unused, in original packaging, and accompanied by proof of purchase
 • Refunds are processed to your original payment method within 5–10 business days after the return is verified
 
-ExpressMart reserves the right to mediate disputes between buyers and sellers and may issue platform credits where appropriate.`,
+tagit reserves the right to mediate disputes between buyers and sellers and may issue platform credits where appropriate.`,
   },
   {
     title: "6. Seller Responsibilities",
-    body: `Sellers on ExpressMart agree to:
+    body: `Sellers on tagit agree to:
 
 • List only products they have the right to sell
 • Provide accurate descriptions, images and pricing
@@ -70,13 +70,13 @@ Violation of these obligations may result in removal of listings, account suspen
   },
   {
     title: "7. Intellectual Property",
-    body: `All content on the ExpressMart platform — including the logo, app design, graphics, text and software — is the property of ExpressMart or its licensors and is protected by intellectual property laws.
+    body: `All content on the tagit platform — including the logo, app design, graphics, text and software — is the property of tagit or its licensors and is protected by intellectual property laws.
 
-You may not reproduce, distribute, or create derivative works from our content without express written permission. Product images and descriptions uploaded by sellers remain their property; by uploading them, sellers grant ExpressMart a license to display them on the platform.`,
+You may not reproduce, distribute, or create derivative works from our content without express written permission. Product images and descriptions uploaded by sellers remain their property; by uploading them, sellers grant tagit a license to display them on the platform.`,
   },
   {
     title: "8. Limitation of Liability",
-    body: `To the fullest extent permitted by law, ExpressMart shall not be liable for:
+    body: `To the fullest extent permitted by law, tagit shall not be liable for:
 
 • Indirect, incidental, or consequential damages arising from use of the platform
 • Loss of profit, data, or business opportunities
@@ -86,7 +86,7 @@ Our total liability in any circumstances shall not exceed the amount you paid fo
   },
   {
     title: "9. Governing Law",
-    body: `These terms are governed by the laws of the Federal Republic of Ghana. Any disputes arising from the use of ExpressMart that cannot be resolved through our support process will be subject to the exclusive jurisdiction of Ghanan courts.`,
+    body: `These terms are governed by the laws of the Federal Republic of Ghana. Any disputes arising from the use of tagit that cannot be resolved through our support process will be subject to the exclusive jurisdiction of Ghanan courts.`,
   },
   {
     title: "10. Contact Us",
@@ -120,7 +120,7 @@ export const TermsScreen = ({ navigation }) => {
       >
         <Text style={styles.lastUpdated}>Last updated: {LAST_UPDATED}</Text>
         <Text style={styles.intro}>
-          Please read these Terms & Policies carefully before using ExpressMart.
+          Please read these Terms & Policies carefully before using tagit.
           By using our services you agree to be bound by these terms.
         </Text>
 
@@ -133,7 +133,7 @@ export const TermsScreen = ({ navigation }) => {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            © {new Date().getFullYear()} ExpressMart. All rights reserved.
+            © {new Date().getFullYear()} tagit. All rights reserved.
           </Text>
         </View>
       </ScrollView>

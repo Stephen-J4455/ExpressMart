@@ -79,7 +79,11 @@ const toBoolean = (value) => {
 const REVIEW_STAR_COLOR = "#F97316";
 
 export const ProductDetailScreen = ({ route, navigation }) => {
-  const { product: initialProduct } = route.params;
+  // When opened via a universal link (https://www.expressmart.me/product/:id)
+  // only `productId` is present; otherwise a full `product` object is passed.
+  const { product: initialProduct, productId: deepLinkProductId } = route.params;
+  const productId = deepLinkProductId || initialProduct?.id;
+  const [loadingDeepLink, setLoadingDeepLink] = useState(false);
   const insets = useSafeAreaInsets();
   const { addToCart } = useCart();
   const { user } = useAuth();
@@ -198,6 +202,41 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     // Refresh product data to ensure we have seller information
     refreshProductData();
   }, []);
+
+  // When the screen is opened via a universal link, only the productId is
+  // available. Fetch the full product record so the screen can render.
+  useEffect(() => {
+    if (initialProduct || !productId || !supabase) return;
+    let mounted = true;
+    const loadByDeepLink = async () => {
+      setLoadingDeepLink(true);
+      try {
+        const { data, error } = await supabase
+          .from("express_products")
+          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+          .eq("id", productId)
+          .single();
+        if (error) throw error;
+        if (mounted && data) {
+          setProduct({
+            ...data,
+            seller: data.seller_id,
+            quantity:
+              data.quantity ?? data.stock ?? data.stock_quantity ?? 0,
+            stock: data.stock ?? data.quantity ?? data.stock_quantity ?? 0,
+          });
+        }
+      } catch (err) {
+        console.error("Error loading product from deep link:", err);
+      } finally {
+        if (mounted) setLoadingDeepLink(false);
+      }
+    };
+    loadByDeepLink();
+    return () => {
+      mounted = false;
+    };
+  }, [initialProduct, productId]);
 
   // Check if product is wishlisted
   useEffect(() => {
@@ -803,6 +842,14 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       return () => clearTimeout(timer);
     }
   }, [showImagePreview]);
+
+  if (loadingDeepLink || !product) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -1919,6 +1966,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   scrollView: {
     flex: 1,

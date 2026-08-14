@@ -11,7 +11,7 @@
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
-		32EEEFF7C1384A4CBCCE1AD9 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 9F8F756A4D4842C5B7AD010A /* GoogleService-Info.plist */; };
+		56F736BFCACC450495822D6B /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4C4776B0440A41FEAF876965 /* GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,7 +23,7 @@
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = tagit/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* tagit-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "tagit-Bridging-Header.h"; path = "tagit/tagit-Bridging-Header.h"; sourceTree = "<group>"; };
-		9F8F756A4D4842C5B7AD010A /* GoogleService-Info.plist */ = {isa = PBXFileReference; name = "GoogleService-Info.plist"; path = "tagit/GoogleService-Info.plist"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = text.plist.xml; explicitFileType = undefined; includeInIndex = 0; };
+		4C4776B0440A41FEAF876965 /* GoogleService-Info.plist */ = {isa = PBXFileReference; name = "GoogleService-Info.plist"; path = "tagit/GoogleService-Info.plist"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = text.plist.xml; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,7 +46,7 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				9F8F756A4D4842C5B7AD010A /* GoogleService-Info.plist */,
+				4C4776B0440A41FEAF876965 /* GoogleService-Info.plist */,
 			);
 			name = tagit;
 			sourceTree = "<group>";
@@ -109,7 +109,7 @@
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				AFB682DC2CFB466FA1B8E095 /* [Expo Dev Launcher] Strip Local Network Keys for Release */,
+				19A16F3FAD634E9F9D227FC9 /* [Expo Dev Launcher] Strip Local Network Keys for Release */,
 			);
 			buildRules = (
 			);
@@ -159,7 +159,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				32EEEFF7C1384A4CBCCE1AD9 /* GoogleService-Info.plist in Resources */,
+				56F736BFCACC450495822D6B /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -227,7 +227,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-tagit/Pods-tagit-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		AFB682DC2CFB466FA1B8E095 /* [Expo Dev Launcher] Strip Local Network Keys for Release */ = {
+		19A16F3FAD634E9F9D227FC9 /* [Expo Dev Launcher] Strip Local Network Keys for Release */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (

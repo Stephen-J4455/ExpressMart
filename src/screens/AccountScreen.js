@@ -181,7 +181,7 @@ export const AccountScreen = ({ navigation }) => {
               <Ionicons name="person" size={48} color={colors.primary} />
             </LinearGradient>
           </View>
-          <Text style={styles.guestTitle}>Welcome to ExpressMart</Text>
+          <Text style={styles.guestTitle}>Welcome to tagit</Text>
           <Text style={styles.guestSubtitle}>
             Sign in to track orders, save favorites,{"\n"}and enjoy personalized
             shopping.
@@ -264,7 +264,7 @@ export const AccountScreen = ({ navigation }) => {
               </View>
               <View style={styles.profileText}>
                 <Text style={styles.profileName}>
-                  {profile?.full_name || "ExpressMart User"}
+                  {profile?.full_name || "tagit User"}
                 </Text>
                 <Text style={styles.profileEmail}>{user?.email}</Text>
               </View>
@@ -298,7 +298,7 @@ export const AccountScreen = ({ navigation }) => {
           >
             <View style={styles.registerStoreTextWrap}>
               <Text style={styles.registerStoreTitle}>
-                Sell on ExpressMart
+                Sell on tagit
               </Text>
               <Text style={styles.registerStoreSubtitle}>
                 Open your own store and reach thousands of customers.
@@ -389,7 +389,7 @@ export const AccountScreen = ({ navigation }) => {
 
         {/* App Version - Clickable */}
         <Pressable onPress={() => setShowLoadingPreview(true)}>
-          <Text style={styles.versionText}>ExpressMart v1.0.1</Text>
+          <Text style={styles.versionText}>tagit v1.0.1</Text>
         </Pressable>
         <View style={{ height: 30 }} />
       </ScrollView>

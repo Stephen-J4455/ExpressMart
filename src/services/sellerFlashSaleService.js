@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 /**
  * Seller Flash Sale Service
  * Mirrors Express-Store/src/services/flashSaleService.js so the
- * ExpressMart seller admin can create/manage flash sales.
+ * tagit seller admin can create/manage flash sales.
  */
 
 export const sellerFlashSaleService = {

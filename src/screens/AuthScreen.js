@@ -500,7 +500,7 @@ export const AuthScreen = ({ navigation, route }) => {
             <Text style={styles.subtitle}>
               {isLogin
                 ? "Sign in to continue shopping"
-                : "Join ExpressMart and start shopping"}
+                : "Join tagit and start shopping"}
             </Text>
           </View>
 

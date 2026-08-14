@@ -331,7 +331,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
 
       toast.success(
         "Store Registered!",
-        "Your store is now live on ExpressMart.",
+        "Your store is now live on tagit.",
       );
       navigation.reset({ index: 0, routes: [{ name: "Main" }] });
     } catch (err) {

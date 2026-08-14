@@ -1,4 +1,4 @@
-// Share and Deeplinking Utilities for ExpressMart
+// Share and Deeplinking Utilities for tagit
 import { Platform, Share, Linking } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useToast } from '../context/ToastContext';
@@ -36,7 +36,7 @@ export const generateDeepLink = (type, id, params = {}) => {
  * Generate web URLs for sharing (fallback for non-app users)
  */
 export const generateWebUrl = (type, id, params = {}) => {
-  const baseUrl = 'https://expressmart.app';
+  const baseUrl = 'https://www.expressmart.me';
   
   switch (type) {
     case 'product':
@@ -98,9 +98,11 @@ export const shareProduct = async (productId, productTitle, productImage = null)
   const deeplink = generateDeepLink('product', productId);
   const webUrl = generateWebUrl('product', productId);
   
-  const message = `Check out "${productTitle}" on ExpressMart!`;
+  const message = `Check out "${productTitle}" on tagit!`;
   
-  return shareContent('Share Product', message, deeplink);
+  // Share the universal web link so recipients without the app still land on
+  // the product page, while app users are deep-linked via universal links.
+  return shareContent('Share Product', message, webUrl);
 };
 
 /**
@@ -114,7 +116,7 @@ export const shareReel = async (reel) => {
   if (!productId) {
     return { success: false, error: 'Missing product' };
   }
-  const message = `Check out "${title}" on ExpressMart!`;
+  const message = `Check out "${title}" on tagit!`;
   return shareContent('Share Product', message, generateDeepLink('product', productId));
 };
 
@@ -125,7 +127,7 @@ export const shareStore = async (sellerId, storeName, storeImage = null) => {
   const deeplink = generateDeepLink('store', sellerId);
   const webUrl = generateWebUrl('store', sellerId);
   
-  const message = `Check out "${storeName}" on ExpressMart!`;
+  const message = `Check out "${storeName}" on tagit!`;
   
   return shareContent('Share Store', message, deeplink);
 };
@@ -136,7 +138,7 @@ export const shareStore = async (sellerId, storeName, storeImage = null) => {
 export const shareSearch = async (query) => {
   const deeplink = generateDeepLink('search', null, { query });
   
-  const message = `Search for "${query}" on ExpressMart!`;
+  const message = `Search for "${query}" on tagit!`;
   
   return shareContent('Share Search', message, deeplink);
 };
@@ -190,7 +192,7 @@ export const useShare = () => {
     try {
       const result = await shareContent(
         title,
-        `Check this out on ExpressMart!`,
+        `Check this out on tagit!`,
         generateDeepLink(type, id, params)
       );
       

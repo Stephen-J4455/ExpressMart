@@ -380,7 +380,12 @@ const LoginRequiredScreen = ({
 );
 
 // only handle our custom URI schemes here; web links will stay in browser
-const prefixes = [Linking.createURL("/"), "expressmart://"];
+const prefixes = [
+  Linking.createURL("/"),
+  "expressmart://",
+  "https://www.expressmart.me",
+  "https://expressmart.me",
+];
 if (Platform.OS === "web" && typeof window !== "undefined" && window.location) {
   prefixes.push(window.location.origin);
 }

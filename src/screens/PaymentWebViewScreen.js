@@ -218,7 +218,7 @@ export const PaymentWebViewScreen = () => {
       <body>
         <div class="container">
           <div class="brand">Secure Checkout</div>
-          <div class="logo">ExpressMart</div>
+          <div class="logo">tagit</div>
           <p class="amount">GH₵${displayAmount}</p>
           <div class="label">Total Amount</div>
           <div class="email">${email}</div>
@@ -361,7 +361,7 @@ export const PaymentWebViewScreen = () => {
       <body>
         <div class="container">
           <div class="brand">Secure Checkout</div>
-          <div class="logo">ExpressMart</div>
+          <div class="logo">tagit</div>
           <p class="amount">GH₵${displayAmount}</p>
           <div class="label">Total Amount</div>
           <div class="email">${email}</div>

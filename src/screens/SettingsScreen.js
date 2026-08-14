@@ -84,7 +84,7 @@ export const SettingsScreen = ({ navigation }) => {
         {
           icon: "code-slash-outline",
           label: "App Version",
-          description: "ExpressMart v1.0.0",
+          description: "tagit v1.0.0",
           value: "1.0.0",
         },
       ],

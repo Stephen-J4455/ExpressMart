@@ -15,6 +15,10 @@
       "usesAppleSignIn": true,
       "bundleIdentifier": "com.stephenj3.ExpressMart",
       "googleServicesFile": "./GoogleService-Info.plist",
+      "associatedDomains": [
+        "applinks:www.expressmart.me",
+        "applinks:expressmart.me"
+      ],
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"],
         "ITSAppUsesNonExemptEncryption": false
@@ -35,6 +39,23 @@
           "data": [
             {
               "scheme": "expressmart"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.expressmart.me",
+              "pathPrefix": "/product"
+            },
+            {
+              "scheme": "https",
+              "host": "expressmart.me",
+              "pathPrefix": "/product"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]

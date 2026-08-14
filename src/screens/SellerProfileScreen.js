@@ -537,7 +537,7 @@ export const SellerProfileScreen = ({ navigation }) => {
         <View style={styles.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.switchLabel}>Apply theme to my store</Text>
-            <Text style={styles.switchSub}>Show this color in your ExpressMart store</Text>
+            <Text style={styles.switchSub}>Show this color in your tagit store</Text>
           </View>
           <Switch
             value={editApplyToStore}

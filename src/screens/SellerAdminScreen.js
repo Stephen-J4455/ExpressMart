@@ -183,7 +183,7 @@ const getVideoSizeBytes = async (uri, pickedFile = null) => {
 
 // Hamburger menu — mirrors the Express-Store seller/store settings surface
 // (Dashboard, Catalog, Orders, Chats, Profile/theme, Paystack, StatusCreator, etc.)
-// mapped onto the screens available in the merged ExpressMart app.
+// mapped onto the screens available in the merged tagit app.
 const MENU_ITEMS = [
   { section: "Store" },
   { label: "Orders", icon: "receipt-outline", screen: "Orders" },

@@ -153,7 +153,7 @@ export const ProfileEditScreen = ({ navigation }) => {
               <Text style={styles.avatarInitials}>{initials}</Text>
             </View>
             <Text style={styles.avatarName}>
-              {profile?.full_name || "ExpressMart User"}
+              {profile?.full_name || "tagit User"}
             </Text>
             <Text style={styles.avatarEmail}>{user?.email}</Text>
           </LinearGradient>
@@ -316,7 +316,7 @@ export const ProfileEditScreen = ({ navigation }) => {
                   />
                 </View>
                 <Text style={styles.helperText}>
-                  Shown on your store profile in the ExpressMart store app.
+                  Shown on your store profile in the tagit store app.
                 </Text>
               </View>
 
@@ -339,7 +339,7 @@ export const ProfileEditScreen = ({ navigation }) => {
                   ))}
                 </View>
                 <Text style={styles.helperText}>
-                  Applied across your store in the ExpressMart app.
+                  Applied across your store in the tagit app.
                 </Text>
               </View>
             </View>

@@ -96,7 +96,7 @@ export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
           <Ionicons name="flash" size={22} color="#fff" />
         </LinearGradient>
         {sidebarWidth >= 200 && (
-          <Text style={styles.brandText}>ExpressMart</Text>
+          <Text style={styles.brandText}>tagit</Text>
         )}
       </View>
 

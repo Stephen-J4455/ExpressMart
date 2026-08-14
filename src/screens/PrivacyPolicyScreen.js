@@ -8,7 +8,7 @@ const LAST_UPDATED = "March 1, 2026";
 const sections = [
   {
     title: "1. Information We Collect",
-    body: `When you use ExpressMart, we collect the following types of information:
+    body: `When you use tagit, we collect the following types of information:
 
 • Account information: name, email address, phone number and delivery addresses you provide during registration or checkout.
 • Order data: products purchased, order amounts, shipping details and payment references.
@@ -69,7 +69,7 @@ To exercise any of these rights, please contact us through the Help & Support se
   },
   {
     title: "7. Children's Privacy",
-    body: `ExpressMart is not intended for use by individuals under the age of 13. We do not knowingly collect personal information from children. If we become aware that we have collected data from a child under 13, we will take steps to delete such information promptly.`,
+    body: `tagit is not intended for use by individuals under the age of 13. We do not knowingly collect personal information from children. If we become aware that we have collected data from a child under 13, we will take steps to delete such information promptly.`,
   },
   {
     title: "8. Changes to This Policy",
@@ -106,7 +106,7 @@ export const PrivacyPolicyScreen = ({ navigation }) => {
         <Text style={styles.lastUpdated}>Last updated: {LAST_UPDATED}</Text>
         <Text style={styles.intro}>
           Your privacy is important to us. This Privacy Policy explains how
-          ExpressMart ("we", "us", or "our") collects, uses, and protects your
+          tagit ("we", "us", or "our") collects, uses, and protects your
           personal information when you use our mobile application and services.
         </Text>
 

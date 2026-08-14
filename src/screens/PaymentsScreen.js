@@ -26,7 +26,7 @@ export const PaymentsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
 
   // Store (seller) payment account — mirrors the Express-Store profile page.
-  // ExpressMart's express_sellers table stores the Paystack subaccount in
+  // tagit's express_sellers table stores the Paystack subaccount in
   // `payment_account` (code), with `payment_platform`, `payment_provider`,
   // `payment_currency`, `account_code` (payout account number) and
   // `account_verified` describing the receiving account.
@@ -314,7 +314,7 @@ export const PaymentsScreen = ({ navigation }) => {
         style={styles.storeCard}
       >
         <View style={styles.storeCardTop}>
-          <Text style={styles.storeCardBrand}>EXPRESSMART</Text>
+          <Text style={styles.storeCardBrand}>TAGIT</Text>
           <Ionicons name="card" size={28} color="#fff" />
         </View>
         <Text style={styles.storeCardNumber}>

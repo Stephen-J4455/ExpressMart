@@ -99,7 +99,7 @@ export const HelpSupportScreen = ({ navigation }) => {
     },
     {
       q: "How do I become a seller?",
-      a: "Download the ExpressMart Seller app or visit our seller portal at expressmart.com/sell to register your store.",
+      a: "Download the tagit Seller app or visit our seller portal at expressmart.com/sell to register your store.",
     },
   ];
 
