@@ -1,0 +1,6 @@
+# pnpm workspace & settings
+# Disables the minimumReleaseAge supply-chain check (default 1440 min / 24h in pnpm v11+).
+# Transitive deps like electron-to-chromium and baseline-browser-mapping are republished
+# frequently, so freshly-pinned versions trip the age check and fail EAS builds with
+# ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION.
+minimumReleaseAge: 0
