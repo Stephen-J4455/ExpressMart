@@ -589,12 +589,14 @@ const linking = {
       !isGoogleOAuthCallbackLink(webHref)
     ) {
       return {
+        index: 0,
         routes: [{ name: "ResetPassword", params: { initialUrl: webHref } }],
       };
     }
 
     if (isWebResetScreenUrl(normalizedPath)) {
       return {
+        index: 0,
         routes: [{ name: "ResetPassword", params: { initialUrl: path } }],
       };
     }
@@ -604,6 +606,7 @@ const linking = {
       !isGoogleOAuthCallbackLink(normalizedPath)
     ) {
       return {
+        index: 0,
         routes: [{ name: "ResetPassword", params: { initialUrl: path } }],
       };
     }
@@ -613,6 +616,7 @@ const linking = {
 
     if (hasResetPasswordPath(normalizedPath)) {
       return {
+        index: 0,
         routes: [{ name: "ResetPassword", params: { initialUrl: path } }],
       };
     }
@@ -858,9 +862,8 @@ const AuthenticatedApp = () => {
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
-          animation: "fade",
-          animationDuration: 100,
-        }}
+          animation: "slide_from_right",
+          animationDuration: 3000}}
       >
         <Stack.Screen name="Main" component={TabNavigator} />
         <Stack.Screen name="Auth" component={AuthScreen} />
