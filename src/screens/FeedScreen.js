@@ -13,7 +13,6 @@ import {
   Image,
   Animated,
   Easing,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -35,8 +34,11 @@ import { useResponsive } from "../hooks/useResponsive";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { supabase } from "../lib/supabase";
-import { shareReel } from "../utils/shareUtils";
+import { shareReel, shareProduct } from "../utils/shareUtils";
+
+const REVIEW_STAR_COLOR = "#F97316";
 
 // Cache the reels feed locally so it loads instantly from disk on every mount
 // instead of re-streaming the list from the network (saves data on metered
@@ -305,8 +307,249 @@ export const FeedScreen = ({ route, navigation }) => {
         item.tags?.find((tag) => String(tag || "").trim()) ||
         item.category ||
         "Featured";
-      const likeCount = Number(item.likes_count || 0);
-      const commentCount = Number(item.comments_count || 0);
+      const baseLikeCount = Number(item.likes_count || 0);
+      const baseCommentCount = Number(item.comments_count || 0);
+
+      // Product-based actions (like / comment / tag) operate on the linked
+      // product, mirroring the ProductDetail screen, not the video itself.
+      const { user } = useAuth();
+      const toast = useToast();
+      const productId = item.product_id;
+
+      // --- Like (product wishlist) with optimistic update + pop animation ---
+      const [isWishlisted, setIsWishlisted] = useState(false);
+      const [likeCount, setLikeCount] = useState(baseLikeCount);
+      const likeAnim = useRef(new Animated.Value(1)).current;
+      const likeBurstAnim = useRef(new Animated.Value(0)).current;
+
+      useEffect(() => {
+        let mounted = true;
+        const checkWishlist = async () => {
+          if (!user || !productId || !supabase) return;
+          const { data } = await supabase
+            .from("express_wishlists")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("product_id", productId)
+            .maybeSingle();
+          if (!mounted) return;
+          // maybeSingle() returns null (not an error) when no row exists.
+          setIsWishlisted(!!data);
+        };
+        checkWishlist();
+        return () => {
+          mounted = false;
+        };
+      }, [user, productId]);
+
+      const playLikeAnimation = useCallback(() => {
+        likeAnim.setValue(0.6);
+        Animated.spring(likeAnim, {
+          toValue: 1,
+          friction: 3,
+          tension: 220,
+          useNativeDriver: true,
+        }).start();
+        likeBurstAnim.setValue(0);
+        Animated.timing(likeBurstAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
+      }, [likeAnim, likeBurstAnim]);
+
+      const toggleLike = useCallback(async () => {
+        if (!user) {
+          toast.info("Sign in required", "Please sign in to like this product");
+          return;
+        }
+        if (!productId || !supabase) return;
+
+        // Optimistic update: flip state + count immediately for snappy UX.
+        const willLike = !isWishlisted;
+        setIsWishlisted(willLike);
+        setLikeCount((c) => Math.max(0, c + (willLike ? 1 : -1)));
+        if (willLike) playLikeAnimation();
+
+        try {
+          if (!willLike) {
+            await supabase
+              .from("express_wishlists")
+              .delete()
+              .eq("user_id", user.id)
+              .eq("product_id", productId);
+          } else {
+            await supabase.from("express_wishlists").insert({
+              user_id: user.id,
+              product_id: productId,
+            });
+          }
+        } catch (err) {
+          // Roll back on failure.
+          setIsWishlisted(!willLike);
+          setLikeCount((c) => Math.max(0, c + (willLike ? -1 : 1)));
+          toast.error("Error", err.message);
+        }
+      }, [user, isWishlisted, productId, toast, playLikeAnimation]);
+
+      // --- Comment: own modal in the feed, backed by PRODUCT comments
+      // (express_reviews + express_review_comments), mirroring the
+      // ProductDetail screen. ---
+      const [commentModalVisible, setCommentModalVisible] = useState(false);
+      const [comments, setComments] = useState([]);
+      const [commentCount, setCommentCount] = useState(baseCommentCount);
+      const [commentText, setCommentText] = useState("");
+      const [commentPosting, setCommentPosting] = useState(false);
+      const [commentsLoading, setCommentsLoading] = useState(false);
+
+      const loadComments = useCallback(async () => {
+        if (!productId || !supabase) return;
+        setCommentsLoading(true);
+        try {
+          // Pull approved product reviews that have a comment, newest first.
+          const { data: reviews } = await supabase
+            .from("express_reviews")
+            .select(
+              "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
+            )
+            .eq("product_id", productId)
+            .eq("is_approved", true)
+            .not("comment", "is", null)
+            .order("created_at", { ascending: false })
+            .limit(50);
+
+          const rows = (reviews ?? [])
+            .filter((r) => String(r.comment || "").trim())
+            .map((r) => {
+              const profile = Array.isArray(r.express_profiles)
+                ? r.express_profiles[0]
+                : r.express_profiles;
+              return {
+                id: r.id,
+                review_id: r.id,
+                user_id: r.user_id,
+                rating: r.rating,
+                comment: r.comment,
+                created_at: r.created_at,
+                author_name: profile?.full_name || "Customer",
+                author_avatar: profile?.avatar_url || null,
+              };
+            });
+          setComments(rows);
+          setCommentCount(rows.length);
+        } catch (e) {
+          console.warn("loadComments error:", e);
+        } finally {
+          setCommentsLoading(false);
+        }
+      }, [productId]);
+
+      const openCommentModal = useCallback(() => {
+        setCommentModalVisible(true);
+        loadComments();
+      }, [loadComments]);
+
+      const submitComment = useCallback(async () => {
+        const trimmed = String(commentText).trim();
+        if (!trimmed) return;
+        if (!user) {
+          toast.info("Sign in required", "Please sign in to comment");
+          return;
+        }
+        if (!productId || !supabase) return;
+        setCommentPosting(true);
+        try {
+          // Mirror ProductDetail: a feed comment is a product review with a
+          // comment (default 5-star rating). Update if the user already
+          // reviewed, otherwise insert.
+          const { data: existing } = await supabase
+            .from("express_reviews")
+            .select("id")
+            .eq("product_id", productId)
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          let saved;
+          if (existing?.id) {
+            const { data, error } = await supabase
+              .from("express_reviews")
+              .update({
+                comment: trimmed,
+                is_approved: true,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", existing.id)
+              .select(
+                "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
+              )
+              .single();
+            if (error) throw error;
+            saved = data;
+          } else {
+            const { data, error } = await supabase
+              .from("express_reviews")
+              .insert({
+                product_id: productId,
+                user_id: user.id,
+                rating: 5,
+                comment: trimmed,
+                is_approved: true,
+              })
+              .select(
+                "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
+              )
+              .single();
+            if (error) throw error;
+            saved = data;
+          }
+
+          const profile = Array.isArray(saved.express_profiles)
+            ? saved.express_profiles[0]
+            : saved.express_profiles;
+          const newComment = {
+            id: saved.id,
+            review_id: saved.id,
+            user_id: saved.user_id,
+            rating: saved.rating,
+            comment: saved.comment,
+            created_at: saved.created_at,
+            author_name: profile?.full_name || "You",
+            author_avatar: profile?.avatar_url || null,
+          };
+
+          // Replace if editing own review, else prepend.
+          setComments((prev) => {
+            const without = prev.filter((c) => c.id !== newComment.id);
+            return [newComment, ...without];
+          });
+          setCommentCount((c) => c + 1);
+          setCommentText("");
+          toast.success("Comment posted", "Your comment was added to the product");
+        } catch (err) {
+          toast.error("Error", err.message);
+        } finally {
+          setCommentPosting(false);
+        }
+      }, [commentText, user, productId, toast]);
+
+      const handleComment = useCallback(() => {
+        openCommentModal();
+      }, [openCommentModal]);
+
+      const handleTag = useCallback(async () => {
+        if (!productId) return;
+        try {
+          const result = await shareProduct(productId, item.title);
+          if (result.success) {
+            toast.success("Product shared!", "Share link copied to clipboard");
+          } else {
+            toast.error("Failed to share", result.error || "Please try again");
+          }
+        } catch (error) {
+          toast.error("Error", "Failed to share product");
+          console.error("Error sharing product:", error);
+        }
+      }, [productId, item.title, toast]);
 
       const openStore = () => {
         if (item.seller?.id) {
@@ -479,23 +722,54 @@ export const FeedScreen = ({ route, navigation }) => {
                 </Pressable>
               </View>
 
-              {/* Right: like / comment / tag actions stacked vertically */}
+              {/* Right: like / comment / tag actions stacked vertically.
+                  These act on the linked PRODUCT (like the ProductDetail
+                  screen), not the video. */}
               <View style={styles.actionCol}>
-                <Pressable style={styles.actionBtn}>
+                <Pressable style={styles.actionBtn} onPress={toggleLike}>
                   <View style={styles.actionIconWrap}>
-                    <Ionicons name="heart" size={24} color="#fff" />
+                    {/* Burst ring behind the heart on like */}
+                    <Animated.View
+                      pointerEvents="none"
+                      style={[
+                        styles.likeBurst,
+                        {
+                          opacity: likeBurstAnim.interpolate({
+                            inputRange: [0, 0.4, 1],
+                            outputRange: [0, 0.7, 0],
+                          }),
+                          transform: [
+                            {
+                              scale: likeBurstAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0.4, 1.8],
+                              }),
+                            },
+                          ],
+                        },
+                      ]}
+                    />
+                    <Animated.View
+                      style={{ transform: [{ scale: likeAnim }] }}
+                    >
+                      <Ionicons
+                        name={isWishlisted ? "heart" : "heart-outline"}
+                        size={24}
+                        color={isWishlisted ? colors.accent : "#fff"}
+                      />
+                    </Animated.View>
                   </View>
                   <Text style={styles.actionLabel}>{likeCount}</Text>
                 </Pressable>
 
-                <Pressable style={styles.actionBtn}>
+                <Pressable style={styles.actionBtn} onPress={handleComment}>
                   <View style={styles.actionIconWrap}>
                     <Ionicons name="chatbubble" size={24} color="#fff" />
                   </View>
                   <Text style={styles.actionLabel}>{commentCount}</Text>
                 </Pressable>
 
-                <Pressable style={styles.actionBtn}>
+                <Pressable style={styles.actionBtn} onPress={handleTag}>
                   <View style={[styles.actionIconWrap, styles.tagIconWrap]}>
                     <Ionicons name="pricetag" size={22} color={colors.primary} />
                   </View>
@@ -504,6 +778,123 @@ export const FeedScreen = ({ route, navigation }) => {
               </View>
             </View>
           </View>
+
+          {/* Comment modal — own to the feed, posts reel-native comments */}
+          <Modal
+            visible={commentModalVisible}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setCommentModalVisible(false)}
+          >
+            <View style={styles.commentModalBackdrop}>
+              <Pressable
+                style={styles.commentModalBackdrop}
+                onPress={() => setCommentModalVisible(false)}
+              />
+              <View style={styles.commentModalSheet}>
+                <View style={styles.commentModalHandle} />
+                <View style={styles.commentModalHeader}>
+                  <Text style={styles.commentModalTitle}>
+                    Comments ({commentCount})
+                  </Text>
+                  <Pressable
+                    onPress={() => setCommentModalVisible(false)}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="close" size={22} color={colors.dark} />
+                  </Pressable>
+                </View>
+
+                {commentsLoading ? (
+                  <View style={styles.commentModalLoading}>
+                    <ActivityIndicator color={colors.primary} />
+                  </View>
+                ) : (
+                  <ScrollView
+                    style={styles.commentList}
+                    contentContainerStyle={styles.commentListContent}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {comments.length === 0 ? (
+                      <Text style={styles.commentEmpty}>
+                        No comments yet. Be the first!
+                      </Text>
+                    ) : (
+                      comments.map((c) => (
+                        <View key={c.id} style={styles.commentItem}>
+                          <View style={styles.commentAvatarWrap}>
+                            {c.author_avatar ? (
+                              <Image
+                                source={{ uri: c.author_avatar }}
+                                style={styles.commentAvatar}
+                              />
+                            ) : (
+                              <View style={styles.commentAvatarFallback}>
+                                <Ionicons
+                                  name="person"
+                                  size={14}
+                                  color={colors.primary}
+                                />
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.commentBody}>
+                            <View style={styles.commentAuthorRow}>
+                              <Text style={styles.commentAuthor}>
+                                {c.author_name}
+                              </Text>
+                              {c.rating ? (
+                                <View style={styles.commentStars}>
+                                  {[1, 2, 3, 4, 5].map((s) => (
+                                    <Ionicons
+                                      key={s}
+                                      name={s <= c.rating ? "star" : "star-outline"}
+                                      size={11}
+                                      color={REVIEW_STAR_COLOR}
+                                    />
+                                  ))}
+                                </View>
+                              ) : null}
+                            </View>
+                            <Text style={styles.commentText}>
+                              {c.comment}
+                            </Text>
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </ScrollView>
+                )}
+
+                <KeyboardStickyView style={styles.commentInputRow}>
+                  <TextInput
+                    style={styles.commentInput}
+                    placeholder="Add a comment…"
+                    placeholderTextColor={colors.muted}
+                    value={commentText}
+                    onChangeText={setCommentText}
+                    multiline
+                    editable={!commentPosting}
+                  />
+                  <Pressable
+                    style={[
+                      styles.commentSendBtn,
+                      (!commentText.trim() || commentPosting) &&
+                        styles.commentSendBtnDisabled,
+                    ]}
+                    onPress={submitComment}
+                    disabled={!commentText.trim() || commentPosting}
+                  >
+                    {commentPosting ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Ionicons name="send" size={18} color="#fff" />
+                    )}
+                  </Pressable>
+                </KeyboardStickyView>
+              </View>
+            </View>
+          </Modal>
         </View>
       );
     },
@@ -770,6 +1161,145 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(0,0,0,0.85)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  likeBurst: {
+    position: "absolute",
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 2,
+    borderColor: colors.accent,
+    backgroundColor: "transparent",
+  },
+  commentModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  commentModalSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    maxHeight: "75%",
+    paddingBottom: Platform.OS === "ios" ? 24 : 12,
+  },
+  commentModalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D1D5DB",
+    alignSelf: "center",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  commentModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F1F1",
+  },
+  commentModalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: colors.dark,
+  },
+  commentModalLoading: {
+    paddingVertical: 40,
+    alignItems: "center",
+  },
+  commentList: {
+    maxHeight: 320,
+  },
+  commentListContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  commentEmpty: {
+    textAlign: "center",
+    color: colors.muted,
+    paddingVertical: 24,
+  },
+  commentItem: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 14,
+  },
+  commentAvatarWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#F1F1F1",
+  },
+  commentAvatar: {
+    width: 32,
+    height: 32,
+  },
+  commentAvatarFallback: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E5E7EB",
+  },
+  commentBody: {
+    flex: 1,
+  },
+  commentAuthorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  commentStars: {
+    flexDirection: "row",
+    gap: 1,
+  },
+  commentAuthor: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.dark,
+    marginBottom: 2,
+  },
+  commentText: {
+    fontSize: 14,
+    color: "#374151",
+    lineHeight: 19,
+  },
+  commentInputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F1F1",
+  },
+  commentInput: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    fontSize: 14,
+    color: colors.dark,
+  },
+  commentSendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  commentSendBtnDisabled: {
+    opacity: 0.4,
   },
   reelTopRow: {
     flexDirection: "row",

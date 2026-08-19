@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../context/OrderContext";
 import { useAds } from "../context/AdsContext";
+import { useTheme } from "../context/ThemeContext";
 import { AdRenderer } from "../components/AdBanner";
 import { colors } from "../theme/colors";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
@@ -99,6 +100,7 @@ export const AccountScreen = ({ navigation }) => {
   const { user, profile, isAuthenticated, loading, signOut } = useAuth();
   const { orders } = useOrder();
   const { fetchAdsByPlacement } = useAds();
+  const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const [showLoadingPreview, setShowLoadingPreview] = useState(false);
   const [profileAds, setProfileAds] = useState([]);
   const { isWide, contentMaxWidth } = useResponsive();
@@ -378,6 +380,56 @@ export const AccountScreen = ({ navigation }) => {
             </View>
           </View>
         ))}
+
+        {/* Appearance / Theme */}
+        <View style={styles.menuSection}>
+          <Text style={styles.sectionTitle}>Appearance</Text>
+          <View style={styles.menuCard}>
+            {[
+              { key: "light", label: "Light", icon: "sunny-outline" },
+              { key: "dark", label: "Dark", icon: "moon-outline" },
+              { key: "system", label: "System", icon: "phone-portrait-outline" },
+            ].map((opt, index) => {
+              const selected = themeMode === opt.key;
+              return (
+                <Pressable
+                  key={opt.key}
+                  style={[
+                    styles.menuItem,
+                    index < 2 && styles.menuItemBorder,
+                  ]}
+                  onPress={() => setThemeMode(opt.key)}
+                >
+                  <View style={styles.menuItemLeft}>
+                    <View style={styles.menuIconContainer}>
+                      <Ionicons
+                        name={opt.icon}
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </View>
+                    <Text style={styles.menuItemLabel}>{opt.label}</Text>
+                  </View>
+                  <View style={styles.menuItemRight}>
+                    {selected ? (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    ) : (
+                      <Ionicons
+                        name="chevron-forward"
+                        size={18}
+                        color="#CBD5E1"
+                      />
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
 
         {/* Sign Out Button */}
         <View style={styles.signOutSection}>

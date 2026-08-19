@@ -559,6 +559,24 @@ export const ProductCard = ({
                 : "New"}
             </Text>
           </View>
+          {(() => {
+            const tag =
+              (Array.isArray(product.tags) && product.tags[0]) ||
+              product.category;
+            if (!tag) return null;
+            return (
+              <View style={styles.tagPill}>
+                <Text style={styles.tagText} numberOfLines={1}>
+                  {String(tag)}
+                </Text>
+              </View>
+            );
+          })()}
+          {!images[0] && (
+            <View style={styles.cardImagePlaceholder}>
+              <Ionicons name="image-outline" size={20} color={colors.muted} />
+            </View>
+          )}
           {isOutOfStock && (
             <View style={styles.outOfStockOverlay}>
               <Text style={styles.outOfStockOverlayText}>Out of Stock</Text>
@@ -1012,6 +1030,32 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "800",
     color: "#334155",
+  },
+  tagPill: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    maxWidth: "70%",
+    backgroundColor: "rgba(15, 23, 42, 0.78)",
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  tagText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  cardImagePlaceholder: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   variantOverlay: {
     flex: 1,

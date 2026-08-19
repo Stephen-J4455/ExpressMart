@@ -25,6 +25,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase, callEdgeFunction } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
 import { notifyOrderStatusUpdate } from "../services/notificationService";
 import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
@@ -199,6 +200,8 @@ const MENU_ITEMS = [
   { label: "Security", icon: "shield-checkmark-outline", screen: "Security" },
   { label: "Privacy", icon: "lock-closed-outline", screen: "PrivacySettings" },
   { label: "Help & Support", icon: "help-circle-outline", screen: "HelpSupport" },
+  { section: "Appearance" },
+  { theme: true },
   { label: "Sign Out", icon: "log-out-outline", action: "signOut" },
 ];
 
@@ -207,6 +210,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const nav = useNavigation();
   const { user, profile: customerProfile, signOut } = useAuth();
   const toast = useToast();
+  const { mode: themeMode, setMode: setThemeMode } = useTheme();
 
   // ── Seller data layer (mirrors Express-Store SellerContext) ──────────────
   const [seller, setSeller] = useState(null);
@@ -1614,7 +1618,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       {loading ? (
         <View style={styles.productGrid}>
           {Array.from({ length: 4 }).map((_, i) => (
-            <ProductCardPlaceholder key={`ph-${i}`} />
+            <View key={`ph-${i}`} style={styles.productPlaceholderCard}>
+              <ProductCardPlaceholder />
+            </View>
           ))}
         </View>
       ) : filteredProducts.length === 0 ? (
@@ -2181,6 +2187,44 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 <Text key={`sec-${i}`} style={styles.menuSection}>
                   {item.section}
                 </Text>
+              ) : item.theme ? (
+                <View key="theme-options" style={styles.themeOptions}>
+                  {[
+                    { key: "light", label: "Light", icon: "sunny-outline" },
+                    { key: "dark", label: "Dark", icon: "moon-outline" },
+                    {
+                      key: "system",
+                      label: "System",
+                      icon: "phone-portrait-outline",
+                    },
+                  ].map((opt) => {
+                    const selected = themeMode === opt.key;
+                    return (
+                      <Pressable
+                        key={opt.key}
+                        style={[
+                          styles.themeOption,
+                          selected && styles.themeOptionActive,
+                        ]}
+                        onPress={() => setThemeMode(opt.key)}
+                      >
+                        <Ionicons
+                          name={opt.icon}
+                          size={18}
+                          color={selected ? colors.primary : colors.muted}
+                        />
+                        <Text
+                          style={[
+                            styles.themeOptionText,
+                            selected && styles.themeOptionTextActive,
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               ) : (
                 <Pressable
                   key={item.screen || item.label}
@@ -2936,10 +2980,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 16,
     backgroundColor: "#EEF2FF",
-    borderRadius: radius.full,
+    borderRadius: radius.lg,
     padding: 4,
   },
-  tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: radius.full },
+  tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: radius.md },
   tabContent: {
     borderRadius: radius.lg, marginTop: 16, paddingHorizontal: 16 },
   reelsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
@@ -3346,6 +3390,7 @@ const styles = StyleSheet.create({
   sortChipTextActive: { color: "#fff", fontWeight: "700" },
   productGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   productCard: { width: "47%", backgroundColor: "#fff", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: "#F1F5F9" },
+  productPlaceholderCard: { width: "47%", borderRadius: radius.md, overflow: "hidden" },
   productImage: { width: "100%", height: 110 },
   productImagePlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
   productBody: { padding: 10 },
@@ -3656,6 +3701,37 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   menuItemText: { fontSize: 15, fontWeight: "600", color: colors.dark },
+  themeOptions: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  themeOption: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+  },
+  themeOptionActive: {
+    borderColor: colors.primary,
+    backgroundColor: "rgba(255, 90, 121, 0.10)",
+  },
+  themeOptionText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.muted,
+  },
+  themeOptionTextActive: {
+    color: colors.primary,
+    fontWeight: "700",
+  },
   statRow: {
     flexDirection: "row",
     alignItems: "center",

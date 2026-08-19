@@ -24,6 +24,7 @@ import * as Linking from "expo-linking";
 import { useResponsive } from "./src/hooks/useResponsive";
 import { WebSidebar } from "./src/components/WebSidebar";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { CartProvider, useCart } from "./src/context/CartContext";
 import { ShopProvider } from "./src/context/ShopContext";
 import { OrderProvider } from "./src/context/OrderContext";
@@ -51,6 +52,7 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { SecurityScreen } from "./src/screens/SecurityScreen";
 import { HelpSupportScreen } from "./src/screens/HelpSupportScreen";
 import { CategoryProductsScreen } from "./src/screens/CategoryProductsScreen";
+import { CategoriesScreen } from "./src/screens/CategoriesScreen";
 import { StoreScreen } from "./src/screens/StoreScreen";
 import { StoresScreen } from "./src/screens/StoresScreen";
 import { ForgotPasswordScreen } from "./src/screens/ForgotPasswordScreen";
@@ -73,7 +75,7 @@ import { colors, getTheme } from "./src/theme/colors";
 // PasswordResetScreen handles recovery links on both web and native.
 
 import { supabase } from "./src/lib/supabase";
-import React from "react";
+import React, { useMemo } from "react";
 import UpdateModal from "./src/components/UpdateModal";
 import { checkForUpdate } from "./src/services/updateService";
 
@@ -340,13 +342,23 @@ const tabStyles = StyleSheet.create({
   },
 });
 
-const navTheme = {
+// Build a FRESH navTheme object on every render. The navigation container only
+// re-renders its screens when it receives a new theme object reference; a
+// module-level constant would be stable across mode changes, so screens (and
+// their memoized children) would never re-render and the live getters would
+// never re-evaluate — the "some parts change, some don't" symptom.
+const createNavTheme = (isDark) => ({
   ...DefaultTheme,
+  dark: isDark,
   colors: {
     ...DefaultTheme.colors,
     background: colors.light,
+    card: colors.surface,
+    border: colors.border,
+    text: colors.dark,
+    primary: colors.primary,
   },
-};
+});
 
 const LoginRequiredScreen = ({
   navigation,
@@ -655,6 +667,7 @@ const linking = {
           categoryId: (categoryId) => categoryId,
         },
       },
+      Categories: "categories",
       Chat: {
         path: "chat/:sellerId",
         parse: {
@@ -859,6 +872,7 @@ const AuthenticatedApp = () => {
           name="CategoryProducts"
           component={CategoryProductsScreen}
         />
+        <Stack.Screen name="Categories" component={CategoriesScreen} />
         <Stack.Screen name="Store" component={StoreScreen} />
         <Stack.Screen name="Stores" component={StoresScreen} />
         <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
@@ -1019,29 +1033,44 @@ const authPromptStyles = StyleSheet.create({
   },
 });
 
+// Wraps the navigation container so it receives a FRESH theme object on every
+// mode change. Without this, the module-level navTheme is stable across theme
+// switches, React Navigation never re-renders its screens, and memoized
+// children (e.g. FeedScreen's ReelItem) skip the re-render — leaving some
+// parts stuck on the old theme.
+const NavigationWithTheme = () => {
+  const { isDark } = useTheme();
+  const theme = useMemo(() => createNavTheme(isDark), [isDark]);
+  return (
+    <NavigationContainer theme={theme} linking={linking}>
+      <StatusBar style="light" />
+      <AuthenticatedApp />
+    </NavigationContainer>
+  );
+};
+
 export default function App() {
   return (
     <SafeAreaProvider>
       <KeyboardProvider>
-        <AuthProvider>
-          <ToastProvider>
-            <CartProvider>
-              <ShopProvider>
-                <OrderProvider>
-                  <ChatProvider>
-                    <AdsProvider>
-                      <DeepLinkHandler />
-                      <NavigationContainer theme={navTheme} linking={linking}>
-                        <StatusBar style="light" />
-                        <AuthenticatedApp />
-                      </NavigationContainer>
-                    </AdsProvider>
-                  </ChatProvider>
-                </OrderProvider>
-              </ShopProvider>
-            </CartProvider>
-          </ToastProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <CartProvider>
+                <ShopProvider>
+                  <OrderProvider>
+                    <ChatProvider>
+                      <AdsProvider>
+                        <DeepLinkHandler />
+                        <NavigationWithTheme />
+                      </AdsProvider>
+                    </ChatProvider>
+                  </OrderProvider>
+                </ShopProvider>
+              </CartProvider>
+            </ToastProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </KeyboardProvider>
     </SafeAreaProvider>
   );

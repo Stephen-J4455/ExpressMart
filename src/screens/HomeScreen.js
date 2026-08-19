@@ -24,6 +24,8 @@ import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 
+const SCREEN_WIDTH = Dimensions.get("window").width;
+
 export const HomeScreen = ({ navigation }) => {
   const {
     products,
@@ -145,6 +147,74 @@ export const HomeScreen = ({ navigation }) => {
       ),
     [homeAds],
   );
+
+  // Show a compact row of categories by default; "Show More" opens the
+  // full Categories page.
+  const CATEGORIES_COLLAPSED_COUNT = 8;
+  const visibleCategories = useMemo(() => {
+    if (!Array.isArray(categories)) return [];
+    return categories.slice(0, CATEGORIES_COLLAPSED_COUNT);
+  }, [categories]);
+
+  const handleCategoryPress = useCallback(
+    (category) => {
+      navigation.navigate("CategoryProducts", { category });
+    },
+    [navigation],
+  );
+
+  const renderCategoriesSection = () => {
+    if (!categories || categories.length === 0) return null;
+    const canExpand = categories.length > CATEGORIES_COLLAPSED_COUNT;
+
+    return (
+      <View style={styles.sectionBlock}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="grid-outline" size={18} color={colors.primary} />
+          <Text style={styles.sectionTitle}>Categories</Text>
+          {canExpand && (
+            <Pressable
+              style={styles.showMoreBtn}
+              onPress={() => navigation.navigate("Categories")}
+              hitSlop={8}
+            >
+              <Text style={styles.showMoreText}>Show More</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={colors.primary}
+              />
+            </Pressable>
+          )}
+        </View>
+        <View style={styles.categoryGrid}>
+          {visibleCategories.map((cat) => (
+            <Pressable
+              key={cat.id}
+              style={styles.categoryTile}
+              onPress={() => handleCategoryPress(cat)}
+            >
+              <View
+                style={[
+                  styles.categoryIconWrap,
+                  { backgroundColor: cat.color || "#F0F9FF" },
+                ]}
+              >
+                <Ionicons
+                  name={cat.icon || "apps-outline"}
+                  size={22}
+                  color={colors.primary}
+                />
+              </View>
+              <Text numberOfLines={1} style={styles.categoryLabel}>
+                {cat.name}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    );
+  };
 
   const homeOverlayAds = useMemo(
     () =>
@@ -319,6 +389,8 @@ export const HomeScreen = ({ navigation }) => {
             </View>
           )}
 
+          {renderCategoriesSection()}
+
           {renderFlashSaleSection()}
 
           <View style={styles.sectionHeader}>
@@ -390,6 +462,48 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 12,
     paddingBottom: 8,
+  },
+  showMoreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginLeft: "auto",
+    paddingVertical: 2,
+  },
+  showMoreText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    paddingHorizontal: 16,
+  },
+  categoryTile: {
+    width: (SCREEN_WIDTH - 16 * 2 - 12 * 3) / 4,
+    alignItems: "center",
+  },
+  categoryIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  categoryLabel: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.dark,
+    textAlign: "center",
+    width: "100%",
   },
   gridSection: {
     paddingTop: 8,
