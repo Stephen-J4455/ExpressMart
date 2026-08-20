@@ -1,9 +1,10 @@
 import React from "react";
 import { View, StyleSheet, Image } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { colors } from "../theme/colors";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 export const CustomerLoadingAnimation = () => {
+  const styles = useAppStyles((c) => buildStyles(c));
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -16,15 +17,16 @@ export const CustomerLoadingAnimation = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.light,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  logo: {
-    width: 200,
-    height: 200,
-  },
-});
+const buildStyles = (c) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.light,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    logo: {
+      width: 200,
+      height: 200,
+    },
+  });

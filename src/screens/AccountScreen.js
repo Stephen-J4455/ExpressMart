@@ -19,9 +19,9 @@ import { useOrder } from "../context/OrderContext";
 import { useAds } from "../context/AdsContext";
 import { useTheme } from "../context/ThemeContext";
 import { AdRenderer } from "../components/AdBanner";
-import { colors } from "../theme/colors";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
 import { useResponsive } from "../hooks/useResponsive";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase } from "../lib/supabase";
 import { SellerAdminScreen } from "./SellerAdminScreen";
 
@@ -100,7 +100,9 @@ export const AccountScreen = ({ navigation }) => {
   const { user, profile, isAuthenticated, loading, signOut } = useAuth();
   const { orders } = useOrder();
   const { fetchAdsByPlacement } = useAds();
-  const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { theme: themeMode, setTheme: setThemeMode, colors: themeColors } =
+    useTheme();
+  const styles = useAppStyles((c) => buildAccountStyles(c));
   const [showLoadingPreview, setShowLoadingPreview] = useState(false);
   const [profileAds, setProfileAds] = useState([]);
   const { isWide, contentMaxWidth } = useResponsive();
@@ -166,7 +168,7 @@ export const AccountScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={themeColors.primary} />
       </View>
     );
   }
@@ -177,10 +179,10 @@ export const AccountScreen = ({ navigation }) => {
         <View style={styles.guestContainer}>
           <View style={styles.guestIconWrap}>
             <LinearGradient
-              colors={[colors.primary + "20", colors.accent + "20"]}
+              colors={[themeColors.primary + "20", themeColors.accent + "20"]}
               style={styles.guestIconBg}
             >
-              <Ionicons name="person" size={48} color={colors.primary} />
+              <Ionicons name="person" size={48} color={themeColors.primary} />
             </LinearGradient>
           </View>
           <Text style={styles.guestTitle}>Welcome to tagit</Text>
@@ -197,7 +199,7 @@ export const AccountScreen = ({ navigation }) => {
             }
           >
             <LinearGradient
-              colors={[colors.primary, colors.accent]}
+              colors={[themeColors.primary, themeColors.accent]}
               style={styles.signInGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
@@ -227,7 +229,7 @@ export const AccountScreen = ({ navigation }) => {
   if (sellerRecord === undefined) {
     return (
       <View style={[styles.container, styles.centerContainer]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={themeColors.primary} />
       </View>
     );
   }
@@ -255,7 +257,7 @@ export const AccountScreen = ({ navigation }) => {
             <View style={styles.profileInfo}>
               <View style={styles.avatarContainer}>
                 <LinearGradient
-                  colors={[colors.primary, colors.accent]}
+                  colors={[themeColors.primary, themeColors.accent]}
                   style={styles.avatarGradient}
                 >
                   <Text style={styles.avatarText}>
@@ -278,7 +280,7 @@ export const AccountScreen = ({ navigation }) => {
               <Ionicons
                 name="create-outline"
                 size={18}
-                color={colors.primary}
+                color={themeColors.primary}
               />
             </Pressable>
           </View>
@@ -293,7 +295,7 @@ export const AccountScreen = ({ navigation }) => {
         {/* Register a Store Banner */}
         <View style={styles.registerStoreSection}>
           <LinearGradient
-            colors={[colors.primary, colors.accent]}
+            colors={[themeColors.primary, themeColors.accent]}
             style={styles.registerStoreGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -310,7 +312,7 @@ export const AccountScreen = ({ navigation }) => {
               style={styles.registerStoreButton}
               onPress={() => navigation.navigate("StoreRegistration")}
             >
-              <Ionicons name="storefront" size={18} color={colors.primary} />
+              <Ionicons name="storefront" size={18} color={themeColors.primary} />
               <Text style={styles.registerStoreButtonText}>
                 Register a Store
               </Text>
@@ -363,7 +365,7 @@ export const AccountScreen = ({ navigation }) => {
                       <Ionicons
                         name={item.icon}
                         size={20}
-                        color={colors.primary}
+                        color={themeColors.primary}
                       />
                     </View>
                     <Text style={styles.menuItemLabel}>{item.label}</Text>
@@ -405,7 +407,7 @@ export const AccountScreen = ({ navigation }) => {
                       <Ionicons
                         name={opt.icon}
                         size={20}
-                        color={colors.primary}
+                        color={themeColors.primary}
                       />
                     </View>
                     <Text style={styles.menuItemLabel}>{opt.label}</Text>
@@ -415,7 +417,7 @@ export const AccountScreen = ({ navigation }) => {
                       <Ionicons
                         name="checkmark-circle"
                         size={20}
-                        color={colors.primary}
+                        color={themeColors.primary}
                       />
                     ) : (
                       <Ionicons
@@ -459,7 +461,7 @@ export const AccountScreen = ({ navigation }) => {
             onPress={() => setShowLoadingPreview(false)}
           >
             <View style={styles.closeButtonInner}>
-              <Ionicons name="close" size={24} color={colors.dark} />
+              <Ionicons name="close" size={24} color={themeColors.dark} />
             </View>
           </Pressable>
           <CustomerLoadingAnimation />
@@ -469,92 +471,93 @@ export const AccountScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    paddingBottom: 60,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  centerContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F8FAFC",
-  },
+const buildAccountStyles = (c) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+      paddingBottom: 60,
+    },
+    scrollContent: {
+      flexGrow: 1,
+    },
+    centerContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#F8FAFC",
+    },
 
-  // Guest State
-  guestContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-  },
-  guestIconWrap: {
-    marginBottom: 24,
-  },
-  guestIconBg: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  guestTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: colors.dark,
-    letterSpacing: -0.5,
-  },
-  guestSubtitle: {
-    fontSize: 15,
-    color: colors.muted,
-    textAlign: "center",
-    marginTop: 10,
-    lineHeight: 22,
-  },
-  signInButton: {
-    marginTop: 32,
-    borderRadius: 16,
-    overflow: "hidden",
-    width: "100%",
-    shadowColor: colors.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
-  },
-  signInGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 16,
-  },
-  signInText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  createAccountButton: {
-    marginTop: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-  },
-  createAccountText: {
-    color: colors.primary,
-    fontSize: 15,
-    fontWeight: "600",
-  },
+    // Guest State
+    guestContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 32,
+    },
+    guestIconWrap: {
+      marginBottom: 24,
+    },
+    guestIconBg: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    guestTitle: {
+      fontSize: 24,
+      fontWeight: "800",
+      color: c.dark,
+      letterSpacing: -0.5,
+    },
+    guestSubtitle: {
+      fontSize: 15,
+      color: c.muted,
+      textAlign: "center",
+      marginTop: 10,
+      lineHeight: 22,
+    },
+    signInButton: {
+      marginTop: 32,
+      borderRadius: 16,
+      overflow: "hidden",
+      width: "100%",
+      shadowColor: c.primary,
+      shadowOpacity: 0.3,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 6,
+    },
+    signInGradient: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingVertical: 16,
+    },
+    signInText: {
+      color: "#fff",
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    createAccountButton: {
+      marginTop: 16,
+      paddingVertical: 14,
+      paddingHorizontal: 24,
+    },
+    createAccountText: {
+      color: c.primary,
+      fontSize: 15,
+      fontWeight: "600",
+    },
 
-  // Profile Header
-  profileHeader: {
-    backgroundColor: colors.background,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomLeftRadius: 28,
+    // Profile Header
+    profileHeader: {
+      backgroundColor: c.background,
+      paddingHorizontal: 20,
+      paddingBottom: 20,
+      borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     shadowColor: "#000",
     shadowOpacity: 0.04,
@@ -609,12 +612,12 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     letterSpacing: -0.3,
   },
   profileEmail: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 2,
   },
   editButton: {
@@ -660,7 +663,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   memberPoints: {
-    color: colors.dark,
+    color: c.dark,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -679,11 +682,11 @@ const styles = StyleSheet.create({
   memberStatValue: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   memberStatLabel: {
     fontSize: 11,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 4,
     fontWeight: "500",
   },
@@ -730,7 +733,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   registerStoreButtonText: {
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "800",
     fontSize: 13,
   },
@@ -743,7 +746,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 14,
     letterSpacing: -0.3,
   },
@@ -766,7 +769,7 @@ const styles = StyleSheet.create({
   quickActionLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
 
   // Menu Sections
@@ -811,7 +814,7 @@ const styles = StyleSheet.create({
   menuItemLabel: {
     fontSize: 15,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   menuItemRight: {
     flexDirection: "row",
@@ -843,7 +846,7 @@ const styles = StyleSheet.create({
   // Version
   versionText: {
     textAlign: "center",
-    color: colors.muted,
+    color: c.muted,
     fontSize: 12,
     marginTop: 24,
   },
@@ -851,7 +854,7 @@ const styles = StyleSheet.create({
   // Modal styles
   modalContainer: {
     flex: 1,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
   },
   closeButton: {
     position: "absolute",
@@ -866,7 +869,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: colors.dark,
+    shadowColor: c.dark,
     shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,

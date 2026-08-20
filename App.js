@@ -89,8 +89,8 @@ const MOBILE_TAB_BAR_PADDING_BOTTOM = 10;
 const TabNavigator = () => {
   const { items } = useCart();
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
-  const defaultTheme = getTheme();
   const { isWide, sidebarWidth } = useResponsive();
+  const { colors, isDark } = useTheme();
 
   return (
     <Tab.Navigator
@@ -115,11 +115,7 @@ const TabNavigator = () => {
         isWide ? (
           <WebSidebar {...props} sidebarWidth={sidebarWidth} />
         ) : (
-          <DefaultTabBar
-            {...props}
-            cartCount={cartCount}
-            defaultTheme={defaultTheme}
-          />
+          <DefaultTabBar {...props} cartCount={cartCount} />
         )
       }
     >
@@ -198,10 +194,10 @@ const DefaultTabBar = ({
   descriptors,
   navigation,
   cartCount,
-  defaultTheme,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = insets.bottom > 0 ? insets.bottom : 0;
+  const { colors } = useTheme();
 
   const pill = (
     <View style={tabStyles.pill}>
@@ -239,7 +235,7 @@ const DefaultTabBar = ({
                   style={[
                     tabStyles.badge,
                     {
-                      backgroundColor: defaultTheme.primary || colors.primary,
+                      backgroundColor: colors.primary,
                     },
                   ]}
                 >
@@ -262,7 +258,7 @@ const DefaultTabBar = ({
       pointerEvents="box-none"
     >
       <LinearGradient
-        colors={[defaultTheme.primary, defaultTheme.gradientEnd || defaultTheme.primary]}
+        colors={[colors.primary, colors.gradientEnd || colors.primary]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={tabStyles.blurContainer}
@@ -342,21 +338,20 @@ const tabStyles = StyleSheet.create({
   },
 });
 
-// Build a FRESH navTheme object on every render. The navigation container only
-// re-renders its screens when it receives a new theme object reference; a
-// module-level constant would be stable across mode changes, so screens (and
-// their memoized children) would never re-render and the live getters would
-// never re-evaluate — the "some parts change, some don't" symptom.
-const createNavTheme = (isDark) => ({
+// Build the navigation theme from the resolved, context-driven palette. The
+// `colors` reference is stable per theme (memoized in ThemeProvider), so this
+// produces a stable object unless the theme actually changes — which is exactly
+// what React Navigation needs to re-style without remounting.
+const createNavTheme = (palette, isDark) => ({
   ...DefaultTheme,
   dark: isDark,
   colors: {
     ...DefaultTheme.colors,
-    background: colors.light,
-    card: colors.surface,
-    border: colors.border,
-    text: colors.dark,
-    primary: colors.primary,
+    background: palette.light,
+    card: palette.surface,
+    border: palette.border,
+    text: palette.dark,
+    primary: palette.primary,
   },
 });
 
@@ -366,30 +361,75 @@ const LoginRequiredScreen = ({
   routeParams,
   title = "Login required",
   message = "Please sign in to use this feature.",
-}) => (
-  <View style={authPromptStyles.container}>
-    <Ionicons name="lock-closed-outline" size={52} color={colors.primary} />
-    <Text style={authPromptStyles.title}>{title}</Text>
-    <Text style={authPromptStyles.message}>{message}</Text>
-    <Pressable
-      style={authPromptStyles.button}
-      onPress={() =>
-        navigation.navigate("Auth", {
-          redirectTo: routeName,
-          redirectParams: routeParams,
-        })
-      }
-    >
-      <LinearGradient
-        colors={[colors.primary, colors.accent]}
-        style={authPromptStyles.buttonGradient}
+}) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) =>
+    StyleSheet.create({
+      container: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        backgroundColor: c.background,
+      },
+      title: {
+        marginTop: 12,
+        fontSize: 24,
+        fontWeight: "800",
+        color: c.dark,
+      },
+      message: {
+        marginTop: 8,
+        textAlign: "center",
+        color: c.muted,
+        fontSize: 15,
+        lineHeight: 22,
+        maxWidth: 360,
+      },
+      button: {
+        borderRadius: 14,
+        overflow: "hidden",
+        marginTop: 24,
+      },
+      buttonGradient: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+      },
+      buttonText: {
+        color: "#fff",
+        fontSize: 15,
+        fontWeight: "700",
+      },
+    }),
+  );
+  return (
+    <View style={styles.container}>
+      <Ionicons name="lock-closed-outline" size={52} color={colors.primary} />
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.message}>{message}</Text>
+      <Pressable
+        style={styles.button}
+        onPress={() =>
+          navigation.navigate("Auth", {
+            redirectTo: routeName,
+            redirectParams: routeParams,
+          })
+        }
       >
-        <Ionicons name="log-in-outline" size={18} color="#fff" />
-        <Text style={authPromptStyles.buttonText}>Login to continue</Text>
-      </LinearGradient>
-    </Pressable>
-  </View>
-);
+        <LinearGradient
+          colors={[colors.primary, colors.accent]}
+          style={styles.buttonGradient}
+        >
+          <Ionicons name="log-in-outline" size={18} color="#fff" />
+          <Text style={styles.buttonText}>Login to continue</Text>
+        </LinearGradient>
+      </Pressable>
+    </View>
+  );
+};
 
 // only handle our custom URI schemes here; web links will stay in browser
 const prefixes = [
@@ -863,7 +903,8 @@ const AuthenticatedApp = () => {
         screenOptions={{
           headerShown: false,
           animation: "slide_from_right",
-          animationDuration: 3000}}
+          animationDuration: .3
+        }}
       >
         <Stack.Screen name="Main" component={TabNavigator} />
         <Stack.Screen name="Auth" component={AuthScreen} />
@@ -995,55 +1036,19 @@ const DeepLinkHandler = () => {
   return null;
 };
 
-const authPromptStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-    backgroundColor: colors.background,
-  },
-  title: {
-    marginTop: 12,
-    fontSize: 24,
-    fontWeight: "800",
-    color: colors.dark,
-  },
-  message: {
-    marginTop: 8,
-    textAlign: "center",
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-    maxWidth: 360,
-  },
-  button: {
-    borderRadius: 14,
-    overflow: "hidden",
-    marginTop: 24,
-  },
-  buttonGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-});
-
 // Wraps the navigation container so it receives a FRESH theme object on every
 // mode change. Without this, the module-level navTheme is stable across theme
 // switches, React Navigation never re-renders its screens, and memoized
 // children (e.g. FeedScreen's ReelItem) skip the re-render — leaving some
 // parts stuck on the old theme.
 const NavigationWithTheme = () => {
-  const { isDark } = useTheme();
-  const theme = useMemo(() => createNavTheme(isDark), [isDark]);
+  const { colors, isDark } = useTheme();
+  // The nav theme is derived from the context palette (stable reference per
+  // theme). We do NOT set a `key` on NavigationContainer — that would remount
+  // the whole navigation tree and reset navigation history, form state, and
+  // scroll position. Toggling the theme only updates context, so the stack and
+  // in-screen state are preserved.
+  const theme = useMemo(() => createNavTheme(colors, isDark), [colors, isDark]);
   return (
     <NavigationContainer theme={theme} linking={linking}>
       <StatusBar style="light" />

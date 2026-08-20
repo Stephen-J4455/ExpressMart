@@ -10,12 +10,15 @@ import {
     ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useShop } from "../context/ShopContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 
 export const SellerCard = ({ seller, onPress }) => {
+    const { colors } = useTheme();
+    const styles = useAppStyles((c) => buildStyles(c));
     const navigation = useNavigation();
     const route = useRoute();
     const { user } = useAuth();
@@ -142,10 +145,11 @@ export const SellerCard = ({ seller, onPress }) => {
     );
 };
 
-const styles = StyleSheet.create({
+const buildStyles = (c) =>
+  StyleSheet.create({
     card: {
         flex: 1,
-        backgroundColor: "#fff",
+        backgroundColor: c.surface,
         borderRadius: 24,
         overflow: "hidden",
         shadowColor: "#000",
@@ -157,7 +161,7 @@ const styles = StyleSheet.create({
     imageContainer: {
         width: "100%",
         height: 140,
-        backgroundColor: "#F8FAFC",
+        backgroundColor: c.border,
         position: "relative",
     },
     avatar: {
@@ -207,7 +211,7 @@ const styles = StyleSheet.create({
     ratingBadgeText: {
         fontSize: 12,
         fontWeight: "800",
-        color: colors.dark,
+        color: c.dark,
     },
     content: {
         padding: 14,
@@ -216,7 +220,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 15,
         fontWeight: "800",
-        color: colors.dark,
+        color: c.dark,
         letterSpacing: -0.3,
     },
     infoRow: {
@@ -231,7 +235,7 @@ const styles = StyleSheet.create({
     },
     infoText: {
         fontSize: 11,
-        color: colors.muted,
+        color: c.muted,
         fontWeight: "500",
     },
     badgeRow: {
@@ -248,7 +252,7 @@ const styles = StyleSheet.create({
     badgeText: {
         fontSize: 10,
         fontWeight: "600",
-        color: colors.primary,
+        color: c.primary,
         textTransform: "capitalize",
     },
     actionRow: {
@@ -270,7 +274,7 @@ const styles = StyleSheet.create({
     visitButtonText: {
         fontSize: 13,
         fontWeight: "700",
-        color: colors.primary,
+        color: c.primary,
     },
     followButtonThin: {
         flexDirection: "row",

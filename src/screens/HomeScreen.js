@@ -19,9 +19,11 @@ import { InlineAdProductCard } from "../components/InlineAdProductCard";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
 import { LazyScrollContext, lazyScroll } from "../context/LazyScrollContext";
+import { useTheme } from "../context/ThemeContext";
 import { flashSaleService } from "../services/flashSaleService";
 import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -41,6 +43,11 @@ export const HomeScreen = ({ navigation }) => {
   const { fetchAdsByPlacement } = useAds();
   const { gridColumns, getItemWidth } = useResponsive();
   const itemWidth = getItemWidth(gridColumns, 12, 12);
+  // Track the active color scheme so memoized UI-generating callbacks
+  // (e.g. renderGridItem) re-create when the theme changes, even while this
+  // tab stays mounted in the background.
+  const { isDark, colors: themeColors } = useTheme();
+  const styles = useAppStyles((c) => buildHomeStyles(c));
   const [homeAds, setHomeAds] = useState([]);
   const [featuredAds, setFeaturedAds] = useState([]);
   const [flashSales, setFlashSales] = useState([]);
@@ -170,7 +177,7 @@ export const HomeScreen = ({ navigation }) => {
     return (
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
-          <Ionicons name="grid-outline" size={18} color={colors.primary} />
+          <Ionicons name="grid-outline" size={18} color={themeColors.primary} />
           <Text style={styles.sectionTitle}>Categories</Text>
           {canExpand && (
             <Pressable
@@ -182,7 +189,7 @@ export const HomeScreen = ({ navigation }) => {
               <Ionicons
                 name="chevron-forward"
                 size={14}
-                color={colors.primary}
+                color={themeColors.primary}
               />
             </Pressable>
           )}
@@ -203,7 +210,7 @@ export const HomeScreen = ({ navigation }) => {
                 <Ionicons
                   name={cat.icon || "apps-outline"}
                   size={22}
-                  color={colors.primary}
+                  color={themeColors.primary}
                 />
               </View>
               <Text numberOfLines={1} style={styles.categoryLabel}>
@@ -266,7 +273,7 @@ export const HomeScreen = ({ navigation }) => {
         </View>
       );
     },
-    [itemWidth, navigation],
+    [itemWidth, navigation, isDark],
   );
 
   const toRows = useCallback((items, columns) => {
@@ -308,7 +315,7 @@ export const HomeScreen = ({ navigation }) => {
       return (
         <View style={styles.sectionBlock}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="flash" size={18} color={colors.warmCoral} />
+            <Ionicons name="flash" size={18} color={themeColors.warmCoral} />
             <Text style={styles.sectionTitle}>Flash Sales</Text>
           </View>
           <ScrollView
@@ -336,7 +343,7 @@ export const HomeScreen = ({ navigation }) => {
     return (
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
-          <Ionicons name="flash" size={18} color={colors.warmCoral} />
+          <Ionicons name="flash" size={18} color={themeColors.warmCoral} />
           <Text style={styles.sectionTitle}>Flash Sales</Text>
         </View>
         <ScrollView
@@ -414,7 +421,7 @@ export const HomeScreen = ({ navigation }) => {
 
           {loadingMore && (
             <View style={styles.loadMoreIndicator}>
-              <ActivityIndicator size="small" color={colors.primary} />
+              <ActivityIndicator size="small" color={themeColors.primary} />
             </View>
           )}
           </View>
@@ -426,91 +433,92 @@ export const HomeScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  homeContent: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  pageContent: {
-    flexGrow: 1,
-  },
-  topCarouselWrap: {
-    paddingTop: 8,
-    paddingBottom: 6,
-  },
-  sectionBlock: {
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.dark,
-  },
-  hScrollContent: {
-    gap: 12,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-  },
-  showMoreBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    marginLeft: "auto",
-    paddingVertical: 2,
-  },
-  showMoreText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.primary,
-  },
-  categoryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    paddingHorizontal: 16,
-  },
-  categoryTile: {
-    width: (SCREEN_WIDTH - 16 * 2 - 12 * 3) / 4,
-    alignItems: "center",
-  },
-  categoryIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  categoryLabel: {
-    marginTop: 6,
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.dark,
-    textAlign: "center",
-    width: "100%",
-  },
-  gridSection: {
-    paddingTop: 8,
-    paddingBottom: 60,
-    gap: 12,
-  },
-  loadMoreIndicator: {
+const buildHomeStyles = (c) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    homeContent: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    pageContent: {
+      flexGrow: 1,
+    },
+    topCarouselWrap: {
+      paddingTop: 8,
+      paddingBottom: 6,
+    },
+    sectionBlock: {
+      paddingTop: 12,
+      paddingBottom: 8,
+    },
+    sectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    hScrollContent: {
+      gap: 12,
+      paddingHorizontal: 12,
+      paddingBottom: 8,
+    },
+    showMoreBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 2,
+      marginLeft: "auto",
+      paddingVertical: 2,
+    },
+    showMoreText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.primary,
+    },
+    categoryGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+      paddingHorizontal: 16,
+    },
+    categoryTile: {
+      width: (SCREEN_WIDTH - 16 * 2 - 12 * 3) / 4,
+      alignItems: "center",
+    },
+    categoryIconWrap: {
+      width: 56,
+      height: 56,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: "#000",
+      shadowOpacity: 0.05,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    categoryLabel: {
+      marginTop: 6,
+      fontSize: 11,
+      fontWeight: "600",
+      color: c.dark,
+      textAlign: "center",
+      width: "100%",
+    },
+    gridSection: {
+      paddingTop: 8,
+      paddingBottom: 60,
+      gap: 12,
+    },
+    loadMoreIndicator: {
     paddingVertical: 20,
     alignItems: "center",
   },

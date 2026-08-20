@@ -210,7 +210,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const nav = useNavigation();
   const { user, profile: customerProfile, signOut } = useAuth();
   const toast = useToast();
-  const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { theme: themeMode, setTheme: setThemeMode } = useTheme();
 
   // ── Seller data layer (mirrors Express-Store SellerContext) ──────────────
   const [seller, setSeller] = useState(null);

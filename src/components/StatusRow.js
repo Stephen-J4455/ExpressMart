@@ -10,7 +10,8 @@ import {
 import { supabase } from "../lib/supabase";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
-import { colors } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 const mapStoryAdToStatus = (ad) => ({
   id: `ad-story-${ad.id}`,
@@ -32,6 +33,7 @@ const mapStoryAdToStatus = (ad) => ({
 });
 
 export const StatusRow = ({ onSelectStatus }) => {
+  const styles = useAppStyles((c) => buildStyles(c));
   const { followedSellers } = useShop();
   const { fetchAdsByPlacement } = useAds();
   const [activeStatuses, setActiveStatuses] = useState([]);
@@ -123,55 +125,56 @@ export const StatusRow = ({ onSelectStatus }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    paddingVertical: 12,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: colors.dark,
-    marginHorizontal: 16,
-    marginBottom: 12,
-  },
-  scrollContent: {
-    paddingHorizontal: 12,
-  },
-  statusItem: {
-    alignItems: "center",
-    width: 80,
-    gap: 6,
-  },
-  avatarContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    padding: 2,
-    position: "relative",
-  },
-  avatar: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 30,
-    backgroundColor: colors.light,
-  },
-  indicator: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-  sellerName: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.muted,
-    textAlign: "center",
-  },
-});
+const buildStyles = (c) =>
+  StyleSheet.create({
+    container: {
+      paddingVertical: 12,
+    },
+    title: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: c.dark,
+      marginHorizontal: 16,
+      marginBottom: 12,
+    },
+    scrollContent: {
+      paddingHorizontal: 12,
+    },
+    statusItem: {
+      alignItems: "center",
+      width: 80,
+      gap: 6,
+    },
+    avatarContainer: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      borderWidth: 2,
+      borderColor: c.primary,
+      padding: 2,
+      position: "relative",
+    },
+    avatar: {
+      width: "100%",
+      height: "100%",
+      borderRadius: 30,
+      backgroundColor: c.light,
+    },
+    indicator: {
+      position: "absolute",
+      bottom: 0,
+      right: 0,
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: c.primary,
+      borderWidth: 2,
+      borderColor: "#fff",
+    },
+    sellerName: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: c.muted,
+      textAlign: "center",
+    },
+  });

@@ -14,9 +14,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useShop } from "../context/ShopContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 export const SellerScroller = ({ sellers = [], onSelect }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildStyles(c));
   const navigation = useNavigation();
   const route = useRoute();
   const { user } = useAuth();
@@ -135,133 +138,134 @@ export const SellerScroller = ({ sellers = [], onSelect }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 12,
-  },
-  card: {
-    width: 170,
-    height: 230,
-    backgroundColor: "#fff",
-    borderRadius: 22,
-    marginRight: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-    overflow: "hidden",
-  },
-  imageContainer: {
-    width: "100%",
-    height: 120,
-    backgroundColor: "#F8FAFC",
-    position: "relative",
-  },
-  avatar: {
-    width: "100%",
-    height: "100%",
-  },
-  imageGradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 50,
-  },
-  verifiedBadge: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#10B981",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 3,
-  },
-  verifiedText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  ratingOnImage: {
-    position: "absolute",
-    bottom: 10,
-    right: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.95)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    gap: 3,
-  },
-  ratingOnImageText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.dark,
-  },
-  content: {
-    padding: 14,
-    flex: 1,
-    justifyContent: "space-between",
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: colors.dark,
-    letterSpacing: -0.3,
-  },
-  metaRow: {
-    marginTop: 6,
-  },
-  reviewsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  reviewsText: {
-    fontSize: 11,
-    color: colors.muted,
-    fontWeight: "500",
-  },
-  visitRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#EEF2FF",
-    paddingVertical: 8,
-    borderRadius: 10,
-    gap: 4,
-    marginTop: 8,
-  },
-  visitText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.primary,
-  },
-  followButtonThin: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    borderColor: "transparent",
-  },
-  followButtonThinActive: {
-    backgroundColor: "transparent",
-    borderColor: "transparent",
-  },
-  followButtonThinText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#DC2626",
-  },
-});
+const buildStyles = (c) =>
+  StyleSheet.create({
+    container: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      gap: 12,
+    },
+    card: {
+      width: 170,
+      height: 230,
+      backgroundColor: c.surface,
+      borderRadius: 22,
+      marginRight: 12,
+      shadowColor: "#000",
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4,
+      overflow: "hidden",
+    },
+    imageContainer: {
+      width: "100%",
+      height: 120,
+      backgroundColor: c.border,
+      position: "relative",
+    },
+    avatar: {
+      width: "100%",
+      height: "100%",
+    },
+    imageGradient: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: 50,
+    },
+    verifiedBadge: {
+      position: "absolute",
+      top: 10,
+      left: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "#10B981",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      gap: 3,
+    },
+    verifiedText: {
+      fontSize: 9,
+      fontWeight: "700",
+      color: "#fff",
+    },
+    ratingOnImage: {
+      position: "absolute",
+      bottom: 10,
+      right: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "rgba(255,255,255,0.95)",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 10,
+      gap: 3,
+    },
+    ratingOnImageText: {
+      fontSize: 11,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    content: {
+      padding: 14,
+      flex: 1,
+      justifyContent: "space-between",
+    },
+    title: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: c.dark,
+      letterSpacing: -0.3,
+    },
+    metaRow: {
+      marginTop: 6,
+    },
+    reviewsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    reviewsText: {
+      fontSize: 11,
+      color: c.muted,
+      fontWeight: "500",
+    },
+    visitRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#EEF2FF",
+      paddingVertical: 8,
+      borderRadius: 10,
+      gap: 4,
+      marginTop: 8,
+    },
+    visitText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.primary,
+    },
+    followButtonThin: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 6,
+      backgroundColor: "transparent",
+      borderWidth: 0,
+      borderColor: "transparent",
+    },
+    followButtonThinActive: {
+      backgroundColor: "transparent",
+      borderColor: "transparent",
+    },
+    followButtonThinText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: "#DC2626",
+    },
+  });

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors, radius } from "../theme/colors";
+import { radius } from "../theme/colors";
 
 export const FlashSaleCountdown = ({ endTime, startTime, onExpire, compact = false, withProgressBar = false, mini = false, availableQty = null }) => {
   const [timeLeft, setTimeLeft] = useState({

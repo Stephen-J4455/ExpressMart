@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, radius } from "../theme/colors";
+import { radius } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
+import { useAppStyles } from "../hooks/useAppStyles";
+import { useTheme } from "../context/ThemeContext";
 
 export const AppHeader = ({
   onSearchPress,
@@ -11,6 +13,60 @@ export const AppHeader = ({
 }) => {
   const { isWide, horizontalPadding } = useResponsive();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) =>
+    StyleSheet.create({
+      container: {
+        paddingBottom: 16,
+        backgroundColor: c.background,
+        borderBottomWidth: 1,
+        borderBottomColor: c.border,
+      },
+      containerWide: {
+        // paddingTop handled dynamically via insets
+      },
+      topRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+      },
+      brandWrap: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      brandTag: {
+        color: c.light,
+        fontSize: 30,
+        fontWeight: "900",
+        letterSpacing: 0.5,
+        textShadowColor: "rgba(0,0,0,0.35)",
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+      },
+      brandTagAccent: {
+        color: c.warmCoral,
+        fontSize: 30,
+        fontWeight: "900",
+        letterSpacing: 0.5,
+        textShadowColor: "rgba(0,0,0,0.35)",
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+      },
+      iconButton: {
+        width: 44,
+        height: 44,
+        borderRadius: radius.pill,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: c.primary,
+      },
+      iconRow: {
+        flexDirection: "row",
+        gap: 8,
+      },
+    }),
+  );
   return (
     <View
       style={[
@@ -53,55 +109,3 @@ export const AppHeader = ({
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    paddingBottom: 16,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEF2F8",
-  },
-  containerWide: {
-    // paddingTop handled dynamically via insets
-  },
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  brandWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  brandTag: {
-    color: colors.light,
-    fontSize: 30,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-    textShadowColor: "rgba(0,0,0,0.35)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  brandTagAccent: {
-    color: colors.warmCoral,
-    fontSize: 30,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-    textShadowColor: "rgba(0,0,0,0.35)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primary,
-  },
-  iconRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-});

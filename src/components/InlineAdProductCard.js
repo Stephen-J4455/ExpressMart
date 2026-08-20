@@ -4,7 +4,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { useAds } from "../context/AdsContext";
-import { colors } from "../theme/colors";
 import { openAdDestination } from "./AdBanner";
 import { ProductCard } from "./ProductCard";
 
@@ -73,28 +72,3 @@ export const InlineAdProductCard = ({ ad, showCta = false }) => {
     />
   );
 };
-
-const styles = StyleSheet.create({
-  ctaButton: {
-    borderRadius: 14,
-    overflow: "hidden",
-    shadowColor: colors.primary,
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 4,
-  },
-  ctaGradient: {
-    minHeight: 42,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  ctaText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-});

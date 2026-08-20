@@ -3,7 +3,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
-import { colors } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 const NAV_ITEMS = [
   { name: "Home", icon: "home-outline", iconFocused: "home" },
@@ -36,6 +37,8 @@ const BOTTOM_ITEMS = [
 
 export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildStyles(c));
   const { items } = useCart();
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
@@ -121,107 +124,108 @@ export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: "#fff",
-    borderRightWidth: 1,
-    borderRightColor: "#F1F5F9",
-    paddingVertical: 16,
-  },
-  brandContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-    paddingTop: 12,
-    gap: 12,
-  },
-  brandIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  brandText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: colors.dark,
-    letterSpacing: -0.5,
-  },
-  navList: {
-    paddingHorizontal: 10,
-    gap: 4,
-  },
-  navItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 14,
-    overflow: "hidden",
-    position: "relative",
-    minHeight: 48,
-  },
-  navItemActive: {
-    backgroundColor: colors.primary + "08",
-  },
-  navItemContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 14,
-    flex: 1,
-  },
-  iconContainer: {
-    position: "relative",
-    width: 24,
-    alignItems: "center",
-  },
-  badge: {
-    position: "absolute",
-    top: -6,
-    right: -10,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 4,
-  },
-  badgeText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  navLabel: {
-    fontSize: 15,
-    fontWeight: "500",
-    color: colors.muted,
-  },
-  navLabelActive: {
-    fontWeight: "700",
-    color: colors.primary,
-  },
-  activeIndicator: {
-    position: "absolute",
-    left: 0,
-    top: 8,
-    bottom: 8,
-    width: 3,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
-  },
-  bottomSection: {
-    paddingHorizontal: 10,
-    paddingBottom: 12,
-    gap: 4,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#F1F5F9",
-    marginHorizontal: 4,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-});
+const buildStyles = (c) =>
+  StyleSheet.create({
+    container: {
+      backgroundColor: c.surface,
+      borderRightWidth: 1,
+      borderRightColor: c.border,
+      paddingVertical: 16,
+    },
+    brandContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingBottom: 28,
+      paddingTop: 12,
+      gap: 12,
+    },
+    brandIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    brandText: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: c.dark,
+      letterSpacing: -0.5,
+    },
+    navList: {
+      paddingHorizontal: 10,
+      gap: 4,
+    },
+    navItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderRadius: 14,
+      overflow: "hidden",
+      position: "relative",
+      minHeight: 48,
+    },
+    navItemActive: {
+      backgroundColor: c.primary + "08",
+    },
+    navItemContent: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 14,
+      flex: 1,
+    },
+    iconContainer: {
+      position: "relative",
+      width: 24,
+      alignItems: "center",
+    },
+    badge: {
+      position: "absolute",
+      top: -6,
+      right: -10,
+      backgroundColor: c.primary,
+      borderRadius: 10,
+      minWidth: 18,
+      height: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 4,
+    },
+    badgeText: {
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    navLabel: {
+      fontSize: 15,
+      fontWeight: "500",
+      color: c.muted,
+    },
+    navLabelActive: {
+      fontWeight: "700",
+      color: c.primary,
+    },
+    activeIndicator: {
+      position: "absolute",
+      left: 0,
+      top: 8,
+      bottom: 8,
+      width: 3,
+      borderRadius: 2,
+      backgroundColor: c.primary,
+    },
+    bottomSection: {
+      paddingHorizontal: 10,
+      paddingBottom: 12,
+      gap: 4,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: c.border,
+      marginHorizontal: 4,
+      marginBottom: 8,
+      marginTop: 4,
+    },
+  });

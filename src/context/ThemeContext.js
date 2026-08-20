@@ -6,70 +6,99 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { useColorScheme } from "react-native";
-import {
-  colors,
-  applyThemeToColors,
-  persistThemeMode,
-  getInitialThemeMode,
-} from "../theme/colors";
+import { Appearance } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { buildPalette, THEME_STORAGE_KEY } from "../theme/colors";
 
-// Theme mode: "light" | "dark" | "system"
-//
-// How theming works (no app reload): colors.js overrides StyleSheet.create so
-// the theme-neutral palette (dark/light/surface/border/background/splashback/
-// muted) is resolved from the LIVE `colors` object via getters, evaluated on every
-// render by RN's flattenStyle(). This provider re-renders its whole subtree when
-// the mode changes, so every screen restyles immediately. The saved mode is read
-// SYNCHRONOUSLY at import time inside colors.js (AsyncStorage cache on native,
-// localStorage on web) so the very first paint already matches the user's
-// preference — no flash of the wrong theme.
+// ── Theme mode ───────────────────────────────────────────────────────────────
+// "light" | "dark" | "system". The active palette is resolved from this mode
+// plus the "system" OS scheme. Toggling the mode does NOT remount the app or the
+// NavigationContainer — it only updates context, so navigation history, form
+// state, and scroll position are preserved.
+
+const THEME_MODES = ["light", "dark", "system"];
+const _isValidMode = (v) => THEME_MODES.includes(v);
+
+// Synchronous read so the very first paint already matches the saved theme
+// (no flash of the wrong theme). AsyncStorage is async, so we keep an
+// in-memory cache that setTheme() writes synchronously, and hydrate from
+// AsyncStorage on import for cold starts.
+let _persistedMode = "system";
+try {
+  if (typeof localStorage !== "undefined") {
+    const v = localStorage.getItem(THEME_STORAGE_KEY);
+    if (_isValidMode(v)) _persistedMode = v;
+  }
+} catch {
+  /* ignore */
+}
+
+try {
+  // AsyncStorage is async; hydrate at import time so a cold start restores the
+  // saved theme before first paint where possible.
+  AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
+    if (_isValidMode(stored) && stored !== _persistedMode) {
+      _persistedMode = stored;
+    }
+  });
+} catch {
+  /* ignore */
+}
+
+const _readInitialMode = () => _persistedMode;
 
 const ThemeContext = createContext({
-  mode: "system",
-  setMode: () => {},
+  theme: "system",
+  colors: buildPalette("system", Appearance.getColorScheme() === "dark"),
   isDark: false,
+  setTheme: () => {},
 });
 
 export const ThemeProvider = ({ children }) => {
-  const systemScheme = useColorScheme();
-  // Initialize from the persisted choice (read synchronously at import time in
-  // colors.js) so the very first render already matches the user's preference.
-  const [mode, setModeState] = useState(() => getInitialThemeMode());
+  const [theme, setThemeState] = useState(() => _readInitialMode());
+  const [systemScheme, setSystemScheme] = useState(() =>
+    Appearance.getColorScheme(),
+  );
 
-  // Re-apply when the OS scheme changes (matters for "system" mode). We do NOT
-  // reload here — only re-bake the live `colors` object so already-mounted
-  // screens that read colors at render pick up the new scheme.
+  // Subscribe to OS appearance changes (matters for "system" mode). Unsubscribe
+  // on unmount. We only update local state — no remount, no reload.
   useEffect(() => {
-    if (mode === "system") {
-      applyThemeToColors("system", systemScheme);
-    }
-  }, [systemScheme, mode]);
-
-  // The saved mode is read synchronously at import time in colors.js (RN Settings
-  // on native, localStorage on web), so this provider's initial `mode` state
-  // already matches the user's preference — no async restore needed here.
-
-  // Apply the palette synchronously during render (before children mount) so
-  // freshly-mounted screens read the correct `colors` values.
-  applyThemeToColors(mode, systemScheme);
-
-  const setMode = useCallback((next) => {
-    setModeState(next);
-    // Persist the choice so a cold start (or web reload) restores it. No reload
-    // needed: colors.js makes the theme-neutral palette live via getters, and
-    // this provider re-renders its whole subtree on mode change.
-    persistThemeMode(next);
+    const sub = Appearance.addChangeListener(({ colorScheme }) => {
+      setSystemScheme(colorScheme);
+    });
+    return () => sub.remove();
   }, []);
 
   const isDark = useMemo(() => {
-    if (mode === "system") return systemScheme === "dark";
-    return mode === "dark";
-  }, [mode, systemScheme]);
+    if (theme === "system") return systemScheme === "dark";
+    return theme === "dark";
+  }, [theme, systemScheme]);
+
+  // Resolved, active palette. Memoized on (theme, systemScheme) so consumers get
+  // a STABLE reference per theme and don't re-render on every provider render.
+  // This is the object passed to useAppStyles / NavigationContainer.
+  const colors = useMemo(
+    () => buildPalette(theme, systemScheme === "dark"),
+    [theme, systemScheme],
+  );
+
+  const setTheme = useCallback((next) => {
+    if (!_isValidMode(next)) return;
+    setThemeState(next);
+    _persistedMode = next;
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(THEME_STORAGE_KEY, next);
+      }
+    } catch {
+      /* ignore */
+    }
+    AsyncStorage.setItem(THEME_STORAGE_KEY, next).catch(() => {});
+  }, []);
 
   const value = useMemo(
-    () => ({ mode, setMode, isDark }),
-    [mode, setMode, isDark],
+    () => ({ theme, colors, isDark, setTheme }),
+    [theme, colors, isDark, setTheme],
   );
 
   return (

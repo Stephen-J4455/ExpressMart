@@ -1,8 +1,9 @@
 import React from "react";
 import { Modal, View, Text, StyleSheet, TouchableOpacity, Linking } from "react-native";
-import { colors } from "../theme/colors";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 const UpdateModal = ({ visible, update, onClose, force }) => {
+  const styles = useAppStyles((c) => buildStyles(c));
   if (!update) return null;
 
   const handleUpdate = () => {
@@ -34,57 +35,58 @@ const UpdateModal = ({ visible, update, onClose, force }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  container: {
-    width: "100%",
-    maxWidth: 520,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 20,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.dark,
-    marginBottom: 10,
-  },
-  message: {
-    color: colors.muted,
-    marginBottom: 18,
-  },
-  actions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 12,
-  },
-  button: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  ghost: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  ghostText: {
-    color: colors.dark,
-    fontWeight: "700",
-  },
-  primary: {
-    backgroundColor: colors.primary,
-  },
-  primaryText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-});
+const buildStyles = (c) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.45)",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: 20,
+    },
+    container: {
+      width: "100%",
+      maxWidth: 520,
+      backgroundColor: c.surface,
+      borderRadius: 12,
+      padding: 20,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.dark,
+      marginBottom: 10,
+    },
+    message: {
+      color: c.muted,
+      marginBottom: 18,
+    },
+    actions: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      gap: 12,
+    },
+    button: {
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+    },
+    ghost: {
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    ghostText: {
+      color: c.dark,
+      fontWeight: "700",
+    },
+    primary: {
+      backgroundColor: c.primary,
+    },
+    primaryText: {
+      color: "#fff",
+      fontWeight: "700",
+    },
+  });
 
 export default UpdateModal;
