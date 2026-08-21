@@ -23,7 +23,9 @@ import { AdRenderer } from "../components/AdBanner";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
 import { supabase } from "../lib/supabase";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -57,6 +59,8 @@ const mapSearchProduct = (product) => ({
 });
 
 export const SearchResultsScreen = ({ navigation, route }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildSearchResultsStyles(c));
   const insets = useSafeAreaInsets();
   const { products } = useShop();
   const { fetchAdsByPlacement } = useAds();
@@ -731,10 +735,11 @@ export const SearchResultsScreen = ({ navigation, route }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildSearchResultsStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -768,7 +773,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: colors.dark,
+    color: c.dark,
     paddingVertical: 0,
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
@@ -791,17 +796,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: colors.primary,
+    borderColor: c.primary,
     gap: 8,
   },
   activeTab: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: c.primary,
+    borderColor: c.primary,
   },
   tabText: {
     fontSize: 15,
     fontWeight: "600",
-    color: colors.primary,
+    color: c.primary,
     letterSpacing: -0.2,
   },
   activeTabText: {
@@ -826,7 +831,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     letterSpacing: -0.3,
   },
   clearButton: {
@@ -834,7 +839,7 @@ const styles = StyleSheet.create({
   },
   clearButtonText: {
     fontSize: 14,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "600",
   },
   suggestionGrid: {
@@ -857,13 +862,13 @@ const styles = StyleSheet.create({
   },
   suggestionText: {
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "500",
   },
   tagFilterSection: {
     marginHorizontal: 20,
     marginBottom: 20,
-    backgroundColor: colors.primary + "10",
+    backgroundColor: c.primary + "10",
     borderRadius: 16,
     padding: 16,
     flexDirection: "row",
@@ -878,7 +883,7 @@ const styles = StyleSheet.create({
   tagText: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.primary,
+    color: c.primary,
   },
   clearTagButton: {
     flexDirection: "row",
@@ -886,7 +891,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   clearTagText: {
-    color: colors.primary,
+    color: c.primary,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -926,7 +931,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 0,
     right: 0,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 10,
     width: 20,
     height: 20,
@@ -944,7 +949,7 @@ const styles = StyleSheet.create({
   storeName: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 4,
     letterSpacing: -0.3,
   },
@@ -956,7 +961,7 @@ const styles = StyleSheet.create({
   },
   storeAddress: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     marginBottom: 8,
   },
   storeAddressPlaceholder: {
@@ -976,7 +981,7 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
   },
   empty: {
@@ -991,19 +996,19 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 20,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     letterSpacing: -0.3,
     marginBottom: 8,
   },
   emptySub: {
     fontSize: 16,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 24,
   },
   emptyAction: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 25,

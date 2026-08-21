@@ -1,7 +1,9 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 const LAST_UPDATED = "March 1, 2026";
 
@@ -85,6 +87,9 @@ To exercise any of these rights, please contact us through the Help & Support se
 ];
 
 export const PrivacyPolicyScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildPrivacyPolicyStyles(c));
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -123,10 +128,11 @@ export const PrivacyPolicyScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildPrivacyPolicyStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -136,7 +142,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   backButton: {
     padding: 8,
@@ -144,7 +150,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   scrollView: {
     flex: 1,
@@ -154,13 +160,13 @@ const styles = StyleSheet.create({
   },
   lastUpdated: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     marginBottom: 16,
   },
   intro: {
     fontSize: 15,
     lineHeight: 24,
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 24,
   },
   section: {
@@ -169,7 +175,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 10,
   },
   sectionBody: {

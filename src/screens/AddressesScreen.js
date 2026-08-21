@@ -18,12 +18,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const AddressesScreen = ({ navigation }) => {
   const { user } = useAuth();
   const toast = useToast();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildAddressesStyles(c));
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -311,10 +315,11 @@ export const AddressesScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildAddressesStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   centerContainer: {
     flex: 1,
@@ -329,7 +334,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   backButton: {
     padding: 8,
@@ -337,7 +342,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   addButton: {
     padding: 8,
@@ -351,18 +356,18 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginTop: 16,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     marginTop: 8,
     lineHeight: 22,
   },
   addAddressButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -400,7 +405,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   defaultBadge: {
-    backgroundColor: colors.success,
+    backgroundColor: c.success,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 12,
@@ -420,13 +425,13 @@ const styles = StyleSheet.create({
   },
   addressText: {
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
     lineHeight: 20,
     marginBottom: 2,
   },
   phoneText: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 8,
   },
   modalContainer: { flex: 1, backgroundColor: "#fff" },
@@ -437,14 +442,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   modalClose: { padding: 4 },
-  modalTitle: { fontSize: 17, fontWeight: "700", color: colors.dark },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: c.dark },
   modalSaveBtn: {
     paddingHorizontal: 18,
     paddingVertical: 8,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 10,
   },
   modalSaveText: { color: "#fff", fontSize: 14, fontWeight: "700" },
@@ -453,7 +458,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
     marginBottom: 6,
   },
   fieldInput: {
@@ -463,7 +468,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: colors.dark,
+    color: c.dark,
     backgroundColor: "#FAFBFC",
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },

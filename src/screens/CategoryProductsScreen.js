@@ -19,7 +19,9 @@ import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
 import { AdRenderer } from "../components/AdBanner";
 import { InlineAdProductCard } from "../components/InlineAdProductCard";
 import { useAds } from "../context/AdsContext";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 
@@ -32,6 +34,8 @@ const SORT_OPTIONS = [
 ];
 
 export const CategoryProductsScreen = ({ navigation, route }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildCategoryProductsStyles(c));
   const { category } = route.params;
   const insets = useSafeAreaInsets();
   const { addToCart } = useCart();
@@ -354,13 +358,14 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildCategoryProductsStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
   },
   contentArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
 
   header: {
@@ -414,7 +419,7 @@ const styles = StyleSheet.create({
   sortBarWrapper: {
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: c.border,
   },
   sortBar: {
     flexDirection: "row",
@@ -429,18 +434,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
   sortPillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: c.primary,
+    borderColor: c.primary,
   },
   sortLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
   },
   sortLabelActive: {
     color: "#fff",
@@ -477,12 +482,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     letterSpacing: -0.3,
   },
   emptySubtitle: {
     fontSize: 15,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     lineHeight: 22,
   },

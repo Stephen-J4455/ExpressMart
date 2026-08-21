@@ -19,7 +19,9 @@ import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
-import { colors, getTheme, THEMES, radius } from "../theme/colors";
+import { colors as palette, getTheme, THEMES, radius } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 import { getImageContentType } from "../utils/webUpload";
 
@@ -60,6 +62,8 @@ const SOCIAL_FIELDS = [
 
 export const SellerProfileScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildSellerProfileStyles(c));
   const { user } = useAuth();
   const toast = useToast();
   const { isWide, horizontalPadding } = useResponsive();
@@ -574,8 +578,9 @@ export const SellerProfileScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+const buildSellerProfileStyles = (c) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
   scrollContent: { paddingBottom: 30 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   hero: { position: "relative", height: 180, justifyContent: "flex-end", paddingBottom: 16 },
@@ -606,11 +611,11 @@ const styles = StyleSheet.create({
   },
   statRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, paddingHorizontal: 20 },
   statDividerH: { height: 1, backgroundColor: "#EDF1F6" },
-  statValue: { fontSize: 18, fontWeight: "900", color: colors.dark },
-  statLabel: { fontSize: 14, fontWeight: "600", color: colors.muted },
+  statValue: { fontSize: 18, fontWeight: "900", color: c.dark },
+  statLabel: { fontSize: 14, fontWeight: "600", color: c.muted },
   section: { marginTop: 24, paddingHorizontal: 4 },
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8, paddingHorizontal: 12 },
-  sectionTitle: { fontSize: 15, fontWeight: "700", color: colors.dark },
+  sectionTitle: { fontSize: 15, fontWeight: "700", color: c.dark },
   fieldRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -622,8 +627,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F1F5F9",
   },
   fieldBlock: { paddingVertical: 10, paddingHorizontal: 12 },
-  fieldLabel: { fontSize: 13, fontWeight: "600", color: colors.muted },
-  valueText: { fontSize: 15, color: colors.dark, fontWeight: "600" },
+  fieldLabel: { fontSize: 13, fontWeight: "600", color: c.muted },
+  valueText: { fontSize: 15, color: c.dark, fontWeight: "600" },
   valueWrap: { flexShrink: 1, textAlign: "right" },
   socialLead: { flexDirection: "row", alignItems: "center", gap: 8, minWidth: 120 },
   socialIcon: { marginRight: 0 },
@@ -634,7 +639,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 13,
     fontSize: 15,
-    color: colors.dark,
+    color: c.dark,
     backgroundColor: "#FAFBFC",
     marginTop: 8,
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
@@ -642,7 +647,7 @@ const styles = StyleSheet.create({
   textArea: { height: 96, textAlignVertical: "top" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.md, borderWidth: 1.5, borderColor: "#E2E8F0", backgroundColor: "#FAFBFC" },
-  chipText: { fontWeight: "600", color: colors.muted, fontSize: 13 },
+  chipText: { fontWeight: "600", color: c.muted, fontSize: 13 },
   themeSwatches: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 8, paddingHorizontal: 12 },
   themeSwatch: { width: 36, height: 36, borderRadius: radius.full },
   switchRow: {
@@ -654,8 +659,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
   },
-  switchLabel: { fontSize: 15, fontWeight: "600", color: colors.dark },
-  switchSub: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  switchLabel: { fontSize: 15, fontWeight: "600", color: c.dark },
+  switchSub: { fontSize: 12, color: c.muted, marginTop: 2 },
   previewOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center" },
   previewWrap: { borderRadius: radius.lg, overflow: "hidden", backgroundColor: "#fff", padding: 6 },
   previewImage: { width: 260, height: 260, borderRadius: radius.md },

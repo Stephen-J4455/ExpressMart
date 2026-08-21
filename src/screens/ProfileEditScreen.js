@@ -13,13 +13,17 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors, getTheme, THEMES } from "../theme/colors";
+import { colors as palette, getTheme, THEMES } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase } from "../lib/supabase";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const ProfileEditScreen = ({ navigation }) => {
   const { user, profile, updateProfile } = useAuth();
   const toast = useToast();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildProfileEditStyles(c));
   const [fullName, setFullName] = useState(profile?.full_name || "");
   const [phone, setPhone] = useState(profile?.phone || "");
   const [loading, setLoading] = useState(false);
@@ -352,8 +356,9 @@ export const ProfileEditScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+const buildProfileEditStyles = (c) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -362,14 +367,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   backButton: { padding: 8 },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: colors.dark },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: c.dark },
   saveButton: {
     paddingHorizontal: 20,
     paddingVertical: 9,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 10,
   },
   saveButtonDisabled: { opacity: 0.6 },
@@ -422,12 +427,12 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 20,
   },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: colors.dark },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: c.dark },
   inputGroup: { marginBottom: 16 },
   inputLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
     marginBottom: 8,
   },
   inputWrap: {
@@ -445,14 +450,14 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 13,
     fontSize: 15,
-    color: colors.dark,
+    color: c.dark,
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
-  inputDisabled: { color: colors.muted },
+  inputDisabled: { color: c.muted },
   lockPill: { backgroundColor: "#E2E8F0", borderRadius: 6, padding: 4 },
   helperText: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 6,
     lineHeight: 16,
   },
@@ -471,7 +476,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  actionLabel: { fontSize: 15, fontWeight: "600", color: colors.dark },
+  actionLabel: { fontSize: 15, fontWeight: "600", color: c.dark },
   inputWrapTop: { alignItems: "flex-start" },
   textAreaInput: { height: 96, textAlignVertical: "top" },
   themeSwatchesContainer: {

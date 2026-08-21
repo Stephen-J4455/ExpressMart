@@ -27,7 +27,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { Video } from "react-native-video";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { fetchProductReels } from "../services/uploadReel";
 import { getReelSource, preloadReel } from "../services/reelVideoCache";
 import { useResponsive } from "../hooks/useResponsive";
@@ -78,7 +80,9 @@ export const FeedScreen = ({ route, navigation }) => {
   const [paused, setPaused] = useState(false);
   const screenIsFocused = useIsFocused();
   const { isWide } = useResponsive();
+  const { colors } = useTheme();
   const { user } = useAuth();
+  const styles = useAppStyles((c) => buildFeedStyles(c));
   const logFeed = useCallback((...args) => {
     if (typeof __DEV__ === "undefined" || __DEV__) {
       console.log("[FeedScreen]", ...args);
@@ -949,12 +953,13 @@ export const FeedScreen = ({ route, navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-    backgroundColor: "#000",
-    paddingTop: TOP_INSET,
-  },
+const buildFeedStyles = (c) =>
+  StyleSheet.create({
+    wrapper: {
+      flex: 1,
+      backgroundColor: "#000",
+      paddingTop: TOP_INSET,
+    },
   feedArea: {
     flex: 1,
   },
@@ -1124,12 +1129,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   tinyProductTitle: {
-    color: colors.dark,
+    color: c.dark,
     fontSize: 12,
     fontWeight: "800",
   },
   tinyProductPrice: {
-    color: colors.primary,
+    color: c.primary,
     fontSize: 12,
     fontWeight: "800",
     marginTop: 2,
@@ -1168,7 +1173,7 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 23,
     borderWidth: 2,
-    borderColor: colors.accent,
+    borderColor: c.accent,
     backgroundColor: "transparent",
   },
   commentModalBackdrop: {
@@ -1204,7 +1209,7 @@ const styles = StyleSheet.create({
   commentModalTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   commentModalLoading: {
     paddingVertical: 40,
@@ -1219,7 +1224,7 @@ const styles = StyleSheet.create({
   },
   commentEmpty: {
     textAlign: "center",
-    color: colors.muted,
+    color: c.muted,
     paddingVertical: 24,
   },
   commentItem: {
@@ -1261,7 +1266,7 @@ const styles = StyleSheet.create({
   commentAuthor: {
     fontSize: 13,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 2,
   },
   commentText: {
@@ -1288,13 +1293,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
   },
   commentSendBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1337,7 +1342,7 @@ const styles = StyleSheet.create({
   menuTitle: {
     fontSize: 14,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,

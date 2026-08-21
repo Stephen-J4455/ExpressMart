@@ -14,11 +14,15 @@ import {
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useAuth } from "../context/AuthContext";
 
 export const PrivacySettingsScreen = ({ navigation }) => {
   const { deleteAccount } = useAuth();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildPrivacySettingsStyles(c));
   const [profileVisibility, setProfileVisibility] = useState(true);
   const [orderHistoryVisible, setOrderHistoryVisible] = useState(false);
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
@@ -292,10 +296,11 @@ export const PrivacySettingsScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildPrivacySettingsStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -305,7 +310,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   backButton: {
     padding: 8,
@@ -313,7 +318,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   scrollView: {
     flex: 1,
@@ -326,7 +331,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
     textTransform: "uppercase",
     letterSpacing: 1,
     paddingVertical: 12,
@@ -337,7 +342,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   privacyItemLast: {
     borderBottomWidth: 0,
@@ -354,16 +359,16 @@ const styles = StyleSheet.create({
   privacyLabel: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 4,
   },
   privacyDescription: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 20,
   },
   dangerText: {
-    color: colors.accent,
+    color: c.accent,
   },
   actionButton: {
     padding: 8,
@@ -377,11 +382,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
   },
   infoText: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     marginLeft: 12,
     flex: 1,
     lineHeight: 20,
@@ -393,17 +398,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
   },
   policyTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 8,
   },
   policyText: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 20,
     marginBottom: 16,
   },
@@ -413,12 +418,12 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingVertical: 8,
     paddingHorizontal: 12,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 6,
   },
   policyButtonText: {
     fontSize: 14,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "600",
     marginRight: 4,
   },
@@ -439,21 +444,21 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 8,
   },
   modalText: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     marginBottom: 12,
   },
   passwordInput: {
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: colors.dark,
+    color: c.dark,
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   modalActions: {
@@ -467,11 +472,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   modalCancelText: {
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "600",
   },
   modalDeleteBtn: {
-    backgroundColor: colors.accent,
+    backgroundColor: c.accent,
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,

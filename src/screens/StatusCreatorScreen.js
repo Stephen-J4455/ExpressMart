@@ -17,7 +17,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../lib/supabase";
-import { colors, getTheme } from "../theme/colors";
+import { colors as palette, getTheme } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { ResponsiveContainer } from "../components/ResponsiveContainer";
@@ -28,6 +30,8 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 
 export const StatusCreatorScreen = ({ navigation }) => {
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildStatusCreatorStyles(c));
   const theme = getTheme();
   const toast = useToast();
   const insets = useSafeAreaInsets();
@@ -272,20 +276,21 @@ export const StatusCreatorScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: { backgroundColor: colors.background, flexGrow: 1 },
+const buildStatusCreatorStyles = (c) =>
+  StyleSheet.create({
+  container: { backgroundColor: c.background, flexGrow: 1 },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  title: { fontSize: 18, fontWeight: "700", color: colors.dark },
+  title: { fontSize: 18, fontWeight: "700", color: c.dark },
   modeRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  modeBtn: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.light, flexDirection: "row", gap: 8, alignItems: "center" },
-  modeBtnActive: { borderColor: colors.primary, backgroundColor: colors.primary + "10" },
+  modeBtn: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: c.light, flexDirection: "row", gap: 8, alignItems: "center" },
+  modeBtnActive: { borderColor: c.primary, backgroundColor: c.primary + "10" },
   modeText: { marginLeft: 6 },
   section: { marginBottom: 16 },
   sectionTitle: { fontWeight: "700", marginBottom: 8 },
   imageBtnRow: { flexDirection: "row", gap: 12, marginBottom: 12 },
   imagePickBtn: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   imagePickBtnText: { fontWeight: "700" },
-  textInput: { borderWidth: 1, borderColor: colors.light, padding: 12, borderRadius: 8, backgroundColor: "#fff" },
+  textInput: { borderWidth: 1, borderColor: c.light, padding: 12, borderRadius: 8, backgroundColor: "#fff" },
   postBtn: { padding: 14, borderRadius: 12, alignItems: "center", marginTop: 12 },
   postText: { color: "#fff", fontWeight: "800" },
 });

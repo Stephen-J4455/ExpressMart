@@ -15,12 +15,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase, callEdgeFunction } from "../lib/supabase";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const PaymentsScreen = ({ navigation }) => {
   const { user, profile } = useAuth();
   const toast = useToast();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildPaymentsStyles(c));
   const { cardColumns, horizontalPadding, getItemWidth } = useResponsive();
   const cardItemWidth = getItemWidth(cardColumns);
   const [loading, setLoading] = useState(true);
@@ -679,10 +683,11 @@ export const PaymentsScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildPaymentsStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   centerContainer: {
     flex: 1,
@@ -697,7 +702,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   backButton: {
     padding: 8,
@@ -705,7 +710,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   addButton: {
     padding: 8,
@@ -719,11 +724,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
   },
   infoText: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     marginLeft: 8,
     flex: 1,
   },
@@ -734,7 +739,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 12,
   },
   storeCard: {
@@ -801,7 +806,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginTop: 12,
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
   },
   detailRow: {
     flexDirection: "row",
@@ -813,12 +818,12 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "600",
   },
   detailValue: {
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "700",
     maxWidth: 180,
     textAlign: "right",
@@ -851,13 +856,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF2FF",
   },
   editButtonText: {
-    color: colors.primary,
+    color: c.primary,
     fontSize: 14,
     fontWeight: "700",
   },
   storeHint: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 8,
   },
   setupButton: {
@@ -865,7 +870,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 12,
     paddingVertical: 14,
   },
@@ -895,12 +900,12 @@ const styles = StyleSheet.create({
   setupModalTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   setupLabel: {
     fontSize: 13,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginTop: 12,
     marginBottom: 6,
   },
@@ -913,9 +918,9 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
     alignItems: "center",
   },
-  setupTypeBtnActive: { borderColor: colors.primary, backgroundColor: "#EEF2FF" },
-  setupTypeText: { fontWeight: "700", color: colors.muted },
-  setupTypeTextActive: { color: colors.primary },
+  setupTypeBtnActive: { borderColor: c.primary, backgroundColor: "#EEF2FF" },
+  setupTypeText: { fontWeight: "700", color: c.muted },
+  setupTypeTextActive: { color: c.primary },
   setupInput: {
     borderWidth: 1.5,
     borderColor: "#E2E8F0",
@@ -923,11 +928,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 13,
     fontSize: 15,
-    color: colors.dark,
+    color: c.dark,
   },
-  setupInputText: { fontSize: 15, color: colors.dark },
+  setupInputText: { fontSize: 15, color: c.dark },
   setupLoading: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 20, justifyContent: "center" },
-  setupLoadingText: { fontSize: 14, color: colors.muted, marginTop: 8 },
+  setupLoadingText: { fontSize: 14, color: c.muted, marginTop: 8 },
   bankDropdown: {
     borderWidth: 1.5,
     borderColor: "#E2E8F0",
@@ -944,8 +949,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F1F5F9",
   },
   bankOptionActive: { backgroundColor: "#EEF2FF" },
-  bankOptionText: { fontSize: 15, color: colors.dark },
-  bankOptionTextActive: { color: colors.primary, fontWeight: "700" },
+  bankOptionText: { fontSize: 15, color: c.dark },
+  bankOptionTextActive: { color: c.primary, fontWeight: "700" },
   setupErrorText: { color: "#EF4444", fontSize: 12, marginTop: 8 },
   setupSubmit: {
     marginTop: 20,

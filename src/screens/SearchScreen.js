@@ -6,7 +6,9 @@ import { SearchBar } from "../components/SearchBar";
 import { AdRenderer } from "../components/AdBanner";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 const trending = [
   "smart watch",
@@ -16,6 +18,8 @@ const trending = [
 ];
 
 export const SearchScreen = ({ navigation, route }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildSearchStyles(c));
   const { products } = useShop();
   const { fetchAdsByPlacement } = useAds();
   const [query, setQuery] = useState(route.params?.query || "");
@@ -285,10 +289,11 @@ export const SearchScreen = ({ navigation, route }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildSearchStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -333,7 +338,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     marginBottom: 12,
-    color: colors.dark,
+    color: c.dark,
     letterSpacing: -0.3,
   },
   tags: {
@@ -355,7 +360,7 @@ const styles = StyleSheet.create({
     borderColor: "#F1F5F9",
   },
   tagText: {
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "500",
     fontSize: 14,
   },
@@ -374,12 +379,12 @@ const styles = StyleSheet.create({
   suggestionText: {
     flex: 1,
     fontSize: 16,
-    color: colors.dark,
+    color: c.dark,
     marginLeft: 12,
   },
   suggestionType: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     backgroundColor: "#F1F5F9",
     paddingHorizontal: 8,
     paddingVertical: 4,

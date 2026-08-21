@@ -62,6 +62,8 @@ const getPresenceSubtitle = (isOnline, lastSeenAt) => {
 
 export const ChatScreen = ({ route, navigation, seller }) => {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildChatStyles(c));
   const { user } = useAuth();
   const { getConversationBySeller, addConversation, updateConversation } =
     useChat();
@@ -777,17 +779,18 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildChatStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     paddingHorizontal: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: c.border,
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -803,7 +806,7 @@ const styles = StyleSheet.create({
     padding: 8,
     marginRight: 8,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   headerInfo: {
     flex: 1,
@@ -814,13 +817,13 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radius.md,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
   avatarImage: {
     width: "100%",
@@ -829,7 +832,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   statusRow: {
     flexDirection: "row",
@@ -843,24 +846,24 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
   },
   headerAction: {
     padding: 8,
   },
   chatContainer: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     gap: 12,
   },
   loadingText: {
-    color: colors.muted,
+    color: c.muted,
     fontSize: 15,
     fontWeight: "500",
   },
@@ -891,24 +894,24 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   userMessage: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderBottomRightRadius: 4,
   },
   sellerMessage: {
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderBottomLeftRadius: 4,
   },
   messageText: {
     fontSize: 16,
     lineHeight: 22,
-    color: colors.dark,
+    color: c.dark,
   },
   userMessageText: {
     color: "#fff",
   },
   messageTime: {
     fontSize: 11,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 4,
     marginHorizontal: 4,
   },
@@ -921,13 +924,13 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: radius.xl,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: colors.primary,
+    borderColor: c.border,
+    shadowColor: c.primary,
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 3,
@@ -935,20 +938,20 @@ const styles = StyleSheet.create({
   emptyChatText: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 4,
   },
   emptyChatSubtext: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
   },
   inputSticky: {
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 10,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: c.border,
     shadowColor: "#000",
     shadowOpacity: 0.06,
     shadowRadius: 10,
@@ -964,12 +967,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "flex-end",
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.pill,
     paddingHorizontal: 16,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
   textInput: {
     flex: 1,
@@ -977,55 +980,55 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     paddingTop: 10,
     paddingBottom: 10,
-    color: colors.dark,
+    color: c.dark,
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   sendButton: {
     width: 40,
     height: 40,
     borderRadius: radius.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 2,
   },
   sendButtonDisabled: {
-    backgroundColor: colors.muted,
+    backgroundColor: c.muted,
     opacity: 0.4,
   },
   productAttachment: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: radius.md,
     marginBottom: 8,
     padding: 10,
     borderWidth: 1,
-    borderColor: colors.primary + "30",
+    borderColor: c.primary + "30",
   },
   productAttachmentImage: {
     width: 48,
     height: 48,
     borderRadius: radius.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   productAttachmentImagePlaceholder: {
     width: 48,
     height: 48,
     borderRadius: radius.sm,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: colors.primary + "30",
+    borderColor: c.primary + "30",
   },
   productAttachmentInfo: {
     flex: 1,
   },
   productAttachmentLabel: {
     fontSize: 11,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -1034,7 +1037,7 @@ const styles = StyleSheet.create({
   productAttachmentTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   productAttachmentRemove: {
     padding: 4,
@@ -1050,17 +1053,17 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   productCardBubbleUser: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderBottomRightRadius: 4,
   },
   productCardBubbleSeller: {
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderBottomLeftRadius: 4,
   },
   productCardImage: {
     width: CARD_WIDTH,
     height: 160,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   productCardBody: {
     padding: 12,
@@ -1068,7 +1071,7 @@ const styles = StyleSheet.create({
   productCardTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 4,
     lineHeight: 20,
   },
@@ -1078,7 +1081,7 @@ const styles = StyleSheet.create({
   productCardPrice: {
     fontSize: 15,
     fontWeight: "700",
-    color: colors.primary,
+    color: c.primary,
   },
   productCardPriceUser: {
     color: "rgba(255,255,255,0.9)",
@@ -1092,11 +1095,11 @@ const styles = StyleSheet.create({
   dateDividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: colors.border,
+    backgroundColor: c.border,
   },
   dateDividerText: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "600",
     marginHorizontal: 10,
     letterSpacing: 0.3,

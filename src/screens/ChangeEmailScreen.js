@@ -13,7 +13,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 export const ChangeEmailScreen = ({ navigation }) => {
   const { user, updateEmail } = useAuth();
@@ -22,6 +24,9 @@ export const ChangeEmailScreen = ({ navigation }) => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildChangeEmailStyles(c));
 
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -176,10 +181,11 @@ export const ChangeEmailScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildChangeEmailStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -189,7 +195,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   backButton: {
     padding: 8,
@@ -197,7 +203,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   scrollView: {
     flex: 1,
@@ -211,17 +217,17 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 8,
   },
   sectionSubtitle: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 20,
     marginBottom: 24,
   },
   currentEmailContainer: {
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     padding: 16,
     borderRadius: 8,
     marginBottom: 20,
@@ -229,13 +235,13 @@ const styles = StyleSheet.create({
   currentEmailLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
     textTransform: "uppercase",
     marginBottom: 4,
   },
   currentEmail: {
     fontSize: 16,
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "500",
   },
   inputGroup: {
@@ -244,17 +250,17 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    color: colors.dark,
+    color: c.dark,
     backgroundColor: "#fff",
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
@@ -262,7 +268,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
     borderRadius: 8,
     backgroundColor: "#fff",
   },
@@ -271,7 +277,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    color: colors.dark,
+    color: c.dark,
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   eyeButton: {
@@ -281,13 +287,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     paddingVertical: 16,
     borderRadius: 8,
     marginTop: 8,
   },
   changeButtonDisabled: {
-    backgroundColor: colors.muted,
+    backgroundColor: c.muted,
   },
   changeButtonText: {
     color: "#fff",
@@ -304,11 +310,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
   },
   infoText: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     marginLeft: 12,
     flex: 1,
     lineHeight: 20,

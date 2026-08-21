@@ -13,7 +13,9 @@ import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 const isNewArchitectureEnabled = global?.nativeFabricUIManager != null;
@@ -28,6 +30,8 @@ if (
 
 export const HelpSupportScreen = ({ navigation }) => {
   const { isWide, horizontalPadding } = useResponsive();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildHelpSupportStyles(c));
   const [expandedFaq, setExpandedFaq] = useState(null);
 
   const toggleFaq = (idx) => {
@@ -247,8 +251,9 @@ export const HelpSupportScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+const buildHelpSupportStyles = (c) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -257,10 +262,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   backButton: { padding: 8 },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: colors.dark },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: c.dark },
   scrollView: { flex: 1 },
   hero: {
     alignItems: "center",
@@ -307,7 +312,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16,
   },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: colors.dark },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: c.dark },
   contactRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -323,8 +328,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   contactText: { flex: 1 },
-  contactLabel: { fontSize: 14, fontWeight: "700", color: colors.dark },
-  contactValue: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  contactLabel: { fontSize: 14, fontWeight: "700", color: c.dark },
+  contactValue: { fontSize: 13, color: c.muted, marginTop: 2 },
   faqBorder: { borderTopWidth: 1, borderTopColor: "#F1F5F9" },
   faqRow: {
     flexDirection: "row",
@@ -337,12 +342,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     lineHeight: 20,
   },
   faqAnswer: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 22,
     paddingBottom: 14,
     paddingRight: 8,
@@ -359,10 +364,10 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: colors.primaryLight || "#EEF2FF",
+    backgroundColor: c.primaryLight || "#EEF2FF",
     alignItems: "center",
     justifyContent: "center",
   },
-  legalLabel: { fontSize: 15, fontWeight: "600", color: colors.dark },
-  legalSub: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  legalLabel: { fontSize: 15, fontWeight: "600", color: c.dark },
+  legalSub: { fontSize: 13, color: c.muted, marginTop: 2 },
 });

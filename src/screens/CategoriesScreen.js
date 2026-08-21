@@ -13,10 +13,14 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useShop } from "../context/ShopContext";
 import { ProductCard } from "../components/ProductCard";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const CategoriesScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildCategoriesStyles(c));
   const { categories, products, loading, refresh } = useShop();
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const { isWide, width, getItemWidth } = useResponsive();
@@ -189,18 +193,19 @@ export const CategoriesScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildCategoriesStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
   },
   sidebar: {
     width: 90,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     borderRightWidth: 1,
-    borderRightColor: colors.light,
+    borderRightColor: c.light,
   },
   sidebarHeader: {
     height: 20,
@@ -215,7 +220,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   sidebarItemSelected: {
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   activeIndicator: {
     position: "absolute",
@@ -223,7 +228,7 @@ const styles = StyleSheet.create({
     top: 16,
     bottom: 16,
     width: 3,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderTopRightRadius: 3,
     borderBottomRightRadius: 3,
   },
@@ -238,17 +243,17 @@ const styles = StyleSheet.create({
   sidebarText: {
     fontSize: 11,
     textAlign: "center",
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
   },
   sidebarTextSelected: {
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "700",
   },
 
   content: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     paddingHorizontal: 16,
@@ -257,11 +262,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 4,
   },
   headerRow: {
@@ -278,10 +283,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: colors.primary + "14",
+    backgroundColor: c.primary + "14",
   },
   moreText: {
-    color: colors.primary,
+    color: c.primary,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -315,6 +320,6 @@ const styles = StyleSheet.create({
   emptyText: {
     marginTop: 12,
     fontSize: 16,
-    color: colors.muted,
+    color: c.muted,
   },
 });

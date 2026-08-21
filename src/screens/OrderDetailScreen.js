@@ -12,10 +12,14 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const OrderDetailScreen = () => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildOrderDetailStyles(c));
   const { isWide, horizontalPadding } = useResponsive();
   const navigation = useNavigation();
   const route = useRoute();
@@ -383,10 +387,11 @@ export const OrderDetailScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildOrderDetailStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -397,7 +402,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   backButton: {
     padding: 8,
@@ -406,7 +411,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   content: {
     flex: 1,
@@ -423,11 +428,11 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: colors.error,
+    color: c.error,
   },
   emptyText: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     paddingVertical: 20,
   },
@@ -440,7 +445,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     borderLeftWidth: 4,
-    borderLeftColor: colors.primary,
+    borderLeftColor: c.primary,
   },
   statusHeader: {
     flexDirection: "row",
@@ -460,28 +465,28 @@ const styles = StyleSheet.create({
   },
   statusLabel: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
     marginBottom: 2,
   },
   orderNumber: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   statusTimeline: {
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.light,
+    borderTopColor: c.light,
   },
   timelineDate: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginBottom: 2,
   },
   timelineTime: {
     fontSize: 12,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "500",
   },
 
@@ -501,7 +506,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginLeft: 10,
   },
 
@@ -511,7 +516,7 @@ const styles = StyleSheet.create({
   },
   itemCardBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   itemContainer: {
     flexDirection: "row",
@@ -522,7 +527,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 8,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
   },
   itemDetails: {
     flex: 1,
@@ -537,13 +542,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: "500",
-    color: colors.dark,
+    color: c.dark,
     marginRight: 8,
   },
   itemPrice: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.primary,
+    color: c.primary,
   },
   itemMeta: {
     flexDirection: "row",
@@ -552,34 +557,34 @@ const styles = StyleSheet.create({
   },
   itemMetaText: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
   },
   itemMetaBold: {
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
 
   /* Address */
   addressCard: {
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     padding: 12,
     borderRadius: 8,
   },
   addressName: {
     fontSize: 15,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 6,
   },
   addressDetail: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 18,
   },
 
   /* Payment */
   paymentCard: {
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     padding: 12,
     borderRadius: 8,
   },
@@ -591,16 +596,16 @@ const styles = StyleSheet.create({
   },
   paymentLabel: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
   },
   paymentValue: {
     fontSize: 13,
     fontWeight: "500",
-    color: colors.dark,
+    color: c.dark,
   },
   divider: {
     height: 1,
-    backgroundColor: colors.border,
+    backgroundColor: c.border,
     marginVertical: 8,
   },
   totalRow: {
@@ -609,12 +614,12 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 15,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   totalValue: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.primary,
+    color: c.primary,
   },
   paymentMethodRow: {
     flexDirection: "row",
@@ -622,16 +627,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: c.border,
   },
   paymentMethodLabel: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
   },
   paymentMethodValue: {
     fontSize: 12,
     fontWeight: "500",
-    color: colors.dark,
+    color: c.dark,
     textTransform: "capitalize",
   },
   referenceRow: {
@@ -642,11 +647,11 @@ const styles = StyleSheet.create({
   },
   referenceLabel: {
     fontSize: 11,
-    color: colors.muted,
+    color: c.muted,
   },
   referenceValue: {
     fontSize: 11,
-    color: colors.muted,
+    color: c.muted,
     fontFamily: "monospace",
     flex: 1,
     textAlign: "right",
@@ -655,19 +660,19 @@ const styles = StyleSheet.create({
 
   /* Tracking */
   trackingCard: {
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     padding: 12,
     borderRadius: 8,
   },
   trackingLabel: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginBottom: 6,
   },
   trackingNumber: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     fontFamily: "monospace",
   },
 });

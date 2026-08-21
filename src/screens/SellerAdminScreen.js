@@ -29,7 +29,8 @@ import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
 import { notifyOrderStatusUpdate } from "../services/notificationService";
 import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
-import { colors, getTheme, radius } from "../theme/colors";
+import { colors as palette, getTheme, radius } from "../theme/colors";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { getImageContentType, getWebUploadPayload } from "../utils/webUpload";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
@@ -211,6 +212,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const { user, profile: customerProfile, signOut } = useAuth();
   const toast = useToast();
   const { theme: themeMode, setTheme: setThemeMode } = useTheme();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildSellerAdminStyles(c));
 
   // ── Seller data layer (mirrors Express-Store SellerContext) ──────────────
   const [seller, setSeller] = useState(null);
@@ -2941,8 +2944,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+const buildSellerAdminStyles = (c) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
   center: { alignItems: "center", justifyContent: "center" },
   scrollContent: { flexGrow: 1, paddingBottom: 20 },
   cover: {
@@ -2972,9 +2976,9 @@ const styles = StyleSheet.create({
   avatarPlaceholder: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
   },
-  name: { fontSize: 20, fontWeight: "800", color: colors.dark, marginTop: 12, textAlign: "center" },
+  name: { fontSize: 20, fontWeight: "800", color: c.dark, marginTop: 12, textAlign: "center" },
   tabBar: {
     flexDirection: "row",
     marginHorizontal: 16,
@@ -3051,7 +3055,7 @@ const styles = StyleSheet.create({
   menuTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
@@ -3063,7 +3067,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: radius.sm,
   },
-  menuItemText: { fontSize: 15, fontWeight: "600", color: colors.dark },
+  menuItemText: { fontSize: 15, fontWeight: "600", color: c.dark },
   uploadQueueSection: {
     marginBottom: 14,
     gap: 10,
@@ -3076,11 +3080,11 @@ const styles = StyleSheet.create({
   uploadQueueTitle: {
     fontSize: 14,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   uploadQueueSub: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
   },
   uploadJobCard: {
     backgroundColor: "#fff",
@@ -3098,17 +3102,17 @@ const styles = StyleSheet.create({
   uploadJobTitle: {
     fontSize: 13,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   uploadJobMeta: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 2,
   },
   uploadJobPct: {
     fontSize: 12,
     fontWeight: "800",
-    color: colors.primary,
+    color: c.primary,
   },
   uploadJobBarTrack: {
     height: 8,
@@ -3141,12 +3145,12 @@ const styles = StyleSheet.create({
   attachVideoTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   attachVideoSubtitle: {
     marginTop: 4,
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 17,
   },
   attachVideoButton: {
@@ -3165,7 +3169,7 @@ const styles = StyleSheet.create({
   attachVideoLabel: {
     fontSize: 12,
     fontWeight: "700",
-    color: colors.muted,
+    color: c.muted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -3184,11 +3188,11 @@ const styles = StyleSheet.create({
   attachProductChipText: {
     fontSize: 13,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   attachProductChipMeta: {
     fontSize: 11,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 4,
   },
   deleteVideosButton: {
@@ -3199,17 +3203,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: c.primary,
     backgroundColor: "#fff",
   },
   deleteVideosButtonText: {
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "800",
     fontSize: 13,
   },
   attachProductChipMeta: {
     fontSize: 11,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 4,
   },
   attachProductThumb: {
@@ -3255,7 +3259,7 @@ const styles = StyleSheet.create({
   videoDeleteEmpty: {
     padding: 24,
     textAlign: "center",
-    color: colors.muted,
+    color: c.muted,
     fontSize: 14,
   },
   videoDeleteThumb: {
@@ -3323,11 +3327,11 @@ const styles = StyleSheet.create({
   sortOptionText: {
     fontSize: 15,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   videoDeleteMeta: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 2,
     textTransform: "capitalize",
   },
@@ -3340,8 +3344,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1F5F9",
   },
-  summaryChipLabel: { color: colors.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
-  summaryChipValue: { fontWeight: "900", color: colors.dark, fontSize: 16, marginTop: 2 },
+  summaryChipLabel: { color: c.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
+  summaryChipValue: { fontWeight: "900", color: c.dark, fontSize: 16, marginTop: 2 },
   flashBanner: {
     backgroundColor: "#FFF5F5",
     borderRadius: radius.md,
@@ -3354,10 +3358,10 @@ const styles = StyleSheet.create({
   flashCountText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   flashCard: { width: 120, marginRight: 10, backgroundColor: "#fff", borderRadius: radius.md, padding: 8, borderWidth: 1, borderColor: "#F1F5F9" },
   flashThumb: { width: "100%", height: 70, borderRadius: radius.xs },
-  flashThumbPlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
-  flashName: { fontSize: 12, fontWeight: "700", color: colors.dark, marginTop: 6 },
+  flashThumbPlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: c.primary },
+  flashName: { fontSize: 12, fontWeight: "700", color: c.dark, marginTop: 6 },
   flashPrice: { fontSize: 13, fontWeight: "800", color: "#EF4444", marginTop: 2 },
-  flashDiscount: { fontSize: 10, color: colors.muted, marginTop: 2 },
+  flashDiscount: { fontSize: 10, color: c.muted, marginTop: 2 },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -3369,7 +3373,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1F5F9",
   },
-  searchInput: { flex: 1, marginLeft: 8, color: colors.dark, fontSize: 14 },
+  searchInput: { flex: 1, marginLeft: 8, color: c.dark, fontSize: 14 },
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -3379,31 +3383,31 @@ const styles = StyleSheet.create({
     borderColor: "#F1F5F9",
     marginRight: 8,
   },
-  filterChipActive: { backgroundColor: colors.dark, borderColor: colors.dark },
-  filterChipText: { color: colors.muted, fontWeight: "600", fontSize: 12 },
+  filterChipActive: { backgroundColor: c.dark, borderColor: c.dark },
+  filterChipText: { color: c.muted, fontWeight: "600", fontSize: 12 },
   filterChipTextActive: { color: "#fff", fontWeight: "700" },
   sortRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  sortLabel: { fontSize: 12, fontWeight: "700", color: colors.muted },
+  sortLabel: { fontSize: 12, fontWeight: "700", color: c.muted },
   sortChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.xs, backgroundColor: "#fff", borderWidth: 1, borderColor: "#F1F5F9" },
-  sortChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  sortChipText: { fontSize: 11, fontWeight: "600", color: colors.muted },
+  sortChipActive: { backgroundColor: c.primary, borderColor: c.primary },
+  sortChipText: { fontSize: 11, fontWeight: "600", color: c.muted },
   sortChipTextActive: { color: "#fff", fontWeight: "700" },
   productGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   productCard: { width: "47%", backgroundColor: "#fff", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: "#F1F5F9" },
   productPlaceholderCard: { width: "47%", borderRadius: radius.md, overflow: "hidden" },
   productImage: { width: "100%", height: 110 },
-  productImagePlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: colors.primary },
+  productImagePlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: c.primary },
   productBody: { padding: 10 },
-  productTitle: { fontSize: 13, fontWeight: "700", color: colors.dark },
+  productTitle: { fontSize: 13, fontWeight: "700", color: c.dark },
   productRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
   productPrice: { fontSize: 13, fontWeight: "800" },
-  productStatus: { fontSize: 10, fontWeight: "700", textTransform: "capitalize", color: colors.muted },
-  emptyNote: { textAlign: "center", color: colors.muted, fontSize: 14, marginTop: 20 },
+  productStatus: { fontSize: 10, fontWeight: "700", textTransform: "capitalize", color: c.muted },
+  emptyNote: { textAlign: "center", color: c.muted, fontSize: 14, marginTop: 20 },
   pipeline: { marginBottom: 12 },
   pipelineBar: { flexDirection: "row", height: 8, borderRadius: radius.xxs, overflow: "hidden", backgroundColor: "#F1F5F9" },
   pipelineSegment: { height: "100%" },
   pipelineLegend: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 6 },
-  legendText: { fontSize: 11, color: colors.muted, fontWeight: "600" },
+  legendText: { fontSize: 11, color: c.muted, fontWeight: "600" },
   orderCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -3424,14 +3428,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
-  orderNo: { fontSize: 14, fontWeight: "700", color: colors.dark },
-  orderMeta: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  orderTotal: { fontSize: 14, fontWeight: "800", color: colors.dark },
+  orderNo: { fontSize: 14, fontWeight: "700", color: c.dark },
+  orderMeta: { fontSize: 12, color: c.muted, marginTop: 2 },
+  orderTotal: { fontSize: 14, fontWeight: "800", color: c.dark },
   orderStatus: { fontSize: 11, fontWeight: "700", textTransform: "capitalize", marginTop: 2 },
   progressButton: { marginTop: 10, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.sm },
   progressText: { fontWeight: "700", fontSize: 13 },
   successBadge: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10 },
-  successText: { color: colors.success, fontWeight: "700", fontSize: 13 },
+  successText: { color: c.success, fontWeight: "700", fontSize: 13 },
   insightCards: { flexDirection: "row", gap: 12 },
   insightCard: {
     flex: 1,
@@ -3442,16 +3446,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1F5F9",
   },
-  insightValue: { fontSize: 18, fontWeight: "900", color: colors.dark, marginTop: 6 },
-  insightLabel: { fontSize: 11, color: colors.muted, marginTop: 4, fontWeight: "600", textAlign: "center" },
+  insightValue: { fontSize: 18, fontWeight: "900", color: c.dark, marginTop: 6 },
+  insightLabel: { fontSize: 11, color: c.muted, marginTop: 4, fontWeight: "600", textAlign: "center" },
   insightSummary: {
-    borderRadius: radius.md, fontSize: 13, color: colors.muted, marginTop: 14, lineHeight: 19, textAlign: "center" },
-  modalContainer: { flex: 1, backgroundColor: colors.background, paddingTop: 40 },
+    borderRadius: radius.md, fontSize: 13, color: c.muted, marginTop: 14, lineHeight: 19, textAlign: "center" },
+  modalContainer: { flex: 1, backgroundColor: c.background, paddingTop: 40 },
   modalScroll: { flex: 1 },
   modalContent: {
     borderRadius: radius.md, padding: 16, paddingBottom: 40 },
   modalHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  modalTitle: { fontSize: 20, fontWeight: "800", color: colors.dark },
+  modalTitle: { fontSize: 20, fontWeight: "800", color: c.dark },
   stepper: {
     borderRadius: radius.md,
     flexDirection: "row",
@@ -3475,24 +3479,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stepperCircleActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: c.primary,
+    borderColor: c.primary,
   },
   stepperCircleDone: {
-    backgroundColor: colors.dark,
-    borderColor: colors.dark,
+    backgroundColor: c.dark,
+    borderColor: c.dark,
   },
-  stepperCircleText: { fontSize: 11, fontWeight: "800", color: colors.muted },
+  stepperCircleText: { fontSize: 11, fontWeight: "800", color: c.muted },
   stepperCircleTextActive: { color: "#fff" },
-  stepperLabel: { fontSize: 10, fontWeight: "700", color: colors.muted, marginTop: 4, textAlign: "center" },
-  stepperLabelActive: { color: colors.dark },
+  stepperLabel: { fontSize: 10, fontWeight: "700", color: c.muted, marginTop: 4, textAlign: "center" },
+  stepperLabelActive: { color: c.dark },
   stepHint: {
     fontSize: 12,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
     marginBottom: 8,
   },
-  label: { fontSize: 13, fontWeight: "700", color: colors.dark, marginBottom: 6, marginTop: 12 },
+  label: { fontSize: 13, fontWeight: "700", color: c.dark, marginBottom: 6, marginTop: 12 },
   input: {
     backgroundColor: "#fff",
     borderWidth: 1,
@@ -3501,7 +3505,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
   },
   textArea: { height: 90, textAlignVertical: "top" },
   row: {
@@ -3518,7 +3522,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1F5F9",
   },
-  catChipText: { fontSize: 12, fontWeight: "600", color: colors.muted },
+  catChipText: { fontSize: 12, fontWeight: "600", color: c.muted },
   colorRow: {
     borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 10 },
   colorDot: {
@@ -3528,12 +3532,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "transparent",
   },
-  colorDotActive: { borderColor: colors.dark, transform: [{ scale: 1.1 }] },
+  colorDotActive: { borderColor: c.dark, transform: [{ scale: 1.1 }] },
   checkRow: {
     borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 12 },
   checkbox: {
     borderRadius: radius.sm, flexDirection: "row", alignItems: "center", gap: 6 },
-  checkLabel: { fontSize: 13, fontWeight: "600", color: colors.dark },
+  checkLabel: { fontSize: 13, fontWeight: "600", color: c.dark },
   imageGrid: {
     borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 },
   imageWrap: {
@@ -3546,7 +3550,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderWidth: 2,
     borderStyle: "dashed",
-    borderColor: colors.muted,
+    borderColor: c.muted,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3557,7 +3561,7 @@ const styles = StyleSheet.create({
     height: 140,
     borderRadius: radius.sm,
     overflow: "hidden",
-    backgroundColor: colors.dark,
+    backgroundColor: c.dark,
   },
   videoThumb: { width: "100%", height: "100%" },
   videoRemove: {
@@ -3586,7 +3590,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderWidth: 2,
     borderStyle: "dashed",
-    borderColor: colors.muted,
+    borderColor: c.muted,
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
@@ -3612,14 +3616,14 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   stepButtonText: { color: "#fff", fontWeight: "800", fontSize: 15 },
-  stepButtonSecondaryText: { color: colors.dark, fontWeight: "800", fontSize: 15 },
+  stepButtonSecondaryText: { color: c.dark, fontWeight: "800", fontSize: 15 },
   submitButton: { marginTop: 20, paddingVertical: 14, borderRadius: radius.md, alignItems: "center" },
   submitButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   detailImage: { width: "100%", height: 200, borderRadius: radius.md, marginBottom: 12 },
-  detailPrice: { fontSize: 20, fontWeight: "800", color: colors.accent, marginBottom: 4 },
-  detailStatus: { fontSize: 14, color: colors.muted, marginBottom: 8 },
-  detailDesc: { fontSize: 14, color: colors.dark, lineHeight: 20 },
-  detailMeta: { fontSize: 13, color: colors.muted, marginTop: 8 },
+  detailPrice: { fontSize: 20, fontWeight: "800", color: c.accent, marginBottom: 4 },
+  detailStatus: { fontSize: 14, color: c.muted, marginBottom: 8 },
+  detailDesc: { fontSize: 14, color: c.dark, lineHeight: 20 },
+  detailMeta: { fontSize: 13, color: c.muted, marginTop: 8 },
   sheetOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -3633,7 +3637,7 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
   },
   sheetItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14 },
-  sheetText: { fontSize: 15, fontWeight: "600", color: colors.dark },
+  sheetText: { fontSize: 15, fontWeight: "600", color: c.dark },
   sheetItemDanger: { borderTopWidth: 1, borderTopColor: "#F1F5F9" },
   innerModal: {
     backgroundColor: "#fff",
@@ -3680,14 +3684,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
   },
-  drawerTitle: { fontSize: 18, fontWeight: "800", color: colors.dark },
+  drawerTitle: { fontSize: 18, fontWeight: "800", color: c.dark },
   drawerScroll: {
     borderRadius: radius.md, flex: 1, paddingHorizontal: 8, paddingTop: 8 },
   menuSection: {
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
-    color: colors.muted,
+    color: c.muted,
     marginTop: 16,
     marginBottom: 4,
     marginLeft: 12,
@@ -3700,7 +3704,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: radius.sm,
   },
-  menuItemText: { fontSize: 15, fontWeight: "600", color: colors.dark },
+  menuItemText: { fontSize: 15, fontWeight: "600", color: c.dark },
   themeOptions: {
     flexDirection: "row",
     gap: 8,
@@ -3720,16 +3724,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
   },
   themeOptionActive: {
-    borderColor: colors.primary,
+    borderColor: c.primary,
     backgroundColor: "rgba(255, 90, 121, 0.10)",
   },
   themeOptionText: {
     fontSize: 13,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
   },
   themeOptionTextActive: {
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "700",
   },
   statRow: {
@@ -3744,11 +3748,11 @@ const styles = StyleSheet.create({
   },
   statItemSeller: {
     borderRadius: radius.sm, alignItems: "center", paddingHorizontal: 14 },
-  statValueSeller: { fontSize: 18, fontWeight: "900", color: colors.dark },
+  statValueSeller: { fontSize: 18, fontWeight: "900", color: c.dark },
   statLabelSeller: {
     fontSize: 12,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
     marginTop: 2,
   },
   statDivider: { width: 1, height: 30, backgroundColor: "#E2E8F0" },

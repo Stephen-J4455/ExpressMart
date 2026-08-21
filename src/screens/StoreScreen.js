@@ -19,7 +19,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useShop } from "../context/ShopContext";
 import { useAuth } from "../context/AuthContext";
-import { colors, getTheme } from "../theme/colors";
+import { colors as palette, getTheme } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useToast } from "../context/ToastContext";
 import { useResponsive } from "../hooks/useResponsive";
 import { ProductCard } from "../components/ProductCard";
@@ -158,6 +160,8 @@ export const StoreScreen = ({ route, navigation }) => {
     useShop();
   const { user } = useAuth();
   const toast = useToast();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildStoreStyles(c));
   const tabScrollRef = useRef(null);
 
   const [statuses, setStatuses] = useState([]);
@@ -1118,7 +1122,8 @@ export const StoreScreen = ({ route, navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildStoreStyles = (c) =>
+  StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -1292,11 +1297,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   emptySubtext: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
   },
   tabScrollView: {
     flexGrow: 0,
@@ -1328,15 +1333,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tabActive: {
-    backgroundColor: colors.primary + "10",
+    backgroundColor: c.primary + "10",
   },
   tabText: {
     fontSize: 12,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
   },
   tabTextActive: {
-    color: colors.primary,
+    color: c.primary,
   },
   tabContent: {
     padding: 16,
@@ -1344,7 +1349,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 12,
   },
   profileSection: {
@@ -1360,7 +1365,7 @@ const styles = StyleSheet.create({
   },
   profileText: {
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
     lineHeight: 20,
   },
   statsGrid: {
@@ -1375,11 +1380,11 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontWeight: "800",
-    color: colors.primary,
+    color: c.primary,
   },
   statLabelSmall: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
   },
   reviewsHeader: {
@@ -1396,11 +1401,11 @@ const styles = StyleSheet.create({
   ratingNumber: {
     fontSize: 20,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   ratingCount: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
   },
   reviewsList: {
     gap: 16,
@@ -1425,19 +1430,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
   },
   reviewerName: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 2,
   },
   productName: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginBottom: 4,
   },
   reviewStars: {
@@ -1446,19 +1451,19 @@ const styles = StyleSheet.create({
   },
   reviewText: {
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
     lineHeight: 20,
     marginBottom: 8,
   },
   reviewDate: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
   },
   chatButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
@@ -1481,14 +1486,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     minWidth: 100,
     justifyContent: "center",
   },
   socialText: {
     fontSize: 12,
     fontWeight: "500",
-    color: colors.dark,
+    color: c.dark,
   },
   // Status Styles
   storeAvatarContainer: {
@@ -1498,13 +1503,13 @@ const styles = StyleSheet.create({
   },
   statusActive: {
     borderWidth: 3,
-    borderColor: colors.primary,
+    borderColor: c.primary,
   },
   statusBadge: {
     position: "absolute",
     bottom: 0,
     right: 0,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 12,
     minWidth: 20,
     height: 20,

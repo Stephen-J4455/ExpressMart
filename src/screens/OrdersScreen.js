@@ -11,7 +11,9 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../context/OrderContext";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 const statusColors = {
@@ -88,6 +90,8 @@ const OrderCard = ({ order, onPress, cardWidth }) => {
 };
 
 export const OrdersScreen = ({ navigation, route }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildOrdersStyles(c));
   const { isAuthenticated } = useAuth();
   const { orders, loading, fetchOrders } = useOrder();
   const { cardColumns, horizontalPadding, getItemWidth } = useResponsive();
@@ -248,10 +252,11 @@ export const OrdersScreen = ({ navigation, route }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildOrdersStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   centerContainer: {
     flex: 1,
@@ -281,11 +286,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 1,
   },
   filters: {
@@ -306,12 +311,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
   },
   filterChipActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
   },
   filterText: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
   },
   filterTextActive: {
     color: "#fff",
@@ -331,7 +336,7 @@ const styles = StyleSheet.create({
   filterCountText: {
     fontSize: 11,
     fontWeight: "700",
-    color: colors.muted,
+    color: c.muted,
   },
   filterCountTextActive: {
     color: "#fff",
@@ -366,11 +371,11 @@ const styles = StyleSheet.create({
   orderNumber: {
     fontSize: 16,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   orderDate: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 3,
   },
   statusBadge: {
@@ -402,12 +407,12 @@ const styles = StyleSheet.create({
   },
   itemCount: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
   },
   orderTotal: {
     fontSize: 19,
     fontWeight: "800",
-    color: colors.primary,
+    color: c.primary,
   },
   emptyState: {
     alignItems: "center",
@@ -426,12 +431,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 15,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 24,
@@ -439,9 +444,9 @@ const styles = StyleSheet.create({
   shopButton: {
     paddingHorizontal: 28,
     paddingVertical: 14,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 25,
-    shadowColor: colors.primary,
+    shadowColor: c.primary,
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },

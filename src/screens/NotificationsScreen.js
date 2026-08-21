@@ -13,7 +13,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 const NOTIFICATION_ICONS = {
@@ -43,6 +45,8 @@ const NOTIFICATION_COLORS = {
 };
 
 export const NotificationsScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildNotificationsStyles(c));
   const { user } = useAuth();
   const toast = useToast();
   const { cardColumns, horizontalPadding, getItemWidth } = useResponsive();
@@ -314,10 +318,11 @@ export const NotificationsScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildNotificationsStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -326,16 +331,16 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   markAllText: {
     fontSize: 14,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "600",
   },
   loadingContainer: {
@@ -352,19 +357,19 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginTop: 20,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 16,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
   },
   signInButton: {
     paddingHorizontal: 32,
     paddingVertical: 14,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 12,
     marginTop: 24,
   },
@@ -392,7 +397,7 @@ const styles = StyleSheet.create({
   unreadCard: {
     backgroundColor: "#F0F9FF",
     borderLeftWidth: 3,
-    borderLeftColor: colors.primary,
+    borderLeftColor: c.primary,
   },
   iconContainer: {
     width: 48,
@@ -414,24 +419,24 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     flex: 1,
   },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
   },
   message: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 20,
     marginBottom: 8,
   },
   time: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
   },
   deleteButton: {
     padding: 4,

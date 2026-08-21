@@ -16,13 +16,16 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShop } from "../context/ShopContext";
-import { colors, radius } from "../theme/colors";
+import { colors as palette, radius } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { SellerCard } from "../components/SellerCard";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const StoresScreen = () => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const { sellers, loading, refreshSellers } = useShop();
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -31,6 +34,7 @@ export const StoresScreen = () => {
   const [showSearch, setShowSearch] = useState(false);
   const { gridColumns, getItemWidth } = useResponsive();
   const itemWidth = getItemWidth(gridColumns, 16);
+  const styles = useAppStyles((c) => buildStoresStyles(c));
 
   const searchVisible = showSearch || searchQuery.length > 0;
 
@@ -266,21 +270,22 @@ export const StoresScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 8,
-  },
+const buildStoresStyles = (c) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    header: {
+      paddingHorizontal: 20,
+      paddingBottom: 28,
+      borderBottomLeftRadius: 28,
+      borderBottomRightRadius: 28,
+      shadowColor: c.primary,
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      elevation: 8,
+    },
   headerTop: {
     flexDirection: "row",
     alignItems: "center",
@@ -349,7 +354,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "500",
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
@@ -364,12 +369,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     letterSpacing: -0.3,
   },
   sectionSubtitle: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
     marginTop: 2,
   },
@@ -385,7 +390,7 @@ const styles = StyleSheet.create({
     paddingVertical: 36,
     paddingHorizontal: 48,
     alignItems: "center",
-    shadowColor: colors.primary,
+    shadowColor: c.primary,
     shadowOpacity: 0.08,
     shadowRadius: 16,
     elevation: 5,
@@ -393,7 +398,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 14,
     fontSize: 15,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "600",
   },
   emptyIconContainer: {
@@ -407,22 +412,22 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 15,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     lineHeight: 22,
   },
   clearSearchButton: {
     marginTop: 20,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: radius.pill,
-    shadowColor: colors.primary,
+    shadowColor: c.primary,
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 4,
@@ -489,11 +494,11 @@ const styles = StyleSheet.create({
   },
   sortOptionText: {
     fontSize: 15,
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "600",
   },
   sortOptionTextSelected: {
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "700",
   },
 });

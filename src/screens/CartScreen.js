@@ -12,8 +12,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 // Map color names to hex values
 const colorMap = {
@@ -72,6 +74,8 @@ export const CartScreen = ({ navigation }) => {
   const { items, total, updateQuantity, removeFromCart, clearCart } = useCart();
   const toast = useToast();
   const { isWide, contentMaxWidth } = useResponsive();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildCartStyles(c));
   const getAvailableStock = (product) =>
     Number(product?.quantity ?? product?.stock ?? 0);
   const hasInventoryValue = (product) =>
@@ -361,10 +365,11 @@ export const CartScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildCartStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     paddingHorizontal: 20,
@@ -385,11 +390,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 26,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     letterSpacing: -0.5,
   },
   itemCountBadge: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -401,7 +406,7 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 4,
     fontWeight: "500",
   },
@@ -420,7 +425,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
-    shadowColor: colors.primary,
+    shadowColor: c.primary,
     shadowOpacity: 0.1,
     shadowRadius: 20,
     elevation: 5,
@@ -428,11 +433,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   emptySubtitle: {
     marginTop: 8,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     fontSize: 15,
     lineHeight: 22,
@@ -441,9 +446,9 @@ const styles = StyleSheet.create({
     marginTop: 28,
     paddingHorizontal: 28,
     paddingVertical: 14,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 20,
-    shadowColor: colors.primary,
+    shadowColor: c.primary,
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
@@ -530,7 +535,7 @@ const styles = StyleSheet.create({
   title: {
     fontWeight: "700",
     fontSize: 15,
-    color: colors.dark,
+    color: c.dark,
     lineHeight: 20,
     letterSpacing: -0.2,
   },
@@ -550,7 +555,7 @@ const styles = StyleSheet.create({
   },
   specText: {
     fontSize: 11,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "600",
   },
   colorDot: {
@@ -569,11 +574,11 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 17,
     fontWeight: "800",
-    color: colors.primary,
+    color: c.primary,
   },
   originalPrice: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     textDecorationLine: "line-through",
   },
   outOfStockText: {
@@ -625,7 +630,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
   },
   qtyButtonAdd: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
   },
   qtyButtonDisabledAdd: {
     backgroundColor: "#CBD5E1",
@@ -637,7 +642,7 @@ const styles = StyleSheet.create({
   qtyValue: {
     fontWeight: "700",
     fontSize: 16,
-    color: colors.dark,
+    color: c.dark,
   },
   summary: {
     backgroundColor: "#fff",
@@ -657,14 +662,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   summaryLabel: {
-    color: colors.muted,
+    color: c.muted,
     fontSize: 15,
     fontWeight: "500",
   },
   summaryValue: {
     fontSize: 15,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   freeShipping: {
     color: "#10B981",
@@ -680,7 +685,7 @@ const styles = StyleSheet.create({
   },
   shippingHint: {
     fontSize: 12,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "600",
   },
   stockWarningContainer: {
@@ -712,12 +717,12 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 17,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   totalValue: {
     fontSize: 22,
     fontWeight: "800",
-    color: colors.primary,
+    color: c.primary,
   },
   checkout: {
     borderRadius: 18,

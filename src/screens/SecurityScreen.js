@@ -11,7 +11,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const SecurityScreen = ({ navigation }) => {
@@ -19,6 +21,8 @@ export const SecurityScreen = ({ navigation }) => {
   const toast = useToast();
   const [loginAlerts, setLoginAlerts] = useState(true);
   const { isWide, horizontalPadding } = useResponsive();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildSecurityStyles(c));
 
   const securityItems = [
     {
@@ -139,10 +143,11 @@ export const SecurityScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildSecurityStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -152,7 +157,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   backButton: {
     padding: 8,
@@ -160,7 +165,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   scrollView: {
     flex: 1,
@@ -173,7 +178,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
     textTransform: "uppercase",
     letterSpacing: 1,
     paddingVertical: 12,
@@ -184,7 +189,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   securityItemLeft: {
     flexDirection: "row",
@@ -198,12 +203,12 @@ const styles = StyleSheet.create({
   securityLabel: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 4,
   },
   securityDescription: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 20,
   },
   actionItem: {
@@ -212,7 +217,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   actionItemLeft: {
     flexDirection: "row",
@@ -225,12 +230,12 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     fontSize: 16,
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 2,
   },
   actionDescription: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
   },
   infoSection: {
     flexDirection: "row",
@@ -241,11 +246,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
   },
   infoText: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     marginLeft: 12,
     flex: 1,
     lineHeight: 20,

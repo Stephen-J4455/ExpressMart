@@ -23,7 +23,9 @@ import { useToast } from "../context/ToastContext";
 import { useShop } from "../context/ShopContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { AdRenderer } from "../components/AdBanner";
 import { ProductCard } from "../components/ProductCard";
 import { InlineAdProductCard } from "../components/InlineAdProductCard";
@@ -79,6 +81,9 @@ const toBoolean = (value) => {
 const REVIEW_STAR_COLOR = "#F97316";
 
 export const ProductDetailScreen = ({ route, navigation }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildProductDetailStyles(c));
+  const markdownStyles = useAppStyles((c) => buildProductDetailMarkdownStyles(c));
   // When opened via a universal link (https://www.expressmart.me/product/:id)
   // only `productId` is present; otherwise a full `product` object is passed.
   const { product: initialProduct, productId: deepLinkProductId } = route.params;
@@ -1962,10 +1967,11 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildProductDetailStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   loadingContainer: {
     alignItems: "center",
@@ -2034,7 +2040,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     marginTop: -24,
@@ -2050,12 +2056,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: colors.primary + "12",
+    backgroundColor: c.primary + "12",
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: colors.primary + "22",
+    borderColor: c.primary + "22",
   },
   categoryPill: {
     backgroundColor: "#F8FAFC",
@@ -2067,14 +2073,14 @@ const styles = StyleSheet.create({
   },
   categoryPillText: {
     fontSize: 11,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   vendor: {
     fontSize: 12,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "700",
   },
   sellerBadgesRow: {
@@ -2098,7 +2104,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 25,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     lineHeight: 32,
     letterSpacing: -0.3,
     marginBottom: 10,
@@ -2136,14 +2142,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   badge: {
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   badgeText: {
     fontSize: 12,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "600",
   },
   priceSection: {
@@ -2155,7 +2161,7 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 30,
     fontWeight: "800",
-    color: colors.primary,
+    color: c.primary,
   },
   priceContainer: {
     flexDirection: "row",
@@ -2165,11 +2171,11 @@ const styles = StyleSheet.create({
   },
   originalPrice: {
     fontSize: 16,
-    color: colors.muted,
+    color: c.muted,
     textDecorationLine: "line-through",
   },
   discountBadge: {
-    backgroundColor: colors.accent,
+    backgroundColor: c.accent,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -2232,11 +2238,11 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 14,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   ratingCount: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
   },
   stockRow: {
@@ -2246,7 +2252,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingBottom: 24,
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   stockText: {
     fontSize: 14,
@@ -2273,12 +2279,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 12,
   },
   description: {
     fontSize: 15,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 24,
   },
   expandDetailsButton: {
@@ -2291,7 +2297,7 @@ const styles = StyleSheet.create({
   expandDetailsText: {
     fontSize: 13,
     fontWeight: "700",
-    color: colors.primary,
+    color: c.primary,
   },
   similarProductsLoader: {
     paddingVertical: 20,
@@ -2299,7 +2305,7 @@ const styles = StyleSheet.create({
   },
   similarProductsEmpty: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
   },
   specRow: {
@@ -2307,21 +2313,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   specLabel: {
     fontSize: 15,
-    color: colors.muted,
+    color: c.muted,
   },
   specValue: {
     fontSize: 15,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   reviewItem: {
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   reviewHeader: {
     flexDirection: "row",
@@ -2335,11 +2341,11 @@ const styles = StyleSheet.create({
   },
   reviewDate: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
   },
   reviewText: {
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
     lineHeight: 20,
     marginBottom: 8,
   },
@@ -2347,17 +2353,17 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingLeft: 12,
     borderLeftWidth: 2,
-    borderLeftColor: colors.light,
+    borderLeftColor: c.light,
     gap: 12,
   },
   commentItem: {
-    backgroundColor: colors.light + "40",
+    backgroundColor: c.light + "40",
     padding: 10,
     borderRadius: 10,
   },
   sellerReplyItem: {
-    backgroundColor: colors.primary + "10",
-    borderColor: colors.primary + "30",
+    backgroundColor: c.primary + "10",
+    borderColor: c.primary + "30",
     borderWidth: 1,
   },
   commentHeader: {
@@ -2369,21 +2375,21 @@ const styles = StyleSheet.create({
   commentAuthor: {
     fontSize: 12,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   commentDate: {
     fontSize: 10,
-    color: colors.muted,
+    color: c.muted,
   },
   commentBody: {
     fontSize: 13,
-    color: colors.dark,
+    color: c.dark,
     lineHeight: 18,
   },
   sellerReplyBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -2397,9 +2403,9 @@ const styles = StyleSheet.create({
   footer: {
     padding: 16,
     paddingBottom: 24,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     borderTopWidth: 1,
-    borderTopColor: colors.light,
+    borderTopColor: c.light,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -2408,11 +2414,11 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
-    borderColor: colors.primary + "40",
+    borderColor: c.primary + "40",
   },
   ctaButton: {
     flex: 1,
@@ -2446,13 +2452,13 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 20,
   },
   writeReviewText: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.primary,
+    color: c.primary,
   },
   noReviews: {
     alignItems: "center",
@@ -2460,14 +2466,14 @@ const styles = StyleSheet.create({
   },
   noReviewsText: {
     fontSize: 16,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 12,
     marginBottom: 16,
   },
   writeFirstReviewButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 8,
   },
   writeFirstReviewText: {
@@ -2477,7 +2483,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     paddingTop: 24,
   },
   modalHeader: {
@@ -2486,12 +2492,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   closeButton: {
     padding: 4,
@@ -2503,7 +2509,7 @@ const styles = StyleSheet.create({
   productInfo: {
     flexDirection: "row",
     padding: 16,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 12,
     marginBottom: 24,
   },
@@ -2521,12 +2527,12 @@ const styles = StyleSheet.create({
   productTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 4,
   },
   productVendor: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
   },
   ratingSection: {
     marginBottom: 24,
@@ -2534,7 +2540,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 12,
   },
   starRating: {
@@ -2546,7 +2552,7 @@ const styles = StyleSheet.create({
   },
   commentInput: {
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
@@ -2558,26 +2564,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: colors.light,
+    borderTopColor: c.light,
     gap: 12,
   },
   cancelButton: {
     flex: 1,
     paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 8,
   },
   cancelText: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   submitButton: {
     flex: 2,
     paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 8,
   },
   submitDisabled: {
@@ -2594,38 +2600,38 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 20,
   },
   editReviewText: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.primary,
+    color: c.primary,
   },
   commentsSection: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.light,
+    borderTopColor: c.light,
   },
   commentItem: {
     marginBottom: 8,
     padding: 8,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 8,
   },
   commentText: {
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
     lineHeight: 20,
   },
   commentAuthor: {
     fontWeight: "600",
-    color: colors.primary,
+    color: c.primary,
   },
   commentDate: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 4,
   },
   addCommentSection: {
@@ -2637,7 +2643,7 @@ const styles = StyleSheet.create({
   commentInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.light,
+    borderColor: c.light,
     borderRadius: 8,
     padding: 8,
     fontSize: 14,
@@ -2648,7 +2654,7 @@ const styles = StyleSheet.create({
   commentButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 8,
     justifyContent: "center",
   },
@@ -2669,7 +2675,7 @@ const styles = StyleSheet.create({
   colorBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -2684,7 +2690,7 @@ const styles = StyleSheet.create({
   },
   colorName: {
     fontSize: 13,
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "500",
   },
   sizeGrid: {
@@ -2694,21 +2700,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sizeBadge: {
-    backgroundColor: colors.primary + "15",
+    backgroundColor: c.primary + "15",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: colors.primary + "30",
+    borderColor: c.primary + "30",
   },
   sizeName: {
     fontSize: 13,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "600",
   },
   divider: {
     height: 1,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     marginVertical: 12,
   },
   tagsContainer: {
@@ -2717,16 +2723,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tagChip: {
-    backgroundColor: colors.primary + "15",
+    backgroundColor: c.primary + "15",
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: colors.primary + "30",
+    borderColor: c.primary + "30",
   },
   tagText: {
     fontSize: 13,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "500",
   },
   variantOverlay: {
@@ -2735,7 +2741,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   variantModal: {
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingHorizontal: 16,
@@ -2752,7 +2758,7 @@ const styles = StyleSheet.create({
   variantTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   variantSection: {
     marginBottom: 14,
@@ -2760,7 +2766,7 @@ const styles = StyleSheet.create({
   variantLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 8,
   },
   variantOptionsRow: {
@@ -2782,7 +2788,7 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
   },
   smallColorDotSelected: {
-    borderColor: colors.primary,
+    borderColor: c.primary,
     borderWidth: 3,
   },
   sizeOption: {
@@ -2790,23 +2796,23 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: colors.light,
+    borderColor: c.light,
     backgroundColor: "#fff",
     minWidth: 40,
     alignItems: "center",
     justifyContent: "center",
   },
   sizeOptionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary + "10",
+    borderColor: c.primary,
+    backgroundColor: c.primary + "10",
   },
   sizeOptionText: {
     fontSize: 12,
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "500",
   },
   sizeOptionTextSelected: {
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "600",
   },
   variantAddButton: {
@@ -2827,7 +2833,7 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.primary,
+    color: c.primary,
     marginTop: 4,
   },
   // Review dropdown header
@@ -2846,7 +2852,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: colors.primary + "15",
+    backgroundColor: c.primary + "15",
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 10,
@@ -2854,7 +2860,7 @@ const styles = StyleSheet.create({
   commentCountText: {
     fontSize: 11,
     fontWeight: "700",
-    color: colors.primary,
+    color: c.primary,
   },
   // Shipping & stock redesign
   deliveryRow: {
@@ -2876,8 +2882,8 @@ const styles = StyleSheet.create({
     borderColor: "#BBF7D0",
   },
   deliveryPillPaid: {
-    backgroundColor: colors.primary + "08",
-    borderColor: colors.primary + "28",
+    backgroundColor: c.primary + "08",
+    borderColor: c.primary + "28",
   },
   deliveryPillInStock: {
     backgroundColor: "#F0FDF4",
@@ -2897,7 +2903,7 @@ const styles = StyleSheet.create({
   deliveryLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: colors.muted,
+    color: c.muted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
     lineHeight: 16,
@@ -2905,7 +2911,7 @@ const styles = StyleSheet.create({
   deliveryValue: {
     fontSize: 15,
     fontWeight: "800",
-    color: colors.primary,
+    color: c.primary,
     lineHeight: 20,
   },
   // Fullscreen image preview
@@ -2968,38 +2974,39 @@ const styles = StyleSheet.create({
   },
 });
 
-const markdownStyles = StyleSheet.create({
+const buildProductDetailMarkdownStyles = (c) =>
+  StyleSheet.create({
   body: {
     fontSize: 15,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 24,
   },
   heading1: {
     fontSize: 20,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginVertical: 8,
   },
   heading2: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginVertical: 6,
   },
   heading3: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginVertical: 4,
   },
   text: {
     fontSize: 15,
-    color: colors.muted,
+    color: c.muted,
     lineHeight: 24,
   },
   strong: {
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   em: {
     fontStyle: "italic",
@@ -3012,15 +3019,15 @@ const markdownStyles = StyleSheet.create({
     marginVertical: 8,
   },
   code_inline: {
-    backgroundColor: colors.light,
-    color: colors.primary,
+    backgroundColor: c.light,
+    color: c.primary,
     paddingHorizontal: 4,
     borderRadius: 4,
     fontFamily: "monospace",
   },
   code_block: {
-    backgroundColor: colors.light,
-    color: colors.dark,
+    backgroundColor: c.light,
+    color: c.dark,
     padding: 12,
     borderRadius: 8,
     marginVertical: 8,
@@ -3028,6 +3035,6 @@ const markdownStyles = StyleSheet.create({
     fontSize: 13,
   },
   link: {
-    color: colors.primary,
+    color: c.primary,
   },
 });

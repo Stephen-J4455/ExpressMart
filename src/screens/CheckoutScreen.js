@@ -21,7 +21,9 @@ import { useToast } from "../context/ToastContext";
 import { useAds } from "../context/AdsContext";
 import { supabase, supabaseUrl } from "../lib/supabase";
 import { AdRenderer } from "../components/AdBanner";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import {
   verifyPaymentAndCreateOrder,
   generatePaymentReference,
@@ -30,6 +32,8 @@ import { callEdgeFunction } from "../lib/supabase";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const CheckoutScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildCheckoutStyles(c));
   const { isWide, horizontalPadding } = useResponsive();
   const insets = useSafeAreaInsets();
   const route = useRoute();
@@ -597,10 +601,11 @@ export const CheckoutScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildCheckoutStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   centerContainer: {
     flex: 1,
@@ -622,14 +627,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   content: {
     flex: 1,
@@ -653,14 +658,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginLeft: 8,
   },
   addressCard: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 12,
   },
   addressContent: {
@@ -673,31 +678,31 @@ const styles = StyleSheet.create({
   addressName: {
     fontSize: 16,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   addressPhone: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 2,
   },
   addressText: {
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
     marginTop: 4,
   },
   addButton: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 12,
     borderStyle: "dashed",
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: c.primary,
   },
   addButtonText: {
     marginLeft: 8,
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "600",
   },
   addressList: {
@@ -709,19 +714,19 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     marginBottom: 8,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
   },
   addressOptionSelected: {
-    backgroundColor: `${colors.primary}10`,
+    backgroundColor: `${c.primary}10`,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: c.primary,
   },
   radioOuter: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: colors.primary,
+    borderColor: c.primary,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -730,19 +735,19 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
   },
   addressOptionName: {
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   addressOptionText: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 2,
   },
   input: {
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 12,
     padding: 14,
     fontSize: 16,
@@ -768,14 +773,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cancelButtonText: {
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "600",
   },
   saveButton: {
     flex: 1,
     padding: 14,
     borderRadius: 12,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     alignItems: "center",
   },
   saveButtonText: {
@@ -790,17 +795,17 @@ const styles = StyleSheet.create({
   orderItemTitle: {
     flex: 1,
     fontSize: 14,
-    color: colors.dark,
+    color: c.dark,
   },
   orderItemQty: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     marginHorizontal: 12,
   },
   orderItemPrice: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   divider: {
     height: 1,
@@ -813,14 +818,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   summaryLabel: {
-    color: colors.muted,
+    color: c.muted,
   },
   summaryValue: {
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   freeShipping: {
-    color: colors.primary,
+    color: c.primary,
   },
   freeShippingText: {
     color: "#10B981",
@@ -829,18 +834,18 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   totalValue: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.primary,
+    color: c.primary,
   },
   paymentMethod: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderRadius: 12,
   },
   paymentIcon: {
@@ -860,11 +865,11 @@ const styles = StyleSheet.create({
   paymentName: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   paymentDesc: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 2,
   },
   footer: {
@@ -885,12 +890,12 @@ const styles = StyleSheet.create({
   },
   footerLabel: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
   },
   footerValue: {
     fontSize: 20,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   checkoutButton: {
     flex: 1,

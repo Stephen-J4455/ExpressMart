@@ -19,8 +19,10 @@ import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useResponsive } from "../hooks/useResponsive";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase, callEdgeFunction } from "../lib/supabase";
-import { colors, getTheme } from "../theme/colors";
+import { colors as palette, getTheme } from "../theme/colors";
 import { getImageContentType, getWebUploadPayload } from "../utils/webUpload";
 import { generatePaymentReference } from "../services/payment";
 
@@ -65,7 +67,9 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
   const { user, refreshProfile } = useAuth();
   const toast = useToast();
   const { isWide, contentMaxWidth } = useResponsive();
+  const { colors, isDark } = useTheme();
   const theme = getTheme(colors.primary);
+  const styles = useAppStyles((c) => buildStoreRegStyles(c));
 
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
@@ -856,7 +860,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
+      <StatusBar backgroundColor={colors.light} barStyle={isDark ? "light-content" : "dark-content"} />
       <View style={styles.header}>
         <Pressable
           style={styles.backButton}
@@ -895,378 +899,379 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  scrollArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E4E8F0",
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.light,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.dark,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 20,
-  },
-  stepIndicator: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  stepDotWrap: {
-    alignItems: "center",
-    flex: 1,
-  },
-  stepDot: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.light,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepDotActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  stepDotDone: {
-    backgroundColor: "#22C55E",
-    borderColor: "#22C55E",
-  },
-  stepDotText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.muted,
-  },
-  stepDotTextActive: {
-    color: "#fff",
-  },
-  stepLabel: {
-    fontSize: 11,
-    color: colors.muted,
-    marginTop: 6,
-    fontWeight: "600",
-  },
-  stepLabelActive: {
-    color: colors.dark,
-  },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 18,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  label: {
-    fontWeight: "700",
-    marginBottom: 8,
-    marginTop: 4,
-    color: colors.dark,
-  },
-  subLabel: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: -4,
-    marginBottom: 12,
-  },
-  introWrap: {
-    alignItems: "center",
-    backgroundColor: colors.light,
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    marginBottom: 18,
-  },
-  introIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  introTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.dark,
-    marginBottom: 6,
-  },
-  introSub: {
-    fontSize: 13,
-    color: colors.muted,
-    textAlign: "center",
-    lineHeight: 19,
-    paddingHorizontal: 8,
-  },
-  inputWrap: {
-    position: "relative",
-    marginBottom: 12,
-  },
-  inputIcon: {
-    position: "absolute",
-    left: 14,
-    top: 15,
-    zIndex: 1,
-  },
-  inputWithIcon: {
-    paddingLeft: 42,
-  },
-  phoneRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  countryCode: {
-    alignItems: "center",
-    justifyContent: "center",
-    height: 48,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#EEF1F6",
-  },
-  countryCodeText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: colors.dark,
-  },
-  phoneInput: {
-    height: 48,
-    marginBottom: 0,
-  },
-  phoneHint: {
-    fontSize: 12,
-    color: colors.muted,
-    marginBottom: 12,
-    marginTop: -4,
-  },
-  input: {
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 15,
-    color: colors.dark,
-    backgroundColor: "#FAFBFC",
-    marginBottom: 12,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: "top",
-  },
-  logoPicker: {
-    marginTop: 4,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    borderStyle: "dashed",
-  },
-  logoPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 36,
-    backgroundColor: colors.light,
-  },
-  logoPlaceholderText: {
-    marginTop: 10,
-    color: colors.muted,
-    fontWeight: "600",
-  },
-  logoImage: {
-    width: "100%",
-    height: 200,
-    resizeMode: "cover",
-  },
-  removeLogo: {
-    alignSelf: "flex-end",
-    marginTop: 8,
-  },
-  removeLogoText: {
-    color: "#EF4444",
-    fontWeight: "600",
-  },
-  typeList: {
-    flexDirection: "column",
-  },
-  typeBtn: {
-    padding: 18,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-  },
-  typeBtnSpacing: {
-    marginTop: 10,
-  },
-  typeText: {
-    marginLeft: 12,
-    fontWeight: "700",
-    color: colors.dark,
-  },
-  providerRow: {
-    flexDirection: "column",
-  },
-  bankList: {
-    maxHeight: 200,
-    marginBottom: 4,
-  },
-  noBanks: {
-    color: colors.muted,
-    marginTop: 8,
-  },
-  chip: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    marginVertical: 5,
-    backgroundColor: colors.light,
-  },
-  chipText: {
-    fontWeight: "700",
-    color: colors.dark,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-  },
-  summaryKey: {
-    fontSize: 14,
-    color: colors.muted,
-    fontWeight: "600",
-  },
-  summaryVal: {
-    fontSize: 14,
-    color: colors.dark,
-    fontWeight: "700",
-    flexShrink: 1,
-    textAlign: "right",
-    marginLeft: 12,
-  },
-  feeBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 14,
-    backgroundColor: colors.light,
-  },
-  feeTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.dark,
-  },
-  feeSub: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
-  },
-  feeAmount: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.primary,
-  },
-  payNote: {
-    marginTop: 16,
-    fontSize: 13,
-    color: colors.muted,
-    lineHeight: 20,
-  },
-  footer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: 16,
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#E4E8F0",
-  },
-  primaryBtn: {
-    paddingVertical: 15,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryBtnText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-    marginLeft: 8,
-  },
-  cancelBtn: {
-    paddingVertical: 15,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F3F4F6",
-  },
-  footerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  footerPrimary: {
-    flex: 1,
-    flexDirection: "row",
-  },
-  footerBtn: {
-    marginRight: 12,
-    minWidth: 90,
-  },
-  busyOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(255,255,255,0.85)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  busyText: {
-    marginTop: 12,
-    color: colors.dark,
-    fontWeight: "600",
-  },
-});
+const buildStoreRegStyles = (c) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.light,
+    },
+    scrollArea: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      backgroundColor: c.light,
+      borderBottomWidth: 1,
+      borderBottomColor: "#E4E8F0",
+    },
+    backButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: c.light,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    scrollContent: {
+      padding: 16,
+      paddingBottom: 20,
+    },
+    stepIndicator: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 20,
+    },
+    stepDotWrap: {
+      alignItems: "center",
+      flex: 1,
+    },
+    stepDot: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: c.light,
+      borderWidth: 1.5,
+      borderColor: "#E2E8F0",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    stepDotActive: {
+      backgroundColor: c.primary,
+      borderColor: c.primary,
+    },
+    stepDotDone: {
+      backgroundColor: "#22C55E",
+      borderColor: "#22C55E",
+    },
+    stepDotText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.muted,
+    },
+    stepDotTextActive: {
+      color: "#fff",
+    },
+    stepLabel: {
+      fontSize: 11,
+      color: c.muted,
+      marginTop: 6,
+      fontWeight: "600",
+    },
+    stepLabelActive: {
+      color: c.dark,
+    },
+    card: {
+      backgroundColor: c.light,
+      borderRadius: 20,
+      padding: 18,
+      shadowColor: "#000",
+      shadowOpacity: 0.04,
+      shadowRadius: 10,
+      elevation: 2,
+    },
+    label: {
+      fontWeight: "700",
+      marginBottom: 8,
+      marginTop: 4,
+      color: c.dark,
+    },
+    subLabel: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: -4,
+      marginBottom: 12,
+    },
+    introWrap: {
+      alignItems: "center",
+      backgroundColor: c.light,
+      borderRadius: 16,
+      paddingVertical: 20,
+      paddingHorizontal: 16,
+      marginBottom: 18,
+    },
+    introIcon: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: c.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 12,
+    },
+    introTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.dark,
+      marginBottom: 6,
+    },
+    introSub: {
+      fontSize: 13,
+      color: c.muted,
+      textAlign: "center",
+      lineHeight: 19,
+      paddingHorizontal: 8,
+    },
+    inputWrap: {
+      position: "relative",
+      marginBottom: 12,
+    },
+    inputIcon: {
+      position: "absolute",
+      left: 14,
+      top: 15,
+      zIndex: 1,
+    },
+    inputWithIcon: {
+      paddingLeft: 42,
+    },
+    phoneRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    countryCode: {
+      alignItems: "center",
+      justifyContent: "center",
+      height: 48,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: "#E2E8F0",
+      backgroundColor: "#EEF1F6",
+    },
+    countryCodeText: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    phoneInput: {
+      height: 48,
+      marginBottom: 0,
+    },
+    phoneHint: {
+      fontSize: 12,
+      color: c.muted,
+      marginBottom: 12,
+      marginTop: -4,
+    },
+    input: {
+      borderWidth: 1.5,
+      borderColor: "#E2E8F0",
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+      fontSize: 15,
+      color: c.dark,
+      backgroundColor: "#FAFBFC",
+      marginBottom: 12,
+      ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    },
+    textArea: {
+      height: 100,
+      textAlignVertical: "top",
+    },
+    logoPicker: {
+      marginTop: 4,
+      borderRadius: 16,
+      overflow: "hidden",
+      borderWidth: 1.5,
+      borderColor: "#E2E8F0",
+      borderStyle: "dashed",
+    },
+    logoPlaceholder: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 36,
+      backgroundColor: c.light,
+    },
+    logoPlaceholderText: {
+      marginTop: 10,
+      color: c.muted,
+      fontWeight: "600",
+    },
+    logoImage: {
+      width: "100%",
+      height: 200,
+      resizeMode: "cover",
+    },
+    removeLogo: {
+      alignSelf: "flex-end",
+      marginTop: 8,
+    },
+    removeLogoText: {
+      color: "#EF4444",
+      fontWeight: "600",
+    },
+    typeList: {
+      flexDirection: "column",
+    },
+    typeBtn: {
+      padding: 18,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: "#E2E8F0",
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+    },
+    typeBtnSpacing: {
+      marginTop: 10,
+    },
+    typeText: {
+      marginLeft: 12,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    providerRow: {
+      flexDirection: "column",
+    },
+    bankList: {
+      maxHeight: 200,
+      marginBottom: 4,
+    },
+    noBanks: {
+      color: c.muted,
+      marginTop: 8,
+    },
+    chip: {
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: "#E2E8F0",
+      marginVertical: 5,
+      backgroundColor: c.light,
+    },
+    chipText: {
+      fontWeight: "700",
+      color: c.dark,
+    },
+    summaryRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: "#F1F5F9",
+    },
+    summaryKey: {
+      fontSize: 14,
+      color: c.muted,
+      fontWeight: "600",
+    },
+    summaryVal: {
+      fontSize: 14,
+      color: c.dark,
+      fontWeight: "700",
+      flexShrink: 1,
+      textAlign: "right",
+      marginLeft: 12,
+    },
+    feeBox: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 16,
+      padding: 16,
+      borderRadius: 14,
+      backgroundColor: c.light,
+    },
+    feeTitle: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    feeSub: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: 2,
+    },
+    feeAmount: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.primary,
+    },
+    payNote: {
+      marginTop: 16,
+      fontSize: 13,
+      color: c.muted,
+      lineHeight: 20,
+    },
+    footer: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      padding: 16,
+      backgroundColor: c.light,
+      borderTopWidth: 1,
+      borderTopColor: "#E4E8F0",
+    },
+    primaryBtn: {
+      paddingVertical: 15,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    primaryBtnText: {
+      color: "#fff",
+      fontSize: 16,
+      fontWeight: "700",
+      marginLeft: 8,
+    },
+    cancelBtn: {
+      paddingVertical: 15,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#F3F4F6",
+    },
+    footerRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    footerPrimary: {
+      flex: 1,
+      flexDirection: "row",
+    },
+    footerBtn: {
+      marginRight: 12,
+      minWidth: 90,
+    },
+    busyOverlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(255,255,255,0.85)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    busyText: {
+      marginTop: 12,
+      color: c.dark,
+      fontWeight: "600",
+    },
+  });
 
 export default StoreRegistrationScreen;

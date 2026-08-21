@@ -11,10 +11,14 @@ import {
 import * as Linking from "expo-linking";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, radius } from "../theme/colors";
+import { colors as palette, radius } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase } from "../lib/supabase";
 
 export const StatusViewer = ({ navigation, route }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildStatusViewerStyles(c));
   const initialStatus = route?.params?.status;
   const [statuses, setStatuses] = useState(
     initialStatus ? [initialStatus] : [],
@@ -292,7 +296,8 @@ export const StatusViewer = ({ navigation, route }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildStatusViewerStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000",
@@ -366,7 +371,7 @@ const styles = StyleSheet.create({
   storyCtaButton: {
     alignSelf: "flex-start",
     marginTop: 14,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: radius.md,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -406,7 +411,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   closeText: {
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "700",
   },
   centerContent: {

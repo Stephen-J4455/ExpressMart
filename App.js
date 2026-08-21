@@ -1051,7 +1051,7 @@ const NavigationWithTheme = () => {
   const theme = useMemo(() => createNavTheme(colors, isDark), [colors, isDark]);
   return (
     <NavigationContainer theme={theme} linking={linking}>
-      <StatusBar style="light" />
+      <StatusBar style={isDark ? "light" : "dark-content"} />
       <AuthenticatedApp />
     </NavigationContainer>
   );

@@ -10,7 +10,9 @@ import {
   Platform,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { getPaystackPublicKey } from "../services/payment";
@@ -20,6 +22,8 @@ const WebView =
   Platform.OS !== "web" ? require("react-native-webview").WebView : null;
 
 export const PaymentWebViewScreen = () => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildPaymentWebViewStyles(c));
   const navigation = useNavigation();
   const route = useRoute();
   const webViewRef = useRef(null);
@@ -592,10 +596,11 @@ export const PaymentWebViewScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildPaymentWebViewStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   webview: {
     flex: 1,

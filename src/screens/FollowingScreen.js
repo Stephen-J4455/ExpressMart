@@ -14,11 +14,15 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useShop } from "../context/ShopContext";
 import { useToast } from "../context/ToastContext";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 export const FollowingScreen = ({ navigation }) => {
   const { sellers, followedSellers, unfollowSeller, isFollowing } = useShop();
   const toast = useToast();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildFollowingStyles(c));
   const [unfollowingId, setUnfollowingId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -195,10 +199,11 @@ export const FollowingScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildFollowingStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -214,19 +219,19 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     letterSpacing: -0.3,
   },
   headerSubtitle: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
   },
   exploreIconBtn: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: colors.primary + "15",
+    backgroundColor: c.primary + "15",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -288,7 +293,7 @@ const styles = StyleSheet.create({
   sellerName: {
     fontSize: 14,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     letterSpacing: -0.2,
   },
   ratingRow: {
@@ -299,7 +304,7 @@ const styles = StyleSheet.create({
   },
   ratingText: {
     fontSize: 11,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
   },
   unfollowBtn: {
@@ -310,8 +315,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.accent + "50",
-    backgroundColor: colors.accent + "10",
+    borderColor: c.accent + "50",
+    backgroundColor: c.accent + "10",
   },
   unfollowBtnLoading: {
     opacity: 0.6,
@@ -319,21 +324,21 @@ const styles = StyleSheet.create({
   unfollowBtnText: {
     fontSize: 10,
     fontWeight: "700",
-    color: colors.accent,
+    color: c.accent,
   },
   visitBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
-    backgroundColor: colors.primary + "12",
+    backgroundColor: c.primary + "12",
     paddingVertical: 8,
     borderRadius: 10,
   },
   visitBtnText: {
     fontSize: 12,
     fontWeight: "700",
-    color: colors.primary,
+    color: c.primary,
   },
   emptyContainer: {
     flex: 1,
@@ -353,14 +358,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     textAlign: "center",
     marginBottom: 10,
     letterSpacing: -0.3,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 32,

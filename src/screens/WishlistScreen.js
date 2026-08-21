@@ -15,10 +15,14 @@ import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const WishlistScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildWishlistStyles(c));
   const { user } = useAuth();
   const { addToCart } = useCart();
   const toast = useToast();
@@ -266,10 +270,11 @@ export const WishlistScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildWishlistStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -278,12 +283,12 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: colors.light,
+    borderBottomColor: c.light,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   loadingContainer: {
     flex: 1,
@@ -299,20 +304,20 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginTop: 20,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 16,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     marginBottom: 24,
   },
   browseButton: {
     paddingHorizontal: 32,
     paddingVertical: 14,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderRadius: 12,
   },
   browseText: {
@@ -351,7 +356,7 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: 150,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     resizeMode: "cover",
   },
   info: {
@@ -365,7 +370,7 @@ const styles = StyleSheet.create({
   },
   vendor: {
     fontSize: 11,
-    color: colors.muted,
+    color: c.muted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 2,
@@ -373,7 +378,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 6,
   },
   priceRow: {
@@ -385,7 +390,7 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.primary,
+    color: c.primary,
   },
   ratingRow: {
     flexDirection: "row",
@@ -395,7 +400,7 @@ const styles = StyleSheet.create({
   rating: {
     fontSize: 12,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
   },
   stock: {
     fontSize: 12,
@@ -406,7 +411,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
   },

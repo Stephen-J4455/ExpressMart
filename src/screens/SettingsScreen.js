@@ -12,13 +12,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const SettingsScreen = ({ navigation }) => {
   const { user, profile } = useAuth();
   const toast = useToast();
   const { isWide, horizontalPadding } = useResponsive();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildSettingsStyles(c));
   const [notifications, setNotifications] = useState(true);
   const [emailUpdates, setEmailUpdates] = useState(true);
   const [activeSection, setActiveSection] = useState(0);
@@ -286,10 +290,11 @@ export const SettingsScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildSettingsStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -318,7 +323,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   wideBody: {
     flex: 1,
@@ -355,11 +360,11 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 15,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   profileEmail: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 2,
   },
   sideNavItem: {
@@ -381,15 +386,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sideNavIconActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
   },
   sideNavLabel: {
     fontSize: 15,
     fontWeight: "500",
-    color: colors.muted,
+    color: c.muted,
   },
   sideNavLabelActive: {
-    color: colors.primary,
+    color: c.primary,
     fontWeight: "700",
   },
   signOutBtn: {
@@ -412,7 +417,7 @@ const styles = StyleSheet.create({
   contentPanelTitle: {
     fontSize: 24,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 20,
   },
   settingCard: {
@@ -438,7 +443,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: colors.muted,
+    color: c.muted,
     textTransform: "uppercase",
     letterSpacing: 1,
     paddingVertical: 12,
@@ -467,12 +472,12 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     fontSize: 15,
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "600",
   },
   settingDescription: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     marginTop: 2,
   },
   settingItemRight: {
@@ -481,7 +486,7 @@ const styles = StyleSheet.create({
   },
   settingValue: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     marginRight: 4,
   },
 });

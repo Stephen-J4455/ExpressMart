@@ -19,7 +19,9 @@ import { useChat } from "../context/ChatContext";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
 import { useAuth } from "../context/AuthContext";
-import { colors, radius } from "../theme/colors";
+import { colors as palette, radius } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 import { ChatScreen } from "./ChatScreen";
 import { SellerChatScreen } from "./SellerChatScreen";
@@ -44,6 +46,8 @@ const mapStoryAdToStatus = (ad) => ({
 });
 
 export const ChatsScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildChatsStyles(c));
   const insets = useSafeAreaInsets();
   const { isWide } = useResponsive();
   const { conversations, isOnline, isLoading, refreshConversations } =
@@ -560,21 +564,22 @@ export const ChatsScreen = ({ navigation }) => {
   return <ConversationList />;
 };
 
-const styles = StyleSheet.create({
+const buildChatsStyles = (c) =>
+  StyleSheet.create({
   wideLayout: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   panelLeft: {
     width: 360,
     borderRightWidth: 1,
-    borderRightColor: colors.border,
-    backgroundColor: colors.light,
+    borderRightColor: c.border,
+    backgroundColor: c.light,
   },
   panelRight: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   noChatSelected: {
     flex: 1,
@@ -587,13 +592,13 @@ const styles = StyleSheet.create({
     width: 110,
     height: 110,
     borderRadius: radius.xl,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: colors.primary,
+    borderColor: c.border,
+    shadowColor: c.primary,
     shadowOpacity: 0.12,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 6 },
@@ -602,32 +607,32 @@ const styles = StyleSheet.create({
   noChatTitle: {
     fontSize: 22,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
   },
   noChatSubtext: {
     fontSize: 15,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     lineHeight: 22,
   },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     gap: 12,
   },
   loadingText: {
-    color: colors.muted,
+    color: c.muted,
     fontSize: 15,
     fontWeight: "500",
   },
   header: {
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomLeftRadius: radius.xl,
@@ -652,7 +657,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     letterSpacing: -0.5,
   },
   offlineBadge: {
@@ -673,30 +678,30 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: radius.pill,
-    backgroundColor: colors.success,
+    backgroundColor: c.success,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.lg,
     paddingHorizontal: 14,
     paddingVertical: 8,
     marginTop: 14,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
   searchBackButton: {
     width: 42,
     height: 42,
     borderRadius: radius.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -704,7 +709,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: radius.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -716,7 +721,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: colors.dark,
+    color: c.dark,
     fontWeight: "500",
     paddingVertical: 0,
   },
@@ -724,7 +729,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginHorizontal: 16,
     marginTop: 12,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.md,
     padding: 4,
   },
@@ -735,12 +740,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   tabActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
   },
   tabText: {
     fontSize: 13,
     fontWeight: "700",
-    color: colors.muted,
+    color: c.muted,
   },
   tabTextActive: {
     color: "#fff",
@@ -752,31 +757,31 @@ const styles = StyleSheet.create({
   conversationItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
     padding: 14,
   },
   conversationItemActive: {
     backgroundColor: "#FFF1F4",
-    borderBottomColor: colors.primary,
+    borderBottomColor: c.primary,
     borderBottomWidth: 1,
   },
   userNameActive: {
-    color: colors.primary,
+    color: c.primary,
   },
   lastMessageActive: {
-    color: colors.dark,
+    color: c.dark,
   },
   avatar: {
     width: 54,
     height: 54,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 14,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
   avatarImage: {
     width: "100%",
@@ -794,17 +799,17 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 17,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     flex: 1,
   },
   timestamp: {
     fontSize: 12,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "500",
   },
   lastMessage: {
     fontSize: 14,
-    color: colors.muted,
+    color: c.muted,
     fontWeight: "400",
   },
   rightAction: {
@@ -813,7 +818,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   unreadBadge: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     minWidth: 20,
     height: 20,
     borderRadius: radius.pill,
@@ -831,15 +836,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   statusSection: {
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: c.border,
   },
   statusSectionTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginHorizontal: 16,
     marginBottom: 12,
   },
@@ -856,11 +861,11 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: radius.pill,
     borderWidth: 2.5,
-    borderColor: colors.primary,
+    borderColor: c.primary,
     marginBottom: 6,
   },
   statusAvatarFallback: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -871,14 +876,14 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: radius.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderWidth: 2,
-    borderColor: colors.light,
+    borderColor: c.light,
   },
   statusSellerName: {
     fontSize: 11,
     fontWeight: "500",
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
   },
   emptyState: {
@@ -890,13 +895,13 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: radius.xl,
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: colors.primary,
+    borderColor: c.border,
+    shadowColor: c.primary,
     shadowOpacity: 0.1,
     shadowRadius: 15,
     elevation: 5,
@@ -904,22 +909,22 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 20,
     fontWeight: "800",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 15,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 24,
   },
   exploreButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: radius.pill,
-    shadowColor: colors.primary,
+    shadowColor: c.primary,
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },

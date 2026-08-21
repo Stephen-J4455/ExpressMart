@@ -15,7 +15,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 import * as Linking from "expo-linking";
 import { createClient } from "@supabase/supabase-js";
@@ -29,6 +31,10 @@ export default function PasswordResetScreen({ navigation, route }) {
   const toast = useToast();
   const { resetPassword } = useAuth();
   const { isWide } = useResponsive();
+
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildPasswordResetStyles(c));
+
   const liveUrl = Linking.useURL();
   const initialRouteUrl =
     route?.params?.initialUrl || route?.params?.url || null;
@@ -527,10 +533,11 @@ export default function PasswordResetScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
+const buildPasswordResetStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   // Subtle background circles
   bgCircle1: {
@@ -538,7 +545,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: `${colors.primary}35`,
+    backgroundColor: `${c.primary}35`,
     top: -50,
     right: -50,
   },
@@ -547,7 +554,7 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: `${colors.accent}30`,
+    backgroundColor: `${c.accent}30`,
     top: 200,
     left: -40,
   },
@@ -556,7 +563,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: `${colors.primary}28`,
+    backgroundColor: `${c.primary}28`,
     bottom: 100,
     right: -30,
   },
@@ -565,7 +572,7 @@ const styles = StyleSheet.create({
     width: 180,
     height: 180,
     borderRadius: 90,
-    backgroundColor: `${colors.accent}25`,
+    backgroundColor: `${c.accent}25`,
     bottom: 50,
     left: -60,
   },
@@ -574,7 +581,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: `${colors.primary}22`,
+    backgroundColor: `${c.primary}22`,
     top: 400,
     right: 30,
   },
@@ -583,7 +590,7 @@ const styles = StyleSheet.create({
     width: 130,
     height: 130,
     borderRadius: 65,
-    backgroundColor: `${colors.accent}32`,
+    backgroundColor: `${c.accent}32`,
     bottom: 200,
     right: 50,
   },
@@ -605,7 +612,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: `${colors.primary}15`,
+    backgroundColor: `${c.primary}15`,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
@@ -618,12 +625,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 12,
   },
   subtitle: {
     fontSize: 16,
-    color: colors.muted,
+    color: c.muted,
     textAlign: "center",
     lineHeight: 24,
     paddingHorizontal: 20,
@@ -637,14 +644,14 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: colors.muted,
+    color: c.muted,
   },
   form: {
     gap: 16,
   },
   errorText: {
     fontSize: 16,
-    color: colors.dark,
+    color: c.dark,
     textAlign: "center",
     marginBottom: 20,
   },
@@ -656,7 +663,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: "#E4E8F0",
-    shadowColor: colors.primary,
+    shadowColor: c.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -669,14 +676,14 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 56,
     fontSize: 16,
-    color: colors.dark,
+    color: c.dark,
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
   },
   submitButton: {
     borderRadius: 16,
     overflow: "hidden",
     marginTop: 8,
-    shadowColor: colors.primary,
+    shadowColor: c.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.2,
     shadowRadius: 10,

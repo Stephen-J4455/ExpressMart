@@ -21,7 +21,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors, getTheme, radius } from "../theme/colors";
+import { colors as palette, getTheme, radius } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 const CARD_WIDTH = Math.min(Dimensions.get("window").width * 0.65, 260);
 
@@ -63,6 +65,8 @@ export const SellerChatScreen = ({
   customer: embeddedCustomer,
 }) => {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildSellerChatStyles(c));
   const { user } = useAuth();
   const toast = useToast();
   const routeParams = route?.params || {};
@@ -531,32 +535,33 @@ export const SellerChatScreen = ({
   return embedded ? content : <View style={{ flex: 1 }}>{content}</View>;
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: { backgroundColor: colors.background, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3, zIndex: 2 },
+const buildSellerChatStyles = (c) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
+  header: { backgroundColor: c.background, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3, zIndex: 2 },
   headerContent: { flexDirection: "row", alignItems: "center" },
-  backButton: { width: 36, height: 36, marginRight: 8, borderRadius: radius.pill, backgroundColor: colors.surface, justifyContent: "center", alignItems: "center" },
+  backButton: { width: 36, height: 36, marginRight: 8, borderRadius: radius.pill, backgroundColor: c.surface, justifyContent: "center", alignItems: "center" },
   headerInfo: { flex: 1, flexDirection: "row", alignItems: "center" },
-  userAvatar: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.surface, justifyContent: "center", alignItems: "center", marginRight: 12, overflow: "hidden", borderWidth: 1, borderColor: colors.border },
+  userAvatar: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: c.surface, justifyContent: "center", alignItems: "center", marginRight: 12, overflow: "hidden", borderWidth: 1, borderColor: c.border },
   avatarImg: { width: "100%", height: "100%" },
-  headerTitle: { fontSize: 17, fontWeight: "700", color: colors.dark },
+  headerTitle: { fontSize: 17, fontWeight: "700", color: c.dark },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   statusDot: { width: 6, height: 6, borderRadius: radius.pill },
-  headerSubtitle: { fontSize: 12, color: colors.muted },
+  headerSubtitle: { fontSize: 12, color: c.muted },
   headerAction: { padding: 8 },
-  chatContainer: { flex: 1, backgroundColor: colors.background },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background, gap: 8 },
-  loadingText: { color: colors.muted, fontSize: 15 },
+  chatContainer: { flex: 1, backgroundColor: c.background },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: c.background, gap: 8 },
+  loadingText: { color: c.muted, fontSize: 15 },
   messagesList: { padding: 16, paddingBottom: 16, flexGrow: 1, justifyContent: "flex-end" },
   messageWrapper: { marginBottom: 16, maxWidth: "85%" },
   userWrapper: { alignSelf: "flex-start" },
   sellerWrapper: { alignSelf: "flex-end", alignItems: "flex-end" },
   messageContainer: { padding: 12, borderRadius: radius.lg, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  userMessage: { backgroundColor: colors.light, borderBottomLeftRadius: 4 },
+  userMessage: { backgroundColor: c.light, borderBottomLeftRadius: 4 },
   sellerMessage: { borderBottomRightRadius: 4 },
-  messageText: { fontSize: 16, lineHeight: 22, color: colors.dark },
+  messageText: { fontSize: 16, lineHeight: 22, color: c.dark },
   sellerMessageText: { color: "#fff" },
-  messageTime: { fontSize: 11, color: colors.muted, marginTop: 4, marginHorizontal: 4 },
+  messageTime: { fontSize: 11, color: c.muted, marginTop: 4, marginHorizontal: 4 },
   productCardBubble: {
     borderRadius: radius.lg,
     overflow: "hidden",
@@ -568,17 +573,17 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   productCardBubbleUser: {
-    backgroundColor: colors.primary,
+    backgroundColor: c.primary,
     borderBottomRightRadius: 4,
   },
   productCardBubbleSeller: {
-    backgroundColor: colors.light,
+    backgroundColor: c.light,
     borderBottomLeftRadius: 4,
   },
   productCardImage: {
     width: CARD_WIDTH,
     height: 160,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
   },
   productCardBody: {
     padding: 12,
@@ -586,7 +591,7 @@ const styles = StyleSheet.create({
   productCardTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 4,
     lineHeight: 20,
   },
@@ -596,18 +601,18 @@ const styles = StyleSheet.create({
   productCardPrice: {
     fontSize: 15,
     fontWeight: "700",
-    color: colors.primary,
+    color: c.primary,
   },
   productCardPriceUser: {
     color: "rgba(255,255,255,0.9)",
   },
   dateDivider: { flexDirection: "row", alignItems: "center", marginVertical: 12, paddingHorizontal: 4 },
-  dateDividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dateDividerText: { fontSize: 12, color: colors.muted, marginHorizontal: 10, fontWeight: "600", backgroundColor: colors.background, paddingHorizontal: 4 },
-  inputSticky: { backgroundColor: colors.background, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, borderTopWidth: 1, borderTopColor: colors.border, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, elevation: 6 },
+  dateDividerLine: { flex: 1, height: 1, backgroundColor: c.border },
+  dateDividerText: { fontSize: 12, color: c.muted, marginHorizontal: 10, fontWeight: "600", backgroundColor: c.background, paddingHorizontal: 4 },
+  inputSticky: { backgroundColor: c.background, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, borderTopWidth: 1, borderTopColor: c.border, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, elevation: 6 },
   inputWrapper: { flexDirection: "row", alignItems: "flex-end", gap: 8, justifyContent: "space-between" },
-  inputField: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: radius.pill, paddingHorizontal: 16, paddingVertical: 4, borderWidth: 1, borderColor: colors.border, minHeight: 44 },
-  textInput: { flex: 1, fontSize: 16, maxHeight: 120, paddingTop: 8, paddingBottom: 8, color: colors.dark, ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}) },
+  inputField: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: c.surface, borderRadius: radius.pill, paddingHorizontal: 16, paddingVertical: 4, borderWidth: 1, borderColor: c.border, minHeight: 44 },
+  textInput: { flex: 1, fontSize: 16, maxHeight: 120, paddingTop: 8, paddingBottom: 8, color: c.dark, ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}) },
   sendButton: { width: 44, height: 44, borderRadius: radius.pill, justifyContent: "center", alignItems: "center" },
-  sendButtonDisabled: { backgroundColor: colors.muted, opacity: 0.5 },
+  sendButtonDisabled: { backgroundColor: c.muted, opacity: 0.5 },
 });

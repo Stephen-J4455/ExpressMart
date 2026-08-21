@@ -1,7 +1,9 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "../theme/colors";
+import { colors as palette } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 const LAST_UPDATED = "March 1, 2026";
 
@@ -100,6 +102,9 @@ We aim to respond to all inquiries within 24 hours on business days.`,
 ];
 
 export const TermsScreen = ({ navigation }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles((c) => buildTermsStyles(c));
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -141,10 +146,11 @@ export const TermsScreen = ({ navigation }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const buildTermsStyles = (c) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: "row",
@@ -166,7 +172,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
   },
   scroll: {
     flex: 1,
@@ -177,19 +183,19 @@ const styles = StyleSheet.create({
   },
   lastUpdated: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
     marginBottom: 12,
   },
   intro: {
     fontSize: 15,
-    color: colors.dark,
+    color: c.dark,
     lineHeight: 24,
     marginBottom: 28,
     padding: 16,
-    backgroundColor: colors.primary + "0D",
+    backgroundColor: c.primary + "0D",
     borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: colors.primary,
+    borderLeftColor: c.primary,
   },
   section: {
     marginBottom: 28,
@@ -197,7 +203,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: colors.dark,
+    color: c.dark,
     marginBottom: 10,
   },
   sectionBody: {
@@ -214,6 +220,6 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 13,
-    color: colors.muted,
+    color: c.muted,
   },
 });
