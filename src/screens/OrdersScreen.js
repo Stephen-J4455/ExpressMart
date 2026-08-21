@@ -11,7 +11,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../context/OrderContext";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -37,7 +36,8 @@ const statusIcons = {
 };
 
 const OrderCard = ({ order, onPress, cardWidth }) => {
-  const statusColor = statusColors[order.status] || colors.muted;
+  const { colors: themeColors } = useTheme();
+  const statusColor = statusColors[order.status] || themeColors.muted;
   const statusIcon = statusIcons[order.status] || "ellipse";
   const statusLabel = order.status
     .replace(/_/g, " ")
@@ -76,7 +76,7 @@ const OrderCard = ({ order, onPress, cardWidth }) => {
       {/* Footer: items + total */}
       <View style={styles.orderFooter}>
         <View style={styles.itemCountWrap}>
-          <Ionicons name="cube-outline" size={15} color={colors.muted} />
+          <Ionicons name="cube-outline" size={15} color={themeColors.muted} />
           <Text style={styles.itemCount}>
             {order.items?.length || 0} item(s)
           </Text>
@@ -90,7 +90,7 @@ const OrderCard = ({ order, onPress, cardWidth }) => {
 };
 
 export const OrdersScreen = ({ navigation, route }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildOrdersStyles(c));
   const { isAuthenticated } = useAuth();
   const { orders, loading, fetchOrders } = useOrder();
@@ -140,7 +140,7 @@ export const OrdersScreen = ({ navigation, route }) => {
   if (!isAuthenticated) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={themeColors.primary} />
       </View>
     );
   }
@@ -158,7 +158,7 @@ export const OrdersScreen = ({ navigation, route }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <View>
           <Text style={styles.headerTitle}>My Orders</Text>
@@ -223,13 +223,13 @@ export const OrdersScreen = ({ navigation, route }) => {
           <RefreshControl
             refreshing={loading}
             onRefresh={fetchOrders}
-            tintColor={colors.primary}
+            tintColor={themeColors.primary}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <View style={styles.emptyIconWrap}>
-              <Ionicons name="cube-outline" size={48} color={colors.primary} />
+              <Ionicons name="cube-outline" size={48} color={themeColors.primary} />
             </View>
             <Text style={styles.emptyTitle}>No orders yet</Text>
             <Text style={styles.emptySubtitle}>

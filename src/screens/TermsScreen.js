@@ -1,7 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 
@@ -102,7 +101,7 @@ We aim to respond to all inquiries within 24 hours on business days.`,
 ];
 
 export const TermsScreen = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildTermsStyles(c));
 
   return (
@@ -112,7 +111,7 @@ export const TermsScreen = ({ navigation }) => {
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <Ionicons name="chevron-back" size={24} color={colors.dark} />
+          <Ionicons name="chevron-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Terms & Policies</Text>
         <View style={{ width: 40 }} />

@@ -16,7 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useShop } from "../context/ShopContext";
-import { colors as palette, radius } from "../theme/colors";
+import { radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { SellerCard } from "../components/SellerCard";
@@ -25,7 +25,7 @@ import { useResponsive } from "../hooks/useResponsive";
 export const StoresScreen = () => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const { sellers, loading, refreshSellers } = useShop();
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -90,7 +90,7 @@ export const StoresScreen = () => {
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient
-        colors={[colors.primary, colors.accent]}
+        colors={[themeColors.primary, themeColors.accent]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.header, { paddingTop: insets.top + 18 }]}
@@ -131,11 +131,11 @@ export const StoresScreen = () => {
         {/* Search Bar (revealed on search icon tap) */}
         {searchVisible && (
           <View style={styles.searchBar}>
-            <Ionicons name="search" size={16} color={colors.muted} />
+            <Ionicons name="search" size={16} color={themeColors.muted} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search stores..."
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoFocus={showSearch}
@@ -146,7 +146,7 @@ export const StoresScreen = () => {
                 setShowSearch(false);
               }}
             >
-              <Ionicons name="close-circle" size={18} color={colors.muted} />
+              <Ionicons name="close-circle" size={18} color={themeColors.muted} />
             </Pressable>
           </View>
         )}
@@ -157,7 +157,7 @@ export const StoresScreen = () => {
       {loading && !refreshing ? (
         <View style={styles.centerContainer}>
           <View style={styles.loadingCard}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <ActivityIndicator size="large" color={themeColors.primary} />
             <Text style={styles.loadingText}>Loading stores...</Text>
           </View>
         </View>
@@ -178,17 +178,17 @@ export const StoresScreen = () => {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={colors.primary}
+              tintColor={themeColors.primary}
             />
           }
         />
       ) : (
         <View style={styles.centerContainer}>
           <LinearGradient
-            colors={[colors.primary + "22", colors.accent + "22"]}
+            colors={[themeColors.primary + "22", themeColors.accent + "22"]}
             style={styles.emptyIconContainer}
           >
-            <Ionicons name="storefront-outline" size={48} color={colors.primary} />
+            <Ionicons name="storefront-outline" size={48} color={themeColors.primary} />
           </LinearGradient>
           <Text style={styles.emptyTitle}>No stores found</Text>
           <Text style={styles.emptySubtitle}>
@@ -220,7 +220,7 @@ export const StoresScreen = () => {
         >
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <LinearGradient
-              colors={[colors.primary, colors.accent]}
+              colors={[themeColors.primary, themeColors.accent]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.modalHeader}
@@ -246,7 +246,7 @@ export const StoresScreen = () => {
                     <Ionicons
                       name={opt.icon}
                       size={18}
-                      color={selected ? colors.primary : colors.muted}
+                      color={selected ? themeColors.primary : themeColors.muted}
                     />
                     <Text
                       style={[
@@ -258,7 +258,7 @@ export const StoresScreen = () => {
                     </Text>
                   </View>
                   {selected && (
-                    <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    <Ionicons name="checkmark" size={18} color={themeColors.primary} />
                   )}
                 </Pressable>
               );

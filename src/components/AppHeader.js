@@ -13,7 +13,7 @@ export const AppHeader = ({
 }) => {
   const { isWide, horizontalPadding } = useResponsive();
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) =>
     StyleSheet.create({
       container: {
@@ -84,7 +84,7 @@ export const AppHeader = ({
           onPress={onSearchPress}
           accessibilityRole="button"
         >
-          <Ionicons name="search-outline" size={20} color={colors.light} />
+          <Ionicons name="search-outline" size={20} color={themeColors.light} />
         </Pressable>
 
         <View style={styles.brandWrap}>
@@ -95,13 +95,13 @@ export const AppHeader = ({
 
         <View style={styles.iconRow}>
           <Pressable style={styles.iconButton} onPress={onChatPress}>
-            <Ionicons name="chatbubble-outline" size={20} color={colors.light} />
+            <Ionicons name="chatbubble-outline" size={20} color={themeColors.light} />
           </Pressable>
           <Pressable style={styles.iconButton} onPress={onNotificationsPress}>
             <Ionicons
               name="notifications-outline"
               size={20}
-              color={colors.light}
+              color={themeColors.light}
             />
           </Pressable>
         </View>

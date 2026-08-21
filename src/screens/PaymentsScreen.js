@@ -15,7 +15,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase, callEdgeFunction } from "../lib/supabase";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -23,7 +22,7 @@ import { useResponsive } from "../hooks/useResponsive";
 export const PaymentsScreen = ({ navigation }) => {
   const { user, profile } = useAuth();
   const toast = useToast();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildPaymentsStyles(c));
   const { cardColumns, horizontalPadding, getItemWidth } = useResponsive();
   const cardItemWidth = getItemWidth(cardColumns);
@@ -312,7 +311,7 @@ export const PaymentsScreen = ({ navigation }) => {
     const last4 = acct.slice(-4);
     return (
       <LinearGradient
-        colors={[colors.primary, colors.accent]}
+        colors={[themeColors.primary, themeColors.accent]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.storeCard}
@@ -358,7 +357,7 @@ export const PaymentsScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={themeColors.primary} />
       </View>
     );
   }
@@ -375,12 +374,12 @@ export const PaymentsScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Payment Methods</Text>
         {!subaccountCode && (
           <Pressable style={styles.addButton} onPress={() => openSetup(false)}>
-            <Ionicons name="add" size={24} color={colors.primary} />
+            <Ionicons name="add" size={24} color={themeColors.primary} />
           </Pressable>
         )}
       </View>
@@ -422,7 +421,7 @@ export const PaymentsScreen = ({ navigation }) => {
                   style={[
                     styles.detailValue,
                     {
-                      color: accountVerified ? colors.success : colors.muted,
+                      color: accountVerified ? themeColors.success : themeColors.muted,
                     },
                   ]}
                 >
@@ -437,7 +436,7 @@ export const PaymentsScreen = ({ navigation }) => {
                   <Ionicons
                     name="create-outline"
                     size={16}
-                    color={colors.primary}
+                    color={themeColors.primary}
                   />
                   <Text style={styles.editButtonText}>Edit account</Text>
                 </Pressable>
@@ -447,12 +446,12 @@ export const PaymentsScreen = ({ navigation }) => {
                   disabled={syncing}
                 >
                   {syncing ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
+                    <ActivityIndicator size="small" color={themeColors.primary} />
                   ) : (
                     <Ionicons
                       name="sync-outline"
                       size={16}
-                      color={colors.primary}
+                      color={themeColors.primary}
                     />
                   )}
                   <Text style={styles.editButtonText}>Sync</Text>
@@ -474,7 +473,7 @@ export const PaymentsScreen = ({ navigation }) => {
         <Ionicons
           name="shield-checkmark-outline"
           size={20}
-          color={colors.success}
+          color={themeColors.success}
         />
         <Text style={styles.infoText}>
           Your payment information is securely stored and encrypted
@@ -490,7 +489,7 @@ export const PaymentsScreen = ({ navigation }) => {
                 {subaccountCode ? "Edit payment account" : "Set up payment account"}
               </Text>
               <Pressable onPress={() => setSetupVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.dark} />
+                <Ionicons name="close" size={24} color={themeColors.dark} />
               </Pressable>
             </View>
 
@@ -555,7 +554,7 @@ export const PaymentsScreen = ({ navigation }) => {
 
             {paymentDetailsLoading ? (
               <View style={styles.setupLoading}>
-                <ActivityIndicator color={colors.primary} />
+                <ActivityIndicator color={themeColors.primary} />
                 <Text style={styles.setupLoadingText}>Loading payment details...</Text>
               </View>
             ) : (
@@ -570,17 +569,17 @@ export const PaymentsScreen = ({ navigation }) => {
                       <Text
                         style={[
                           styles.setupInputText,
-                          !setupBank && { color: colors.muted },
+                          !setupBank && { color: themeColors.muted },
                         ]}
                       >
                         {setupBank || "Select your bank"}
                       </Text>
-                      <Ionicons name="chevron-down" size={18} color={colors.muted} />
+                      <Ionicons name="chevron-down" size={18} color={themeColors.muted} />
                     </Pressable>
                     {setupBankDropdownVisible && (
                       <View style={styles.bankDropdown}>
                         {loadingBanks ? (
-                          <ActivityIndicator style={{ marginVertical: 12 }} color={colors.primary} />
+                          <ActivityIndicator style={{ marginVertical: 12 }} color={themeColors.primary} />
                         ) : (
                           <ScrollView style={styles.bankScroll} keyboardShouldPersistTaps="handled">
                             {PAYSTACK_BANKS.map((b) => (
@@ -650,7 +649,7 @@ export const PaymentsScreen = ({ navigation }) => {
                       ? `${setupCurrency} ${setupCurrency === "GHS" ? "13" : "10"}-digit number`
                       : "+233..."
                   }
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                 />
 
                 {paymentLoadError ? (
@@ -660,7 +659,7 @@ export const PaymentsScreen = ({ navigation }) => {
                 <Pressable
                   style={[
                     styles.setupSubmit,
-                    { backgroundColor: colors.primary },
+                    { backgroundColor: themeColors.primary },
                     creating && { opacity: 0.6 },
                   ]}
                   onPress={handleCreateSubaccount}

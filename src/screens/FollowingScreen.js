@@ -14,14 +14,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useShop } from "../context/ShopContext";
 import { useToast } from "../context/ToastContext";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 
 export const FollowingScreen = ({ navigation }) => {
   const { sellers, followedSellers, unfollowSeller, isFollowing } = useShop();
   const toast = useToast();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildFollowingStyles(c));
   const [unfollowingId, setUnfollowingId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -96,13 +95,13 @@ export const FollowingScreen = ({ navigation }) => {
               disabled={!!isUnfollowing}
             >
               {isUnfollowing ? (
-                <ActivityIndicator size="small" color={colors.accent} />
+                <ActivityIndicator size="small" color={themeColors.accent} />
               ) : (
                 <>
                   <Ionicons
                     name="person-remove-outline"
                     size={13}
-                    color={colors.accent}
+                    color={themeColors.accent}
                   />
                   <Text style={styles.unfollowBtnText}>Unfollow</Text>
                 </>
@@ -117,7 +116,7 @@ export const FollowingScreen = ({ navigation }) => {
             }
           >
             <Text style={styles.visitBtnText}>Visit Store</Text>
-            <Ionicons name="arrow-forward" size={13} color={colors.primary} />
+            <Ionicons name="arrow-forward" size={13} color={themeColors.primary} />
           </Pressable>
         </View>
       </Pressable>
@@ -128,13 +127,13 @@ export const FollowingScreen = ({ navigation }) => {
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIconWrap}>
         <LinearGradient
-          colors={[colors.primary + "20", colors.accent + "20"]}
+          colors={[themeColors.primary + "20", themeColors.accent + "20"]}
           style={styles.emptyIconBg}
         >
           <Ionicons
             name="storefront-outline"
             size={48}
-            color={colors.primary}
+            color={themeColors.primary}
           />
         </LinearGradient>
       </View>
@@ -147,7 +146,7 @@ export const FollowingScreen = ({ navigation }) => {
         onPress={() => navigation.navigate("Stores")}
       >
         <LinearGradient
-          colors={[colors.primary, colors.accent]}
+          colors={[themeColors.primary, themeColors.accent]}
           style={styles.exploreBtnGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
@@ -164,7 +163,7 @@ export const FollowingScreen = ({ navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <View>
           <Text style={styles.headerTitle}>Following</Text>
@@ -178,7 +177,7 @@ export const FollowingScreen = ({ navigation }) => {
           style={styles.exploreIconBtn}
           onPress={() => navigation.navigate("Stores")}
         >
-          <Ionicons name="add" size={22} color={colors.primary} />
+          <Ionicons name="add" size={22} color={themeColors.primary} />
         </Pressable>
       </View>
 

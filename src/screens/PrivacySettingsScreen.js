@@ -14,14 +14,13 @@ import {
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useAuth } from "../context/AuthContext";
 
 export const PrivacySettingsScreen = ({ navigation }) => {
   const { deleteAccount } = useAuth();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildPrivacySettingsStyles(c));
   const [profileVisibility, setProfileVisibility] = useState(true);
   const [orderHistoryVisible, setOrderHistoryVisible] = useState(false);
@@ -156,7 +155,7 @@ export const PrivacySettingsScreen = ({ navigation }) => {
         <Ionicons
           name={item.icon}
           size={24}
-          color={item.danger ? colors.accent : colors.primary}
+          color={item.danger ? themeColors.accent : themeColors.primary}
         />
         <View style={styles.privacyItemContent}>
           <Text style={[styles.privacyLabel, item.danger && styles.dangerText]}>
@@ -169,7 +168,7 @@ export const PrivacySettingsScreen = ({ navigation }) => {
         <Switch
           value={item.value}
           onValueChange={item.onValueChange}
-          trackColor={{ false: colors.light, true: colors.primary }}
+          trackColor={{ false: themeColors.light, true: themeColors.primary }}
           thumbColor="#fff"
         />
       ) : (
@@ -179,12 +178,12 @@ export const PrivacySettingsScreen = ({ navigation }) => {
           disabled={deletingAccount && item.label === "Delete My Account"}
         >
           {deletingAccount && item.label === "Delete My Account" ? (
-            <ActivityIndicator size="small" color={colors.accent} />
+            <ActivityIndicator size="small" color={themeColors.accent} />
           ) : (
             <Ionicons
               name="chevron-forward"
               size={18}
-              color={item.danger ? colors.accent : colors.muted}
+              color={item.danger ? themeColors.accent : themeColors.muted}
             />
           )}
         </Pressable>
@@ -199,7 +198,7 @@ export const PrivacySettingsScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Privacy Settings</Text>
         <View style={{ width: 40 }} />
@@ -222,7 +221,7 @@ export const PrivacySettingsScreen = ({ navigation }) => {
           <Ionicons
             name="shield-checkmark-outline"
             size={20}
-            color={colors.success}
+            color={themeColors.success}
           />
           <Text style={styles.infoText}>
             Your privacy is important to us. We only collect data necessary to
@@ -238,7 +237,7 @@ export const PrivacySettingsScreen = ({ navigation }) => {
           </Text>
           <Pressable style={styles.policyButton}>
             <Text style={styles.policyButtonText}>Read Privacy Policy</Text>
-            <Ionicons name="open-outline" size={16} color={colors.primary} />
+            <Ionicons name="open-outline" size={16} color={themeColors.primary} />
           </Pressable>
         </View>
 
@@ -264,7 +263,7 @@ export const PrivacySettingsScreen = ({ navigation }) => {
               value={deletePassword}
               onChangeText={setDeletePassword}
               placeholder="Current password"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
             />
             <View style={styles.modalActions}>
               <Pressable

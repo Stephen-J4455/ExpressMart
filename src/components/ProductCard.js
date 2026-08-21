@@ -71,7 +71,7 @@ export const ProductCard = ({
   priceLabelOverride,
   priceLabelLines = 2,
 }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildStyles(c));
   const navigation = useNavigation();
   const route = useRoute();
@@ -209,18 +209,18 @@ export const ProductCard = ({
       ? product.thumbnails
       : [product.thumbnail];
 
-  // theme is an object from colors.getTheme() or undefined
+  // theme is an object from themeColors.getTheme() or undefined
   const themeObj = theme || {
-    primary: colors.primary,
-    gradientStart: colors.primary,
-    gradientEnd: colors.primaryLight,
-    accent: colors.primary,
+    primary: themeColors.primary,
+    gradientStart: themeColors.primary,
+    gradientEnd: themeColors.primaryLight,
+    accent: themeColors.primary,
   };
-  const accent = (themeObj && themeObj.accent) || (themeObj && themeObj.primary) || colors.accent;
+  const accent = (themeObj && themeObj.accent) || (themeObj && themeObj.primary) || themeColors.accent;
   const accentEnd =
     (themeObj && themeObj.gradientEnd) ||
     (themeObj && themeObj.gradientStart) ||
-    colors.primary;
+    themeColors.primary;
   const accentColor = accent;
 
   if (variant === "list") {
@@ -417,7 +417,7 @@ export const ProductCard = ({
                   onPress={() => setShowVariantModal(false)}
                   hitSlop={8}
                 >
-                  <Ionicons name="close" size={20} color={colors.dark} />
+                  <Ionicons name="close" size={20} color={themeColors.dark} />
                 </Pressable>
               </View>
 
@@ -578,7 +578,7 @@ export const ProductCard = ({
           })()}
           {!images[0] && (
             <View style={styles.cardImagePlaceholder}>
-              <Ionicons name="image-outline" size={20} color={colors.muted} />
+              <Ionicons name="image-outline" size={20} color={themeColors.muted} />
             </View>
           )}
           {isOutOfStock && (
@@ -684,7 +684,7 @@ export const ProductCard = ({
             <View style={styles.variantHeader}>
               <Text style={styles.variantTitle}>Select Options</Text>
               <Pressable onPress={() => setShowVariantModal(false)} hitSlop={8}>
-                <Ionicons name="close" size={20} color={colors.dark} />
+                <Ionicons name="close" size={20} color={themeColors.dark} />
               </Pressable>
             </View>
 

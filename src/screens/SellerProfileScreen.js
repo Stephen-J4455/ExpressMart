@@ -19,7 +19,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
-import { colors as palette, getTheme, THEMES, radius } from "../theme/colors";
+import { getTheme, THEMES, radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -62,7 +62,7 @@ const SOCIAL_FIELDS = [
 
 export const SellerProfileScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildSellerProfileStyles(c));
   const { user } = useAuth();
   const toast = useToast();
@@ -82,7 +82,7 @@ export const SellerProfileScreen = ({ navigation }) => {
   const [editAvatar, setEditAvatar] = useState("");
   const [editAvatarFile, setEditAvatarFile] = useState(null);
   const [social, setSocial] = useState({});
-  const [editThemeColor, setEditThemeColor] = useState(colors.primary);
+  const [editThemeColor, setEditThemeColor] = useState(themeColors.primary);
   const [editApplyToStore, setEditApplyToStore] = useState(false);
   const [editApplyToCustomer, setEditApplyToCustomer] = useState(false);
 
@@ -90,7 +90,7 @@ export const SellerProfileScreen = ({ navigation }) => {
   const [saving, setSaving] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
 
-  const activeTheme = getTheme(seller?.theme_color || colors.primary);
+  const activeTheme = getTheme(seller?.theme_color || themeColors.primary);
   const heroUri = seller ? resolveProfileImageUri(getProfileAvatarValue(seller)) : "";
   const displayUri = editing && editAvatar ? editAvatar : heroUri;
 
@@ -153,7 +153,7 @@ export const SellerProfileScreen = ({ navigation }) => {
       social_whatsapp: data?.social_whatsapp || "",
       social_website: data?.social_website || "",
     });
-    setEditThemeColor(data?.theme_color || colors.primary);
+    setEditThemeColor(data?.theme_color || themeColors.primary);
     setEditApplyToStore(!!data?.theme_apply_store);
     setEditApplyToCustomer(!!data?.theme_apply_customer);
   };
@@ -405,11 +405,11 @@ export const SellerProfileScreen = ({ navigation }) => {
           <>
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>Store Name</Text>
-              <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholder="Store name" placeholderTextColor={colors.muted} />
+              <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholder="Store name" placeholderTextColor={themeColors.muted} />
             </View>
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>Location</Text>
-              <TextInput style={styles.input} value={editLocation} onChangeText={setEditLocation} placeholder="City / Region" placeholderTextColor={colors.muted} />
+              <TextInput style={styles.input} value={editLocation} onChangeText={setEditLocation} placeholder="City / Region" placeholderTextColor={themeColors.muted} />
             </View>
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>Store Description</Text>
@@ -418,7 +418,7 @@ export const SellerProfileScreen = ({ navigation }) => {
                 value={editStoreDescription}
                 onChangeText={setEditStoreDescription}
                 placeholder="Tell customers about your store"
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
@@ -450,7 +450,7 @@ export const SellerProfileScreen = ({ navigation }) => {
                 onChangeText={setEditWeeklyTarget}
                 keyboardType="numeric"
                 placeholder="e.g. 50"
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
               />
             </View>
           </>
@@ -492,7 +492,7 @@ export const SellerProfileScreen = ({ navigation }) => {
         {SOCIAL_FIELDS.map((f) => (
           <View key={f.key} style={editing ? styles.fieldBlock : styles.fieldRow}>
             <View style={styles.socialLead}>
-              <Ionicons name={f.icon} size={18} color={colors.muted} style={styles.socialIcon} />
+              <Ionicons name={f.icon} size={18} color={themeColors.muted} style={styles.socialIcon} />
               <Text style={styles.fieldLabel}>{f.label}</Text>
             </View>
             {editing ? (
@@ -501,7 +501,7 @@ export const SellerProfileScreen = ({ navigation }) => {
                 value={social[f.key]}
                 onChangeText={(t) => setSocial((prev) => ({ ...prev, [f.key]: t }))}
                 placeholder={f.placeholder}
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
                 keyboardType={f.type === "whatsapp" ? "phone-pad" : "url"}
               />
             ) : (

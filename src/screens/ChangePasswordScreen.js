@@ -13,7 +13,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 
@@ -28,7 +27,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildChangePasswordStyles(c));
 
   const validatePasswords = () => {
@@ -87,7 +86,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Change Password</Text>
         <View style={{ width: 40 }} />
@@ -112,7 +111,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter current password"
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
                 secureTextEntry={!showCurrentPassword}
                 autoCapitalize="none"
               />
@@ -123,7 +122,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
                 <Ionicons
                   name={showCurrentPassword ? "eye-off" : "eye"}
                   size={20}
-                  color={colors.muted}
+                  color={themeColors.muted}
                 />
               </Pressable>
             </View>
@@ -137,7 +136,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
                 value={newPassword}
                 onChangeText={setNewPassword}
                 placeholder="Enter new password"
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
                 secureTextEntry={!showNewPassword}
                 autoCapitalize="none"
               />
@@ -148,7 +147,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
                 <Ionicons
                   name={showNewPassword ? "eye-off" : "eye"}
                   size={20}
-                  color={colors.muted}
+                  color={themeColors.muted}
                 />
               </Pressable>
             </View>
@@ -162,7 +161,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 placeholder="Confirm new password"
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
                 secureTextEntry={!showConfirmPassword}
                 autoCapitalize="none"
               />
@@ -173,7 +172,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
                 <Ionicons
                   name={showConfirmPassword ? "eye-off" : "eye"}
                   size={20}
-                  color={colors.muted}
+                  color={themeColors.muted}
                 />
               </Pressable>
             </View>
@@ -202,7 +201,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
           <Ionicons
             name="information-circle-outline"
             size={20}
-            color={colors.primary}
+            color={themeColors.primary}
           />
           <Text style={styles.infoText}>
             For security reasons, you will be logged out after changing your

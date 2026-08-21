@@ -12,13 +12,12 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const OrderDetailScreen = () => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildOrderDetailStyles(c));
   const { isWide, horizontalPadding } = useResponsive();
   const navigation = useNavigation();
@@ -89,7 +88,7 @@ export const OrderDetailScreen = () => {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="arrow-back" size={24} color={colors.dark} />
+            <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
           </Pressable>
           <Text style={styles.headerTitle}>Order Details</Text>
           <View style={{ width: 44 }} />
@@ -103,15 +102,15 @@ export const OrderDetailScreen = () => {
 
   const getStatusColor = (status) => {
     const statusMap = {
-      pending_payment: colors.warning,
-      processing: colors.warning,
-      packed: colors.info,
-      shipped: colors.primary,
-      delivered: colors.success,
-      canceled: colors.error,
-      refunded: colors.muted,
+      pending_payment: themeColors.warning,
+      processing: themeColors.warning,
+      packed: themeColors.info,
+      shipped: themeColors.primary,
+      delivered: themeColors.success,
+      canceled: themeColors.error,
+      refunded: themeColors.muted,
     };
-    return statusMap[status] || colors.muted;
+    return statusMap[status] || themeColors.muted;
   };
 
   const getStatusIcon = (status) => {
@@ -162,7 +161,7 @@ export const OrderDetailScreen = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Order Details</Text>
         <View style={{ width: 44 }} />
@@ -210,13 +209,13 @@ export const OrderDetailScreen = () => {
         {/* Order Items Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="bag-outline" size={20} color={colors.primary} />
+            <Ionicons name="bag-outline" size={20} color={themeColors.primary} />
             <Text style={styles.sectionTitle}>Order Items</Text>
           </View>
 
           {loading ? (
             <View style={styles.centerContent}>
-              <ActivityIndicator size="large" color={colors.primary} />
+              <ActivityIndicator size="large" color={themeColors.primary} />
             </View>
           ) : items.length > 0 ? (
             items.map((item, index) => (
@@ -282,7 +281,7 @@ export const OrderDetailScreen = () => {
               <Ionicons
                 name="location-outline"
                 size={20}
-                color={colors.primary}
+                color={themeColors.primary}
               />
               <Text style={styles.sectionTitle}>Delivery Address</Text>
             </View>
@@ -312,7 +311,7 @@ export const OrderDetailScreen = () => {
         {/* Payment Summary Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="receipt-outline" size={20} color={colors.primary} />
+            <Ionicons name="receipt-outline" size={20} color={themeColors.primary} />
             <Text style={styles.sectionTitle}>Payment Summary</Text>
           </View>
 
@@ -371,7 +370,7 @@ export const OrderDetailScreen = () => {
               <Ionicons
                 name="navigate-outline"
                 size={20}
-                color={colors.primary}
+                color={themeColors.primary}
               />
               <Text style={styles.sectionTitle}>Tracking Info</Text>
             </View>

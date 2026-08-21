@@ -21,7 +21,6 @@ import { useAds } from "../context/AdsContext";
 import { LazyScrollContext, lazyScroll } from "../context/LazyScrollContext";
 import { useTheme } from "../context/ThemeContext";
 import { flashSaleService } from "../services/flashSaleService";
-import { colors } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { injectAdsIntoProducts } from "../utils/adPlacement";

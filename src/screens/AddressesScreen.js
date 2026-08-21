@@ -18,7 +18,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -26,7 +25,7 @@ import { useResponsive } from "../hooks/useResponsive";
 export const AddressesScreen = ({ navigation }) => {
   const { user } = useAuth();
   const toast = useToast();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildAddressesStyles(c));
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +141,7 @@ export const AddressesScreen = ({ navigation }) => {
     >
       <View style={styles.addressHeader}>
         <View style={styles.addressType}>
-          <Ionicons name="location-outline" size={16} color={colors.primary} />
+          <Ionicons name="location-outline" size={16} color={themeColors.primary} />
           {item.is_default && (
             <View style={styles.defaultBadge}>
               <Text style={styles.defaultText}>Default</Text>
@@ -154,13 +153,13 @@ export const AddressesScreen = ({ navigation }) => {
             style={styles.actionButton}
             onPress={() => handleEditAddress(item)}
           >
-            <Ionicons name="pencil" size={16} color={colors.primary} />
+            <Ionicons name="pencil" size={16} color={themeColors.primary} />
           </Pressable>
           <Pressable
             style={styles.actionButton}
             onPress={() => handleDeleteAddress(item)}
           >
-            <Ionicons name="trash-outline" size={16} color={colors.accent} />
+            <Ionicons name="trash-outline" size={16} color={themeColors.accent} />
           </Pressable>
         </View>
       </View>
@@ -170,7 +169,7 @@ export const AddressesScreen = ({ navigation }) => {
         {item.city}, {item.state}
       </Text>
       <Text style={styles.phoneText}>
-        <Ionicons name="call-outline" size={14} color={colors.muted} />
+        <Ionicons name="call-outline" size={14} color={themeColors.muted} />
         {" " + item.phone}
       </Text>
     </View>
@@ -179,7 +178,7 @@ export const AddressesScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={themeColors.primary} />
       </View>
     );
   }
@@ -203,7 +202,7 @@ export const AddressesScreen = ({ navigation }) => {
                 onPress={() => setShowModal(false)}
                 style={styles.modalClose}
               >
-                <Ionicons name="close" size={24} color={colors.dark} />
+                <Ionicons name="close" size={24} color={themeColors.dark} />
               </Pressable>
               <Text style={styles.modalTitle}>
                 {editingAddress ? "Edit Address" : "New Address"}
@@ -258,7 +257,7 @@ export const AddressesScreen = ({ navigation }) => {
                       setFormData((p) => ({ ...p, [field.key]: v }))
                     }
                     placeholder={field.placeholder}
-                    placeholderTextColor={colors.muted}
+                    placeholderTextColor={themeColors.muted}
                     keyboardType={field.keyboardType || "default"}
                   />
                 </View>
@@ -280,17 +279,17 @@ export const AddressesScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>My Addresses</Text>
         <Pressable style={styles.addButton} onPress={handleAddAddress}>
-          <Ionicons name="add" size={24} color={colors.primary} />
+          <Ionicons name="add" size={24} color={themeColors.primary} />
         </Pressable>
       </View>
 
       {addresses.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="location-outline" size={64} color={colors.muted} />
+          <Ionicons name="location-outline" size={64} color={themeColors.muted} />
           <Text style={styles.emptyTitle}>No addresses yet</Text>
           <Text style={styles.emptySubtitle}>
             Add your delivery addresses to make checkout faster

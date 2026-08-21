@@ -12,7 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors as palette } from "../theme/colors";
+
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -21,7 +21,7 @@ export const SettingsScreen = ({ navigation }) => {
   const { user, profile } = useAuth();
   const toast = useToast();
   const { isWide, horizontalPadding } = useResponsive();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildSettingsStyles(c));
   const [notifications, setNotifications] = useState(true);
   const [emailUpdates, setEmailUpdates] = useState(true);
@@ -116,7 +116,7 @@ export const SettingsScreen = ({ navigation }) => {
       disabled={item.type === "switch" || !item.action}
     >
       <View style={styles.settingItemIconWrap}>
-        <Ionicons name={item.icon} size={20} color={colors.primary} />
+        <Ionicons name={item.icon} size={20} color={themeColors.primary} />
       </View>
       <View style={styles.settingItemBody}>
         <Text style={styles.settingLabel}>{item.label}</Text>
@@ -132,12 +132,12 @@ export const SettingsScreen = ({ navigation }) => {
           <Switch
             value={item.value}
             onValueChange={item.onValueChange}
-            trackColor={{ false: "#E2E8F0", true: colors.primary }}
+            trackColor={{ false: "#E2E8F0", true: themeColors.primary }}
             thumbColor="#fff"
           />
         ) : (
           item.action && (
-            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            <Ionicons name="chevron-forward" size={18} color={themeColors.muted} />
           )
         )}
       </View>
@@ -156,7 +156,7 @@ export const SettingsScreen = ({ navigation }) => {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="arrow-back" size={24} color={colors.dark} />
+            <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
           </Pressable>
           <Text style={styles.headerTitle}>Settings</Text>
         </View>
@@ -167,7 +167,7 @@ export const SettingsScreen = ({ navigation }) => {
             {/* Profile card */}
             <View style={styles.profileCard}>
               <View style={styles.profileAvatar}>
-                <Ionicons name="person" size={28} color={colors.primary} />
+                <Ionicons name="person" size={28} color={themeColors.primary} />
               </View>
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName} numberOfLines={1}>
@@ -198,7 +198,7 @@ export const SettingsScreen = ({ navigation }) => {
                   <Ionicons
                     name={sec.icon}
                     size={18}
-                    color={activeSection === i ? "#fff" : colors.muted}
+                    color={activeSection === i ? "#fff" : themeColors.muted}
                   />
                 </View>
                 <Text
@@ -243,7 +243,7 @@ export const SettingsScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={{ width: 40 }} />
@@ -280,7 +280,7 @@ export const SettingsScreen = ({ navigation }) => {
                 Sign Out
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            <Ionicons name="chevron-forward" size={18} color={themeColors.muted} />
           </Pressable>
         </View>
 

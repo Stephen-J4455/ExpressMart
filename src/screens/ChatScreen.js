@@ -25,7 +25,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useChat } from "../context/ChatContext";
 import { useToast } from "../context/ToastContext";
-import { colors, radius } from "../theme/colors";
+import { radius } from "../theme/colors";
 
 const getDateLabel = (dateStr) => {
   const date = new Date(dateStr);
@@ -62,7 +62,7 @@ const getPresenceSubtitle = (isOnline, lastSeenAt) => {
 
 export const ChatScreen = ({ route, navigation, seller }) => {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildChatStyles(c));
   const { user } = useAuth();
   const { getConversationBySeller, addConversation, updateConversation } =
@@ -619,7 +619,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={themeColors.primary} />
         <Text style={styles.loadingText}>Loading chat...</Text>
       </View>
     );
@@ -644,7 +644,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
               style={styles.backButton}
               onPress={() => navigation.goBack()}
             >
-              <Ionicons name="arrow-back" size={24} color={colors.dark} />
+              <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
             </Pressable>
           )}
           <View style={styles.headerInfo}>
@@ -655,7 +655,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
                   style={styles.avatarImage}
                 />
               ) : (
-                <Ionicons name="storefront" size={20} color={colors.primary} />
+                <Ionicons name="storefront" size={20} color={themeColors.primary} />
               )}
             </View>
             <View>
@@ -666,7 +666,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
                 <View
                   style={[
                     styles.statusDot,
-                    { backgroundColor: sellerOnline ? colors.success : "#9CA3AF" },
+                    { backgroundColor: sellerOnline ? themeColors.success : "#9CA3AF" },
                   ]}
                 />
                 <Text style={styles.headerSubtitle}>
@@ -676,7 +676,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
             </View>
           </View>
           <Pressable style={styles.headerAction}>
-            <Ionicons name="ellipsis-vertical" size={20} color={colors.muted} />
+            <Ionicons name="ellipsis-vertical" size={20} color={themeColors.muted} />
           </Pressable>
         </View>
       </View>
@@ -703,7 +703,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
               <Ionicons
                 name="chatbubbles-outline"
                 size={40}
-                color={colors.primary}
+                color={themeColors.primary}
               />
             </View>
             <Text style={styles.emptyChatText}>No messages yet</Text>
@@ -729,7 +729,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
                 <Ionicons
                   name="cube-outline"
                   size={22}
-                  color={colors.primary}
+                  color={themeColors.primary}
                 />
               </View>
             )}
@@ -743,7 +743,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
               style={styles.productAttachmentRemove}
               onPress={() => setPendingProduct(null)}
             >
-              <Ionicons name="close" size={18} color={colors.muted} />
+              <Ionicons name="close" size={18} color={themeColors.muted} />
             </Pressable>
           </View>
         )}
@@ -754,7 +754,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
               value={newMessage}
               onChangeText={setNewMessage}
               placeholder="Type a message..."
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
               multiline
               maxLength={1000}
             />

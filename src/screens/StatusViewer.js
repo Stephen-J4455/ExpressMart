@@ -11,13 +11,13 @@ import {
 import * as Linking from "expo-linking";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { colors as palette, radius } from "../theme/colors";
+import { radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase } from "../lib/supabase";
 
 export const StatusViewer = ({ navigation, route }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildStatusViewerStyles(c));
   const initialStatus = route?.params?.status;
   const [statuses, setStatuses] = useState(
@@ -180,7 +180,7 @@ export const StatusViewer = ({ navigation, route }) => {
           style={styles.closeButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="close" size={20} color={colors.dark} />
+          <Ionicons name="close" size={20} color={themeColors.dark} />
           <Text style={styles.closeText}>Close</Text>
         </Pressable>
       </SafeAreaView>
@@ -237,7 +237,7 @@ export const StatusViewer = ({ navigation, route }) => {
                 <Ionicons
                   name={isAdStory ? "megaphone" : "storefront"}
                   size={20}
-                  color={colors.primary}
+                  color={themeColors.primary}
                 />
               </View>
             )}

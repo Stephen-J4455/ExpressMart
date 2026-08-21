@@ -23,7 +23,6 @@ import { useToast } from "../context/ToastContext";
 import { useShop } from "../context/ShopContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { AdRenderer } from "../components/AdBanner";
@@ -81,7 +80,7 @@ const toBoolean = (value) => {
 const REVIEW_STAR_COLOR = "#F97316";
 
 export const ProductDetailScreen = ({ route, navigation }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildProductDetailStyles(c));
   const markdownStyles = useAppStyles((c) => buildProductDetailMarkdownStyles(c));
   // When opened via a universal link (https://www.expressmart.me/product/:id)
@@ -851,7 +850,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   if (loadingDeepLink || !product) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={themeColors.primary} />
       </View>
     );
   }
@@ -916,13 +915,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Pressable
           style={styles.shareButton}
           onPress={() => handleShareProduct()}
         >
-          <Ionicons name="share-outline" size={24} color={colors.dark} />
+          <Ionicons name="share-outline" size={24} color={themeColors.dark} />
         </Pressable>
         <Pressable
           style={styles.wishlistButton}
@@ -930,12 +929,12 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           disabled={wishlistLoading}
         >
           {wishlistLoading ? (
-            <ActivityIndicator size="small" color={colors.accent} />
+            <ActivityIndicator size="small" color={themeColors.accent} />
           ) : (
             <Ionicons
               name={isWishlisted ? "heart" : "heart-outline"}
               size={24}
-              color={isWishlisted ? colors.accent : colors.dark}
+              color={isWishlisted ? themeColors.accent : themeColors.dark}
             />
           )}
         </Pressable>
@@ -946,7 +945,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 <Ionicons
                   name="storefront-outline"
                   size={14}
-                  color={colors.primary}
+                  color={themeColors.primary}
                 />
                 <Text style={styles.vendor}>
                   {product.seller?.name || product.vendor}
@@ -1102,7 +1101,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                           styles.productBadge,
                           {
                             backgroundColor:
-                              (badgeConfig?.color || colors.primary) + "20",
+                              (badgeConfig?.color || themeColors.primary) + "20",
                           },
                         ]}
                       >
@@ -1110,13 +1109,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                           <Ionicons
                             name={badgeConfig.icon}
                             size={12}
-                            color={badgeConfig.color || colors.primary}
+                            color={badgeConfig.color || themeColors.primary}
                           />
                         )}
                         <Text
                           style={[
                             styles.productBadgeText,
-                            { color: badgeConfig?.color || colors.primary },
+                            { color: badgeConfig?.color || themeColors.primary },
                           ]}
                         >
                           {displayLabel}
@@ -1145,7 +1144,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                   {
                     backgroundColor:
                       product.shipping_fee > 0
-                        ? colors.primary + "22"
+                        ? themeColors.primary + "22"
                         : "#D1FAE5",
                   },
                 ]}
@@ -1157,7 +1156,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                       : "rocket-outline"
                   }
                   size={18}
-                  color={product.shipping_fee > 0 ? colors.primary : "#059669"}
+                  color={product.shipping_fee > 0 ? themeColors.primary : "#059669"}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -1366,7 +1365,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                   <Ionicons
                     name={isDetailsExpanded ? "chevron-up" : "chevron-down"}
                     size={16}
-                    color={colors.primary}
+                    color={themeColors.primary}
                   />
                 </Pressable>
               )}
@@ -1396,7 +1395,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             <Text style={styles.sectionTitle}>Similar Products</Text>
             {loadingSimilarProducts ? (
               <View style={styles.similarProductsLoader}>
-                <ActivityIndicator size="small" color={colors.primary} />
+                <ActivityIndicator size="small" color={themeColors.primary} />
               </View>
             ) : similarFeedItems.length > 0 ? (
               <ScrollView
@@ -1447,7 +1446,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                   <Ionicons
                     name="create-outline"
                     size={16}
-                    color={colors.primary}
+                    color={themeColors.primary}
                   />
                   <Text style={styles.editReviewText}>Edit Review</Text>
                 </Pressable>
@@ -1459,7 +1458,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                   <Ionicons
                     name="create-outline"
                     size={16}
-                    color={colors.primary}
+                    color={themeColors.primary}
                   />
                   <Text style={styles.writeReviewText}>Write Review</Text>
                 </Pressable>
@@ -1499,7 +1498,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                             <Ionicons
                               name="chatbubbles"
                               size={11}
-                              color={colors.primary}
+                              color={themeColors.primary}
                             />
                             <Text style={styles.commentCountText}>
                               {commentList.length}
@@ -1509,7 +1508,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                         <Ionicons
                           name={isExpanded ? "chevron-up" : "chevron-down"}
                           size={16}
-                          color={colors.muted}
+                          color={themeColors.muted}
                         />
                       </View>
                     </Pressable>
@@ -1610,7 +1609,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 <Ionicons
                   name="chatbubble-outline"
                   size={48}
-                  color={colors.muted}
+                  color={themeColors.muted}
                 />
                 <Text style={styles.noReviewsText}>No reviews yet</Text>
                 {user && !userHasReviewed && (
@@ -1644,7 +1643,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           <Ionicons
             name="chatbubble-ellipses"
             size={24}
-            color={colors.primary}
+            color={themeColors.primary}
           />
         </Pressable>
         <Pressable
@@ -1655,8 +1654,8 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           <LinearGradient
             colors={
               isOutOfStock
-                ? [colors.muted, colors.muted]
-                : [colors.primary, colors.accent]
+                ? [themeColors.muted, themeColors.muted]
+                : [themeColors.primary, themeColors.accent]
             }
             style={styles.ctaGradient}
             start={{ x: 0, y: 0 }}
@@ -1768,7 +1767,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               }}
               style={styles.closeButton}
             >
-              <Ionicons name="close" size={24} color={colors.dark} />
+              <Ionicons name="close" size={24} color={themeColors.dark} />
             </Pressable>
           </View>
 
@@ -1798,7 +1797,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                       name={star <= reviewRating ? "star" : "star-outline"}
                       size={32}
                       color={
-                        star <= reviewRating ? REVIEW_STAR_COLOR : colors.muted
+                        star <= reviewRating ? REVIEW_STAR_COLOR : themeColors.muted
                       }
                     />
                   </Pressable>
@@ -1866,7 +1865,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             <View style={styles.variantHeader}>
               <Text style={styles.variantTitle}>Select Options</Text>
               <Pressable onPress={() => setShowVariantModal(false)} hitSlop={8}>
-                <Ionicons name="close" size={20} color={colors.dark} />
+                <Ionicons name="close" size={20} color={themeColors.dark} />
               </Pressable>
             </View>
 
@@ -1950,7 +1949,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               onPress={handleConfirmAddToCart}
             >
               <LinearGradient
-                colors={[colors.primary, colors.accent]}
+                colors={[themeColors.primary, themeColors.accent]}
                 style={styles.variantAddGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}

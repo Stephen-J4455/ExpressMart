@@ -15,7 +15,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -29,7 +28,7 @@ export const ForgotPasswordScreen = ({ navigation }) => {
   const toast = useToast();
   const { isWide, contentMaxWidth } = useResponsive();
 
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildForgotPasswordStyles(c));
 
   const handleResetPassword = async () => {
@@ -61,7 +60,7 @@ export const ForgotPasswordScreen = ({ navigation }) => {
       <SafeAreaView style={styles.container}>
         <View style={[styles.successContainer, isWide && { maxWidth: 480, alignSelf: "center", width: "100%" }]}>
           <View style={styles.successIcon}>
-            <Ionicons name="mail" size={60} color={colors.primary} />
+            <Ionicons name="mail" size={60} color={themeColors.primary} />
           </View>
           <Text style={styles.successTitle}>Check Your Email</Text>
           <Text style={styles.successMessage}>
@@ -78,7 +77,7 @@ export const ForgotPasswordScreen = ({ navigation }) => {
             onPress={() => navigation.goBack()}
           >
             <LinearGradient
-              colors={[colors.primary, colors.accent]}
+              colors={[themeColors.primary, themeColors.accent]}
               style={styles.buttonGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
@@ -121,7 +120,7 @@ export const ForgotPasswordScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
 
         <View style={styles.header}>
@@ -144,7 +143,7 @@ export const ForgotPasswordScreen = ({ navigation }) => {
             <Ionicons
               name="mail-outline"
               size={20}
-              color={colors.muted}
+              color={themeColors.muted}
               style={styles.inputIcon}
             />
             <TextInput
@@ -155,7 +154,7 @@ export const ForgotPasswordScreen = ({ navigation }) => {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
             />
           </View>
 
@@ -165,7 +164,7 @@ export const ForgotPasswordScreen = ({ navigation }) => {
             disabled={loading}
           >
             <LinearGradient
-              colors={[colors.primary, colors.accent]}
+              colors={[themeColors.primary, themeColors.accent]}
               style={styles.buttonGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}

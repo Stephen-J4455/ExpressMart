@@ -15,7 +15,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -47,7 +46,7 @@ export const AuthScreen = ({ navigation, route }) => {
   const { isWide } = useResponsive();
   const isIOS = Platform.OS === "ios";
 
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildAuthStyles(c));
 
   const { signIn, signUp, isAuthenticated } = useAuth();
@@ -516,7 +515,7 @@ export const AuthScreen = ({ navigation, route }) => {
                 <Ionicons
                   name="person-outline"
                   size={20}
-                  color={colors.muted}
+                  color={themeColors.muted}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -525,7 +524,7 @@ export const AuthScreen = ({ navigation, route }) => {
                   value={fullName}
                   onChangeText={setFullName}
                   autoCapitalize="words"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                 />
               </View>
             )}
@@ -534,7 +533,7 @@ export const AuthScreen = ({ navigation, route }) => {
               <Ionicons
                 name="mail-outline"
                 size={20}
-                color={colors.muted}
+                color={themeColors.muted}
                 style={styles.inputIcon}
               />
               <TextInput
@@ -545,7 +544,7 @@ export const AuthScreen = ({ navigation, route }) => {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
               />
             </View>
 
@@ -553,7 +552,7 @@ export const AuthScreen = ({ navigation, route }) => {
               <Ionicons
                 name="lock-closed-outline"
                 size={20}
-                color={colors.muted}
+                color={themeColors.muted}
                 style={styles.inputIcon}
               />
               <TextInput
@@ -562,13 +561,13 @@ export const AuthScreen = ({ navigation, route }) => {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
               />
               <Pressable onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons
                   name={showPassword ? "eye-outline" : "eye-off-outline"}
                   size={20}
-                  color={colors.muted}
+                  color={themeColors.muted}
                 />
               </Pressable>
             </View>
@@ -588,7 +587,7 @@ export const AuthScreen = ({ navigation, route }) => {
               disabled={loading}
             >
               <LinearGradient
-                colors={[colors.primary, colors.accent]}
+                colors={[themeColors.primary, themeColors.accent]}
                 style={styles.buttonGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -622,7 +621,7 @@ export const AuthScreen = ({ navigation, route }) => {
               disabled={googleLoading || appleLoading || loading}
             >
               {googleLoading ? (
-                <ActivityIndicator color={colors.dark} />
+                <ActivityIndicator color={themeColors.dark} />
               ) : (
                 <>
                   <Ionicons name="logo-google" size={20} color="#EA4335" />
@@ -640,7 +639,7 @@ export const AuthScreen = ({ navigation, route }) => {
                 disabled={appleLoading || googleLoading || loading}
               >
                 {appleLoading ? (
-                  <ActivityIndicator color={colors.dark} />
+                  <ActivityIndicator color={themeColors.dark} />
                 ) : (
                   <>
                     <Ionicons name="logo-apple" size={20} color="#000000" />

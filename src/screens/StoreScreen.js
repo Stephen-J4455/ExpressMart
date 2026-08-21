@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useShop } from "../context/ShopContext";
 import { useAuth } from "../context/AuthContext";
-import { colors as palette, getTheme } from "../theme/colors";
+import { getTheme } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useToast } from "../context/ToastContext";
@@ -148,19 +148,19 @@ export const StoreScreen = ({ route, navigation }) => {
   const theme =
     (sellerDetail?.theme_apply_customer
       ? getTheme(
-          sellerDetail?.theme_color || sellerDetail?.theme || colors.primary,
+          sellerDetail?.theme_color || sellerDetail?.theme || themeColors.primary,
         )
-      : getTheme(colors.primary)) || getTheme(colors.primary);
-  const accent = (theme && theme.accent) || (theme && theme.primary) || colors.accent;
+      : getTheme(themeColors.primary)) || getTheme(themeColors.primary);
+  const accent = (theme && theme.accent) || (theme && theme.primary) || themeColors.accent;
   const accentGradient = [
-    (theme && theme.gradientStart) || colors.primary,
-    (theme && theme.gradientEnd) || colors.primary,
+    (theme && theme.gradientStart) || themeColors.primary,
+    (theme && theme.gradientEnd) || themeColors.primary,
   ];
   const { refresh, loading, followSeller, unfollowSeller, isFollowing } =
     useShop();
   const { user } = useAuth();
   const toast = useToast();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildStoreStyles(c));
   const tabScrollRef = useRef(null);
 
@@ -542,7 +542,7 @@ export const StoreScreen = ({ route, navigation }) => {
         ListFooterComponent={
           storeLoadingMore ? (
             <View style={{ paddingVertical: 20, alignItems: "center" }}>
-              <ActivityIndicator size="small" color={colors.primary} />
+              <ActivityIndicator size="small" color={themeColors.primary} />
             </View>
           ) : null
         }
@@ -717,7 +717,7 @@ export const StoreScreen = ({ route, navigation }) => {
                 <Ionicons
                   name="storefront-outline"
                   size={20}
-                  color={activeTab === "products" ? accent : colors.muted}
+                  color={activeTab === "products" ? accent : themeColors.muted}
                 />
                 <Text
                   style={[
@@ -741,7 +741,7 @@ export const StoreScreen = ({ route, navigation }) => {
                 <Ionicons
                   name="person-outline"
                   size={20}
-                  color={activeTab === "profile" ? accent : colors.muted}
+                  color={activeTab === "profile" ? accent : themeColors.muted}
                 />
                 <Text
                   style={[
@@ -765,7 +765,7 @@ export const StoreScreen = ({ route, navigation }) => {
                 <Ionicons
                   name="star-outline"
                   size={20}
-                  color={activeTab === "reviews" ? accent : colors.muted}
+                  color={activeTab === "reviews" ? accent : themeColors.muted}
                 />
                 <Text
                   style={[
@@ -842,7 +842,7 @@ export const StoreScreen = ({ route, navigation }) => {
                     <Ionicons
                       name="cube-outline"
                       size={64}
-                      color={colors.muted}
+                      color={themeColors.muted}
                     />
                     <Text style={styles.emptyText}>No products</Text>
                     <Text style={styles.emptySubtext}>
@@ -979,7 +979,7 @@ export const StoreScreen = ({ route, navigation }) => {
                             <Ionicons
                               name="globe-outline"
                               size={20}
-                              color={colors.primary}
+                              color={themeColors.primary}
                             />
                             <Text style={styles.socialText}>Website</Text>
                           </Pressable>
@@ -1096,7 +1096,7 @@ export const StoreScreen = ({ route, navigation }) => {
                         <Ionicons
                           name="chatbubble-outline"
                           size={48}
-                          color={colors.muted}
+                          color={themeColors.muted}
                         />
                         <Text style={styles.emptyText}>No reviews yet</Text>
                       </View>

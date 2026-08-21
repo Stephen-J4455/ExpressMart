@@ -11,7 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors as palette } from "../theme/colors";
+
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -21,7 +21,7 @@ export const SecurityScreen = ({ navigation }) => {
   const toast = useToast();
   const [loginAlerts, setLoginAlerts] = useState(true);
   const { isWide, horizontalPadding } = useResponsive();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildSecurityStyles(c));
 
   const securityItems = [
@@ -53,7 +53,7 @@ export const SecurityScreen = ({ navigation }) => {
   const renderSecurityItem = (item) => (
     <View key={item.label} style={styles.securityItem}>
       <View style={styles.securityItemLeft}>
-        <Ionicons name={item.icon} size={24} color={colors.primary} />
+        <Ionicons name={item.icon} size={24} color={themeColors.primary} />
         <View style={styles.securityItemContent}>
           <Text style={styles.securityLabel}>{item.label}</Text>
           <Text style={styles.securityDescription}>{item.description}</Text>
@@ -63,11 +63,11 @@ export const SecurityScreen = ({ navigation }) => {
         <Switch
           value={item.value}
           onValueChange={item.onValueChange}
-          trackColor={{ false: colors.light, true: colors.primary }}
+          trackColor={{ false: themeColors.light, true: themeColors.primary }}
           thumbColor="#fff"
         />
       ) : (
-        <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+        <Ionicons name="chevron-forward" size={18} color={themeColors.muted} />
       )}
     </View>
   );
@@ -75,13 +75,13 @@ export const SecurityScreen = ({ navigation }) => {
   const renderActionItem = (item) => (
     <Pressable key={item.label} style={styles.actionItem} onPress={item.action}>
       <View style={styles.actionItemLeft}>
-        <Ionicons name={item.icon} size={20} color={colors.primary} />
+        <Ionicons name={item.icon} size={20} color={themeColors.primary} />
         <View style={styles.actionItemContent}>
           <Text style={styles.actionLabel}>{item.label}</Text>
           <Text style={styles.actionDescription}>{item.description}</Text>
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+      <Ionicons name="chevron-forward" size={18} color={themeColors.muted} />
     </Pressable>
   );
 
@@ -97,7 +97,7 @@ export const SecurityScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Security</Text>
         <View style={{ width: 40 }} />
@@ -128,7 +128,7 @@ export const SecurityScreen = ({ navigation }) => {
             <Ionicons
               name="information-circle-outline"
               size={20}
-              color={colors.primary}
+              color={themeColors.primary}
             />
             <Text style={styles.infoText}>
               Your account security is our top priority. Enable additional

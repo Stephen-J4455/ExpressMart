@@ -22,7 +22,7 @@ import { useResponsive } from "../hooks/useResponsive";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase, callEdgeFunction } from "../lib/supabase";
-import { colors as palette, getTheme } from "../theme/colors";
+import { getTheme } from "../theme/colors";
 import { getImageContentType, getWebUploadPayload } from "../utils/webUpload";
 import { generatePaymentReference } from "../services/payment";
 
@@ -67,8 +67,8 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
   const { user, refreshProfile } = useAuth();
   const toast = useToast();
   const { isWide, contentMaxWidth } = useResponsive();
-  const { colors, isDark } = useTheme();
-  const theme = getTheme(colors.primary);
+  const { colors: themeColors, isDark } = useTheme();
+  const theme = getTheme(themeColors.primary);
   const styles = useAppStyles((c) => buildStoreRegStyles(c));
 
   const [step, setStep] = useState(1);
@@ -515,7 +515,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
             <Ionicons
               name="storefront-outline"
               size={18}
-              color={colors.muted}
+              color={themeColors.muted}
               style={styles.inputIcon}
             />
             <TextInput
@@ -523,7 +523,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
               value={name}
               onChangeText={setName}
               placeholder="e.g. Nova Retail"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
             />
           </View>
 
@@ -536,7 +536,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
               <Ionicons
                 name="call-outline"
                 size={18}
-                color={colors.muted}
+                color={themeColors.muted}
                 style={styles.inputIcon}
               />
               <TextInput
@@ -546,7 +546,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
                 keyboardType="phone-pad"
                 maxLength={9}
                 placeholder="e.g. 241234567"
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
               />
             </View>
           </View>
@@ -561,7 +561,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
               value={description}
               onChangeText={setDescription}
               placeholder="Tell customers about your store"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
               multiline
               numberOfLines={4}
               textAlignVertical="top"
@@ -595,7 +595,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
                   <Ionicons
                     name="cloud-upload-outline"
                     size={40}
-                    color={colors.primary}
+                    color={themeColors.primary}
                   />
                 </Animated.View>
                 <Text style={styles.logoPlaceholderText}>
@@ -627,21 +627,21 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
             <Pressable
               style={[
                 styles.typeBtn,
-                payType === "bank" && { borderColor: colors.primary },
+                payType === "bank" && { borderColor: themeColors.primary },
               ]}
               onPress={() => setPayType("bank")}
             >
               <Ionicons
                 name="business"
                 size={22}
-                color={payType === "bank" ? colors.primary : colors.muted}
+                color={payType === "bank" ? themeColors.primary : themeColors.muted}
               />
               <Text style={styles.typeText}>Bank Account</Text>
             </Pressable>
             <Pressable
               style={[
                 styles.typeBtn,
-                payType === "mobile_money" && { borderColor: colors.primary },
+                payType === "mobile_money" && { borderColor: themeColors.primary },
                 styles.typeBtnSpacing,
               ]}
               onPress={() => setPayType("mobile_money")}
@@ -650,7 +650,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
                 name="phone-portrait"
                 size={22}
                 color={
-                  payType === "mobile_money" ? colors.primary : colors.muted
+                  payType === "mobile_money" ? themeColors.primary : themeColors.muted
                 }
               />
               <Text style={styles.typeText}>Mobile Money</Text>
@@ -683,7 +683,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
                           style={[
                             styles.chip,
                             bankCode === b.code && {
-                              borderColor: colors.primary,
+                              borderColor: themeColors.primary,
                             },
                           ]}
                           onPress={() => setBankCode(b.code)}
@@ -691,7 +691,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
                           <Text
                             style={[
                               styles.chipText,
-                              bankCode === b.code && { color: colors.primary },
+                              bankCode === b.code && { color: themeColors.primary },
                             ]}
                           >
                             {b.name}
@@ -713,7 +713,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
                     style={[
                       styles.typeBtn,
                       payType === "mobile_money" &&
-                        mobileProvider === p && { borderColor: colors.primary },
+                        mobileProvider === p && { borderColor: themeColors.primary },
                       styles.typeBtnSpacing,
                     ]}
                     onPress={() => setMobileProvider(p)}
@@ -736,7 +736,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
             placeholder={
               payType === "bank" ? "13-digit account number" : "e.g. 024..."
             }
-            placeholderTextColor={colors.muted}
+            placeholderTextColor={themeColors.muted}
           />
         </View>
       );
@@ -763,7 +763,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
         </View>
 
         <View style={styles.feeBox}>
-          <Ionicons name="receipt-outline" size={22} color={colors.primary} />
+          <Ionicons name="receipt-outline" size={22} color={themeColors.primary} />
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={styles.feeTitle}>Store Registration Fee</Text>
             <Text style={styles.feeSub}>
@@ -785,7 +785,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
     if (step === 1) {
       return (
         <Pressable
-          style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
+          style={[styles.primaryBtn, { backgroundColor: themeColors.primary }]}
           onPress={() => canContinueStep1 && setStep(2)}
           disabled={!canContinueStep1}
         >
@@ -803,7 +803,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
             <Text>Back</Text>
           </Pressable>
           <Pressable
-            style={[styles.primaryBtn, styles.footerPrimary, { backgroundColor: colors.primary }]}
+            style={[styles.primaryBtn, styles.footerPrimary, { backgroundColor: themeColors.primary }]}
             onPress={() => setStep(3)}
           >
             <Text style={styles.primaryBtnText}>Continue</Text>
@@ -821,7 +821,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
             <Text>Back</Text>
           </Pressable>
           <Pressable
-            style={[styles.primaryBtn, styles.footerPrimary, { backgroundColor: colors.primary }]}
+            style={[styles.primaryBtn, styles.footerPrimary, { backgroundColor: themeColors.primary }]}
             onPress={() => setStep(4)}
           >
             <Text style={styles.primaryBtnText}>Continue</Text>
@@ -839,7 +839,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
           <Text>Back</Text>
         </Pressable>
         <Pressable
-          style={[styles.primaryBtn, styles.footerPrimary, { backgroundColor: colors.primary }]}
+          style={[styles.primaryBtn, styles.footerPrimary, { backgroundColor: themeColors.primary }]}
           onPress={handlePay}
           disabled={busy}
         >
@@ -860,13 +860,13 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar backgroundColor={colors.light} barStyle={isDark ? "light-content" : "dark-content"} />
+      <StatusBar backgroundColor={themeColors.light} barStyle={isDark ? "light-content" : "dark-content"} />
       <View style={styles.header}>
         <Pressable
           style={styles.backButton}
           onPress={() => (step === 1 ? navigation.goBack() : setStep(step - 1))}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Register a Store</Text>
         <View style={{ width: 44 }} />
@@ -891,7 +891,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
 
       {busy && step === 4 && (
         <View style={styles.busyOverlay}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={themeColors.primary} />
           <Text style={styles.busyText}>Finalizing your store...</Text>
         </View>
       )}

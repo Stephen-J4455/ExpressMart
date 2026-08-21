@@ -15,7 +15,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 
@@ -32,7 +31,7 @@ export default function PasswordResetScreen({ navigation, route }) {
   const { resetPassword } = useAuth();
   const { isWide } = useResponsive();
 
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildPasswordResetStyles(c));
 
   const liveUrl = Linking.useURL();
@@ -399,7 +398,7 @@ export default function PasswordResetScreen({ navigation, route }) {
 
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
+              <ActivityIndicator size="large" color={themeColors.primary} />
               <Text style={styles.loadingText}>Verifying reset link...</Text>
             </View>
           ) : error ? (
@@ -410,7 +409,7 @@ export default function PasswordResetScreen({ navigation, route }) {
                 <Ionicons
                   name="mail-outline"
                   size={20}
-                  color={colors.muted}
+                  color={themeColors.muted}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -421,7 +420,7 @@ export default function PasswordResetScreen({ navigation, route }) {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                 />
               </View>
 
@@ -434,7 +433,7 @@ export default function PasswordResetScreen({ navigation, route }) {
                 disabled={requestingNewLink || newLinkRequested}
               >
                 <LinearGradient
-                  colors={[colors.primary, colors.accent]}
+                  colors={[themeColors.primary, themeColors.accent]}
                   style={styles.buttonGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
@@ -458,7 +457,7 @@ export default function PasswordResetScreen({ navigation, route }) {
                 <Ionicons
                   name="lock-closed-outline"
                   size={20}
-                  color={colors.muted}
+                  color={themeColors.muted}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -468,13 +467,13 @@ export default function PasswordResetScreen({ navigation, route }) {
                   onChangeText={setNewPassword}
                   secureTextEntry={!showNewPassword}
                   autoCapitalize="none"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                 />
                 <Pressable onPress={() => setShowNewPassword(!showNewPassword)}>
                   <Ionicons
                     name={showNewPassword ? "eye-outline" : "eye-off-outline"}
                     size={20}
-                    color={colors.muted}
+                    color={themeColors.muted}
                   />
                 </Pressable>
               </View>
@@ -483,7 +482,7 @@ export default function PasswordResetScreen({ navigation, route }) {
                 <Ionicons
                   name="lock-closed-outline"
                   size={20}
-                  color={colors.muted}
+                  color={themeColors.muted}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -493,13 +492,13 @@ export default function PasswordResetScreen({ navigation, route }) {
                   onChangeText={setConfirmPassword}
                   secureTextEntry={!showConfirmPassword}
                   autoCapitalize="none"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                 />
                 <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
                   <Ionicons
                     name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
                     size={20}
-                    color={colors.muted}
+                    color={themeColors.muted}
                   />
                 </Pressable>
               </View>
@@ -510,7 +509,7 @@ export default function PasswordResetScreen({ navigation, route }) {
                 disabled={submitting}
               >
                 <LinearGradient
-                  colors={[colors.primary, colors.accent]}
+                  colors={[themeColors.primary, themeColors.accent]}
                   style={styles.buttonGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}

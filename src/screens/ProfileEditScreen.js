@@ -13,7 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors as palette, getTheme, THEMES } from "../theme/colors";
+import { getTheme, THEMES } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase } from "../lib/supabase";
@@ -22,7 +22,7 @@ import { useResponsive } from "../hooks/useResponsive";
 export const ProfileEditScreen = ({ navigation }) => {
   const { user, profile, updateProfile } = useAuth();
   const toast = useToast();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildProfileEditStyles(c));
   const [fullName, setFullName] = useState(profile?.full_name || "");
   const [phone, setPhone] = useState(profile?.phone || "");
@@ -33,7 +33,7 @@ export const ProfileEditScreen = ({ navigation }) => {
   const [isSeller, setIsSeller] = useState(false);
   const [sellerId, setSellerId] = useState(null);
   const [storeDescription, setStoreDescription] = useState("");
-  const [themeColor, setThemeColor] = useState(colors.primary);
+  const [themeColor, setThemeColor] = useState(themeColors.primary);
   const THEME_OPTIONS = Object.values(THEMES).map((t) => t.primary);
 
   useEffect(() => {
@@ -50,7 +50,7 @@ export const ProfileEditScreen = ({ navigation }) => {
           setIsSeller(true);
           setSellerId(data.id);
           setStoreDescription(data.store_description || "");
-          setThemeColor(data.theme_color || colors.primary);
+          setThemeColor(data.theme_color || themeColors.primary);
         }
       } catch (e) {
         // Not a seller — store settings simply stay hidden.
@@ -121,7 +121,7 @@ export const ProfileEditScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Edit Profile</Text>
         <Pressable
@@ -148,7 +148,7 @@ export const ProfileEditScreen = ({ navigation }) => {
         >
           {/* Avatar hero */}
           <LinearGradient
-            colors={[colors.primary, colors.accent]}
+            colors={[themeColors.primary, themeColors.accent]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.avatarHero}
@@ -168,7 +168,7 @@ export const ProfileEditScreen = ({ navigation }) => {
               <Ionicons
                 name="person-outline"
                 size={18}
-                color={colors.primary}
+                color={themeColors.primary}
               />
               <Text style={styles.cardTitle}>Personal Information</Text>
             </View>
@@ -179,7 +179,7 @@ export const ProfileEditScreen = ({ navigation }) => {
                 <Ionicons
                   name="person-outline"
                   size={18}
-                  color={colors.muted}
+                  color={themeColors.muted}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -187,7 +187,7 @@ export const ProfileEditScreen = ({ navigation }) => {
                   value={fullName}
                   onChangeText={setFullName}
                   placeholder="Enter your full name"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                 />
               </View>
             </View>
@@ -198,7 +198,7 @@ export const ProfileEditScreen = ({ navigation }) => {
                 <Ionicons
                   name="call-outline"
                   size={18}
-                  color={colors.muted}
+                  color={themeColors.muted}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -206,7 +206,7 @@ export const ProfileEditScreen = ({ navigation }) => {
                   value={phone}
                   onChangeText={setPhone}
                   placeholder="+233 XX XXX XXXX"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                   keyboardType="phone-pad"
                 />
               </View>
@@ -216,7 +216,7 @@ export const ProfileEditScreen = ({ navigation }) => {
           {/* Email (read-only) card */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <Ionicons name="mail-outline" size={18} color={colors.primary} />
+              <Ionicons name="mail-outline" size={18} color={themeColors.primary} />
               <Text style={styles.cardTitle}>Email Address</Text>
             </View>
 
@@ -225,17 +225,17 @@ export const ProfileEditScreen = ({ navigation }) => {
                 <Ionicons
                   name="mail-outline"
                   size={18}
-                  color={colors.muted}
+                  color={themeColors.muted}
                   style={styles.inputIcon}
                 />
                 <TextInput
                   style={[styles.input, styles.inputDisabled]}
                   value={user?.email || ""}
                   editable={false}
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                 />
                 <View style={styles.lockPill}>
-                  <Ionicons name="lock-closed" size={11} color={colors.muted} />
+                  <Ionicons name="lock-closed" size={11} color={themeColors.muted} />
                 </View>
               </View>
               <Text style={styles.helperText}>
@@ -250,7 +250,7 @@ export const ProfileEditScreen = ({ navigation }) => {
               <Ionicons
                 name="settings-outline"
                 size={18}
-                color={colors.primary}
+                color={themeColors.primary}
               />
               <Text style={styles.cardTitle}>Account</Text>
             </View>
@@ -299,7 +299,7 @@ export const ProfileEditScreen = ({ navigation }) => {
                 <Ionicons
                   name="storefront-outline"
                   size={18}
-                  color={colors.primary}
+                  color={themeColors.primary}
                 />
                 <Text style={styles.cardTitle}>Store Settings</Text>
               </View>
@@ -312,7 +312,7 @@ export const ProfileEditScreen = ({ navigation }) => {
                     value={storeDescription}
                     onChangeText={setStoreDescription}
                     placeholder="Tell customers what your store is about"
-                    placeholderTextColor={colors.muted}
+                    placeholderTextColor={themeColors.muted}
                     multiline
                     numberOfLines={4}
                     textAlignVertical="top"

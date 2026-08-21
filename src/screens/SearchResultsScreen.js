@@ -23,7 +23,6 @@ import { AdRenderer } from "../components/AdBanner";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
 import { supabase } from "../lib/supabase";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -59,7 +58,7 @@ const mapSearchProduct = (product) => ({
 });
 
 export const SearchResultsScreen = ({ navigation, route }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildSearchResultsStyles(c));
   const insets = useSafeAreaInsets();
   const { products } = useShop();
@@ -385,7 +384,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
                 <Ionicons
                   name="time-outline"
                   size={20}
-                  color={colors.primary}
+                  color={themeColors.primary}
                 />
                 <Text style={styles.sectionTitle}>Recent Searches</Text>
                 <Pressable
@@ -414,7 +413,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
               <Ionicons
                 name="trending-up-outline"
                 size={20}
-                color={colors.primary}
+                color={themeColors.primary}
               />
               <Text style={styles.sectionTitle}>Trending Now</Text>
             </View>
@@ -443,24 +442,24 @@ export const SearchResultsScreen = ({ navigation, route }) => {
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <Ionicons name="chevron-back" size={24} color={colors.dark} />
+          <Ionicons name="chevron-back" size={24} color={themeColors.dark} />
         </Pressable>
 
         <View style={styles.searchInputContainer}>
-          <Ionicons name="search" size={20} color={colors.muted} />
+          <Ionicons name="search" size={20} color={themeColors.muted} />
           <TextInput
             style={styles.searchInput}
             value={query}
             onChangeText={setQuery}
             placeholder="Search products, stores..."
-            placeholderTextColor={colors.muted}
+            placeholderTextColor={themeColors.muted}
             autoFocus
             returnKeyType="search"
             onSubmitEditing={() => handleSearchSubmit(query)}
           />
           {query ? (
             <Pressable onPress={() => setQuery("")} style={styles.clearIcon}>
-              <Ionicons name="close-circle" size={20} color={colors.muted} />
+              <Ionicons name="close-circle" size={20} color={themeColors.muted} />
             </Pressable>
           ) : null}
         </View>
@@ -475,7 +474,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
           <Ionicons
             name="cube-outline"
             size={20}
-            color={activeTab === "products" ? "#fff" : colors.primary}
+            color={activeTab === "products" ? "#fff" : themeColors.primary}
           />
           <Text
             style={[
@@ -493,7 +492,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
           <Ionicons
             name="storefront-outline"
             size={20}
-            color={activeTab === "stores" ? "#fff" : colors.primary}
+            color={activeTab === "stores" ? "#fff" : themeColors.primary}
           />
           <Text
             style={[
@@ -532,7 +531,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
             {tag && (
               <View style={styles.tagFilterSection}>
                 <View style={styles.tagIndicator}>
-                  <Ionicons name="pricetag" size={16} color={colors.primary} />
+                  <Ionicons name="pricetag" size={16} color={themeColors.primary} />
                   <Text style={styles.tagText}>Tag: "{tag}"</Text>
                 </View>
                 <Pressable
@@ -545,7 +544,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
                   <Ionicons
                     name="close-circle"
                     size={20}
-                    color={colors.primary}
+                    color={themeColors.primary}
                   />
                   <Text style={styles.clearTagText}>Clear</Text>
                 </Pressable>
@@ -597,7 +596,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
 
             {loadingMoreSearch && (
               <View style={{ paddingVertical: 20, alignItems: "center" }}>
-                <ActivityIndicator size="small" color={colors.primary} />
+                <ActivityIndicator size="small" color={themeColors.primary} />
               </View>
             )}
 
@@ -607,7 +606,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
                   <Ionicons
                     name="search-outline"
                     size={64}
-                    color={colors.muted}
+                    color={themeColors.muted}
                   />
                 </View>
                 <Text style={styles.emptyText}>No products found</Text>
@@ -687,7 +686,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
                               <Ionicons
                                 name="people"
                                 size={14}
-                                color={colors.muted}
+                                color={themeColors.muted}
                               />
                               <Text style={styles.statText}>
                                 {store.total_ratings || 0} reviews
@@ -698,7 +697,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
                         <Ionicons
                           name="chevron-forward"
                           size={20}
-                          color={colors.muted}
+                          color={themeColors.muted}
                         />
                       </Pressable>
                     ))}
@@ -711,7 +710,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
                   <Ionicons
                     name="storefront-outline"
                     size={64}
-                    color={colors.muted}
+                    color={themeColors.muted}
                   />
                 </View>
                 <Text style={styles.emptyText}>No stores found</Text>

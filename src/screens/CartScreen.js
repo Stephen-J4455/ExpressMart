@@ -12,7 +12,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
-import { colors as palette } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -74,7 +73,7 @@ export const CartScreen = ({ navigation }) => {
   const { items, total, updateQuantity, removeFromCart, clearCart } = useCart();
   const toast = useToast();
   const { isWide, contentMaxWidth } = useResponsive();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildCartStyles(c));
   const getAvailableStock = (product) =>
     Number(product?.quantity ?? product?.stock ?? 0);
@@ -109,7 +108,7 @@ export const CartScreen = ({ navigation }) => {
     return (
       <View style={styles.emptyState}>
         <View style={styles.emptyIconContainer}>
-          <Ionicons name="cart-outline" size={56} color={colors.primary} />
+          <Ionicons name="cart-outline" size={56} color={themeColors.primary} />
         </View>
         <Text style={styles.emptyTitle}>Your cart is empty</Text>
         <Text style={styles.emptySubtitle}>
@@ -135,7 +134,7 @@ export const CartScreen = ({ navigation }) => {
         <Ionicons
           name="information-circle-outline"
           size={14}
-          color={colors.primary}
+          color={themeColors.primary}
         />
         <Text style={styles.shippingHint}>
           Shipping & service fees calculated at checkout
@@ -153,8 +152,8 @@ export const CartScreen = ({ navigation }) => {
         <LinearGradient
           colors={
             hasOutOfStockItems
-              ? [colors.muted, colors.muted]
-              : [colors.primary, colors.accent]
+              ? [themeColors.muted, themeColors.muted]
+              : [themeColors.primary, themeColors.accent]
           }
           style={styles.checkoutGradient}
           start={{ x: 0, y: 0 }}
@@ -270,7 +269,7 @@ export const CartScreen = ({ navigation }) => {
                             <Ionicons
                               name="resize"
                               size={10}
-                              color={colors.primary}
+                              color={themeColors.primary}
                             />
                             <Text style={styles.specText}>{size}</Text>
                           </View>
@@ -330,7 +329,7 @@ export const CartScreen = ({ navigation }) => {
                       <Ionicons
                         name="remove"
                         size={18}
-                        color={quantity <= 1 ? "#CBD5E1" : colors.dark}
+                        color={quantity <= 1 ? "#CBD5E1" : themeColors.dark}
                       />
                     </Pressable>
                     <View style={styles.qtyValueContainer}>

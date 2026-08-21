@@ -21,7 +21,6 @@ import { useToast } from "../context/ToastContext";
 import { useAds } from "../context/AdsContext";
 import { supabase, supabaseUrl } from "../lib/supabase";
 import { AdRenderer } from "../components/AdBanner";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import {
@@ -32,7 +31,7 @@ import { callEdgeFunction } from "../lib/supabase";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const CheckoutScreen = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildCheckoutStyles(c));
   const { isWide, horizontalPadding } = useResponsive();
   const insets = useSafeAreaInsets();
@@ -311,7 +310,7 @@ export const CheckoutScreen = ({ navigation }) => {
   if (!isAuthenticated) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={themeColors.primary} />
       </View>
     );
   }
@@ -323,7 +322,7 @@ export const CheckoutScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Checkout</Text>
         <View style={{ width: 44 }} />
@@ -343,7 +342,7 @@ export const CheckoutScreen = ({ navigation }) => {
         {/* Delivery Address Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="location" size={20} color={colors.primary} />
+            <Ionicons name="location" size={20} color={themeColors.primary} />
             <Text style={styles.sectionTitle}>Delivery Address</Text>
           </View>
 
@@ -364,14 +363,14 @@ export const CheckoutScreen = ({ navigation }) => {
                   {selectedAddress.city}, {selectedAddress.state}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+              <Ionicons name="chevron-forward" size={20} color={themeColors.muted} />
             </Pressable>
           ) : (
             <Pressable
               style={styles.addButton}
               onPress={() => setShowAddAddress(true)}
             >
-              <Ionicons name="add-circle" size={24} color={colors.primary} />
+              <Ionicons name="add-circle" size={24} color={themeColors.primary} />
               <Text style={styles.addButtonText}>Add Delivery Address</Text>
             </Pressable>
           )}
@@ -419,7 +418,7 @@ export const CheckoutScreen = ({ navigation }) => {
               onChangeText={(text) =>
                 setNewAddress({ ...newAddress, full_name: text })
               }
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
             />
             <TextInput
               style={styles.input}
@@ -429,7 +428,7 @@ export const CheckoutScreen = ({ navigation }) => {
                 setNewAddress({ ...newAddress, phone: text })
               }
               keyboardType="phone-pad"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
             />
             <TextInput
               style={styles.input}
@@ -438,7 +437,7 @@ export const CheckoutScreen = ({ navigation }) => {
               onChangeText={(text) =>
                 setNewAddress({ ...newAddress, street_address: text })
               }
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
             />
             <View style={styles.row}>
               <TextInput
@@ -448,7 +447,7 @@ export const CheckoutScreen = ({ navigation }) => {
                 onChangeText={(text) =>
                   setNewAddress({ ...newAddress, city: text })
                 }
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
               />
               <TextInput
                 style={[styles.input, { flex: 1, marginLeft: 8 }]}
@@ -457,7 +456,7 @@ export const CheckoutScreen = ({ navigation }) => {
                 onChangeText={(text) =>
                   setNewAddress({ ...newAddress, state: text })
                 }
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
               />
             </View>
             <View style={styles.formButtons}>
@@ -485,7 +484,7 @@ export const CheckoutScreen = ({ navigation }) => {
         {/* Order Summary */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="receipt" size={20} color={colors.primary} />
+            <Ionicons name="receipt" size={20} color={themeColors.primary} />
             <Text style={styles.sectionTitle}>Order Summary</Text>
           </View>
 
@@ -542,7 +541,7 @@ export const CheckoutScreen = ({ navigation }) => {
         {/* Payment Method */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="card" size={20} color={colors.primary} />
+            <Ionicons name="card" size={20} color={themeColors.primary} />
             <Text style={styles.sectionTitle}>Payment Method</Text>
           </View>
           <View style={styles.paymentMethod}>
@@ -558,7 +557,7 @@ export const CheckoutScreen = ({ navigation }) => {
             <Ionicons
               name="checkmark-circle"
               size={24}
-              color={colors.primary}
+              color={themeColors.primary}
             />
           </View>
         </View>
@@ -581,7 +580,7 @@ export const CheckoutScreen = ({ navigation }) => {
           disabled={loading}
         >
           <LinearGradient
-            colors={[colors.primary, colors.accent]}
+            colors={[themeColors.primary, themeColors.accent]}
             style={styles.checkoutGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}

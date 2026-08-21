@@ -15,13 +15,12 @@ import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const WishlistScreen = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildWishlistStyles(c));
   const { user } = useAuth();
   const { addToCart } = useCart();
@@ -150,7 +149,7 @@ export const WishlistScreen = ({ navigation }) => {
             <Text style={styles.price}>{formatPrice(product.price)}</Text>
             {!!product.rating && (
               <View style={styles.ratingRow}>
-                <Ionicons name="star" size={14} color={colors.secondary} />
+                <Ionicons name="star" size={14} color={themeColors.secondary} />
                 <Text style={styles.rating}>{product.rating.toFixed(1)}</Text>
               </View>
             )}
@@ -159,7 +158,7 @@ export const WishlistScreen = ({ navigation }) => {
             style={[
               styles.stock,
               {
-                color: product.quantity > 0 ? colors.success : colors.accent,
+                color: product.quantity > 0 ? themeColors.success : themeColors.accent,
               },
             ]}
           >
@@ -172,13 +171,13 @@ export const WishlistScreen = ({ navigation }) => {
             onPress={() => handleAddToCart(item)}
             disabled={product.quantity === 0}
           >
-            <Ionicons name="cart-outline" size={18} color={colors.primary} />
+            <Ionicons name="cart-outline" size={18} color={themeColors.primary} />
           </Pressable>
           <Pressable
             style={styles.removeButton}
             onPress={() => removeFromWishlist(item.id)}
           >
-            <Ionicons name="trash-outline" size={18} color={colors.accent} />
+            <Ionicons name="trash-outline" size={18} color={themeColors.accent} />
           </Pressable>
         </View>
       </View>
@@ -190,13 +189,13 @@ export const WishlistScreen = ({ navigation }) => {
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color={colors.dark} />
+            <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
           </Pressable>
           <Text style={styles.headerTitle}>My Wishlist</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.emptyContainer}>
-          <Ionicons name="heart-outline" size={80} color={colors.muted} />
+          <Ionicons name="heart-outline" size={80} color={themeColors.muted} />
           <Text style={styles.emptyTitle}>Sign in to view your wishlist</Text>
           <Pressable
             style={styles.signInButton}
@@ -207,7 +206,7 @@ export const WishlistScreen = ({ navigation }) => {
             }
           >
             <LinearGradient
-              colors={[colors.primary, colors.accent]}
+              colors={[themeColors.primary, themeColors.accent]}
               style={styles.signInGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
@@ -224,7 +223,7 @@ export const WishlistScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container} edges={["top"]}>
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>My Wishlist</Text>
         <View style={{ width: 24 }} />
@@ -232,11 +231,11 @@ export const WishlistScreen = ({ navigation }) => {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={themeColors.primary} />
         </View>
       ) : wishlist.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="heart-outline" size={80} color={colors.muted} />
+          <Ionicons name="heart-outline" size={80} color={themeColors.muted} />
           <Text style={styles.emptyTitle}>Your wishlist is empty</Text>
           <Text style={styles.emptySubtitle}>
             Save items you love by tapping the heart icon

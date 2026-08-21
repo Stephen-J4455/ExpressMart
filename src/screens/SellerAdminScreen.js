@@ -29,7 +29,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
 import { notifyOrderStatusUpdate } from "../services/notificationService";
 import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
-import { colors as palette, getTheme, radius } from "../theme/colors";
+import { getTheme, radius } from "../theme/colors";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { getImageContentType, getWebUploadPayload } from "../utils/webUpload";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
@@ -211,8 +211,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const nav = useNavigation();
   const { user, profile: customerProfile, signOut } = useAuth();
   const toast = useToast();
-  const { theme: themeMode, setTheme: setThemeMode } = useTheme();
-  const { colors } = useTheme();
+  const { theme: themeMode, setTheme: setThemeMode, colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildSellerAdminStyles(c));
 
   // ── Seller data layer (mirrors Express-Store SellerContext) ──────────────
@@ -226,8 +225,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
   const theme =
     getTheme(seller?.theme_color) ||
-    getTheme(colors.primary);
-  const accent = (theme && theme.accent) || colors.accent;
+    getTheme(themeColors.primary);
+  const accent = (theme && theme.accent) || themeColors.accent;
 
   // ── Catalog UI state ─────────────────────────────────────────────────────
   const [productFilter, setProductFilter] = useState("all");
@@ -1502,7 +1501,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     <Image source={{ uri: thumb }} style={styles.flashThumb} />
                   ) : (
                     <View style={[styles.flashThumb, styles.flashThumbPlaceholder]}>
-                      <Ionicons name="image-outline" size={20} color={colors.muted} />
+                      <Ionicons name="image-outline" size={20} color={themeColors.muted} />
                     </View>
                   )}
                   <Text style={styles.flashName} numberOfLines={1}>
@@ -1520,17 +1519,17 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       )}
 
       <View style={styles.searchBox}>
-        <Ionicons name="search" size={18} color={colors.muted} />
+        <Ionicons name="search" size={18} color={themeColors.muted} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search products..."
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={themeColors.muted}
         />
         {searchQuery ? (
           <Pressable onPress={() => setSearchQuery("")}>
-            <Ionicons name="close-circle" size={18} color={colors.muted} />
+            <Ionicons name="close-circle" size={18} color={themeColors.muted} />
           </Pressable>
         ) : null}
       </View>
@@ -1683,13 +1682,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       flex: total / Math.max(statusSummary.reduce((s, x) => s + x.total, 0), 1),
                       backgroundColor:
                         status === "processing"
-                          ? colors.primary
+                          ? themeColors.primary
                           : status === "packed"
                             ? "#F59E0B"
                             : status === "shipped"
                               ? "#06B6D4"
                               : status === "delivered"
-                                ? colors.success
+                                ? themeColors.success
                                 : "#EF4444",
                     },
                   ]}
@@ -1707,13 +1706,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       )}
 
       <View style={styles.searchBox}>
-        <Ionicons name="search" size={18} color={colors.muted} />
+        <Ionicons name="search" size={18} color={themeColors.muted} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search by order # or customer..."
           value={orderSearch}
           onChangeText={setOrderSearch}
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={themeColors.muted}
         />
       </View>
 
@@ -1790,7 +1789,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </TouchableOpacity>
             ) : o.status === "delivered" ? (
               <View style={styles.successBadge}>
-                <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                <Ionicons name="checkmark-circle" size={14} color={themeColors.success} />
                 <Text style={styles.successText}>Delivered</Text>
               </View>
             ) : null}
@@ -1946,7 +1945,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       job.status === "error"
                         ? "#EF4444"
                         : job.status === "done"
-                          ? colors.success
+                          ? themeColors.success
                           : accent,
                   },
                 ]}
@@ -2074,19 +2073,19 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <Ionicons
               name="trash-outline"
               size={20}
-              color={deletingReelId === cardMenu?.id ? colors.muted : "#EF4444"}
+              color={deletingReelId === cardMenu?.id ? themeColors.muted : "#EF4444"}
             />
             <Text
               style={[
                 styles.menuItemText,
-                deletingReelId === cardMenu?.id && { color: colors.muted },
+                deletingReelId === cardMenu?.id && { color: themeColors.muted },
               ]}
             >
               {deletingReelId === cardMenu?.id ? "Deleting…" : "Delete"}
             </Text>
           </Pressable>
           <Pressable style={styles.menuItemRow} onPress={() => setCardMenu(null)}>
-            <Ionicons name="close-outline" size={20} color={colors.dark} />
+            <Ionicons name="close-outline" size={20} color={themeColors.dark} />
             <Text style={styles.menuItemText}>Cancel</Text>
           </Pressable>
         </Pressable>
@@ -2114,7 +2113,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       >
         <Pressable style={styles.modalCard} onPress={() => {}}>
           <LinearGradient
-            colors={[colors.primary, colors.accent]}
+            colors={[themeColors.primary, themeColors.accent]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.modalHeader}
@@ -2139,7 +2138,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                         <Image source={{ uri: thumb }} style={styles.videoDeleteThumb} />
                       ) : (
                         <View style={styles.videoDeleteThumbFallback}>
-                          <Ionicons name="cube-outline" size={16} color={colors.primary} />
+                          <Ionicons name="cube-outline" size={16} color={themeColors.primary} />
                         </View>
                       )}
                       <View style={{ flex: 1, minWidth: 0 }}>
@@ -2151,7 +2150,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                         </Text>
                       </View>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+                    <Ionicons name="chevron-forward" size={18} color={themeColors.muted} />
                   </Pressable>
                 );
               })
@@ -2181,7 +2180,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           <View style={styles.drawerHeader}>
             <Text style={styles.drawerTitle}>Store Menu</Text>
             <Pressable onPress={() => setMenuVisible(false)} hitSlop={8}>
-              <Ionicons name="close" size={24} color={colors.dark} />
+              <Ionicons name="close" size={24} color={themeColors.dark} />
             </Pressable>
           </View>
           <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false}>
@@ -2214,7 +2213,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                         <Ionicons
                           name={opt.icon}
                           size={18}
-                          color={selected ? colors.primary : colors.muted}
+                          color={selected ? themeColors.primary : themeColors.muted}
                         />
                         <Text
                           style={[
@@ -2255,7 +2254,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     name={item.icon}
                     size={20}
                     color={
-                      item.action === "signOut" ? "#EF4444" : colors.muted
+                      item.action === "signOut" ? "#EF4444" : themeColors.muted
                     }
                   />
                   <Text
@@ -2269,7 +2268,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   <Ionicons
                     name="chevron-forward"
                     size={18}
-                    color={colors.muted}
+                    color={themeColors.muted}
                     style={{ marginLeft: "auto" }}
                   />
                 </Pressable>
@@ -2359,7 +2358,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 <Ionicons
                   name={TAB_ICONS[tab]}
                   size={22}
-                  color={isActive ? accent : colors.muted}
+                  color={isActive ? accent : themeColors.muted}
                 />
               </Pressable>
             );
@@ -2390,7 +2389,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 {editingProduct ? "Edit Product" : "New Product"}
               </Text>
               <Pressable onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.dark} />
+                <Ionicons name="close" size={24} color={themeColors.dark} />
               </Pressable>
             </View>
 
@@ -2442,7 +2441,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   value={title}
                   onChangeText={setTitle}
                   placeholder="Product title"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                 />
 
                 <View style={styles.row}>
@@ -2454,7 +2453,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       onChangeText={setPrice}
                       keyboardType="numeric"
                       placeholder="0.00"
-                      placeholderTextColor={colors.muted}
+                      placeholderTextColor={themeColors.muted}
                     />
                   </View>
                   <View style={styles.col}>
@@ -2465,7 +2464,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       onChangeText={setShippingFee}
                       keyboardType="numeric"
                       placeholder="0.00"
-                      placeholderTextColor={colors.muted}
+                      placeholderTextColor={themeColors.muted}
                     />
                   </View>
                 </View>
@@ -2502,7 +2501,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   value={description}
                   onChangeText={setDescription}
                   placeholder="Describe the product..."
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                   multiline
                   numberOfLines={4}
                 />
@@ -2530,7 +2529,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   onChangeText={setQuantity}
                   keyboardType="numeric"
                   placeholder="0"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                 />
               </View>
               <View style={styles.col}>
@@ -2541,7 +2540,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   onChangeText={(t) => setDiscount(Number(t) || 0)}
                   keyboardType="numeric"
                   placeholder="0"
-                  placeholderTextColor={colors.muted}
+                  placeholderTextColor={themeColors.muted}
                 />
               </View>
             </View>
@@ -2595,7 +2594,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 <Ionicons
                   name={isPreorder ? "checkbox" : "square-outline"}
                   size={20}
-                  color={isPreorder ? accent : colors.muted}
+                  color={isPreorder ? accent : themeColors.muted}
                 />
                 <Text style={styles.checkLabel}>Preorder</Text>
               </Pressable>
@@ -2606,7 +2605,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 <Ionicons
                   name={trackInventory ? "checkbox" : "square-outline"}
                   size={20}
-                  color={trackInventory ? accent : colors.muted}
+                  color={trackInventory ? accent : themeColors.muted}
                 />
                 <Text style={styles.checkLabel}>Track inventory</Text>
               </Pressable>
@@ -2617,7 +2616,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 <Ionicons
                   name={allowBackorder ? "checkbox" : "square-outline"}
                   size={20}
-                  color={allowBackorder ? accent : colors.muted}
+                  color={allowBackorder ? accent : themeColors.muted}
                 />
                 <Text style={styles.checkLabel}>Allow backorder</Text>
               </Pressable>
@@ -2768,7 +2767,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                           setSpecifications(updated);
                         }}
                         placeholder="Name (e.g. Material)"
-                        placeholderTextColor={colors.muted}
+                        placeholderTextColor={themeColors.muted}
                       />
                       <TextInput
                         style={[styles.input, styles.specValue]}
@@ -2779,7 +2778,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                           setSpecifications(updated);
                         }}
                         placeholder="Value (e.g. Cotton)"
-                        placeholderTextColor={colors.muted}
+                        placeholderTextColor={themeColors.muted}
                       />
                       <Pressable
                         style={styles.specRemove}
@@ -2840,27 +2839,27 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         <Pressable style={styles.sheetOverlay} onPress={() => setActionSheetVisible(false)}>
           <View style={styles.sheet}>
             <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("view")}>
-              <Ionicons name="eye-outline" size={20} color={colors.dark} />
+              <Ionicons name="eye-outline" size={20} color={themeColors.dark} />
               <Text style={styles.sheetText}>View</Text>
             </Pressable>
             <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("edit")}>
-              <Ionicons name="create-outline" size={20} color={colors.dark} />
+              <Ionicons name="create-outline" size={20} color={themeColors.dark} />
               <Text style={styles.sheetText}>Edit</Text>
             </Pressable>
             <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("restock")}>
-              <Ionicons name="add-circle-outline" size={20} color={colors.dark} />
+              <Ionicons name="add-circle-outline" size={20} color={themeColors.dark} />
               <Text style={styles.sheetText}>Restock</Text>
             </Pressable>
             <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("flash_sale")}>
-              <Ionicons name="flash-outline" size={20} color={colors.dark} />
+              <Ionicons name="flash-outline" size={20} color={themeColors.dark} />
               <Text style={styles.sheetText}>Flash Sale</Text>
             </Pressable>
             <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("duplicate")}>
-              <Ionicons name="copy-outline" size={20} color={colors.dark} />
+              <Ionicons name="copy-outline" size={20} color={themeColors.dark} />
               <Text style={styles.sheetText}>Duplicate as draft</Text>
             </Pressable>
             <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("toggle_status")}>
-              <Ionicons name="swap-horizontal-outline" size={20} color={colors.dark} />
+              <Ionicons name="swap-horizontal-outline" size={20} color={themeColors.dark} />
               <Text style={styles.sheetText}>Toggle status</Text>
             </Pressable>
             <Pressable style={[styles.sheetItem, styles.sheetItemDanger]} onPress={() => handleActionSheet("delete")}>
@@ -2878,7 +2877,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <View style={styles.modalHead}>
               <Text style={styles.modalTitle}>{viewingProduct?.title}</Text>
               <Pressable onPress={() => setDetailModalVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.dark} />
+                <Ionicons name="close" size={24} color={themeColors.dark} />
               </Pressable>
             </View>
             {viewingProduct?.thumbnail ? (
@@ -2897,7 +2896,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         <Pressable style={styles.sheetOverlay} onPress={() => setRestockModalVisible(false)}>
           <View style={styles.innerModal}>
             <Text style={styles.modalTitle}>Restock</Text>
-            <TextInput style={styles.input} value={restockQuantity} onChangeText={setRestockQuantity} keyboardType="numeric" placeholder="Quantity to add" placeholderTextColor={colors.muted} />
+            <TextInput style={styles.input} value={restockQuantity} onChangeText={setRestockQuantity} keyboardType="numeric" placeholder="Quantity to add" placeholderTextColor={themeColors.muted} />
             <TouchableOpacity
               style={[styles.submitButton, { backgroundColor: accent }, restockSubmitting && { opacity: 0.6 }]}
               onPress={handleRestock}
@@ -2918,14 +2917,14 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <View style={styles.modalHead}>
               <Text style={styles.modalTitle}>Create Flash Sale</Text>
               <Pressable onPress={() => setFlashSaleModalVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.dark} />
+                <Ionicons name="close" size={24} color={themeColors.dark} />
               </Pressable>
             </View>
             <Text style={styles.detailPrice}>Original: {formatPrice(selectedProduct?.price)}</Text>
             <Text style={styles.label}>Flash Price (GH₵) *</Text>
-            <TextInput style={styles.input} value={flashSalePrice} onChangeText={setFlashSalePrice} keyboardType="numeric" placeholder="0.00" placeholderTextColor={colors.muted} />
+            <TextInput style={styles.input} value={flashSalePrice} onChangeText={setFlashSalePrice} keyboardType="numeric" placeholder="0.00" placeholderTextColor={themeColors.muted} />
             <Text style={styles.label}>Max Quantity (optional)</Text>
-            <TextInput style={styles.input} value={flashSaleMaxQty} onChangeText={setFlashSaleMaxQty} keyboardType="numeric" placeholder="Unlimited" placeholderTextColor={colors.muted} />
+            <TextInput style={styles.input} value={flashSaleMaxQty} onChangeText={setFlashSaleMaxQty} keyboardType="numeric" placeholder="Unlimited" placeholderTextColor={themeColors.muted} />
             <TouchableOpacity
               style={[styles.submitButton, { backgroundColor: accent }, submitting && { opacity: 0.6 }]}
               onPress={handleCreateFlashSale}

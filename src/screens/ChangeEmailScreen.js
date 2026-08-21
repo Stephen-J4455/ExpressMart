@@ -13,7 +13,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 
@@ -25,7 +24,7 @@ export const ChangeEmailScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildChangeEmailStyles(c));
 
   const validateEmail = (email) => {
@@ -84,7 +83,7 @@ export const ChangeEmailScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Change Email</Text>
         <View style={{ width: 40 }} />
@@ -112,7 +111,7 @@ export const ChangeEmailScreen = ({ navigation }) => {
               value={newEmail}
               onChangeText={setNewEmail}
               placeholder="Enter new email address"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -127,7 +126,7 @@ export const ChangeEmailScreen = ({ navigation }) => {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Enter your current password"
-                placeholderTextColor={colors.muted}
+                placeholderTextColor={themeColors.muted}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
               />
@@ -138,7 +137,7 @@ export const ChangeEmailScreen = ({ navigation }) => {
                 <Ionicons
                   name={showPassword ? "eye-off" : "eye"}
                   size={20}
-                  color={colors.muted}
+                  color={themeColors.muted}
                 />
               </Pressable>
             </View>
@@ -167,7 +166,7 @@ export const ChangeEmailScreen = ({ navigation }) => {
           <Ionicons
             name="information-circle-outline"
             size={20}
-            color={colors.primary}
+            color={themeColors.primary}
           />
           <Text style={styles.infoText}>
             After submitting, you'll receive verification emails at both

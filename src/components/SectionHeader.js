@@ -8,7 +8,7 @@ export const SectionHeader = ({
   actionLabel = "See all",
   onActionPress,
 }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildStyles(c));
   return (
     <View style={styles.row}>
@@ -16,7 +16,7 @@ export const SectionHeader = ({
       {onActionPress && (
         <Pressable onPress={onActionPress} style={styles.actionButton}>
           <Text style={styles.action}>{actionLabel}</Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+          <Ionicons name="chevron-forward" size={16} color={themeColors.primary} />
         </Pressable>
       )}
     </View>

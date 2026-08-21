@@ -19,7 +19,7 @@ import { useChat } from "../context/ChatContext";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
 import { useAuth } from "../context/AuthContext";
-import { colors as palette, radius } from "../theme/colors";
+import { radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -46,7 +46,7 @@ const mapStoryAdToStatus = (ad) => ({
 });
 
 export const ChatsScreen = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildChatsStyles(c));
   const insets = useSafeAreaInsets();
   const { isWide } = useResponsive();
@@ -251,7 +251,7 @@ export const ChatsScreen = ({ navigation }) => {
           {sellerAvatar ? (
             <Image source={{ uri: sellerAvatar }} style={styles.avatarImage} />
           ) : (
-            <Ionicons name="storefront" size={24} color={colors.primary} />
+            <Ionicons name="storefront" size={24} color={themeColors.primary} />
           )}
         </View>
         <View style={styles.conversationContent}>
@@ -278,7 +278,7 @@ export const ChatsScreen = ({ navigation }) => {
             </View>
           )}
           {!isWide && (
-            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            <Ionicons name="chevron-forward" size={18} color={themeColors.muted} />
           )}
         </View>
       </Pressable>
@@ -308,7 +308,7 @@ export const ChatsScreen = ({ navigation }) => {
           {customerAvatar ? (
             <Image source={{ uri: customerAvatar }} style={styles.avatarImage} />
           ) : (
-            <Ionicons name="person" size={24} color={colors.primary} />
+            <Ionicons name="person" size={24} color={themeColors.primary} />
           )}
         </View>
         <View style={styles.conversationContent}>
@@ -329,7 +329,7 @@ export const ChatsScreen = ({ navigation }) => {
             </View>
           )}
           {!isWide && (
-            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            <Ionicons name="chevron-forward" size={18} color={themeColors.muted} />
           )}
         </View>
       </Pressable>
@@ -374,7 +374,7 @@ export const ChatsScreen = ({ navigation }) => {
   if (isLoading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={themeColors.primary} />
         <Text style={styles.loadingText}>Loading conversations...</Text>
       </View>
     );
@@ -394,7 +394,7 @@ export const ChatsScreen = ({ navigation }) => {
             style={styles.searchBackButton}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="arrow-back" size={22} color={colors.light} />
+            <Ionicons name="arrow-back" size={22} color={themeColors.light} />
           </Pressable>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>Messages</Text>
@@ -412,7 +412,7 @@ export const ChatsScreen = ({ navigation }) => {
               <Ionicons
                 name={searchVisible ? "close" : "search"}
                 size={20}
-                color={colors.light}
+                color={themeColors.light}
               />
             </Pressable>
           </View>
@@ -426,18 +426,18 @@ export const ChatsScreen = ({ navigation }) => {
 
         {searchVisible && (
           <View style={styles.searchBar}>
-            <Ionicons name="search" size={16} color={colors.muted} />
+            <Ionicons name="search" size={16} color={themeColors.muted} />
             <TextInput
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder="Search messages"
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
               autoFocus
             />
             {searchQuery.length > 0 && (
               <Pressable onPress={() => setSearchQuery("")}>
-                <Ionicons name="close-circle" size={18} color={colors.muted} />
+                <Ionicons name="close-circle" size={18} color={themeColors.muted} />
               </Pressable>
             )}
           </View>
@@ -470,7 +470,7 @@ export const ChatsScreen = ({ navigation }) => {
                       <Ionicons
                         name={status.is_ad_story ? "megaphone" : "storefront"}
                         size={20}
-                        color={colors.primary}
+                        color={themeColors.primary}
                       />
                     </View>
                   )}
@@ -494,7 +494,7 @@ export const ChatsScreen = ({ navigation }) => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.primary}
+            tintColor={themeColors.primary}
           />
         }
         ListEmptyComponent={
@@ -503,7 +503,7 @@ export const ChatsScreen = ({ navigation }) => {
               <Ionicons
                 name="chatbubble-ellipses-outline"
                 size={48}
-                color={colors.primary}
+                color={themeColors.primary}
               />
             </View>
             <Text style={styles.emptyText}>No conversations yet</Text>
@@ -547,7 +547,7 @@ export const ChatsScreen = ({ navigation }) => {
                 <Ionicons
                   name="chatbubbles-outline"
                   size={56}
-                  color={colors.primary}
+                  color={themeColors.primary}
                 />
               </View>
               <Text style={styles.noChatTitle}>Select a conversation</Text>

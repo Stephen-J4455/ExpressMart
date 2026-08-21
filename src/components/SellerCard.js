@@ -17,7 +17,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 
 export const SellerCard = ({ seller, onPress }) => {
-    const { colors } = useTheme();
+    const { colors: themeColors } = useTheme();
     const styles = useAppStyles((c) => buildStyles(c));
     const navigation = useNavigation();
     const route = useRoute();
@@ -97,7 +97,7 @@ export const SellerCard = ({ seller, onPress }) => {
                 <View style={styles.infoRow}>
                     {seller.total_ratings > 0 && (
                         <View style={styles.infoItem}>
-                            <Ionicons name="people-outline" size={12} color={colors.muted} />
+                            <Ionicons name="people-outline" size={12} color={themeColors.muted} />
                             <Text style={styles.infoText}>
                                 {seller.total_ratings} reviews
                             </Text>
@@ -137,7 +137,7 @@ export const SellerCard = ({ seller, onPress }) => {
                 <View style={styles.actionRow}>
                     <View style={styles.visitButton}>
                         <Text style={styles.visitButtonText}>Visit Store</Text>
-                        <Ionicons name="arrow-forward" size={14} color={colors.primary} />
+                        <Ionicons name="arrow-forward" size={14} color={themeColors.primary} />
                     </View>
                 </View>
             </View>

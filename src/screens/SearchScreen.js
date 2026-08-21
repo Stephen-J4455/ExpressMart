@@ -6,7 +6,7 @@ import { SearchBar } from "../components/SearchBar";
 import { AdRenderer } from "../components/AdBanner";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
-import { colors as palette } from "../theme/colors";
+
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 
@@ -18,7 +18,7 @@ const trending = [
 ];
 
 export const SearchScreen = ({ navigation, route }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildSearchStyles(c));
   const { products } = useShop();
   const { fetchAdsByPlacement } = useAds();
@@ -149,7 +149,7 @@ export const SearchScreen = ({ navigation, route }) => {
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <Ionicons name="chevron-back" size={22} color={colors.dark} />
+          <Ionicons name="chevron-back" size={22} color={themeColors.dark} />
         </Pressable>
         <SearchBar
           value={query}
@@ -207,7 +207,7 @@ export const SearchScreen = ({ navigation, route }) => {
                       : "pricetag-outline"
                 }
                 size={18}
-                color={colors.muted}
+                color={themeColors.muted}
               />
               <Text style={styles.suggestionText}>{suggestion.text}</Text>
               <Text style={styles.suggestionType}>
@@ -240,7 +240,7 @@ export const SearchScreen = ({ navigation, route }) => {
                   <Ionicons
                     name="trash-outline"
                     size={16}
-                    color={colors.muted}
+                    color={themeColors.muted}
                   />
                 </Pressable>
               </View>

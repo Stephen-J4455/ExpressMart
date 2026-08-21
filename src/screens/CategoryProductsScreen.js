@@ -19,7 +19,6 @@ import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
 import { AdRenderer } from "../components/AdBanner";
 import { InlineAdProductCard } from "../components/InlineAdProductCard";
 import { useAds } from "../context/AdsContext";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -34,7 +33,7 @@ const SORT_OPTIONS = [
 ];
 
 export const CategoryProductsScreen = ({ navigation, route }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildCategoryProductsStyles(c));
   const { category } = route.params;
   const insets = useSafeAreaInsets();
@@ -164,7 +163,7 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
 
   const categoryName = typeof category === "string" ? category : category.name;
   const categoryIcon = category?.icon || "apps-outline";
-  const categoryColor = category?.color || colors.primary;
+  const categoryColor = category?.color || themeColors.primary;
   const overlayAds = useMemo(
     () =>
       (categoryAds || []).filter((ad) =>
@@ -275,7 +274,7 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
                   <Ionicons
                     name={opt.icon}
                     size={13}
-                    color={isActive ? "#fff" : colors.muted}
+                    color={isActive ? "#fff" : themeColors.muted}
                   />
                   <Text
                     style={[
@@ -335,7 +334,7 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
             ListFooterComponent={
               loadingMore ? (
                 <View style={styles.loadMoreRow}>
-                  <ActivityIndicator size="small" color={colors.primary} />
+                  <ActivityIndicator size="small" color={themeColors.primary} />
                 </View>
               ) : hasMore && !loading ? (
                 <View style={{ height: 40 }} />

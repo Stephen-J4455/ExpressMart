@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { colors as palette, getTheme, radius } from "../theme/colors";
+import { getTheme, radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 
@@ -65,7 +65,7 @@ export const SellerChatScreen = ({
   customer: embeddedCustomer,
 }) => {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildSellerChatStyles(c));
   const { user } = useAuth();
   const toast = useToast();
@@ -92,7 +92,7 @@ export const SellerChatScreen = ({
   const sellerId = routeParams.sellerId || user?.id;
   const seller = routeParams.seller;
 
-  const theme = getTheme(seller?.theme_color || colors.primary);
+  const theme = getTheme(seller?.theme_color || themeColors.primary);
 
   const userName =
     conversation?.user?.full_name ||
@@ -515,7 +515,7 @@ export const SellerChatScreen = ({
               value={newMessage}
               onChangeText={setNewMessage}
               placeholder="Type a message..."
-              placeholderTextColor={colors.muted}
+              placeholderTextColor={themeColors.muted}
               multiline
               maxLength={1000}
             />

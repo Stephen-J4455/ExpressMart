@@ -27,7 +27,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { Video } from "react-native-video";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { fetchProductReels } from "../services/uploadReel";
@@ -80,7 +79,7 @@ export const FeedScreen = ({ route, navigation }) => {
   const [paused, setPaused] = useState(false);
   const screenIsFocused = useIsFocused();
   const { isWide } = useResponsive();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const { user } = useAuth();
   const styles = useAppStyles((c) => buildFeedStyles(c));
   const logFeed = useCallback((...args) => {
@@ -681,7 +680,7 @@ export const FeedScreen = ({ route, navigation }) => {
                       <Image source={{ uri: storeAvatar }} style={styles.storeAvatar} />
                     ) : (
                       <View style={styles.storeAvatarFallback}>
-                        <Ionicons name="storefront-outline" size={14} color={colors.primary} />
+                        <Ionicons name="storefront-outline" size={14} color={themeColors.primary} />
                       </View>
                     )}
                   </View>
@@ -710,7 +709,7 @@ export const FeedScreen = ({ route, navigation }) => {
                     <Image source={{ uri: item.thumbnail_url }} style={styles.tinyProductThumb} />
                   ) : (
                     <View style={styles.tinyProductThumbFallback}>
-                      <Ionicons name="image-outline" size={16} color={colors.muted} />
+                      <Ionicons name="image-outline" size={16} color={themeColors.muted} />
                     </View>
                   )}
                   <View style={styles.tinyProductMeta}>
@@ -759,7 +758,7 @@ export const FeedScreen = ({ route, navigation }) => {
                       <Ionicons
                         name={isWishlisted ? "heart" : "heart-outline"}
                         size={24}
-                        color={isWishlisted ? colors.accent : "#fff"}
+                        color={isWishlisted ? themeColors.accent : "#fff"}
                       />
                     </Animated.View>
                   </View>
@@ -775,7 +774,7 @@ export const FeedScreen = ({ route, navigation }) => {
 
                 <Pressable style={styles.actionBtn} onPress={handleTag}>
                   <View style={[styles.actionIconWrap, styles.tagIconWrap]}>
-                    <Ionicons name="pricetag" size={22} color={colors.primary} />
+                    <Ionicons name="pricetag" size={22} color={themeColors.primary} />
                   </View>
                   <Text style={styles.actionLabel}>Tag</Text>
                 </Pressable>
@@ -805,13 +804,13 @@ export const FeedScreen = ({ route, navigation }) => {
                     onPress={() => setCommentModalVisible(false)}
                     hitSlop={8}
                   >
-                    <Ionicons name="close" size={22} color={colors.dark} />
+                    <Ionicons name="close" size={22} color={themeColors.dark} />
                   </Pressable>
                 </View>
 
                 {commentsLoading ? (
                   <View style={styles.commentModalLoading}>
-                    <ActivityIndicator color={colors.primary} />
+                    <ActivityIndicator color={themeColors.primary} />
                   </View>
                 ) : (
                   <ScrollView
@@ -837,7 +836,7 @@ export const FeedScreen = ({ route, navigation }) => {
                                 <Ionicons
                                   name="person"
                                   size={14}
-                                  color={colors.primary}
+                                  color={themeColors.primary}
                                 />
                               </View>
                             )}
@@ -874,7 +873,7 @@ export const FeedScreen = ({ route, navigation }) => {
                   <TextInput
                     style={styles.commentInput}
                     placeholder="Add a comment…"
-                    placeholderTextColor={colors.muted}
+                    placeholderTextColor={themeColors.muted}
                     value={commentText}
                     onChangeText={setCommentText}
                     multiline
@@ -922,7 +921,7 @@ export const FeedScreen = ({ route, navigation }) => {
     <View style={styles.wrapper}>
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={themeColors.primary} />
         </View>
       ) : (
         <View style={styles.feedArea}>

@@ -13,7 +13,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -32,20 +31,20 @@ const NOTIFICATION_ICONS = {
 };
 
 const NOTIFICATION_COLORS = {
-  order_placed: colors.primary,
-  order_confirmed: colors.success,
-  order_shipped: colors.secondary,
-  order_delivered: colors.success,
-  order_cancelled: colors.accent,
-  payment_success: colors.success,
-  payment_failed: colors.accent,
-  promotion: colors.secondary,
-  system: colors.muted,
-  review_reminder: colors.secondary,
+  order_placed: themeColors.primary,
+  order_confirmed: themeColors.success,
+  order_shipped: themeColors.secondary,
+  order_delivered: themeColors.success,
+  order_cancelled: themeColors.accent,
+  payment_success: themeColors.success,
+  payment_failed: themeColors.accent,
+  promotion: themeColors.secondary,
+  system: themeColors.muted,
+  review_reminder: themeColors.secondary,
 };
 
 export const NotificationsScreen = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildNotificationsStyles(c));
   const { user } = useAuth();
   const toast = useToast();
@@ -176,7 +175,7 @@ export const NotificationsScreen = ({ navigation }) => {
 
   const renderItem = ({ item }) => {
     const icon = NOTIFICATION_ICONS[item.type] || "notifications";
-    const iconColor = NOTIFICATION_COLORS[item.type] || colors.primary;
+    const iconColor = NOTIFICATION_COLORS[item.type] || themeColors.primary;
 
     return (
       <Pressable
@@ -208,7 +207,7 @@ export const NotificationsScreen = ({ navigation }) => {
           style={styles.deleteButton}
           onPress={() => deleteNotification(item.id)}
         >
-          <Ionicons name="close" size={20} color={colors.muted} />
+          <Ionicons name="close" size={20} color={themeColors.muted} />
         </Pressable>
       </Pressable>
     );
@@ -221,7 +220,7 @@ export const NotificationsScreen = ({ navigation }) => {
       <SafeAreaView style={styles.container} edges={["top"]}>
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color={colors.dark} />
+            <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
           </Pressable>
           <Text style={styles.headerTitle}>Notifications</Text>
           <View style={{ width: 24 }} />
@@ -230,7 +229,7 @@ export const NotificationsScreen = ({ navigation }) => {
           <Ionicons
             name="notifications-off-outline"
             size={80}
-            color={colors.muted}
+            color={themeColors.muted}
           />
           <Text style={styles.emptyTitle}>Sign in to view notifications</Text>
           <Pressable
@@ -257,7 +256,7 @@ export const NotificationsScreen = ({ navigation }) => {
         ]}
       >
         <Pressable onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Notifications</Text>
         {unreadCount > 0 ? (
@@ -271,14 +270,14 @@ export const NotificationsScreen = ({ navigation }) => {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={themeColors.primary} />
         </View>
       ) : notifications.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons
             name="notifications-outline"
             size={80}
-            color={colors.muted}
+            color={themeColors.muted}
           />
           <Text style={styles.emptyTitle}>No notifications yet</Text>
           <Text style={styles.emptySubtitle}>
@@ -309,7 +308,7 @@ export const NotificationsScreen = ({ navigation }) => {
                 setRefreshing(true);
                 fetchNotifications();
               }}
-              colors={[colors.primary]}
+              colors={[themeColors.primary]}
             />
           }
         />

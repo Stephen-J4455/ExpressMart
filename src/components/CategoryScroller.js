@@ -4,7 +4,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 
 export const CategoryScroller = ({ categories = [], onSelect }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildStyles(c));
   return (
     <FlatList
@@ -22,14 +22,14 @@ export const CategoryScroller = ({ categories = [], onSelect }) => {
             <Ionicons
               name={item.icon || "apps-outline"}
               size={22}
-              color={colors.primary}
+              color={themeColors.primary}
             />
           </View>
           <Text numberOfLines={2} style={styles.label}>
             {item.name}
           </Text>
           <View style={styles.arrowWrap}>
-            <Ionicons name="chevron-forward" size={14} color={colors.muted} />
+            <Ionicons name="chevron-forward" size={14} color={themeColors.muted} />
           </View>
         </Pressable>
       )}

@@ -37,7 +37,7 @@ const BOTTOM_ITEMS = [
 
 export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildStyles(c));
   const { items } = useCart();
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
@@ -52,7 +52,7 @@ export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
     >
       {isActive && (
         <LinearGradient
-          colors={[colors.primary + "15", colors.accent + "08"]}
+          colors={[themeColors.primary + "15", themeColors.accent + "08"]}
           style={StyleSheet.absoluteFill}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
@@ -63,7 +63,7 @@ export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
           <Ionicons
             name={isActive ? item.iconFocused : item.icon}
             size={22}
-            color={isActive ? colors.primary : colors.muted}
+            color={isActive ? themeColors.primary : themeColors.muted}
           />
           {item.name === "Cart" && cartCount > 0 && (
             <View style={styles.badge}>
@@ -91,7 +91,7 @@ export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
       {/* Brand */}
       <View style={styles.brandContainer}>
         <LinearGradient
-          colors={[colors.primary, colors.accent]}
+          colors={[themeColors.primary, themeColors.accent]}
           style={styles.brandIcon}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}

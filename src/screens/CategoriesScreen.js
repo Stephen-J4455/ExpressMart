@@ -13,13 +13,12 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useShop } from "../context/ShopContext";
 import { ProductCard } from "../components/ProductCard";
-import { colors as palette } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 
 export const CategoriesScreen = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildCategoriesStyles(c));
   const { categories, products, loading, refresh } = useShop();
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
@@ -82,7 +81,7 @@ export const CategoriesScreen = ({ navigation }) => {
             styles.iconWrap,
             {
               backgroundColor: isSelected
-                ? colors.primary
+                ? themeColors.primary
                 : item.color || "#f0f0f0",
             },
           ]}
@@ -90,7 +89,7 @@ export const CategoriesScreen = ({ navigation }) => {
           <Ionicons
             name={item.icon || "apps"}
             size={20}
-            color={isSelected ? "#fff" : colors.dark}
+            color={isSelected ? "#fff" : themeColors.dark}
           />
         </View>
         <Text
@@ -156,7 +155,7 @@ export const CategoriesScreen = ({ navigation }) => {
                 <Ionicons
                   name="chevron-forward"
                   size={14}
-                  color={colors.primary}
+                  color={themeColors.primary}
                 />
               </Pressable>
             )}
@@ -176,13 +175,13 @@ export const CategoriesScreen = ({ navigation }) => {
             <RefreshControl
               refreshing={loading}
               onRefresh={refresh}
-              colors={[colors.primary]}
+              colors={[themeColors.primary]}
             />
           }
           ListEmptyComponent={
             !loading && (
               <View style={styles.emptyState}>
-                <Ionicons name="cube-outline" size={48} color={colors.muted} />
+                <Ionicons name="cube-outline" size={48} color={themeColors.muted} />
                 <Text style={styles.emptyText}>No products found</Text>
               </View>
             )

@@ -13,7 +13,7 @@ import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors as palette } from "../theme/colors";
+
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
@@ -30,7 +30,7 @@ if (
 
 export const HelpSupportScreen = ({ navigation }) => {
   const { isWide, horizontalPadding } = useResponsive();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildHelpSupportStyles(c));
   const [expandedFaq, setExpandedFaq] = useState(null);
 
@@ -120,7 +120,7 @@ export const HelpSupportScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.dark} />
+          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
         </Pressable>
         <Text style={styles.headerTitle}>Help & Support</Text>
         <View style={{ width: 40 }} />
@@ -139,13 +139,13 @@ export const HelpSupportScreen = ({ navigation }) => {
         >
           {/* Hero */}
           <LinearGradient
-            colors={[colors.primary, colors.accent]}
+            colors={[themeColors.primary, themeColors.accent]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.hero}
           >
             <View style={styles.heroIconWrap}>
-              <Ionicons name="headset" size={36} color={colors.primary} />
+              <Ionicons name="headset" size={36} color={themeColors.primary} />
             </View>
             <Text style={styles.heroTitle}>How can we help?</Text>
             <Text style={styles.heroSub}>
@@ -159,7 +159,7 @@ export const HelpSupportScreen = ({ navigation }) => {
               <Ionicons
                 name="chatbubbles-outline"
                 size={18}
-                color={colors.primary}
+                color={themeColors.primary}
               />
               <Text style={styles.cardTitle}>Contact Us</Text>
             </View>
@@ -189,7 +189,7 @@ export const HelpSupportScreen = ({ navigation }) => {
               <Ionicons
                 name="help-circle-outline"
                 size={18}
-                color={colors.primary}
+                color={themeColors.primary}
               />
               <Text style={styles.cardTitle}>Frequently Asked Questions</Text>
             </View>
@@ -200,7 +200,7 @@ export const HelpSupportScreen = ({ navigation }) => {
                   <Ionicons
                     name={expandedFaq === i ? "chevron-up" : "chevron-down"}
                     size={18}
-                    color={colors.muted}
+                    color={themeColors.muted}
                   />
                 </Pressable>
                 {expandedFaq === i && (
@@ -216,7 +216,7 @@ export const HelpSupportScreen = ({ navigation }) => {
               <Ionicons
                 name="shield-outline"
                 size={18}
-                color={colors.primary}
+                color={themeColors.primary}
               />
               <Text style={styles.cardTitle}>Legal & Policies</Text>
             </View>
@@ -231,7 +231,7 @@ export const HelpSupportScreen = ({ navigation }) => {
                     <Ionicons
                       name={item.icon}
                       size={18}
-                      color={colors.primary}
+                      color={themeColors.primary}
                     />
                   </View>
                   <View>

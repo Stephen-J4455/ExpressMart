@@ -17,7 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../lib/supabase";
-import { colors as palette, getTheme } from "../theme/colors";
+import { getTheme } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useAuth } from "../context/AuthContext";
@@ -30,7 +30,7 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 
 export const StatusCreatorScreen = ({ navigation }) => {
   const { user } = useAuth();
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildStatusCreatorStyles(c));
   const theme = getTheme();
   const toast = useToast();
@@ -228,7 +228,7 @@ export const StatusCreatorScreen = ({ navigation }) => {
         <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 16 }}>
           <View style={styles.headerRow}>
             <Pressable onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={24} color={colors.dark} />
+              <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
             </Pressable>
             <Text style={styles.title}>Create Status</Text>
             <View style={{ width: 24 }} />
@@ -236,12 +236,12 @@ export const StatusCreatorScreen = ({ navigation }) => {
 
           <View style={styles.modeRow}>
             <Pressable onPress={() => setStatusMode("image")} style={[styles.modeBtn, statusMode === "image" && styles.modeBtnActive]}>
-              <Ionicons name="images" size={18} color={statusMode === "image" ? colors.primary : colors.muted} />
-              <Text style={[styles.modeText, statusMode === "image" && { color: colors.primary }]}>Image</Text>
+              <Ionicons name="images" size={18} color={statusMode === "image" ? themeColors.primary : themeColors.muted} />
+              <Text style={[styles.modeText, statusMode === "image" && { color: themeColors.primary }]}>Image</Text>
             </Pressable>
             <Pressable onPress={() => setStatusMode("text")} style={[styles.modeBtn, statusMode === "text" && styles.modeBtnActive]}>
-              <Ionicons name="text" size={18} color={statusMode === "text" ? colors.primary : colors.muted} />
-              <Text style={[styles.modeText, statusMode === "text" && { color: colors.primary }]}>Text</Text>
+              <Ionicons name="text" size={18} color={statusMode === "text" ? themeColors.primary : themeColors.muted} />
+              <Text style={[styles.modeText, statusMode === "text" && { color: themeColors.primary }]}>Text</Text>
             </Pressable>
           </View>
 
@@ -249,25 +249,25 @@ export const StatusCreatorScreen = ({ navigation }) => {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Select Image</Text>
               <View style={styles.imageBtnRow}>
-                <TouchableOpacity style={[styles.imagePickBtn, { borderColor: colors.primary }]} onPress={pickImage}>
-                  <Ionicons name="images" size={20} color={colors.primary} />
-                  <Text style={[styles.imagePickBtnText, { color: colors.primary }]}>Gallery</Text>
+                <TouchableOpacity style={[styles.imagePickBtn, { borderColor: themeColors.primary }]} onPress={pickImage}>
+                  <Ionicons name="images" size={20} color={themeColors.primary} />
+                  <Text style={[styles.imagePickBtnText, { color: themeColors.primary }]}>Gallery</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.imagePickBtn, { borderColor: colors.primary }]} onPress={takePhoto}>
-                  <Ionicons name="camera" size={20} color={colors.primary} />
-                  <Text style={[styles.imagePickBtnText, { color: colors.primary }]}>Camera</Text>
+                <TouchableOpacity style={[styles.imagePickBtn, { borderColor: themeColors.primary }]} onPress={takePhoto}>
+                  <Ionicons name="camera" size={20} color={themeColors.primary} />
+                  <Text style={[styles.imagePickBtnText, { color: themeColors.primary }]}>Camera</Text>
                 </TouchableOpacity>
               </View>
-              <TextInput style={styles.textInput} placeholder="Caption (optional)" placeholderTextColor={colors.muted} value={imageCaption} onChangeText={setImageCaption} />
+              <TextInput style={styles.textInput} placeholder="Caption (optional)" placeholderTextColor={themeColors.muted} value={imageCaption} onChangeText={setImageCaption} />
             </View>
           ) : (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Status Text</Text>
-              <TextInput style={styles.textInput} placeholder="Enter your status text..." placeholderTextColor={colors.muted} multiline value={statusText} onChangeText={setStatusText} />
+              <TextInput style={styles.textInput} placeholder="Enter your status text..." placeholderTextColor={themeColors.muted} multiline value={statusText} onChangeText={setStatusText} />
             </View>
           )}
 
-          <Pressable style={[styles.postBtn, { backgroundColor: colors.primary }, loading && { opacity: 0.6 }]} onPress={handlePost} disabled={loading}>
+          <Pressable style={[styles.postBtn, { backgroundColor: themeColors.primary }, loading && { opacity: 0.6 }]} onPress={handlePost} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.postText}>Post Status</Text>}
           </Pressable>
         </View>

@@ -18,7 +18,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 
 export const SellerScroller = ({ sellers = [], onSelect }) => {
-  const { colors } = useTheme();
+  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildStyles(c));
   const navigation = useNavigation();
   const route = useRoute();
@@ -93,7 +93,7 @@ export const SellerScroller = ({ sellers = [], onSelect }) => {
             </Text>
             <View style={styles.metaRow}>
               <View style={styles.reviewsRow}>
-                <Ionicons name="people-outline" size={12} color={colors.muted} />
+                <Ionicons name="people-outline" size={12} color={themeColors.muted} />
                 <Text style={styles.reviewsText}>
                   {item.total_ratings || 0} reviews
                 </Text>
@@ -129,7 +129,7 @@ export const SellerScroller = ({ sellers = [], onSelect }) => {
             </View>
             <View style={styles.visitRow}>
               <Text style={styles.visitText}>Visit</Text>
-              <Ionicons name="arrow-forward" size={12} color={colors.primary} />
+              <Ionicons name="arrow-forward" size={12} color={themeColors.primary} />
             </View>
           </View>
         </Pressable>
