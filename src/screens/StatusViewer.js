@@ -297,7 +297,7 @@ export const StatusViewer = ({ navigation, route }) => {
 };
 
 const buildStatusViewerStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: "#000",
@@ -418,4 +418,4 @@ const buildStatusViewerStyles = (c) =>
     justifyContent: "center",
     alignItems: "center",
   },
-});
+ });

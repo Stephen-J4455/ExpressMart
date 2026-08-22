@@ -146,7 +146,7 @@ export const TermsScreen = ({ navigation }) => {
 };
 
 const buildTermsStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -158,13 +158,13 @@ const buildTermsStyles = (c) =>
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "c.surface",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "c.surface",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -214,11 +214,11 @@ const buildTermsStyles = (c) =>
     marginTop: 12,
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: "c.surface",
     alignItems: "center",
   },
   footerText: {
     fontSize: 13,
     color: c.muted,
   },
-});
+ });

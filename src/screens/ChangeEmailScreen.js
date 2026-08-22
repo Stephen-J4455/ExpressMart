@@ -181,7 +181,7 @@ export const ChangeEmailScreen = ({ navigation }) => {
 };
 
 const buildChangeEmailStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -261,7 +261,7 @@ const buildChangeEmailStyles = (c) =>
     fontSize: 16,
     color: c.dark,
     backgroundColor: "#fff",
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   passwordInputContainer: {
     flexDirection: "row",

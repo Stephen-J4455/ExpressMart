@@ -144,7 +144,7 @@ export const SecurityScreen = ({ navigation }) => {
 };
 
 const buildSecurityStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -258,4 +258,4 @@ const buildSecurityStyles = (c) =>
   spacer: {
     height: 32,
   },
-});
+ });

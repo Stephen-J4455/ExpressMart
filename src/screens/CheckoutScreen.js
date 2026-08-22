@@ -601,7 +601,7 @@ export const CheckoutScreen = ({ navigation }) => {
 };
 
 const buildCheckoutStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -753,7 +753,7 @@ const buildCheckoutStyles = (c) =>
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "#E4E8F0",
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   row: {
     flexDirection: "row",

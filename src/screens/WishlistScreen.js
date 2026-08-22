@@ -270,7 +270,7 @@ export const WishlistScreen = ({ navigation }) => {
 };
 
 const buildWishlistStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -422,4 +422,4 @@ const buildWishlistStyles = (c) =>
     alignItems: "center",
     justifyContent: "center",
   },
-});
+ });

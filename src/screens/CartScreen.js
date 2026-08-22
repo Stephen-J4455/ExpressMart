@@ -365,7 +365,7 @@ export const CartScreen = ({ navigation }) => {
 };
 
 const buildCartStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -414,7 +414,7 @@ const buildCartStyles = (c) =>
     alignItems: "center",
     justifyContent: "center",
     padding: 32,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "c.light",
   },
   emptyIconContainer: {
     width: 120,
@@ -484,7 +484,7 @@ const buildCartStyles = (c) =>
   thumbnailContainer: {
     width: 90,
     height: 90,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "c.light",
     borderRadius: 14,
     overflow: "hidden",
     position: "relative",
@@ -562,7 +562,7 @@ const buildCartStyles = (c) =>
     height: 10,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "c.border",
   },
   priceRow: {
     flexDirection: "row",
@@ -593,7 +593,7 @@ const buildCartStyles = (c) =>
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: "c.surface",
     backgroundColor: "#FAFBFC",
   },
   removeButton: {
@@ -613,7 +613,7 @@ const buildCartStyles = (c) =>
   quantityRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "c.surface",
     borderRadius: 12,
     padding: 4,
   },
@@ -626,13 +626,13 @@ const buildCartStyles = (c) =>
     justifyContent: "center",
   },
   qtyButtonDisabled: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "c.light",
   },
   qtyButtonAdd: {
     backgroundColor: c.primary,
   },
   qtyButtonDisabledAdd: {
-    backgroundColor: "#CBD5E1",
+    backgroundColor: "c.surface",
   },
   qtyValueContainer: {
     minWidth: 36,
@@ -709,7 +709,7 @@ const buildCartStyles = (c) =>
     justifyContent: "space-between",
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
+    borderTopColor: "c.border",
     marginTop: 8,
     marginBottom: 20,
   },
@@ -767,4 +767,4 @@ const buildCartStyles = (c) =>
     elevation: 6,
     marginBottom: 20,
   },
-});
+ });

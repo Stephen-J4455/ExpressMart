@@ -565,7 +565,7 @@ export const ChatsScreen = ({ navigation }) => {
 };
 
 const buildChatsStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   wideLayout: {
     flex: 1,
     flexDirection: "row",
@@ -935,4 +935,4 @@ const buildChatsStyles = (c) =>
     fontSize: 16,
     fontWeight: "700",
   },
-});
+ });

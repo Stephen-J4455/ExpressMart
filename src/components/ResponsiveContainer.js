@@ -35,8 +35,8 @@ export const ResponsiveContainer = ({ children, maxWidth, style }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create({ 
   root: {
     flex: 1,
   },
-});
+ });

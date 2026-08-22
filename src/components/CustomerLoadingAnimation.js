@@ -20,7 +20,7 @@ export const CustomerLoadingAnimation = () => {
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     container: {
       flex: 1,
       backgroundColor: c.light,
@@ -31,4 +31,4 @@ const buildStyles = (c) =>
       width: 200,
       height: 200,
     },
-  });
+   });

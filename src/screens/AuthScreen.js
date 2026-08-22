@@ -668,7 +668,7 @@ export const AuthScreen = ({ navigation, route }) => {
 };
 
 const buildAuthStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -792,7 +792,7 @@ const buildAuthStyles = (c) =>
     height: 56,
     fontSize: 16,
     color: c.dark,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   forgotPassword: {
     alignSelf: "flex-end",

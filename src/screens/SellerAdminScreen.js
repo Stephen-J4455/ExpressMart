@@ -2944,7 +2944,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 };
 
 const buildSellerAdminStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: { flex: 1, backgroundColor: c.background },
   center: { alignItems: "center", justifyContent: "center" },
   scrollContent: { flexGrow: 1, paddingBottom: 20 },
@@ -2996,7 +2996,7 @@ const buildSellerAdminStyles = (c) =>
     borderRadius: radius.md,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "c.surface",
     height: 200,
     position: "relative",
   },
@@ -3089,7 +3089,7 @@ const buildSellerAdminStyles = (c) =>
     backgroundColor: "#fff",
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
     padding: 12,
     gap: 8,
   },
@@ -3116,7 +3116,7 @@ const buildSellerAdminStyles = (c) =>
   uploadJobBarTrack: {
     height: 8,
     borderRadius: radius.full,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "c.border",
     overflow: "hidden",
   },
   uploadJobBarFill: {
@@ -3127,7 +3127,7 @@ const buildSellerAdminStyles = (c) =>
     backgroundColor: "#fff",
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
     padding: 14,
     marginBottom: 14,
     gap: 12,
@@ -3180,8 +3180,8 @@ const buildSellerAdminStyles = (c) =>
     padding: 10,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#F8FAFC",
+    borderColor: "c.border",
+    backgroundColor: "c.light",
     gap: 8,
   },
   attachProductChipText: {
@@ -3219,7 +3219,7 @@ const buildSellerAdminStyles = (c) =>
     width: "100%",
     height: 84,
     borderRadius: radius.sm,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "c.border",
   },
   attachProductThumbFallback: {
     width: "100%",
@@ -3227,7 +3227,7 @@ const buildSellerAdminStyles = (c) =>
     borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "c.border",
   },
   primaryButton: {
     flexDirection: "row",
@@ -3265,7 +3265,7 @@ const buildSellerAdminStyles = (c) =>
     width: 56,
     height: 56,
     borderRadius: radius.md,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "c.border",
   },
   videoDeleteThumbFallback: {
     width: 56,
@@ -3314,7 +3314,7 @@ const buildSellerAdminStyles = (c) =>
     paddingHorizontal: 18,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "c.surface",
   },
   sortOptionLeft: {
     flex: 1,
@@ -3341,7 +3341,7 @@ const buildSellerAdminStyles = (c) =>
     paddingVertical: 8,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "c.surface",
   },
   summaryChipLabel: { color: c.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
   summaryChipValue: { fontWeight: "900", color: c.dark, fontSize: 16, marginTop: 2 },
@@ -3355,7 +3355,7 @@ const buildSellerAdminStyles = (c) =>
   flashBannerTitle: { fontWeight: "800", color: "#EF4444", fontSize: 14 },
   flashCountPill: { backgroundColor: "#EF4444", borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 2 },
   flashCountText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  flashCard: { width: 120, marginRight: 10, backgroundColor: "#fff", borderRadius: radius.md, padding: 8, borderWidth: 1, borderColor: "#F1F5F9" },
+  flashCard: { width: 120, marginRight: 10, backgroundColor: "#fff", borderRadius: radius.md, padding: 8, borderWidth: 1, borderColor: "c.surface" },
   flashThumb: { width: "100%", height: 70, borderRadius: radius.xs },
   flashThumbPlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: c.primary },
   flashName: { fontSize: 12, fontWeight: "700", color: c.dark, marginTop: 6 },
@@ -3370,7 +3370,7 @@ const buildSellerAdminStyles = (c) =>
     paddingVertical: 10,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "c.surface",
   },
   searchInput: { flex: 1, marginLeft: 8, color: c.dark, fontSize: 14 },
   filterChip: {
@@ -3379,7 +3379,7 @@ const buildSellerAdminStyles = (c) =>
     borderRadius: radius.sm,
     backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "c.surface",
     marginRight: 8,
   },
   filterChipActive: { backgroundColor: c.dark, borderColor: c.dark },
@@ -3387,12 +3387,12 @@ const buildSellerAdminStyles = (c) =>
   filterChipTextActive: { color: "#fff", fontWeight: "700" },
   sortRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   sortLabel: { fontSize: 12, fontWeight: "700", color: c.muted },
-  sortChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.xs, backgroundColor: "#fff", borderWidth: 1, borderColor: "#F1F5F9" },
+  sortChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.xs, backgroundColor: "#fff", borderWidth: 1, borderColor: "c.surface" },
   sortChipActive: { backgroundColor: c.primary, borderColor: c.primary },
   sortChipText: { fontSize: 11, fontWeight: "600", color: c.muted },
   sortChipTextActive: { color: "#fff", fontWeight: "700" },
   productGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  productCard: { width: "47%", backgroundColor: "#fff", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: "#F1F5F9" },
+  productCard: { width: "47%", backgroundColor: "#fff", borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: "c.surface" },
   productPlaceholderCard: { width: "47%", borderRadius: radius.md, overflow: "hidden" },
   productImage: { width: "100%", height: 110 },
   productImagePlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: c.primary },
@@ -3403,7 +3403,7 @@ const buildSellerAdminStyles = (c) =>
   productStatus: { fontSize: 10, fontWeight: "700", textTransform: "capitalize", color: c.muted },
   emptyNote: { textAlign: "center", color: c.muted, fontSize: 14, marginTop: 20 },
   pipeline: { marginBottom: 12 },
-  pipelineBar: { flexDirection: "row", height: 8, borderRadius: radius.xxs, overflow: "hidden", backgroundColor: "#F1F5F9" },
+  pipelineBar: { flexDirection: "row", height: 8, borderRadius: radius.xxs, overflow: "hidden", backgroundColor: "c.surface" },
   pipelineSegment: { height: "100%" },
   pipelineLegend: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 6 },
   legendText: { fontSize: 11, color: c.muted, fontWeight: "600" },
@@ -3416,7 +3416,7 @@ const buildSellerAdminStyles = (c) =>
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "c.surface",
   },
   orderIconBox: {
     width: 40,
@@ -3443,7 +3443,7 @@ const buildSellerAdminStyles = (c) =>
     padding: 14,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "c.surface",
   },
   insightValue: { fontSize: 18, fontWeight: "900", color: c.dark, marginTop: 6 },
   insightLabel: { fontSize: 11, color: c.muted, marginTop: 4, fontWeight: "600", textAlign: "center" },
@@ -3472,7 +3472,7 @@ const buildSellerAdminStyles = (c) =>
     height: 28,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "#CBD5E1",
+    borderColor: "c.surface",
     backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
@@ -3499,7 +3499,7 @@ const buildSellerAdminStyles = (c) =>
   input: {
     backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "c.surface",
     borderRadius: radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -3519,7 +3519,7 @@ const buildSellerAdminStyles = (c) =>
     borderRadius: radius.sm,
     backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "c.surface",
   },
   catChipText: { fontSize: 12, fontWeight: "600", color: c.muted },
   colorRow: {
@@ -3612,7 +3612,7 @@ const buildSellerAdminStyles = (c) =>
   stepButtonSecondary: {
     backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
   },
   stepButtonText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   stepButtonSecondaryText: { color: c.dark, fontWeight: "800", fontSize: 15 },
@@ -3637,7 +3637,7 @@ const buildSellerAdminStyles = (c) =>
   },
   sheetItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14 },
   sheetText: { fontSize: 15, fontWeight: "600", color: c.dark },
-  sheetItemDanger: { borderTopWidth: 1, borderTopColor: "#F1F5F9" },
+  sheetItemDanger: { borderTopWidth: 1, borderTopColor: "c.surface" },
   innerModal: {
     backgroundColor: "#fff",
     borderRadius: radius.lg,
@@ -3681,7 +3681,7 @@ const buildSellerAdminStyles = (c) =>
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "c.surface",
   },
   drawerTitle: { fontSize: 18, fontWeight: "800", color: c.dark },
   drawerScroll: {
@@ -3719,8 +3719,8 @@ const buildSellerAdminStyles = (c) =>
     paddingVertical: 10,
     borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#F8FAFC",
+    borderColor: "c.border",
+    backgroundColor: "c.light",
   },
   themeOptionActive: {
     borderColor: c.primary,
@@ -3754,7 +3754,7 @@ const buildSellerAdminStyles = (c) =>
     color: c.muted,
     marginTop: 2,
   },
-  statDivider: { width: 1, height: 30, backgroundColor: "#E2E8F0" },
+  statDivider: { width: 1, height: 30, backgroundColor: "c.border" },
   orderSkeleton: {
     flexDirection: "row",
     alignItems: "center",
@@ -3763,18 +3763,18 @@ const buildSellerAdminStyles = (c) =>
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "c.surface",
   },
   orderSkeletonIcon: {
     width: 40,
     height: 40,
     borderRadius: radius.sm,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "c.border",
   },
   orderSkeletonLine: {
     height: 12,
     borderRadius: radius.xxs,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "c.border",
     width: "80%",
   },
   specList: {
@@ -3800,6 +3800,6 @@ const buildSellerAdminStyles = (c) =>
     alignSelf: "flex-start",
   },
   addSpecText: { fontSize: 14, fontWeight: "700" },
-});
+ });
 
 export default SellerAdminScreen;

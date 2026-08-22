@@ -62,7 +62,7 @@ export const PromoBanner = ({ deal, onPress }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create({ 
   container: {
     height: 160,
     width: 320,
@@ -120,4 +120,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   }
-});
+ });

@@ -735,7 +735,7 @@ export const SearchResultsScreen = ({ navigation, route }) => {
 };
 
 const buildSearchResultsStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -749,13 +749,13 @@ const buildSearchResultsStyles = (c) =>
     paddingHorizontal: 16,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "c.surface",
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "c.surface",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -763,7 +763,7 @@ const buildSearchResultsStyles = (c) =>
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "c.surface",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -774,7 +774,7 @@ const buildSearchResultsStyles = (c) =>
     fontSize: 16,
     color: c.dark,
     paddingVertical: 0,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   clearIcon: {
     padding: 4,

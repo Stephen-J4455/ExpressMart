@@ -24,7 +24,7 @@ export const SectionHeader = ({
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     row: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -48,4 +48,4 @@ const buildStyles = (c) =>
       alignItems: "center",
       gap: 2,
     },
-  });
+   });

@@ -900,7 +900,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
 };
 
 const buildStoreRegStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     container: {
       flex: 1,
       backgroundColor: c.light,
@@ -951,7 +951,7 @@ const buildStoreRegStyles = (c) =>
       borderRadius: 15,
       backgroundColor: c.light,
       borderWidth: 1.5,
-      borderColor: "#E2E8F0",
+      borderColor: "c.border",
       alignItems: "center",
       justifyContent: "center",
     },
@@ -1056,7 +1056,7 @@ const buildStoreRegStyles = (c) =>
       paddingHorizontal: 14,
       borderRadius: 12,
       borderWidth: 1.5,
-      borderColor: "#E2E8F0",
+      borderColor: "c.border",
       backgroundColor: "#EEF1F6",
     },
     countryCodeText: {
@@ -1076,7 +1076,7 @@ const buildStoreRegStyles = (c) =>
     },
     input: {
       borderWidth: 1.5,
-      borderColor: "#E2E8F0",
+      borderColor: "c.border",
       borderRadius: 12,
       paddingHorizontal: 14,
       paddingVertical: 13,
@@ -1084,7 +1084,7 @@ const buildStoreRegStyles = (c) =>
       color: c.dark,
       backgroundColor: "#FAFBFC",
       marginBottom: 12,
-      ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+      ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
     },
     textArea: {
       height: 100,

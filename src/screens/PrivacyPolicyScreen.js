@@ -128,7 +128,7 @@ export const PrivacyPolicyScreen = ({ navigation }) => {
 };
 
 const buildPrivacyPolicyStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -182,4 +182,4 @@ const buildPrivacyPolicyStyles = (c) =>
     lineHeight: 22,
     color: "#475569",
   },
-});
+ });

@@ -1,6 +1,6 @@
 // ── Brand palette (theme-independent) ────────────────────────────────────────
 // These are the Tagit brand colors. They do NOT change with light/dark mode.
-export const themeColors = {
+export const colors = {
   // Tagit brand palette
   primary: "#FF5A79", // Coral Pink
   primaryDark: "#F03A70", // Vibrant Magenta

@@ -683,7 +683,7 @@ export const PaymentsScreen = ({ navigation }) => {
 };
 
 const buildPaymentsStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -813,7 +813,7 @@ const buildPaymentsStyles = (c) =>
     alignItems: "center",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "c.surface",
   },
   detailLabel: {
     fontSize: 13,
@@ -914,7 +914,7 @@ const buildPaymentsStyles = (c) =>
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
     alignItems: "center",
   },
   setupTypeBtnActive: { borderColor: c.primary, backgroundColor: "#EEF2FF" },
@@ -922,7 +922,7 @@ const buildPaymentsStyles = (c) =>
   setupTypeTextActive: { color: c.primary },
   setupInput: {
     borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 13,
@@ -934,7 +934,7 @@ const buildPaymentsStyles = (c) =>
   setupLoadingText: { fontSize: 14, color: c.muted, marginTop: 8 },
   bankDropdown: {
     borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
     borderRadius: 12,
     marginTop: 6,
     maxHeight: 200,
@@ -945,7 +945,7 @@ const buildPaymentsStyles = (c) =>
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "c.surface",
   },
   bankOptionActive: { backgroundColor: "#EEF2FF" },
   bankOptionText: { fontSize: 15, color: c.dark },
@@ -958,4 +958,4 @@ const buildPaymentsStyles = (c) =>
     alignItems: "center",
   },
   setupSubmitText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-});
+ });

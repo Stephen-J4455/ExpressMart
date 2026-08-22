@@ -315,7 +315,7 @@ export const AddressesScreen = ({ navigation }) => {
 };
 
 const buildAddressesStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -462,13 +462,13 @@ const buildAddressesStyles = (c) =>
   },
   fieldInput: {
     borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     color: c.dark,
     backgroundColor: "#FAFBFC",
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
 });

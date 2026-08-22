@@ -374,7 +374,7 @@ export const AccountScreen = ({ navigation }) => {
                     <Ionicons
                       name="chevron-forward"
                       size={18}
-                      color="#CBD5E1"
+                      color="themeColors.muted"
                     />
                   </View>
                 </Pressable>
@@ -423,7 +423,7 @@ export const AccountScreen = ({ navigation }) => {
                       <Ionicons
                         name="chevron-forward"
                         size={18}
-                        color="#CBD5E1"
+                        color={themeColors.muted}
                       />
                     )}
                   </View>
@@ -472,7 +472,7 @@ export const AccountScreen = ({ navigation }) => {
 };
 
 const buildAccountStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     container: {
       flex: 1,
       backgroundColor: c.background,
@@ -485,7 +485,7 @@ const buildAccountStyles = (c) =>
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "#F8FAFC",
+      backgroundColor: c.light,
     },
 
     // Guest State
@@ -537,7 +537,7 @@ const buildAccountStyles = (c) =>
       paddingVertical: 16,
     },
     signInText: {
-      color: "#fff",
+      color: c.light,
       fontSize: 16,
       fontWeight: "700",
     },
@@ -558,321 +558,321 @@ const buildAccountStyles = (c) =>
       paddingHorizontal: 20,
       paddingBottom: 20,
       borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  adSection: {
-    paddingTop: 8,
-    paddingBottom: 6,
-  },
-  profileTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  profileInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  avatarContainer: {
-    position: "relative",
-    marginRight: 14,
-  },
-  avatarGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  onlineDot: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#22C55E",
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-  profileText: {
-    justifyContent: "center",
-  },
-  profileName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: c.dark,
-    letterSpacing: -0.3,
-  },
-  profileEmail: {
-    fontSize: 13,
-    color: c.muted,
-    marginTop: 2,
-  },
-  editButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#EEF2FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+      borderBottomRightRadius: 28,
+      shadowColor: "#000",
+      shadowOpacity: 0.04,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4,
+    },
+    adSection: {
+      paddingTop: 8,
+      paddingBottom: 6,
+    },
+    profileTopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 20,
+    },
+    profileInfo: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    avatarContainer: {
+      position: "relative",
+      marginRight: 14,
+    },
+    avatarGradient: {
+      width: 60,
+      height: 60,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarText: {
+      fontSize: 24,
+      fontWeight: "700",
+      color: c.light,
+    },
+    onlineDot: {
+      position: "absolute",
+      bottom: 2,
+      right: 2,
+      width: 14,
+      height: 14,
+      borderRadius: 7,
+      backgroundColor: "#22C55E",
+      borderWidth: 2,
+      borderColor: c.light,
+    },
+    profileText: {
+      justifyContent: "center",
+    },
+    profileName: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.dark,
+      letterSpacing: -0.3,
+    },
+    profileEmail: {
+      fontSize: 13,
+      color: c.muted,
+      marginTop: 2,
+    },
+    editButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: "#EEF2FF",
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  // Membership Card
-  memberCard: {
-    borderRadius: 20,
-    padding: 18,
-    backgroundColor: "#EEF2FF",
-    borderWidth: 1,
-    borderColor: "#E0E7FF",
-  },
-  memberCardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  memberBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
-  },
-  memberText: {
-    color: "#B45309",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  pointsBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  memberPoints: {
-    color: c.dark,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  memberCardBottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    paddingVertical: 14,
-  },
-  memberStat: {
-    alignItems: "center",
-    flex: 1,
-  },
-  memberStatValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: c.dark,
-  },
-  memberStatLabel: {
-    fontSize: 11,
-    color: c.muted,
-    marginTop: 4,
-    fontWeight: "500",
-  },
-  memberStatDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: "#E2E8F0",
-  },
+    // Membership Card
+    memberCard: {
+      borderRadius: 20,
+      padding: 18,
+      backgroundColor: "#EEF2FF",
+      borderWidth: 1,
+      borderColor: "#E0E7FF",
+    },
+    memberCardTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16,
+    },
+    memberBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "#FEF3C7",
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      gap: 6,
+    },
+    memberText: {
+      color: "#B45309",
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    pointsBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    memberPoints: {
+      color: c.dark,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    memberCardBottom: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-around",
+      backgroundColor: c.light,
+      borderRadius: 14,
+      paddingVertical: 14,
+    },
+    memberStat: {
+      alignItems: "center",
+      flex: 1,
+    },
+    memberStatValue: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    memberStatLabel: {
+      fontSize: 11,
+      color: c.muted,
+      marginTop: 4,
+      fontWeight: "500",
+    },
+    memberStatDivider: {
+      width: 1,
+      height: 30,
+      backgroundColor: c.border,
+    },
 
-  // Register a Store Banner
-  registerStoreSection: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-  },
-  registerStoreGradient: {
-    borderRadius: 20,
-    padding: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  registerStoreTextWrap: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  registerStoreTitle: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  registerStoreSubtitle: {
-    color: "rgba(255,255,255,0.9)",
-    fontSize: 12,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  registerStoreButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-    gap: 6,
-  },
-  registerStoreButtonText: {
-    color: c.primary,
-    fontWeight: "800",
-    fontSize: 13,
-  },
+    // Register a Store Banner
+    registerStoreSection: {
+      paddingHorizontal: 20,
+      paddingTop: 24,
+    },
+    registerStoreGradient: {
+      borderRadius: 20,
+      padding: 20,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    registerStoreTextWrap: {
+      flex: 1,
+      paddingRight: 12,
+    },
+    registerStoreTitle: {
+      color: "#fff",
+      fontSize: 17,
+      fontWeight: "800",
+    },
+    registerStoreSubtitle: {
+      color: "rgba(255,255,255,0.9)",
+      fontSize: 12,
+      marginTop: 4,
+      lineHeight: 18,
+    },
+    registerStoreButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.light,
+      borderRadius: 14,
+      paddingVertical: 11,
+      paddingHorizontal: 16,
+      gap: 6,
+    },
+    registerStoreButtonText: {
+      color: c.primary,
+      fontWeight: "800",
+      fontSize: 13,
+    },
 
-  // Quick Actions
-  quickActionsSection: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: c.dark,
-    marginBottom: 14,
-    letterSpacing: -0.3,
-  },
-  quickActionsGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  quickActionCard: {
-    width: "23%",
-    alignItems: "center",
-  },
-  quickActionIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  quickActionLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: c.dark,
-  },
+    // Quick Actions
+    quickActionsSection: {
+      paddingHorizontal: 20,
+      paddingTop: 24,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: c.dark,
+      marginBottom: 14,
+      letterSpacing: -0.3,
+    },
+    quickActionsGrid: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    quickActionCard: {
+      width: "23%",
+      alignItems: "center",
+    },
+    quickActionIcon: {
+      width: 54,
+      height: 54,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 8,
+    },
+    quickActionLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.dark,
+    },
 
-  // Menu Sections
-  menuSection: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-  },
-  menuCard: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-  },
-  menuItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-  },
-  menuItemLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  menuIconContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "#EEF2FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuItemLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: c.dark,
-  },
-  menuItemRight: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+    // Menu Sections
+    menuSection: {
+      paddingHorizontal: 20,
+      paddingTop: 24,
+    },
+    menuCard: {
+      backgroundColor: c.surface,
+      borderRadius: 20,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.03,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    menuItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+    },
+    menuItemBorder: {
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    menuItemLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+    },
+    menuIconContainer: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      backgroundColor: "#EEF2FF",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    menuItemLabel: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: c.dark,
+    },
+    menuItemRight: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
 
-  // Sign Out
-  signOutSection: {
-    paddingHorizontal: 20,
-    paddingTop: 32,
-  },
-  signOutButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    paddingVertical: 16,
-    gap: 8,
-    borderWidth: 1.5,
-    borderColor: "#FEE2E2",
-  },
-  signOutText: {
-    color: "#EF4444",
-    fontWeight: "700",
-    fontSize: 15,
-  },
+    // Sign Out
+    signOutSection: {
+      paddingHorizontal: 20,
+      paddingTop: 32,
+    },
+    signOutButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.light,
+      borderRadius: 16,
+      paddingVertical: 16,
+      gap: 8,
+      borderWidth: 1.5,
+      borderColor: "#FEE2E2",
+    },
+    signOutText: {
+      color: "#EF4444",
+      fontWeight: "700",
+      fontSize: 15,
+    },
 
-  // Version
-  versionText: {
-    textAlign: "center",
-    color: c.muted,
-    fontSize: 12,
-    marginTop: 24,
-  },
+    // Version
+    versionText: {
+      textAlign: "center",
+      color: c.muted,
+      fontSize: 12,
+      marginTop: 24,
+    },
 
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: c.light,
-  },
-  closeButton: {
-    position: "absolute",
-    top: 60,
-    right: 20,
-    zIndex: 10,
-  },
-  closeButtonInner: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: c.dark,
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    elevation: 4,
-  },
-});
+    // Modal styles
+    modalContainer: {
+      flex: 1,
+      backgroundColor: c.light,
+    },
+    closeButton: {
+      position: "absolute",
+      top: 60,
+      right: 20,
+      zIndex: 10,
+    },
+    closeButtonInner: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: c.light,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: c.dark,
+      shadowOpacity: 0.1,
+      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 8,
+      elevation: 4,
+    },
+   });

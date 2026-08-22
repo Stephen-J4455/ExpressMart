@@ -216,7 +216,7 @@ export const ChangePasswordScreen = ({ navigation }) => {
 };
 
 const buildChangePasswordStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -283,7 +283,7 @@ const buildChangePasswordStyles = (c) =>
     paddingVertical: 12,
     fontSize: 16,
     color: c.dark,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   eyeButton: {
     padding: 12,

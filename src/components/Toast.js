@@ -131,7 +131,7 @@ export const Toast = ({
   );
 };
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create({ 
   container: {
     position: "absolute",
     left: 16,
@@ -170,6 +170,6 @@ const styles = StyleSheet.create({
     padding: 4,
     marginLeft: 8,
   },
-});
+ });
 
 export default Toast;

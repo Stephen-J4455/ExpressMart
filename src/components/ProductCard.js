@@ -788,7 +788,7 @@ export const ProductCard = ({
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     card: {
       backgroundColor: c.surface,
       borderRadius: radius.xl,
@@ -1112,7 +1112,7 @@ const buildStyles = (c) =>
       height: 44,
       borderRadius: 22,
       borderWidth: 2,
-      borderColor: "#E5E7EB",
+      borderColor: "c.border",
     },
     smallColorDotSelected: {
       borderColor: c.primary,
@@ -1123,7 +1123,7 @@ const buildStyles = (c) =>
       paddingVertical: 10,
       borderRadius: 12,
       borderWidth: 2,
-      borderColor: "#E5E7EB",
+      borderColor: "c.border",
       backgroundColor: c.surface,
       minWidth: 48,
       alignItems: "center",
@@ -1219,4 +1219,4 @@ const buildStyles = (c) =>
       lineHeight: 16,
       maxWidth: 160,
     },
-  });
+   });

@@ -253,7 +253,7 @@ export const OrdersScreen = ({ navigation, route }) => {
 };
 
 const buildOrdersStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -277,7 +277,7 @@ const buildOrdersStyles = (c) =>
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "c.light",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -308,7 +308,7 @@ const buildOrdersStyles = (c) =>
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "c.surface",
   },
   filterChipActive: {
     backgroundColor: c.primary,
@@ -325,7 +325,7 @@ const buildOrdersStyles = (c) =>
     minWidth: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: "c.border",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 4,
@@ -392,7 +392,7 @@ const buildOrdersStyles = (c) =>
   },
   divider: {
     height: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "c.surface",
     marginBottom: 12,
   },
   orderFooter: {
@@ -457,4 +457,4 @@ const buildOrdersStyles = (c) =>
     fontWeight: "700",
     fontSize: 16,
   },
-});
+ });

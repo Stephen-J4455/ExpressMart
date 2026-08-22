@@ -271,7 +271,7 @@ export const StoresScreen = () => {
 };
 
 const buildStoresStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     container: {
       flex: 1,
       backgroundColor: c.background,
@@ -356,7 +356,7 @@ const buildStoresStyles = (c) =>
     fontSize: 15,
     color: c.dark,
     fontWeight: "500",
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   sectionHeader: {
     paddingHorizontal: 20,

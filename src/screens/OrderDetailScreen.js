@@ -387,7 +387,7 @@ export const OrderDetailScreen = () => {
 };
 
 const buildOrderDetailStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -674,4 +674,4 @@ const buildOrderDetailStyles = (c) =>
     color: c.dark,
     fontFamily: "monospace",
   },
-});
+ });

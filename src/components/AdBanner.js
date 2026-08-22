@@ -1209,7 +1209,7 @@ export const AdRenderer = ({ ad, ads, onClose, visible = true }) => {
   }
 };
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create({ 
   // Shared overlay for use_image_as_bg mode
   imageBgOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -1694,4 +1694,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 12,
   },
-});
+ });

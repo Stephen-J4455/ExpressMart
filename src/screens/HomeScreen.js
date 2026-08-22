@@ -433,7 +433,7 @@ export const HomeScreen = ({ navigation }) => {
 };
 
 const buildHomeStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     container: {
       flex: 1,
       backgroundColor: c.background,
@@ -530,4 +530,4 @@ const buildHomeStyles = (c) =>
   gridItem: {
     flex: 1,
   },
-});
+ });

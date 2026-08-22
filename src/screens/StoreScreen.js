@@ -143,6 +143,7 @@ export const StoreScreen = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, gridColumns, getItemWidth } = useResponsive();
   const itemWidth = getItemWidth(gridColumns, 12, 12);
+  const { colors: themeColors } = useTheme();
 
   // Resolve a theme object from seller.theme_color only if seller allows it for customers
   const theme =
@@ -160,7 +161,6 @@ export const StoreScreen = ({ route, navigation }) => {
     useShop();
   const { user } = useAuth();
   const toast = useToast();
-  const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildStoreStyles(c));
   const tabScrollRef = useRef(null);
 
@@ -1123,7 +1123,7 @@ export const StoreScreen = ({ route, navigation }) => {
 };
 
 const buildStoreStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -1622,4 +1622,4 @@ const buildStoreStyles = (c) =>
     fontWeight: "700",
     fontSize: 16,
   },
-});
+ });

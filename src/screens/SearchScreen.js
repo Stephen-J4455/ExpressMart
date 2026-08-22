@@ -290,7 +290,7 @@ export const SearchScreen = ({ navigation, route }) => {
 };
 
 const buildSearchStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -357,7 +357,7 @@ const buildSearchStyles = (c) =>
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: "c.surface",
   },
   tagText: {
     color: c.dark,
@@ -374,7 +374,7 @@ const buildSearchStyles = (c) =>
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "c.surface",
   },
   suggestionText: {
     flex: 1,
@@ -385,11 +385,11 @@ const buildSearchStyles = (c) =>
   suggestionType: {
     fontSize: 12,
     color: c.muted,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "c.surface",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     textTransform: "uppercase",
     fontWeight: "500",
   },
-});
+ });

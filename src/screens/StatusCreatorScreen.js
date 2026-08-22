@@ -277,7 +277,7 @@ export const StatusCreatorScreen = ({ navigation }) => {
 };
 
 const buildStatusCreatorStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: { backgroundColor: c.background, flexGrow: 1 },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   title: { fontSize: 18, fontWeight: "700", color: c.dark },
@@ -293,6 +293,6 @@ const buildStatusCreatorStyles = (c) =>
   textInput: { borderWidth: 1, borderColor: c.light, padding: 12, borderRadius: 8, backgroundColor: "#fff" },
   postBtn: { padding: 14, borderRadius: 12, alignItems: "center", marginTop: 12 },
   postText: { color: "#fff", fontWeight: "800" },
-});
+ });
 
 export default StatusCreatorScreen;

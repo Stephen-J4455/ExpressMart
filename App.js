@@ -71,7 +71,7 @@ import { StatusViewer } from "./src/screens/StatusViewer";
 import StatusCreatorScreen from "./src/screens/StatusCreatorScreen";
 import { PaymentWebViewScreen } from "./src/screens/PaymentWebViewScreen";
 import { StoreRegistrationScreen } from "./src/screens/StoreRegistrationScreen";
-import { colors, getTheme } from "./src/theme/colors";
+
 // PasswordResetScreen handles recovery links on both web and native.
 
 import { supabase } from "./src/lib/supabase";

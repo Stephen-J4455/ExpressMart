@@ -30,21 +30,20 @@ const NOTIFICATION_ICONS = {
   review_reminder: "star",
 };
 
-const NOTIFICATION_COLORS = {
-  order_placed: themeColors.primary,
-  order_confirmed: themeColors.success,
-  order_shipped: themeColors.secondary,
-  order_delivered: themeColors.success,
-  order_cancelled: themeColors.accent,
-  payment_success: themeColors.success,
-  payment_failed: themeColors.accent,
-  promotion: themeColors.secondary,
-  system: themeColors.muted,
-  review_reminder: themeColors.secondary,
-};
-
 export const NotificationsScreen = ({ navigation }) => {
   const { colors: themeColors } = useTheme();
+  const NOTIFICATION_COLORS = {
+    order_placed: themeColors.primary,
+    order_confirmed: themeColors.success,
+    order_shipped: themeColors.secondary,
+    order_delivered: themeColors.success,
+    order_cancelled: themeColors.accent,
+    payment_success: themeColors.success,
+    payment_failed: themeColors.accent,
+    promotion: themeColors.secondary,
+    system: themeColors.muted,
+    review_reminder: themeColors.secondary,
+  };
   const styles = useAppStyles((c) => buildNotificationsStyles(c));
   const { user } = useAuth();
   const toast = useToast();
@@ -318,7 +317,7 @@ export const NotificationsScreen = ({ navigation }) => {
 };
 
 const buildNotificationsStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -440,4 +439,4 @@ const buildNotificationsStyles = (c) =>
   deleteButton: {
     padding: 4,
   },
-});
+ });

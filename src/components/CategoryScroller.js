@@ -38,7 +38,7 @@ export const CategoryScroller = ({ categories = [], onSelect }) => {
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     container: {
       paddingHorizontal: 16,
       gap: 12,
@@ -85,4 +85,4 @@ const buildStyles = (c) =>
       alignItems: "center",
       justifyContent: "center",
     },
-  });
+   });

@@ -252,7 +252,7 @@ export const HelpSupportScreen = ({ navigation }) => {
 };
 
 const buildHelpSupportStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: "row",
@@ -319,7 +319,7 @@ const buildHelpSupportStyles = (c) =>
     paddingVertical: 12,
     gap: 12,
   },
-  contactRowBorder: { borderTopWidth: 1, borderTopColor: "#F1F5F9" },
+  contactRowBorder: { borderTopWidth: 1, borderTopColor: "c.surface" },
   contactIconWrap: {
     width: 44,
     height: 44,
@@ -330,7 +330,7 @@ const buildHelpSupportStyles = (c) =>
   contactText: { flex: 1 },
   contactLabel: { fontSize: 14, fontWeight: "700", color: c.dark },
   contactValue: { fontSize: 13, color: c.muted, marginTop: 2 },
-  faqBorder: { borderTopWidth: 1, borderTopColor: "#F1F5F9" },
+  faqBorder: { borderTopWidth: 1, borderTopColor: "c.surface" },
   faqRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -358,7 +358,7 @@ const buildHelpSupportStyles = (c) =>
     justifyContent: "space-between",
     paddingVertical: 12,
   },
-  legalRowBorder: { borderTopWidth: 1, borderTopColor: "#F1F5F9" },
+  legalRowBorder: { borderTopWidth: 1, borderTopColor: "c.surface" },
   legalLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   legalIconWrap: {
     width: 38,
@@ -370,4 +370,4 @@ const buildHelpSupportStyles = (c) =>
   },
   legalLabel: { fontSize: 15, fontWeight: "600", color: c.dark },
   legalSub: { fontSize: 13, color: c.muted, marginTop: 2 },
-});
+ });

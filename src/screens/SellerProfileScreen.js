@@ -579,7 +579,7 @@ export const SellerProfileScreen = ({ navigation }) => {
 };
 
 const buildSellerProfileStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: { flex: 1, backgroundColor: c.background },
   scrollContent: { paddingBottom: 30 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -624,7 +624,7 @@ const buildSellerProfileStyles = (c) =>
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "c.surface",
   },
   fieldBlock: { paddingVertical: 10, paddingHorizontal: 12 },
   fieldLabel: { fontSize: 13, fontWeight: "600", color: c.muted },
@@ -634,7 +634,7 @@ const buildSellerProfileStyles = (c) =>
   socialIcon: { marginRight: 0 },
   input: {
     borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
     borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 13,
@@ -642,7 +642,7 @@ const buildSellerProfileStyles = (c) =>
     color: c.dark,
     backgroundColor: "#FAFBFC",
     marginTop: 8,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   textArea: { height: 96, textAlignVertical: "top" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },

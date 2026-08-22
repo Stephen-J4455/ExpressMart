@@ -358,7 +358,7 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
 };
 
 const buildCategoryProductsStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
   },
@@ -504,4 +504,4 @@ const buildCategoryProductsStyles = (c) =>
     fontSize: 15,
     fontWeight: "700",
   },
-});
+ });

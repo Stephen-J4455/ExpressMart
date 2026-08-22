@@ -357,7 +357,7 @@ export const ProfileEditScreen = ({ navigation }) => {
 };
 
 const buildProfileEditStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: { flex: 1, backgroundColor: c.background },
   header: {
     flexDirection: "row",
@@ -439,19 +439,19 @@ const buildProfileEditStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
     borderRadius: 12,
     paddingHorizontal: 12,
     backgroundColor: "#FAFBFC",
   },
-  inputWrapDisabled: { backgroundColor: "#F1F5F9", borderColor: "#E2E8F0" },
+  inputWrapDisabled: { backgroundColor: "c.surface", borderColor: "c.border" },
   inputIcon: { marginRight: 8 },
   input: {
     flex: 1,
     paddingVertical: 13,
     fontSize: 15,
     color: c.dark,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   inputDisabled: { color: c.muted },
   lockPill: { backgroundColor: "#E2E8F0", borderRadius: 6, padding: 4 },

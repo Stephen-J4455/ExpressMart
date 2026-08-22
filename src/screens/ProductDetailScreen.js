@@ -1967,7 +1967,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 };
 
 const buildProductDetailStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -2063,12 +2063,12 @@ const buildProductDetailStyles = (c) =>
     borderColor: c.primary + "22",
   },
   categoryPill: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "c.light",
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
   },
   categoryPillText: {
     fontSize: 11,
@@ -2261,18 +2261,18 @@ const buildProductDetailStyles = (c) =>
     marginBottom: 24,
   },
   sectionPanel: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "c.light",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
     paddingHorizontal: 14,
     paddingVertical: 4,
   },
   detailsPanel: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "c.light",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
     padding: 16,
   },
   sectionTitle: {
@@ -2557,7 +2557,7 @@ const buildProductDetailStyles = (c) =>
     fontSize: 16,
     minHeight: 100,
     textAlignVertical: "top",
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   modalFooter: {
     flexDirection: "row",
@@ -2974,7 +2974,7 @@ const buildProductDetailStyles = (c) =>
 });
 
 const buildProductDetailMarkdownStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   body: {
     fontSize: 15,
     color: c.muted,
@@ -3036,4 +3036,4 @@ const buildProductDetailMarkdownStyles = (c) =>
   link: {
     color: c.primary,
   },
-});
+ });

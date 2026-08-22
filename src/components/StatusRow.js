@@ -126,7 +126,7 @@ export const StatusRow = ({ onSelectStatus }) => {
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     container: {
       paddingVertical: 12,
     },
@@ -177,4 +177,4 @@ const buildStyles = (c) =>
       color: c.muted,
       textAlign: "center",
     },
-  });
+   });

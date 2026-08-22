@@ -596,7 +596,7 @@ export const PaymentWebViewScreen = () => {
 };
 
 const buildPaymentWebViewStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -615,4 +615,4 @@ const buildPaymentWebViewStyles = (c) =>
     backgroundColor: "rgba(255, 255, 255, 0.8)",
     zIndex: 1,
   },
-});
+ });

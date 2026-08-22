@@ -15,7 +15,7 @@ export const AppHeader = ({
   const insets = useSafeAreaInsets();
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) =>
-    StyleSheet.create({
+    StyleSheet.create({ 
       container: {
         paddingBottom: 16,
         backgroundColor: c.background,
@@ -65,7 +65,7 @@ export const AppHeader = ({
         flexDirection: "row",
         gap: 8,
       },
-    }),
+     }),
   );
   return (
     <View

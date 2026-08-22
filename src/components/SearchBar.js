@@ -20,7 +20,7 @@ export const SearchBar = ({
   ...inputProps
 }) => {
   const styles = useAppStyles((c) =>
-    StyleSheet.create({
+    StyleSheet.create({ 
       wrapper: {
         flexDirection: "row",
         alignItems: "center",
@@ -45,7 +45,7 @@ export const SearchBar = ({
         color: c.dark,
         ...(Platform.OS === "web"
           ? { outlineStyle: "none", outlineWidth: 0 }
-          : {}),
+          : { }),
       },
       placeholder: {
         color: c.muted,

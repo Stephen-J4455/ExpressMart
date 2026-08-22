@@ -291,7 +291,7 @@ export const SettingsScreen = ({ navigation }) => {
 };
 
 const buildSettingsStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -318,7 +318,7 @@ const buildSettingsStyles = (c) =>
   backButton: {
     padding: 8,
     borderRadius: 12,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "c.light",
   },
   headerTitle: {
     fontSize: 20,
@@ -381,7 +381,7 @@ const buildSettingsStyles = (c) =>
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "c.light",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -453,7 +453,7 @@ const buildSettingsStyles = (c) =>
     alignItems: "center",
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: "c.surface",
     gap: 12,
   },
   settingItemLast: {
@@ -489,4 +489,4 @@ const buildSettingsStyles = (c) =>
     color: c.muted,
     marginRight: 4,
   },
-});
+ });

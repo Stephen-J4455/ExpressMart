@@ -1,8 +1,10 @@
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useAppStyles } from "../hooks/useAppStyles";
 
 export const FlashSaleBadge = ({ discountPercentage, position = "top-left" }) => {
+  const styles = useAppStyles((c) => buildStyles(c));
   const positionStyle =
     position === "top-right"
       ? styles.topRight
@@ -26,7 +28,8 @@ export const FlashSaleBadge = ({ discountPercentage, position = "top-left" }) =>
   );
 };
 
-const styles = StyleSheet.create({
+const buildStyles = (c) =>
+  StyleSheet.create({
   container: {
     position: "absolute",
     zIndex: 10,
@@ -55,7 +58,7 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#fff",
+    color: c.light,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -74,4 +77,4 @@ const styles = StyleSheet.create({
     borderRightColor: "transparent",
     borderTopColor: "#DC2626",
   },
-});
+ });

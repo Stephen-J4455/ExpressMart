@@ -146,7 +146,7 @@ export const SellerCard = ({ seller, onPress }) => {
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     card: {
         flex: 1,
         backgroundColor: c.surface,
@@ -296,4 +296,4 @@ const buildStyles = (c) =>
         fontWeight: "700",
         color: "#DC2626",
     },
-});
+ });

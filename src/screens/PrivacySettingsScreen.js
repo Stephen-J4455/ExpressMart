@@ -296,7 +296,7 @@ export const PrivacySettingsScreen = ({ navigation }) => {
 };
 
 const buildPrivacySettingsStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -458,7 +458,7 @@ const buildPrivacySettingsStyles = (c) =>
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: c.dark,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   modalActions: {
     flexDirection: "row",

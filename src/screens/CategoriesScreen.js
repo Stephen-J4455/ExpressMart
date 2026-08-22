@@ -193,7 +193,7 @@ export const CategoriesScreen = ({ navigation }) => {
 };
 
 const buildCategoriesStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     flexDirection: "row",
@@ -321,4 +321,4 @@ const buildCategoriesStyles = (c) =>
     fontSize: 16,
     color: c.muted,
   },
-});
+ });

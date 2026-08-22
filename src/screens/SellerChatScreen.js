@@ -536,7 +536,7 @@ export const SellerChatScreen = ({
 };
 
 const buildSellerChatStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: { flex: 1, backgroundColor: c.background },
   header: { backgroundColor: c.background, paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3, zIndex: 2 },
   headerContent: { flexDirection: "row", alignItems: "center" },
@@ -612,7 +612,7 @@ const buildSellerChatStyles = (c) =>
   inputSticky: { backgroundColor: c.background, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, borderTopWidth: 1, borderTopColor: c.border, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: -3 }, elevation: 6 },
   inputWrapper: { flexDirection: "row", alignItems: "flex-end", gap: 8, justifyContent: "space-between" },
   inputField: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: c.surface, borderRadius: radius.pill, paddingHorizontal: 16, paddingVertical: 4, borderWidth: 1, borderColor: c.border, minHeight: 44 },
-  textInput: { flex: 1, fontSize: 16, maxHeight: 120, paddingTop: 8, paddingBottom: 8, color: c.dark, ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}) },
+  textInput: { flex: 1, fontSize: 16, maxHeight: 120, paddingTop: 8, paddingBottom: 8, color: c.dark, ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }) },
   sendButton: { width: 44, height: 44, borderRadius: radius.pill, justifyContent: "center", alignItems: "center" },
   sendButtonDisabled: { backgroundColor: c.muted, opacity: 0.5 },
 });

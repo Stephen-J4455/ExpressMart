@@ -193,7 +193,7 @@ export const ForgotPasswordScreen = ({ navigation }) => {
 };
 
 const buildForgotPasswordStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -328,7 +328,7 @@ const buildForgotPasswordStyles = (c) =>
     height: 56,
     fontSize: 16,
     color: c.dark,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   submitButton: {
     borderRadius: 16,

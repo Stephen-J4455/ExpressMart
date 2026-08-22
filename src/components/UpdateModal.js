@@ -36,7 +36,7 @@ const UpdateModal = ({ visible, update, onClose, force }) => {
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     overlay: {
       flex: 1,
       backgroundColor: "rgba(0,0,0,0.45)",
@@ -87,6 +87,6 @@ const buildStyles = (c) =>
       color: "#fff",
       fontWeight: "700",
     },
-  });
+   });
 
 export default UpdateModal;

@@ -139,7 +139,7 @@ export const SellerScroller = ({ sellers = [], onSelect }) => {
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     container: {
       paddingHorizontal: 16,
       paddingVertical: 8,
@@ -268,4 +268,4 @@ const buildStyles = (c) =>
       fontWeight: "700",
       color: "#DC2626",
     },
-  });
+   });

@@ -199,7 +199,7 @@ export const FollowingScreen = ({ navigation }) => {
 };
 
 const buildFollowingStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -256,7 +256,7 @@ const buildFollowingStyles = (c) =>
   cardImageArea: {
     width: "100%",
     height: 100,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "c.surface",
     position: "relative",
   },
   cardAvatar: {
@@ -382,4 +382,4 @@ const buildFollowingStyles = (c) =>
     fontWeight: "700",
     color: "#fff",
   },
-});
+ });

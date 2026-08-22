@@ -953,7 +953,7 @@ export const FeedScreen = ({ route, navigation }) => {
 };
 
 const buildFeedStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     wrapper: {
       flex: 1,
       backgroundColor: "#000",
@@ -1059,7 +1059,7 @@ const buildFeedStyles = (c) =>
     overflow: "hidden",
     backgroundColor: "rgba(255,255,255,0.9)",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "c.border",
   },
   storeAvatar: {
     width: "100%",
@@ -1119,7 +1119,7 @@ const buildFeedStyles = (c) =>
     width: 42,
     height: 42,
     borderRadius: 10,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "c.surface",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1191,7 +1191,7 @@ const buildFeedStyles = (c) =>
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#D1D5DB",
+    backgroundColor: "c.border",
     alignSelf: "center",
     marginTop: 8,
     marginBottom: 8,
@@ -1247,7 +1247,7 @@ const buildFeedStyles = (c) =>
     height: 32,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#E5E7EB",
+    backgroundColor: "c.border",
   },
   commentBody: {
     flex: 1,
@@ -1287,7 +1287,7 @@ const buildFeedStyles = (c) =>
     minHeight: 40,
     maxHeight: 100,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "c.border",
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 9,
@@ -1359,6 +1359,6 @@ const buildFeedStyles = (c) =>
     fontWeight: "700",
     color: "#EF4444",
   },
-});
+ });
 
 export default FeedScreen;

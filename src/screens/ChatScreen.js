@@ -780,7 +780,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
 };
 
 const buildChatStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
   container: {
     flex: 1,
     backgroundColor: c.background,
@@ -981,7 +981,7 @@ const buildChatStyles = (c) =>
     paddingTop: 10,
     paddingBottom: 10,
     color: c.dark,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   sendButton: {
     width: 40,

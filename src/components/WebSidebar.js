@@ -125,7 +125,7 @@ export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({
+  StyleSheet.create({ 
     container: {
       backgroundColor: c.surface,
       borderRightWidth: 1,
@@ -228,4 +228,4 @@ const buildStyles = (c) =>
       marginBottom: 8,
       marginTop: 4,
     },
-  });
+   });
