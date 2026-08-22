@@ -487,7 +487,7 @@ export const ProductCard = ({
                             styles.sizeOption,
                             isSelected && {
                               borderColor: accent,
-                              backgroundColor: "#EEF2FF",
+                              backgroundColor: themeColors.surface,
                             },
                           ]}
                         >
@@ -829,7 +829,7 @@ const buildStyles = (c) =>
       borderRadius: 10,
     },
     outOfStockOverlayText: {
-      color: "#fff",
+      color: "#FFFFFF",
       fontSize: 10,
       fontWeight: "800",
       letterSpacing: 0.4,
@@ -855,7 +855,7 @@ const buildStyles = (c) =>
       backgroundColor: "rgba(255, 255, 255, 0.5)",
     },
     imageIndicatorActive: {
-      backgroundColor: "#fff",
+      backgroundColor: "#FFFFFF",
       width: 16,
     },
     listImageContainer: {
@@ -989,7 +989,7 @@ const buildStyles = (c) =>
       gap: 7,
     },
     ctaText: {
-      color: "#fff",
+      color: "#FFFFFF",
       fontWeight: "800",
       fontSize: 13,
       letterSpacing: 0.2,
@@ -1034,7 +1034,7 @@ const buildStyles = (c) =>
     ratingPillText: {
       fontSize: 10,
       fontWeight: "800",
-      color: "#334155",
+      color: c.dark,
     },
     tagPill: {
       position: "absolute",
@@ -1049,7 +1049,7 @@ const buildStyles = (c) =>
     tagText: {
       fontSize: 10,
       fontWeight: "700",
-      color: "#fff",
+      color: "#FFFFFF",
     },
     cardImagePlaceholder: {
       position: "absolute",
@@ -1112,7 +1112,7 @@ const buildStyles = (c) =>
       height: 44,
       borderRadius: 22,
       borderWidth: 2,
-      borderColor: "c.border",
+      borderColor: c.border,
     },
     smallColorDotSelected: {
       borderColor: c.primary,
@@ -1123,7 +1123,7 @@ const buildStyles = (c) =>
       paddingVertical: 10,
       borderRadius: 12,
       borderWidth: 2,
-      borderColor: "c.border",
+      borderColor: c.border,
       backgroundColor: c.surface,
       minWidth: 48,
       alignItems: "center",
@@ -1131,7 +1131,7 @@ const buildStyles = (c) =>
     },
     sizeOptionSelected: {
       borderColor: c.primary,
-      backgroundColor: "#EEF2FF",
+      backgroundColor: c.surface,
     },
     sizeOptionText: {
       fontSize: 13,
@@ -1155,7 +1155,7 @@ const buildStyles = (c) =>
     variantAddText: {
       fontSize: 16,
       fontWeight: "700",
-      color: "#fff",
+      color: "#FFFFFF",
     },
     discountBadge: {
       position: "absolute",
@@ -1176,7 +1176,7 @@ const buildStyles = (c) =>
     discountText: {
       fontSize: 10,
       fontWeight: "800",
-      color: "#fff",
+      color: "#FFFFFF",
       letterSpacing: 0.3,
     },
     flashBadgeGradient: {

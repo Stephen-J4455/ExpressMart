@@ -15,22 +15,22 @@ const toastConfig = {
   success: {
     icon: "checkmark-circle",
     backgroundColor: "#10B981",
-    iconColor: "#fff",
+    iconColor: "#FFFFFF",
   },
   error: {
     icon: "close-circle",
     backgroundColor: "#EF4444",
-    iconColor: "#fff",
+    iconColor: "#FFFFFF",
   },
   warning: {
     icon: "warning",
     backgroundColor: "#F59E0B",
-    iconColor: "#fff",
+    iconColor: "#FFFFFF",
   },
   info: {
     icon: "information-circle",
     backgroundColor: "#3B82F6",
-    iconColor: "#fff",
+    iconColor: "#FFFFFF",
   },
 };
 
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
     marginBottom: 2,

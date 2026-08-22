@@ -210,7 +210,7 @@ const buildFollowingStyles = (c) =>
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: "#EEF2F8",
   },
@@ -244,7 +244,7 @@ const buildFollowingStyles = (c) =>
   },
   card: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 20,
     overflow: "hidden",
     shadowColor: "#000",
@@ -256,7 +256,7 @@ const buildFollowingStyles = (c) =>
   cardImageArea: {
     width: "100%",
     height: 100,
-    backgroundColor: "c.surface",
+    backgroundColor: c.surface,
     position: "relative",
   },
   cardAvatar: {
@@ -278,7 +278,7 @@ const buildFollowingStyles = (c) =>
   verifiedText: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#fff",
+    color: c.light,
   },
   cardBody: {
     padding: 12,
@@ -380,6 +380,6 @@ const buildFollowingStyles = (c) =>
   exploreBtnText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#fff",
+    color: c.light,
   },
  });

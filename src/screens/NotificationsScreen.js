@@ -327,7 +327,7 @@ const buildNotificationsStyles = (c) =>
     alignItems: "center",
     justifyContent: "space-between",
     padding: 16,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: c.light,
   },
@@ -372,7 +372,7 @@ const buildNotificationsStyles = (c) =>
     marginTop: 24,
   },
   signInText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -381,7 +381,7 @@ const buildNotificationsStyles = (c) =>
     gap: 12,
   },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 16,
     padding: 16,
     flexDirection: "row",

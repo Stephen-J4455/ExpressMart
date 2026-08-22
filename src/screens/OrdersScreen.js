@@ -268,7 +268,7 @@ const buildOrdersStyles = (c) =>
     alignItems: "center",
     paddingTop: 50,
     paddingBottom: 16,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: "#EEF2F8",
     gap: 16,
@@ -277,7 +277,7 @@ const buildOrdersStyles = (c) =>
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: "c.light",
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -296,7 +296,7 @@ const buildOrdersStyles = (c) =>
   filters: {
     flexDirection: "row",
     paddingVertical: 14,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: "#EEF2F8",
     gap: 8,
@@ -308,7 +308,7 @@ const buildOrdersStyles = (c) =>
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "c.surface",
+    backgroundColor: c.surface,
   },
   filterChipActive: {
     backgroundColor: c.primary,
@@ -319,13 +319,13 @@ const buildOrdersStyles = (c) =>
     color: c.muted,
   },
   filterTextActive: {
-    color: "#fff",
+    color: c.light,
   },
   filterCount: {
     minWidth: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "c.border",
+    backgroundColor: c.border,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 4,
@@ -339,7 +339,7 @@ const buildOrdersStyles = (c) =>
     color: c.muted,
   },
   filterCountTextActive: {
-    color: "#fff",
+    color: c.light,
   },
   list: {
     paddingTop: 20,
@@ -349,7 +349,7 @@ const buildOrdersStyles = (c) =>
     gap: 16,
   },
   orderCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 20,
     padding: 18,
     marginBottom: 14,
@@ -392,7 +392,7 @@ const buildOrdersStyles = (c) =>
   },
   divider: {
     height: 1,
-    backgroundColor: "c.surface",
+    backgroundColor: c.surface,
     marginBottom: 12,
   },
   orderFooter: {
@@ -453,7 +453,7 @@ const buildOrdersStyles = (c) =>
     elevation: 4,
   },
   shopButtonText: {
-    color: "#fff",
+    color: c.light,
     fontWeight: "700",
     fontSize: 16,
   },

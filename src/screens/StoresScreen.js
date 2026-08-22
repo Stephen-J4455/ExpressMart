@@ -315,7 +315,7 @@ const buildStoresStyles = (c) =>
   headerTitle: {
     fontSize: 24,
     fontWeight: "800",
-    color: "#fff",
+    color: c.light,
     letterSpacing: -0.5,
   },
   headerSubtitle: {
@@ -335,12 +335,12 @@ const buildStoresStyles = (c) =>
   storeCountText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#fff",
+    color: c.light,
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: radius.lg,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -385,7 +385,7 @@ const buildStoresStyles = (c) =>
     paddingHorizontal: 32,
   },
   loadingCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: radius.xl,
     paddingVertical: 36,
     paddingHorizontal: 48,
@@ -433,7 +433,7 @@ const buildStoresStyles = (c) =>
     elevation: 4,
   },
   clearSearchText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 15,
     fontWeight: "600",
   },
@@ -455,7 +455,7 @@ const buildStoresStyles = (c) =>
   modalCard: {
     width: "100%",
     maxWidth: 420,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: radius.xl,
     overflow: "hidden",
     shadowColor: "#000",
@@ -473,7 +473,7 @@ const buildStoresStyles = (c) =>
   modalTitle: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#fff",
+    color: c.light,
   },
   sortOption: {
     flexDirection: "row",
@@ -482,7 +482,7 @@ const buildStoresStyles = (c) =>
     paddingVertical: 14,
     paddingHorizontal: 18,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: c.surface,
   },
   sortOptionSelected: {
     backgroundColor: "#FFF5F7",

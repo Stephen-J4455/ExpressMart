@@ -633,7 +633,7 @@ export const StoreScreen = ({ route, navigation }) => {
                             <Text
                               style={[
                                 styles.followButtonText,
-                                isFollowing(sellerId) && { color: "#fff" },
+                                isFollowing(sellerId) && { color: themeColors.light },
                               ]}
                             >
                               {isFollowing(sellerId) ? "Following" : "Follow"}
@@ -1138,7 +1138,7 @@ const buildStoreStyles = (c) =>
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#fff",
+    color: c.light,
   },
   listContainer: {
     flexGrow: 1,
@@ -1174,7 +1174,7 @@ const buildStoreStyles = (c) =>
     height: 100,
     borderRadius: 50,
     borderWidth: 3,
-    borderColor: "#fff",
+    borderColor: c.light,
   },
   avatarPlaceholder: {
     backgroundColor: "rgba(255,255,255,0.3)",
@@ -1188,7 +1188,7 @@ const buildStoreStyles = (c) =>
   storeName: {
     fontSize: 24,
     fontWeight: "800",
-    color: "#fff",
+    color: c.light,
   },
   ratingRow: {
     flexDirection: "row",
@@ -1196,7 +1196,7 @@ const buildStoreStyles = (c) =>
     gap: 4,
   },
   rating: {
-    color: "#fff",
+    color: c.light,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -1266,7 +1266,7 @@ const buildStoreStyles = (c) =>
   statValue: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#fff",
+    color: c.light,
   },
   statLabel: {
     fontSize: 12,
@@ -1311,7 +1311,7 @@ const buildStoreStyles = (c) =>
   },
   tabContainer: {
     flexDirection: "row",
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 12,
@@ -1353,7 +1353,7 @@ const buildStoreStyles = (c) =>
     marginBottom: 12,
   },
   profileSection: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -1411,7 +1411,7 @@ const buildStoreStyles = (c) =>
     gap: 16,
   },
   reviewItem: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 12,
     padding: 16,
     shadowColor: "#000",
@@ -1470,7 +1470,7 @@ const buildStoreStyles = (c) =>
     gap: 8,
   },
   chatButtonText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -1516,10 +1516,10 @@ const buildStoreStyles = (c) =>
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: "#fff",
+    borderColor: c.light,
   },
   statusBadgeText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 10,
     fontWeight: "800",
   },
@@ -1553,7 +1553,7 @@ const buildStoreStyles = (c) =>
     borderRadius: 2,
   },
   progressBarActive: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
   },
   modalUserInfoRow: {
     flexDirection: "row",
@@ -1570,10 +1570,10 @@ const buildStoreStyles = (c) =>
     height: 40,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: "#fff",
+    borderColor: c.light,
   },
   modalUserName: {
-    color: "#fff",
+    color: c.light,
     fontWeight: "700",
     fontSize: 16,
   },
@@ -1594,7 +1594,7 @@ const buildStoreStyles = (c) =>
     borderRadius: 12,
   },
   fullStatusText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 16,
     lineHeight: 22,
     textAlign: "center",
@@ -1618,7 +1618,7 @@ const buildStoreStyles = (c) =>
     borderColor: "rgba(255,255,255,0.3)",
   },
   replyButtonText: {
-    color: "#fff",
+    color: c.light,
     fontWeight: "700",
     fontSize: 16,
   },

@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   solidDiscountText: {
-    color: '#fff',
+    color: "#FFFFFF",
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   solidCtaText: {
-    color: '#fff',
+    color: "#FFFFFF",
     fontSize: 12,
     fontWeight: '700',
   }

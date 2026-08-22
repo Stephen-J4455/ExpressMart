@@ -657,7 +657,7 @@ const buildPasswordResetStyles = (c) =>
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 16,
     paddingHorizontal: 16,
     borderWidth: 1,
@@ -699,7 +699,7 @@ const buildPasswordResetStyles = (c) =>
     gap: 10,
   },
   buttonText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 18,
     fontWeight: "600",
   },

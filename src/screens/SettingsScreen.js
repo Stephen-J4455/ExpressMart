@@ -132,7 +132,7 @@ export const SettingsScreen = ({ navigation }) => {
           <Switch
             value={item.value}
             onValueChange={item.onValueChange}
-            trackColor={{ false: "#E2E8F0", true: themeColors.primary }}
+            trackColor={{ false: themeColors.border, true: themeColors.primary }}
             thumbColor="#fff"
           />
         ) : (
@@ -302,7 +302,7 @@ const buildSettingsStyles = (c) =>
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: "#EEF2F8",
   },
@@ -311,14 +311,14 @@ const buildSettingsStyles = (c) =>
     alignItems: "center",
     gap: 16,
     paddingVertical: 16,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: "#EEF2F8",
   },
   backButton: {
     padding: 8,
     borderRadius: 12,
-    backgroundColor: "c.light",
+    backgroundColor: c.light,
   },
   headerTitle: {
     fontSize: 20,
@@ -331,7 +331,7 @@ const buildSettingsStyles = (c) =>
   },
   sidebar: {
     width: 260,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRightWidth: 1,
     borderRightColor: "#EEF2F8",
     padding: 20,
@@ -350,7 +350,7 @@ const buildSettingsStyles = (c) =>
     width: 48,
     height: 48,
     borderRadius: 16,
-    backgroundColor: "#DBEAFE",
+    backgroundColor: "rgba(59,130,246,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -381,7 +381,7 @@ const buildSettingsStyles = (c) =>
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "c.light",
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -421,7 +421,7 @@ const buildSettingsStyles = (c) =>
     marginBottom: 20,
   },
   settingCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 20,
     overflow: "hidden",
     borderWidth: 1,
@@ -431,7 +431,7 @@ const buildSettingsStyles = (c) =>
     flex: 1,
   },
   section: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginTop: 16,
     marginHorizontal: 16,
     borderRadius: 16,
@@ -453,7 +453,7 @@ const buildSettingsStyles = (c) =>
     alignItems: "center",
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "c.surface",
+    borderBottomColor: c.surface,
     gap: 12,
   },
   settingItemLast: {

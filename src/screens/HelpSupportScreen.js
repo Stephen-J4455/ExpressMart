@@ -260,7 +260,7 @@ const buildHelpSupportStyles = (c) =>
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: c.light,
   },
@@ -286,7 +286,7 @@ const buildHelpSupportStyles = (c) =>
   heroTitle: {
     fontSize: 24,
     fontWeight: "800",
-    color: "#fff",
+    color: c.light,
     letterSpacing: -0.3,
   },
   heroSub: {
@@ -296,7 +296,7 @@ const buildHelpSupportStyles = (c) =>
     lineHeight: 20,
   },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 20,
@@ -319,7 +319,7 @@ const buildHelpSupportStyles = (c) =>
     paddingVertical: 12,
     gap: 12,
   },
-  contactRowBorder: { borderTopWidth: 1, borderTopColor: "c.surface" },
+  contactRowBorder: { borderTopWidth: 1, borderTopColor: c.surface },
   contactIconWrap: {
     width: 44,
     height: 44,
@@ -330,7 +330,7 @@ const buildHelpSupportStyles = (c) =>
   contactText: { flex: 1 },
   contactLabel: { fontSize: 14, fontWeight: "700", color: c.dark },
   contactValue: { fontSize: 13, color: c.muted, marginTop: 2 },
-  faqBorder: { borderTopWidth: 1, borderTopColor: "c.surface" },
+  faqBorder: { borderTopWidth: 1, borderTopColor: c.surface },
   faqRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -358,7 +358,7 @@ const buildHelpSupportStyles = (c) =>
     justifyContent: "space-between",
     paddingVertical: 12,
   },
-  legalRowBorder: { borderTopWidth: 1, borderTopColor: "c.surface" },
+  legalRowBorder: { borderTopWidth: 1, borderTopColor: c.surface },
   legalLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   legalIconWrap: {
     width: 38,

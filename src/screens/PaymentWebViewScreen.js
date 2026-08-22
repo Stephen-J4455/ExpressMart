@@ -148,7 +148,7 @@ export const PaymentWebViewScreen = () => {
             padding: 28px 22px 24px;
             background: rgba(255, 255, 255, 0.95);
             border-radius: 20px;
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            border: 1px solid rgba(15, 23, 42, 0.12);
             box-shadow: 0 14px 40px rgba(15, 23, 42, 0.12);
             backdrop-filter: blur(4px);
           }
@@ -292,7 +292,7 @@ export const PaymentWebViewScreen = () => {
             padding: 28px 22px 24px;
             background: rgba(255, 255, 255, 0.95);
             border-radius: 20px;
-            border: 1px solid rgba(148, 163, 184, 0.2);
+            border: 1px solid rgba(15, 23, 42, 0.12);
             box-shadow: 0 14px 40px rgba(15, 23, 42, 0.12);
             backdrop-filter: blur(4px);
           }

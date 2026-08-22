@@ -437,7 +437,7 @@ export const SellerProfileScreen = ({ navigation }) => {
                     ]}
                     onPress={() => setEditFulfillmentSpeed(opt)}
                   >
-                    <Text style={[styles.chipText, editFulfillmentSpeed === opt && { color: "#fff" }]}>{opt}</Text>
+                    <Text style={[styles.chipText, editFulfillmentSpeed === opt && { color: themeColors.light }]}>{opt}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -586,19 +586,19 @@ const buildSellerProfileStyles = (c) =>
   hero: { position: "relative", height: 180, justifyContent: "flex-end", paddingBottom: 16 },
   heroOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.28)" },
   coverPress: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  coverCamera: { position: "absolute", top: 12, right: 16, zIndex: 5, width: 36, height: 36, borderRadius: radius.full, backgroundColor: "rgba(0,0,0,0.35)", alignItems: "center", justifyContent: "center" },
+  coverCamera: { position: "absolute", top: 12, right: 16, zIndex: 5, width: 36, height: 36, borderRadius: radius.full, backgroundColor: c.overlay, alignItems: "center", justifyContent: "center" },
   backFloating: { position: "absolute", top: 12, left: 16, zIndex: 5, width: 36, height: 36, borderRadius: radius.full, backgroundColor: "rgba(0,0,0,0.3)", alignItems: "center", justifyContent: "center" },
   heroBottom: { alignItems: "center", gap: 10, paddingHorizontal: 16 },
-  heroName: { color: "#fff", fontSize: 22, fontWeight: "800", textShadowColor: "rgba(0,0,0,0.4)", textShadowRadius: 4 },
+  heroName: { color: c.light, fontSize: 22, fontWeight: "800", textShadowColor: c.overlay, textShadowRadius: 4 },
   actionRow: { flexDirection: "row", gap: 12, paddingHorizontal: 16, marginTop: 4 },
   cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: radius.md, backgroundColor: "rgba(255,255,255,0.3)", alignItems: "center" },
-  cancelText: { fontWeight: "700", color: "#fff" },
+  cancelText: { fontWeight: "700", color: c.light },
   saveBtn: { flex: 2, paddingVertical: 13, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
-  saveText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  saveText: { color: c.light, fontWeight: "700", fontSize: 15 },
   editBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 11, paddingHorizontal: 20, borderRadius: radius.md, marginTop: 4 },
-  editText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  editText: { color: c.light, fontWeight: "700", fontSize: 15 },
   statsCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginHorizontal: 16,
     marginTop: -28,
     borderRadius: radius.lg,
@@ -624,7 +624,7 @@ const buildSellerProfileStyles = (c) =>
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "c.surface",
+    borderBottomColor: c.surface,
   },
   fieldBlock: { paddingVertical: 10, paddingHorizontal: 12 },
   fieldLabel: { fontSize: 13, fontWeight: "600", color: c.muted },
@@ -634,7 +634,7 @@ const buildSellerProfileStyles = (c) =>
   socialIcon: { marginRight: 0 },
   input: {
     borderWidth: 1.5,
-    borderColor: "c.border",
+    borderColor: c.border,
     borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 13,
@@ -646,7 +646,7 @@ const buildSellerProfileStyles = (c) =>
   },
   textArea: { height: 96, textAlignVertical: "top" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.md, borderWidth: 1.5, borderColor: "#E2E8F0", backgroundColor: "#FAFBFC" },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.md, borderWidth: 1.5, borderColor: c.border, backgroundColor: "#FAFBFC" },
   chipText: { fontWeight: "600", color: c.muted, fontSize: 13 },
   themeSwatches: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 8, paddingHorizontal: 12 },
   themeSwatch: { width: 36, height: 36, borderRadius: radius.full },
@@ -657,11 +657,11 @@ const buildSellerProfileStyles = (c) =>
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: c.surface,
   },
   switchLabel: { fontSize: 15, fontWeight: "600", color: c.dark },
   switchSub: { fontSize: 12, color: c.muted, marginTop: 2 },
   previewOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center" },
-  previewWrap: { borderRadius: radius.lg, overflow: "hidden", backgroundColor: "#fff", padding: 6 },
+  previewWrap: { borderRadius: radius.lg, overflow: "hidden", backgroundColor: c.light, padding: 6 },
   previewImage: { width: 260, height: 260, borderRadius: radius.md },
 });

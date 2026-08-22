@@ -262,7 +262,7 @@ const buildForgotPasswordStyles = (c) =>
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: c.primary,
@@ -309,7 +309,7 @@ const buildForgotPasswordStyles = (c) =>
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 16,
     paddingHorizontal: 16,
     borderWidth: 1,
@@ -350,7 +350,7 @@ const buildForgotPasswordStyles = (c) =>
     gap: 10,
   },
   buttonText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 18,
     fontWeight: "600",
   },

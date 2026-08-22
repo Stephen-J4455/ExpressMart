@@ -907,7 +907,7 @@ const buildChatStyles = (c) =>
     color: c.dark,
   },
   userMessageText: {
-    color: "#fff",
+    color: c.light,
   },
   messageTime: {
     fontSize: 11,
@@ -1076,7 +1076,7 @@ const buildChatStyles = (c) =>
     lineHeight: 20,
   },
   productCardTitleUser: {
-    color: "#fff",
+    color: c.light,
   },
   productCardPrice: {
     fontSize: 15,

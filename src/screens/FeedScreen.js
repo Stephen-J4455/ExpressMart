@@ -758,7 +758,7 @@ export const FeedScreen = ({ route, navigation }) => {
                       <Ionicons
                         name={isWishlisted ? "heart" : "heart-outline"}
                         size={24}
-                        color={isWishlisted ? themeColors.accent : "#fff"}
+                        color={isWishlisted ? themeColors.accent : themeColors.light}
                       />
                     </Animated.View>
                   </View>
@@ -1059,7 +1059,7 @@ const buildFeedStyles = (c) =>
     overflow: "hidden",
     backgroundColor: "rgba(255,255,255,0.9)",
     borderWidth: 1,
-    borderColor: "c.border",
+    borderColor: c.border,
   },
   storeAvatar: {
     width: "100%",
@@ -1075,7 +1075,7 @@ const buildFeedStyles = (c) =>
     minWidth: 0,
   },
   storeName: {
-    color: "#fff",
+    color: c.light,
     fontSize: 14,
     fontWeight: "800",
     textShadowColor: "rgba(0,0,0,0.85)",
@@ -1083,7 +1083,7 @@ const buildFeedStyles = (c) =>
     textShadowRadius: 4,
   },
   storeSub: {
-    color: "#fff",
+    color: c.light,
     fontSize: 10,
     fontWeight: "600",
     marginTop: 1,
@@ -1119,7 +1119,7 @@ const buildFeedStyles = (c) =>
     width: 42,
     height: 42,
     borderRadius: 10,
-    backgroundColor: "c.surface",
+    backgroundColor: c.surface,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1151,15 +1151,15 @@ const buildFeedStyles = (c) =>
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: c.overlay,
     alignItems: "center",
     justifyContent: "center",
   },
   tagIconWrap: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
   },
   actionLabel: {
-    color: "#fff",
+    color: c.light,
     fontSize: 11,
     fontWeight: "800",
     textShadowColor: "rgba(0,0,0,0.85)",
@@ -1177,11 +1177,11 @@ const buildFeedStyles = (c) =>
   },
   commentModalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: c.overlay,
     justifyContent: "flex-end",
   },
   commentModalSheet: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     maxHeight: "75%",
@@ -1191,7 +1191,7 @@ const buildFeedStyles = (c) =>
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "c.border",
+    backgroundColor: c.border,
     alignSelf: "center",
     marginTop: 8,
     marginBottom: 8,
@@ -1247,7 +1247,7 @@ const buildFeedStyles = (c) =>
     height: 32,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "c.border",
+    backgroundColor: c.border,
   },
   commentBody: {
     flex: 1,
@@ -1287,7 +1287,7 @@ const buildFeedStyles = (c) =>
     minHeight: 40,
     maxHeight: 100,
     borderWidth: 1,
-    borderColor: "c.border",
+    borderColor: c.border,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 9,
@@ -1315,20 +1315,20 @@ const buildFeedStyles = (c) =>
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: c.overlay,
     alignItems: "center",
     justifyContent: "center",
   },
   menuBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: c.overlay,
     justifyContent: "center",
     alignItems: "center",
   },
   menuCard: {
     width: "80%",
     maxWidth: 320,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 8,

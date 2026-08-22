@@ -155,7 +155,7 @@ const buildSecurityStyles = (c) =>
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: c.light,
   },
@@ -171,7 +171,7 @@ const buildSecurityStyles = (c) =>
     flex: 1,
   },
   section: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginTop: 16,
     paddingHorizontal: 16,
   },
@@ -240,7 +240,7 @@ const buildSecurityStyles = (c) =>
   infoSection: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginTop: 16,
     padding: 16,
     marginHorizontal: 16,

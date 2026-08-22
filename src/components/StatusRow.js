@@ -169,7 +169,7 @@ const buildStyles = (c) =>
       borderRadius: 8,
       backgroundColor: c.primary,
       borderWidth: 2,
-      borderColor: "#fff",
+      borderColor: c.light,
     },
     sellerName: {
       fontSize: 11,

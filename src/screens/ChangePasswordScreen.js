@@ -227,7 +227,7 @@ const buildChangePasswordStyles = (c) =>
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: c.light,
   },
@@ -243,7 +243,7 @@ const buildChangePasswordStyles = (c) =>
     flex: 1,
   },
   section: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginTop: 16,
     paddingHorizontal: 16,
     paddingVertical: 20,
@@ -275,7 +275,7 @@ const buildChangePasswordStyles = (c) =>
     borderWidth: 1,
     borderColor: c.light,
     borderRadius: 8,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
   },
   passwordInput: {
     flex: 1,
@@ -301,7 +301,7 @@ const buildChangePasswordStyles = (c) =>
     backgroundColor: c.muted,
   },
   changeButtonText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 16,
     fontWeight: "600",
     marginLeft: 8,
@@ -309,7 +309,7 @@ const buildChangePasswordStyles = (c) =>
   infoSection: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginTop: 16,
     padding: 16,
     marginHorizontal: 16,

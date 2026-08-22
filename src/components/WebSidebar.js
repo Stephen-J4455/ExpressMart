@@ -194,7 +194,7 @@ const buildStyles = (c) =>
       paddingHorizontal: 4,
     },
     badgeText: {
-      color: "#fff",
+      color: c.light,
       fontSize: 10,
       fontWeight: "700",
     },

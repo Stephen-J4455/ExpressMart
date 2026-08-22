@@ -290,9 +290,9 @@ const buildStatusCreatorStyles = (c) =>
   imageBtnRow: { flexDirection: "row", gap: 12, marginBottom: 12 },
   imagePickBtn: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   imagePickBtnText: { fontWeight: "700" },
-  textInput: { borderWidth: 1, borderColor: c.light, padding: 12, borderRadius: 8, backgroundColor: "#fff" },
+  textInput: { borderWidth: 1, borderColor: c.light, padding: 12, borderRadius: 8, backgroundColor: c.light },
   postBtn: { padding: 14, borderRadius: 12, alignItems: "center", marginTop: 12 },
-  postText: { color: "#fff", fontWeight: "800" },
+  postText: { color: c.light, fontWeight: "800" },
  });
 
 export default StatusCreatorScreen;

@@ -39,7 +39,7 @@ const buildStyles = (c) =>
   StyleSheet.create({ 
     overlay: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.45)",
+      backgroundColor: c.overlay,
       justifyContent: "center",
       alignItems: "center",
       padding: 20,
@@ -84,7 +84,7 @@ const buildStyles = (c) =>
       backgroundColor: c.primary,
     },
     primaryText: {
-      color: "#fff",
+      color: c.light,
       fontWeight: "700",
     },
    });

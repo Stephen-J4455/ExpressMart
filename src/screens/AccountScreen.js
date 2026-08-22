@@ -374,7 +374,7 @@ export const AccountScreen = ({ navigation }) => {
                     <Ionicons
                       name="chevron-forward"
                       size={18}
-                      color="themeColors.muted"
+                      color={themeColors.muted}
                     />
                   </View>
                 </Pressable>
@@ -624,7 +624,7 @@ const buildAccountStyles = (c) =>
       width: 40,
       height: 40,
       borderRadius: 12,
-      backgroundColor: "#EEF2FF",
+      backgroundColor: c.surface,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -633,7 +633,7 @@ const buildAccountStyles = (c) =>
     memberCard: {
       borderRadius: 20,
       padding: 18,
-      backgroundColor: "#EEF2FF",
+      backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: "#E0E7FF",
     },
@@ -713,7 +713,7 @@ const buildAccountStyles = (c) =>
       paddingRight: 12,
     },
     registerStoreTitle: {
-      color: "#fff",
+      color: c.light,
       fontSize: 17,
       fontWeight: "800",
     },
@@ -807,7 +807,7 @@ const buildAccountStyles = (c) =>
       width: 38,
       height: 38,
       borderRadius: 12,
-      backgroundColor: "#EEF2FF",
+      backgroundColor: c.surface,
       alignItems: "center",
       justifyContent: "center",
     },

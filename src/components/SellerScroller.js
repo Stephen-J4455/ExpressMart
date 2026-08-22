@@ -190,7 +190,7 @@ const buildStyles = (c) =>
     verifiedText: {
       fontSize: 9,
       fontWeight: "700",
-      color: "#fff",
+      color: c.light,
     },
     ratingOnImage: {
       position: "absolute",
@@ -237,7 +237,7 @@ const buildStyles = (c) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "#EEF2FF",
+      backgroundColor: c.surface,
       paddingVertical: 8,
       borderRadius: 10,
       gap: 4,

@@ -365,7 +365,7 @@ const buildProfileEditStyles = (c) =>
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: c.light,
   },
@@ -378,7 +378,7 @@ const buildProfileEditStyles = (c) =>
     borderRadius: 10,
   },
   saveButtonDisabled: { opacity: 0.6 },
-  saveText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  saveText: { color: c.light, fontSize: 14, fontWeight: "700" },
   scrollView: { flex: 1 },
   avatarHero: {
     alignItems: "center",
@@ -398,11 +398,11 @@ const buildProfileEditStyles = (c) =>
     borderColor: "rgba(255,255,255,0.6)",
     marginBottom: 6,
   },
-  avatarInitials: { fontSize: 32, fontWeight: "800", color: "#fff" },
+  avatarInitials: { fontSize: 32, fontWeight: "800", color: c.light },
   avatarName: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#fff",
+    color: c.light,
     letterSpacing: -0.3,
   },
   avatarEmail: {
@@ -411,7 +411,7 @@ const buildProfileEditStyles = (c) =>
     fontWeight: "500",
   },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginHorizontal: 16,
     marginTop: 16,
     borderRadius: 20,
@@ -439,12 +439,12 @@ const buildProfileEditStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1.5,
-    borderColor: "c.border",
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 12,
     backgroundColor: "#FAFBFC",
   },
-  inputWrapDisabled: { backgroundColor: "c.surface", borderColor: "c.border" },
+  inputWrapDisabled: { backgroundColor: c.surface, borderColor: c.border },
   inputIcon: { marginRight: 8 },
   input: {
     flex: 1,
@@ -454,7 +454,7 @@ const buildProfileEditStyles = (c) =>
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   inputDisabled: { color: c.muted },
-  lockPill: { backgroundColor: "#E2E8F0", borderRadius: 6, padding: 4 },
+  lockPill: { backgroundColor: c.border, borderRadius: 6, padding: 4 },
   helperText: {
     fontSize: 12,
     color: c.muted,
@@ -467,7 +467,7 @@ const buildProfileEditStyles = (c) =>
     justifyContent: "space-between",
     paddingVertical: 12,
   },
-  actionRowBorder: { borderTopWidth: 1, borderTopColor: "#F1F5F9" },
+  actionRowBorder: { borderTopWidth: 1, borderTopColor: c.surface },
   actionLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
   actionIconWrap: {
     width: 38,

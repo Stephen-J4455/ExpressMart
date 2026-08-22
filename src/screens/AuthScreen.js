@@ -773,7 +773,7 @@ const buildAuthStyles = (c) =>
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 16,
     paddingHorizontal: 16,
     borderWidth: 1,
@@ -824,7 +824,7 @@ const buildAuthStyles = (c) =>
     gap: 10,
   },
   buttonText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 18,
     fontWeight: "600",
   },
@@ -848,7 +848,7 @@ const buildAuthStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 16,
     height: 56,
     borderWidth: 1,

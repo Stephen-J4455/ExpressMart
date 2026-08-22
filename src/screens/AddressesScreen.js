@@ -331,7 +331,7 @@ const buildAddressesStyles = (c) =>
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: c.light,
   },
@@ -373,7 +373,7 @@ const buildAddressesStyles = (c) =>
     marginTop: 24,
   },
   addAddressText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -381,7 +381,7 @@ const buildAddressesStyles = (c) =>
     padding: 16,
   },
   addressCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 20,
     padding: 18,
     marginBottom: 12,
@@ -411,7 +411,7 @@ const buildAddressesStyles = (c) =>
     marginLeft: 8,
   },
   defaultText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -433,7 +433,7 @@ const buildAddressesStyles = (c) =>
     color: c.muted,
     marginTop: 8,
   },
-  modalContainer: { flex: 1, backgroundColor: "#fff" },
+  modalContainer: { flex: 1, backgroundColor: c.light },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -451,7 +451,7 @@ const buildAddressesStyles = (c) =>
     backgroundColor: c.primary,
     borderRadius: 10,
   },
-  modalSaveText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  modalSaveText: { color: c.light, fontSize: 14, fontWeight: "700" },
   modalScroll: { flex: 1, padding: 20 },
   fieldGroup: { marginBottom: 16 },
   fieldLabel: {
@@ -462,7 +462,7 @@ const buildAddressesStyles = (c) =>
   },
   fieldInput: {
     borderWidth: 1.5,
-    borderColor: "c.border",
+    borderColor: c.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,

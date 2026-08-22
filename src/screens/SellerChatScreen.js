@@ -560,7 +560,7 @@ const buildSellerChatStyles = (c) =>
   userMessage: { backgroundColor: c.light, borderBottomLeftRadius: 4 },
   sellerMessage: { borderBottomRightRadius: 4 },
   messageText: { fontSize: 16, lineHeight: 22, color: c.dark },
-  sellerMessageText: { color: "#fff" },
+  sellerMessageText: { color: c.light },
   messageTime: { fontSize: 11, color: c.muted, marginTop: 4, marginHorizontal: 4 },
   productCardBubble: {
     borderRadius: radius.lg,
@@ -596,7 +596,7 @@ const buildSellerChatStyles = (c) =>
     lineHeight: 20,
   },
   productCardTitleUser: {
-    color: "#fff",
+    color: c.light,
   },
   productCardPrice: {
     fontSize: 15,

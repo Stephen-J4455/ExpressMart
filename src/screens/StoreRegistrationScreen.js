@@ -951,7 +951,7 @@ const buildStoreRegStyles = (c) =>
       borderRadius: 15,
       backgroundColor: c.light,
       borderWidth: 1.5,
-      borderColor: "c.border",
+      borderColor: c.border,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -969,7 +969,7 @@ const buildStoreRegStyles = (c) =>
       color: c.muted,
     },
     stepDotTextActive: {
-      color: "#fff",
+      color: c.light,
     },
     stepLabel: {
       fontSize: 11,
@@ -1056,7 +1056,7 @@ const buildStoreRegStyles = (c) =>
       paddingHorizontal: 14,
       borderRadius: 12,
       borderWidth: 1.5,
-      borderColor: "c.border",
+      borderColor: c.border,
       backgroundColor: "#EEF1F6",
     },
     countryCodeText: {
@@ -1076,7 +1076,7 @@ const buildStoreRegStyles = (c) =>
     },
     input: {
       borderWidth: 1.5,
-      borderColor: "c.border",
+      borderColor: c.border,
       borderRadius: 12,
       paddingHorizontal: 14,
       paddingVertical: 13,
@@ -1095,7 +1095,7 @@ const buildStoreRegStyles = (c) =>
       borderRadius: 16,
       overflow: "hidden",
       borderWidth: 1.5,
-      borderColor: "#E2E8F0",
+      borderColor: c.border,
       borderStyle: "dashed",
     },
     logoPlaceholder: {
@@ -1129,7 +1129,7 @@ const buildStoreRegStyles = (c) =>
       padding: 18,
       borderRadius: 14,
       borderWidth: 1.5,
-      borderColor: "#E2E8F0",
+      borderColor: c.border,
       alignItems: "center",
       justifyContent: "center",
       flexDirection: "row",
@@ -1158,7 +1158,7 @@ const buildStoreRegStyles = (c) =>
       paddingHorizontal: 16,
       borderRadius: 12,
       borderWidth: 1.5,
-      borderColor: "#E2E8F0",
+      borderColor: c.border,
       marginVertical: 5,
       backgroundColor: c.light,
     },
@@ -1171,7 +1171,7 @@ const buildStoreRegStyles = (c) =>
       justifyContent: "space-between",
       paddingVertical: 12,
       borderBottomWidth: 1,
-      borderBottomColor: "#F1F5F9",
+      borderBottomColor: c.surface,
     },
     summaryKey: {
       fontSize: 14,
@@ -1232,7 +1232,7 @@ const buildStoreRegStyles = (c) =>
       justifyContent: "center",
     },
     primaryBtnText: {
-      color: "#fff",
+      color: c.light,
       fontSize: 16,
       fontWeight: "700",
       marginLeft: 8,
@@ -1242,7 +1242,7 @@ const buildStoreRegStyles = (c) =>
       borderRadius: 14,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "#F3F4F6",
+      backgroundColor: c.surface,
     },
     footerRow: {
       flexDirection: "row",

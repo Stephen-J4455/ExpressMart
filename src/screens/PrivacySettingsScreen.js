@@ -307,7 +307,7 @@ const buildPrivacySettingsStyles = (c) =>
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: c.light,
   },
@@ -323,7 +323,7 @@ const buildPrivacySettingsStyles = (c) =>
     flex: 1,
   },
   section: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginTop: 16,
     paddingHorizontal: 16,
   },
@@ -375,7 +375,7 @@ const buildPrivacySettingsStyles = (c) =>
   infoSection: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginTop: 16,
     padding: 16,
     marginHorizontal: 16,
@@ -391,7 +391,7 @@ const buildPrivacySettingsStyles = (c) =>
     lineHeight: 20,
   },
   policySection: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginTop: 16,
     padding: 16,
     marginHorizontal: 16,
@@ -431,12 +431,12 @@ const buildPrivacySettingsStyles = (c) =>
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: c.overlay,
     justifyContent: "center",
     paddingHorizontal: 20,
   },
   modalCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 14,
     padding: 16,
   },
@@ -483,7 +483,7 @@ const buildPrivacySettingsStyles = (c) =>
     alignItems: "center",
   },
   modalDeleteText: {
-    color: "#fff",
+    color: c.light,
     fontWeight: "700",
   },
 });

@@ -748,7 +748,7 @@ const buildChatsStyles = (c) =>
     color: c.muted,
   },
   tabTextActive: {
-    color: "#fff",
+    color: c.light,
   },
   listContainer: {
     padding: 16,
@@ -827,7 +827,7 @@ const buildChatsStyles = (c) =>
     paddingHorizontal: 6,
   },
   unreadText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -931,7 +931,7 @@ const buildChatsStyles = (c) =>
     elevation: 4,
   },
   exploreButtonText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 16,
     fontWeight: "700",
   },

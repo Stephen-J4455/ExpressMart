@@ -16,6 +16,7 @@ import * as Linking from "expo-linking";
 import { useIsFocused } from "@react-navigation/native";
 import { useAds } from "../context/AdsContext";
 import { useResponsive } from "../hooks/useResponsive";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { radius } from "../theme/colors";
 
 const { width } = Dimensions.get("window");
@@ -136,6 +137,7 @@ export const openAdDestination = async (ad, trackClick) => {
 export const AdBanner = ({ ad, onClose }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
+  const styles = useAppStyles((c) => buildAdStyles(c));
 
   useEffect(() => {
     if (ad && isFocused) {
@@ -184,7 +186,7 @@ export const AdBanner = ({ ad, onClose }) => {
               <Text style={styles.discountText}>{ad.discount_badge}</Text>
             </View>
           )}
-          <Text style={[styles.bannerTitle, { color: "#fff" }]}>
+          <Text style={[styles.bannerTitle, { color: "#FFFFFF" }]}>
             {ad.title}
           </Text>
           {ad.description && (
@@ -252,6 +254,7 @@ export const AdBanner = ({ ad, onClose }) => {
 export const AdCard = ({ ad }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
+  const styles = useAppStyles((c) => buildAdStyles(c));
 
   useEffect(() => {
     if (ad && isFocused) {
@@ -289,7 +292,7 @@ export const AdCard = ({ ad }) => {
               </View>
             )}
             <Text
-              style={[styles.cardTitle, { color: "#fff" }]}
+              style={[styles.cardTitle, { color: "#FFFFFF" }]}
               numberOfLines={2}
             >
               {ad.title}
@@ -386,6 +389,7 @@ export const AdCarousel = ({ ads }) => {
   const interactionTimeoutRef = React.useRef(null);
   const scrollRef = React.useRef(null);
   const { isWide } = useResponsive();
+  const styles = useAppStyles((c) => buildAdStyles(c));
 
   // Auto-scroll on mobile (pauses briefly after user interaction)
   useEffect(() => {
@@ -448,7 +452,7 @@ export const AdCarousel = ({ ads }) => {
                     </View>
                   )}
                   <Text
-                    style={[styles.carouselTitle, { color: "#fff" }]}
+                    style={[styles.carouselTitle, { color: "#FFFFFF" }]}
                     numberOfLines={2}
                   >
                     {ad.title}
@@ -648,7 +652,7 @@ export const AdCarousel = ({ ads }) => {
                     </View>
                   )}
                   <Text
-                    style={[styles.carouselTitle, { color: "#fff" }]}
+                    style={[styles.carouselTitle, { color: "#FFFFFF" }]}
                     numberOfLines={2}
                   >
                     {ad.title}
@@ -781,6 +785,7 @@ export const AdPopup = ({ ad, onClose, visible = true }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
   const [dismissed, setDismissed] = React.useState(false);
+  const styles = useAppStyles((c) => buildAdStyles(c));
 
   useEffect(() => {
     if (ad && visible && isFocused) {
@@ -892,6 +897,7 @@ export const AdPopup = ({ ad, onClose, visible = true }) => {
 export const AdStory = ({ ad, onClose }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
+  const styles = useAppStyles((c) => buildAdStyles(c));
 
   useEffect(() => {
     if (ad && isFocused) {
@@ -959,6 +965,7 @@ export const AdFullscreen = ({ ad, onClose, visible = true }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
   const [dismissed, setDismissed] = React.useState(false);
+  const styles = useAppStyles((c) => buildAdStyles(c));
 
   useEffect(() => {
     if (ad && visible && isFocused) {
@@ -1048,6 +1055,7 @@ export const AdStickyFooter = ({ ad, onClose, visible = true }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
   const [dismissed, setDismissed] = React.useState(false);
+  const styles = useAppStyles((c) => buildAdStyles(c));
 
   useEffect(() => {
     if (ad && visible && isFocused) {
@@ -1132,6 +1140,7 @@ export const AdStickyFooter = ({ ad, onClose, visible = true }) => {
 // Smart AdRenderer - Picks the right component based on ad.style
 export const AdRenderer = ({ ad, ads, onClose, visible = true }) => {
   const { isWide } = useResponsive();
+  const styles = useAppStyles((c) => buildAdStyles(c));
 
   if (!ad && (!ads || ads.length === 0)) return null;
 
@@ -1209,11 +1218,12 @@ export const AdRenderer = ({ ad, ads, onClose, visible = true }) => {
   }
 };
 
-const styles = StyleSheet.create({ 
+const buildAdStyles = (c) =>
+  StyleSheet.create({
   // Shared overlay for use_image_as_bg mode
   imageBgOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: c.overlay,
   },
   // Banner styles
   sidebarAdSlot: {
@@ -1264,7 +1274,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   discountText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "700",
   },
@@ -1277,7 +1287,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   ctaText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "600",
     fontSize: 13,
   },
@@ -1308,7 +1318,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   cardBadgeText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "700",
   },
@@ -1328,7 +1338,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   cardCtaText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "600",
     fontSize: 12,
   },
@@ -1378,7 +1388,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   carouselBadgeText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "700",
   },
@@ -1399,7 +1409,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   carouselCtaText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "600",
     fontSize: 12,
   },
@@ -1457,7 +1467,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   popupBadgeText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -1479,7 +1489,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   popupCtaText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "700",
     fontSize: 15,
   },
@@ -1522,18 +1532,18 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   storyBadgeText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "700",
   },
   storyTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#fff",
+    color: "#FFFFFF",
   },
   storyDescription: {
     fontSize: 13,
-    color: "#fff",
+    color: "#FFFFFF",
     opacity: 0.9,
   },
   storyCta: {
@@ -1543,7 +1553,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   storyCtaText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "600",
     fontSize: 13,
   },
@@ -1554,7 +1564,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: c.overlay,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1598,18 +1608,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   fullscreenBadgeText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
   },
   fullscreenTitle: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#fff",
+    color: "#FFFFFF",
   },
   fullscreenDescription: {
     fontSize: 16,
-    color: "#fff",
+    color: "#FFFFFF",
     opacity: 0.9,
   },
   fullscreenCta: {
@@ -1622,7 +1632,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   fullscreenCtaText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "700",
     fontSize: 17,
   },
@@ -1676,7 +1686,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   stickyFooterBadgeText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 9,
     fontWeight: "700",
   },
@@ -1690,7 +1700,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   stickyFooterCtaText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontWeight: "700",
     fontSize: 12,
   },

@@ -399,7 +399,7 @@ const buildOrderDetailStyles = (c) =>
     paddingHorizontal: 16,
     paddingVertical: 12,
     paddingTop: 20,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: c.light,
   },
@@ -438,7 +438,7 @@ const buildOrderDetailStyles = (c) =>
 
   /* Status Card */
   statusCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     margin: 16,
     marginBottom: 12,
     borderRadius: 12,
@@ -491,7 +491,7 @@ const buildOrderDetailStyles = (c) =>
 
   /* Sections */
   section: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     marginHorizontal: 16,
     marginBottom: 12,
     borderRadius: 12,

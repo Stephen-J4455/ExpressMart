@@ -26,7 +26,7 @@ const colorMap = {
   purple: "#A855F7",
   pink: "#EC4899",
   black: "#1F2937",
-  white: "#E5E7EB",
+  white: "#FFFFFF",
   gray: "#6B7280",
   grey: "#6B7280",
   brown: "#92400E",
@@ -373,7 +373,7 @@ const buildCartStyles = (c) =>
   header: {
     paddingHorizontal: 20,
     paddingBottom: 20,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
     shadowColor: "#000",
@@ -401,7 +401,7 @@ const buildCartStyles = (c) =>
   itemCountText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#fff",
+    color: c.light,
   },
   headerSubtitle: {
     fontSize: 14,
@@ -414,13 +414,13 @@ const buildCartStyles = (c) =>
     alignItems: "center",
     justifyContent: "center",
     padding: 32,
-    backgroundColor: "c.light",
+    backgroundColor: c.light,
   },
   emptyIconContainer: {
     width: 120,
     height: 120,
     borderRadius: 40,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
@@ -453,7 +453,7 @@ const buildCartStyles = (c) =>
     elevation: 4,
   },
   shopButtonText: {
-    color: "#fff",
+    color: c.light,
     fontWeight: "700",
     fontSize: 16,
   },
@@ -463,7 +463,7 @@ const buildCartStyles = (c) =>
     paddingTop: 20,
   },
   itemCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 20,
     marginBottom: 14,
     shadowColor: "#000",
@@ -484,7 +484,7 @@ const buildCartStyles = (c) =>
   thumbnailContainer: {
     width: 90,
     height: 90,
-    backgroundColor: "c.light",
+    backgroundColor: c.light,
     borderRadius: 14,
     overflow: "hidden",
     position: "relative",
@@ -506,7 +506,7 @@ const buildCartStyles = (c) =>
     backgroundColor: "#F97316",
   },
   discountText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 10,
     fontWeight: "700",
   },
@@ -520,7 +520,7 @@ const buildCartStyles = (c) =>
     borderRadius: 6,
   },
   outOfStockBadgeText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 9,
     fontWeight: "800",
     textTransform: "uppercase",
@@ -547,7 +547,7 @@ const buildCartStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: c.surface,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -562,7 +562,7 @@ const buildCartStyles = (c) =>
     height: 10,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "c.border",
+    borderColor: c.border,
   },
   priceRow: {
     flexDirection: "row",
@@ -593,7 +593,7 @@ const buildCartStyles = (c) =>
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: "c.surface",
+    borderTopColor: c.surface,
     backgroundColor: "#FAFBFC",
   },
   removeButton: {
@@ -613,7 +613,7 @@ const buildCartStyles = (c) =>
   quantityRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "c.surface",
+    backgroundColor: c.surface,
     borderRadius: 12,
     padding: 4,
   },
@@ -621,18 +621,18 @@ const buildCartStyles = (c) =>
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
   },
   qtyButtonDisabled: {
-    backgroundColor: "c.light",
+    backgroundColor: c.light,
   },
   qtyButtonAdd: {
     backgroundColor: c.primary,
   },
   qtyButtonDisabledAdd: {
-    backgroundColor: "c.surface",
+    backgroundColor: c.surface,
   },
   qtyValueContainer: {
     minWidth: 36,
@@ -644,7 +644,7 @@ const buildCartStyles = (c) =>
     color: c.dark,
   },
   summary: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     padding: 24,
@@ -677,7 +677,7 @@ const buildCartStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#EEF2FF",
+    backgroundColor: c.surface,
     padding: 10,
     borderRadius: 12,
     marginBottom: 14,
@@ -709,7 +709,7 @@ const buildCartStyles = (c) =>
     justifyContent: "space-between",
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: "c.border",
+    borderTopColor: c.border,
     marginTop: 8,
     marginBottom: 20,
   },
@@ -735,7 +735,7 @@ const buildCartStyles = (c) =>
     gap: 10,
   },
   checkoutText: {
-    color: "#fff",
+    color: c.light,
     fontWeight: "700",
     fontSize: 17,
   },
@@ -756,7 +756,7 @@ const buildCartStyles = (c) =>
   },
   summaryWide: {
     width: 360,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 24,
     padding: 24,
     alignSelf: "flex-start",

@@ -2002,7 +2002,7 @@ const buildProductDetailStyles = (c) =>
     backgroundColor: "rgba(255, 255, 255, 0.5)",
   },
   paginationDotActive: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     width: 24,
   },
   backButton: {
@@ -2012,7 +2012,7 @@ const buildProductDetailStyles = (c) =>
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
@@ -2028,7 +2028,7 @@ const buildProductDetailStyles = (c) =>
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
@@ -2063,12 +2063,12 @@ const buildProductDetailStyles = (c) =>
     borderColor: c.primary + "22",
   },
   categoryPill: {
-    backgroundColor: "c.light",
+    backgroundColor: c.light,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "c.border",
+    borderColor: c.border,
   },
   categoryPillText: {
     fontSize: 11,
@@ -2182,7 +2182,7 @@ const buildProductDetailStyles = (c) =>
   discountText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#fff",
+    color: c.light,
     textTransform: "uppercase",
   },
   flashSaleSection: {
@@ -2214,7 +2214,7 @@ const buildProductDetailStyles = (c) =>
   flashDiscountText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#fff",
+    color: c.light,
     textTransform: "uppercase",
   },
   ratingRow: {
@@ -2261,18 +2261,18 @@ const buildProductDetailStyles = (c) =>
     marginBottom: 24,
   },
   sectionPanel: {
-    backgroundColor: "c.light",
+    backgroundColor: c.light,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "c.border",
+    borderColor: c.border,
     paddingHorizontal: 14,
     paddingVertical: 4,
   },
   detailsPanel: {
-    backgroundColor: "c.light",
+    backgroundColor: c.light,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "c.border",
+    borderColor: c.border,
     padding: 16,
   },
   sectionTitle: {
@@ -2395,7 +2395,7 @@ const buildProductDetailStyles = (c) =>
     gap: 4,
   },
   sellerReplyText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 10,
     fontWeight: "800",
   },
@@ -2435,7 +2435,7 @@ const buildProductDetailStyles = (c) =>
     gap: 10,
   },
   ctaText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 18,
     fontWeight: "700",
   },
@@ -2476,7 +2476,7 @@ const buildProductDetailStyles = (c) =>
     borderRadius: 8,
   },
   writeFirstReviewText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -2591,7 +2591,7 @@ const buildProductDetailStyles = (c) =>
   submitText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#fff",
+    color: c.light,
   },
   editReviewButton: {
     flexDirection: "row",
@@ -2661,7 +2661,7 @@ const buildProductDetailStyles = (c) =>
     opacity: 0.6,
   },
   commentButtonText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 14,
     fontWeight: "600",
   },
@@ -2796,7 +2796,7 @@ const buildProductDetailStyles = (c) =>
     borderRadius: 6,
     borderWidth: 1.5,
     borderColor: c.light,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     minWidth: 40,
     alignItems: "center",
     justifyContent: "center",
@@ -2827,7 +2827,7 @@ const buildProductDetailStyles = (c) =>
   variantAddText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#fff",
+    color: c.light,
   },
   productPrice: {
     fontSize: 16,
@@ -2959,7 +2959,7 @@ const buildProductDetailStyles = (c) =>
   },
   previewDotActive: {
     width: 20,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
   },
   previewCounter: {
     position: "absolute",

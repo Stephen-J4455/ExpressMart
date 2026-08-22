@@ -190,7 +190,7 @@ const buildStyles = (c) =>
     verifiedText: {
         fontSize: 10,
         fontWeight: "700",
-        color: "#fff",
+        color: c.light,
     },
     ratingBadge: {
         position: "absolute",
@@ -244,7 +244,7 @@ const buildStyles = (c) =>
         flexWrap: "wrap",
     },
     badge: {
-        backgroundColor: "#EEF2FF",
+        backgroundColor: c.surface,
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 8,
@@ -266,7 +266,7 @@ const buildStyles = (c) =>
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#EEF2FF",
+        backgroundColor: c.surface,
         paddingVertical: 10,
         borderRadius: 12,
         gap: 6,

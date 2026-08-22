@@ -618,7 +618,7 @@ const buildCheckoutStyles = (c) =>
     paddingTop: 50,
     paddingHorizontal: 16,
     paddingBottom: 16,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: "#E4E8F0",
   },
@@ -640,7 +640,7 @@ const buildCheckoutStyles = (c) =>
     padding: 16,
   },
   section: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
@@ -783,7 +783,7 @@ const buildCheckoutStyles = (c) =>
     alignItems: "center",
   },
   saveButtonText: {
-    color: "#fff",
+    color: c.light,
     fontWeight: "600",
   },
   orderItem: {
@@ -859,7 +859,7 @@ const buildCheckoutStyles = (c) =>
   paymentIconText: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#fff",
+    color: c.light,
   },
   paymentName: {
     fontSize: 14,
@@ -879,7 +879,7 @@ const buildCheckoutStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderTopWidth: 1,
     borderTopColor: "#E4E8F0",
     paddingBottom: 32,
@@ -912,7 +912,7 @@ const buildCheckoutStyles = (c) =>
     gap: 8,
   },
   checkoutText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 16,
     fontWeight: "700",
   },

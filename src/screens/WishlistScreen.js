@@ -280,7 +280,7 @@ const buildWishlistStyles = (c) =>
     alignItems: "center",
     justifyContent: "space-between",
     padding: 16,
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: c.light,
   },
@@ -320,7 +320,7 @@ const buildWishlistStyles = (c) =>
     borderRadius: 12,
   },
   browseText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -334,7 +334,7 @@ const buildWishlistStyles = (c) =>
     paddingVertical: 14,
   },
   signInText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -343,7 +343,7 @@ const buildWishlistStyles = (c) =>
     gap: 12,
   },
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderRadius: 16,
     overflow: "hidden",
     shadowColor: "#000",

@@ -405,7 +405,7 @@ const buildCategoryProductsStyles = (c) =>
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#fff",
+    color: c.light,
     letterSpacing: -0.3,
   },
   headerCount: {
@@ -416,7 +416,7 @@ const buildCategoryProductsStyles = (c) =>
   },
   /* ── Sort Bar ── */
   sortBarWrapper: {
-    backgroundColor: "#fff",
+    backgroundColor: c.light,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
@@ -447,7 +447,7 @@ const buildCategoryProductsStyles = (c) =>
     color: c.muted,
   },
   sortLabelActive: {
-    color: "#fff",
+    color: c.light,
   },
   /* ── Grid ── */
   gridContent: {
@@ -500,7 +500,7 @@ const buildCategoryProductsStyles = (c) =>
     borderRadius: 14,
   },
   browseText: {
-    color: "#fff",
+    color: c.light,
     fontSize: 15,
     fontWeight: "700",
   },
