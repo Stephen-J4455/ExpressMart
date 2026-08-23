@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  ImageBackground,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -154,14 +155,6 @@ export const HomeScreen = ({ navigation }) => {
     [homeAds],
   );
 
-  // Show a compact row of categories by default; "Show More" opens the
-  // full Categories page.
-  const CATEGORIES_COLLAPSED_COUNT = 8;
-  const visibleCategories = useMemo(() => {
-    if (!Array.isArray(categories)) return [];
-    return categories.slice(0, CATEGORIES_COLLAPSED_COUNT);
-  }, [categories]);
-
   const handleCategoryPress = useCallback(
     (category) => {
       navigation.navigate("CategoryProducts", { category });
@@ -171,53 +164,71 @@ export const HomeScreen = ({ navigation }) => {
 
   const renderCategoriesSection = () => {
     if (!categories || categories.length === 0) return null;
-    const canExpand = categories.length > CATEGORIES_COLLAPSED_COUNT;
 
     return (
       <View style={styles.sectionBlock}>
         <View style={styles.sectionHeader}>
           <Ionicons name="grid-outline" size={18} color={themeColors.primary} />
           <Text style={styles.sectionTitle}>Categories</Text>
-          {canExpand && (
-            <Pressable
-              style={styles.showMoreBtn}
-              onPress={() => navigation.navigate("Categories")}
-              hitSlop={8}
-            >
-              <Text style={styles.showMoreText}>Show More</Text>
-              <Ionicons
-                name="chevron-forward"
-                size={14}
-                color={themeColors.primary}
-              />
-            </Pressable>
-          )}
+          <Pressable
+            style={styles.showMoreBtn}
+            onPress={() => navigation.navigate("Categories")}
+            hitSlop={8}
+          >
+            <Text style={styles.showMoreText}>See All</Text>
+            <Ionicons
+              name="chevron-forward"
+              size={14}
+              color={themeColors.primary}
+            />
+          </Pressable>
         </View>
-        <View style={styles.categoryGrid}>
-          {visibleCategories.map((cat) => (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryScroller}
+          decelerationRate="fast"
+        >
+          {categories.map((cat) => (
             <Pressable
               key={cat.id}
-              style={styles.categoryTile}
+              style={({ pressed }) => [
+                styles.categoryTile,
+                pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
+              ]}
               onPress={() => handleCategoryPress(cat)}
             >
-              <View
-                style={[
-                  styles.categoryIconWrap,
-                  { backgroundColor: cat.color || "#F0F9FF" },
-                ]}
-              >
-                <Ionicons
-                  name={cat.icon || "apps-outline"}
-                  size={22}
-                  color={themeColors.primary}
-                />
-              </View>
-              <Text numberOfLines={1} style={styles.categoryLabel}>
-                {cat.name}
-              </Text>
+              {cat.image_url ? (
+                <ImageBackground
+                  source={{ uri: cat.image_url }}
+                  style={styles.categoryTileBg}
+                  imageStyle={styles.categoryTileBgImage}
+                >
+                  <View style={styles.categoryTileOverlay} />
+                  <Text numberOfLines={2} style={styles.categoryTileLabel}>
+                    {cat.name}
+                  </Text>
+                </ImageBackground>
+              ) : (
+                <View
+                  style={[
+                    styles.categoryTileBg,
+                    { backgroundColor: cat.color || "#F0F9FF" },
+                  ]}
+                >
+                  <Ionicons
+                    name={cat.icon || "apps-outline"}
+                    size={26}
+                    color={themeColors.primary}
+                  />
+                  <Text numberOfLines={2} style={styles.categoryTileLabel}>
+                    {cat.name}
+                  </Text>
+                </View>
+              )}
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       </View>
     );
   };
@@ -482,35 +493,44 @@ const buildHomeStyles = (c) =>
       fontWeight: "700",
       color: c.primary,
     },
-    categoryGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 12,
+    categoryScroller: {
       paddingHorizontal: 16,
+      gap: 12,
+      paddingBottom: 4,
     },
     categoryTile: {
-      width: (SCREEN_WIDTH - 16 * 2 - 12 * 3) / 4,
-      alignItems: "center",
+      width: 120,
+      height: 120,
+      borderRadius: 20,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 3,
     },
-    categoryIconWrap: {
-      width: 56,
-      height: 56,
-      borderRadius: 18,
+    categoryTileBg: {
+      flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      shadowColor: "#000",
-      shadowOpacity: 0.05,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
+      gap: 8,
+      padding: 10,
     },
-    categoryLabel: {
-      marginTop: 6,
-      fontSize: 11,
-      fontWeight: "600",
-      color: c.dark,
+    categoryTileBgImage: {
+      borderRadius: 20,
+    },
+    categoryTileOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(0,0,0,0.35)",
+    },
+    categoryTileLabel: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: "#FFFFFF",
       textAlign: "center",
-      width: "100%",
+      textShadowColor: "rgba(0,0,0,0.4)",
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
     },
     gridSection: {
       paddingTop: 8,

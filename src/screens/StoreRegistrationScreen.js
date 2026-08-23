@@ -23,10 +23,15 @@ import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase, callEdgeFunction } from "../lib/supabase";
 import { getTheme } from "../theme/colors";
-import { getImageContentType, getWebUploadPayload } from "../utils/webUpload";
+import { getImageContentType } from "../utils/webUpload";
+import {
+  R2_FOLDERS,
+  uploadToR2Presigned,
+} from "../services/r2Storage";
 import { generatePaymentReference } from "../services/payment";
 
-const PROFILE_BUCKET = "profile";
+// R2 key prefix for seller profile images
+const PROFILE_BUCKET = R2_FOLDERS.PROFILE;
 const REGISTRATION_FEE = 150; // GHC 150
 const COUNTRY_CODE = "+233";
 
@@ -189,26 +194,16 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
     };
     const ext = getExt(logoUri);
     const fileName = `store-${Date.now()}.${ext}`;
-    const objectPath = `${user.id}/${fileName}`;
+    const folder = `${PROFILE_BUCKET}/${user.id}`;
 
-    // Use the robust upload utility with XHR fallback (handles web + native)
-    const { fileBody, contentType } = await getWebUploadPayload({
+    // Upload to Cloudflare R2 via presigned URL (works on web + native).
+    const { publicUrl } = await uploadToR2Presigned({
       uri: logoUri,
       pickedFile: logoFile,
+      folder,
+      fileName,
     });
-
-    const uploadRes = await supabase.storage
-      .from(PROFILE_BUCKET)
-      .upload(objectPath, fileBody, {
-        contentType: fileBody.type || contentType,
-        cacheControl: "3600",
-        upsert: true,
-      });
-    if (uploadRes.error) throw uploadRes.error;
-    const { data: urlData } = supabase.storage
-      .from(PROFILE_BUCKET)
-      .getPublicUrl(objectPath);
-    return urlData.publicUrl;
+    return publicUrl;
   };
 
   const createSeller = async (avatarUrl, sellerData = {}) => {

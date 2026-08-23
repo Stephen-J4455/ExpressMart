@@ -37,6 +37,7 @@ import { useToast } from "../context/ToastContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { supabase } from "../lib/supabase";
+import { R2_FOLDERS, resolveMediaUrl } from "../services/r2Storage";
 import { shareReel, shareProduct } from "../utils/shareUtils";
 
 const REVIEW_STAR_COLOR = "#F97316";
@@ -61,16 +62,8 @@ const ITEM_HEIGHT = SCREEN_HEIGHT - TOP_INSET;
 
 const FLOATING_TAB_OFFSET = 120;
 
-const resolveAvatarUri = (rawValue) => {
-  const value = String(rawValue || "").trim();
-  if (!value) return "";
-  if (/^https?:\/\//i.test(value) || value.startsWith("file://")) {
-    return value;
-  }
-  const normalizedPath = value.replace(/^\/+/, "");
-  const { data } = supabase.storage.from("profile").getPublicUrl(normalizedPath);
-  return data?.publicUrl || "";
-};
+const resolveAvatarUri = (rawValue) =>
+  resolveMediaUrl(rawValue, R2_FOLDERS.PROFILE);
 
 export const FeedScreen = ({ route, navigation }) => {
   const [reels, setReels] = useState([]);

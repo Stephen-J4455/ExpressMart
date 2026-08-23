@@ -4,7 +4,7 @@
     "details": [
       {
         "appID": "COM.STEPHENJ3.EXPRESSMART",
-        "paths": ["/product/*"]
+        "paths": ["/product/*", "/p/*"]
       }
     ]
   }

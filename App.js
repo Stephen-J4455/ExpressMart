@@ -699,6 +699,14 @@ const linking = {
           productId: (productId) => productId,
         },
       },
+      // SKU-based deep links (tagit://product/[sku], /p/[sku]) route to the
+      // same PDP; the screen resolves the SKU and handles ?action=add_to_cart.
+      ProductDetailBySku: {
+        path: "p/:sku",
+        parse: {
+          sku: (sku) => sku,
+        },
+      },
       Store: {
         path: "store/:sellerId",
         parse: {
@@ -920,6 +928,7 @@ const AuthenticatedApp = () => {
         <Stack.Screen name="Store" component={StoreScreen} />
         <Stack.Screen name="Stores" component={StoresScreen} />
         <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+        <Stack.Screen name="ProductDetailBySku" component={ProductDetailScreen} />
         <Stack.Screen name="Chat" component={GuardedChat} />
         <Stack.Screen name="Chats" component={GuardedChats} />
         <Stack.Screen name="SellerChat" component={SellerChatScreen} />

@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "scheme": "expressmart",
+    "scheme": ["tagit", "expressmart"],
     "experiments": {
       "baseUrl": "/"
     },
@@ -39,6 +39,9 @@
           "data": [
             {
               "scheme": "expressmart"
+            },
+            {
+              "scheme": "tagit"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
@@ -56,6 +59,16 @@
               "scheme": "https",
               "host": "expressmart.me",
               "pathPrefix": "/product"
+            },
+            {
+              "scheme": "https",
+              "host": "www.expressmart.me",
+              "pathPrefix": "/p"
+            },
+            {
+              "scheme": "https",
+              "host": "expressmart.me",
+              "pathPrefix": "/p"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]

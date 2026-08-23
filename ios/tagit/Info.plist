@@ -29,6 +29,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
+          <string>tagit</string>
           <string>expressmart</string>
           <string>com.stephenj3.ExpressMart</string>
         </array>

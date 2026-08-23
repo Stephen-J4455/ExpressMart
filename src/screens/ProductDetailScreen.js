@@ -33,6 +33,8 @@ import { useAds } from "../context/AdsContext";
 import { flashSaleService } from "../services/flashSaleService";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 import { shareProduct } from "../utils/shareUtils";
+import { useDeepLinkProductHandler } from "../hooks/useDeepLinkProductHandler";
+import { InstallAppBanner } from "../components/InstallAppBanner";
 
 const SELLER_BADGE_CONFIG = {
   verified: {
@@ -85,7 +87,14 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const markdownStyles = useAppStyles((c) => buildProductDetailMarkdownStyles(c));
   // When opened via a universal link (https://www.expressmart.me/product/:id)
   // only `productId` is present; otherwise a full `product` object is passed.
-  const { product: initialProduct, productId: deepLinkProductId } = route.params;
+  // SKU deep links (tagit://product/[sku], /p/[sku]) pass `sku` + optional
+  // `action` (e.g. add_to_cart) instead of a product id.
+  const {
+    product: initialProduct,
+    productId: deepLinkProductId,
+    sku: deepLinkSku,
+    action: deepLinkAction,
+  } = route.params;
   const productId = deepLinkProductId || initialProduct?.id;
   const [loadingDeepLink, setLoadingDeepLink] = useState(false);
   const insets = useSafeAreaInsets();
@@ -124,6 +133,18 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
   const [canExpandDetails, setCanExpandDetails] = useState(false);
   const previewScrollRef = useRef(null);
+
+  // Deep-link cart hand-off (?action=add_to_cart). Resolves SKU links, adds to
+  // cart once details are loaded, and navigates to Cart. Dedup-guarded.
+  const { resolvingSku: resolvingSkuLink } = useDeepLinkProductHandler({
+    product: initialProduct || null,
+    skuParam: deepLinkSku || null,
+    actionParam: deepLinkAction || null,
+    loading: loadingDeepLink,
+    addToCart,
+    navigation,
+    toast,
+  });
 
   const screenWidth = Dimensions.get("window").width;
 
@@ -847,7 +868,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     }
   }, [showImagePreview]);
 
-  if (loadingDeepLink || !product) {
+  if (loadingDeepLink || resolvingSkuLink || (!product && deepLinkSku)) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color={themeColors.primary} />
@@ -855,8 +876,41 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     );
   }
 
+  // Deep-linked by SKU but the product doesn't resolve — show an explicit
+  // "not found" state instead of silently redirecting home.
+  if (!product) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <Ionicons
+          name="alert-circle-outline"
+          size={48}
+          color={themeColors.muted}
+        />
+        <Text style={{ marginTop: 12, color: themeColors.muted, fontSize: 16 }}>
+          Product not found or no longer available
+        </Text>
+        <Pressable
+          onPress={() =>
+            navigation.canGoBack() ? navigation.goBack() : navigation.navigate("Main")
+          }
+          style={{
+            marginTop: 20,
+            paddingHorizontal: 24,
+            paddingVertical: 10,
+            borderRadius: 22,
+            backgroundColor: themeColors.primary,
+          }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "600" }}>Go back</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
+      {/* Web fallback: prompt mobile-web visitors to install the app */}
+      <InstallAppBanner />
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}

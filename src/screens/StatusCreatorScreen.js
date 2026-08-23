@@ -24,7 +24,8 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { ResponsiveContainer } from "../components/ResponsiveContainer";
 import { useResponsive } from "../hooks/useResponsive";
-import { getImageContentType, getWebUploadPayload } from "../utils/webUpload";
+import { getImageContentType } from "../utils/webUpload";
+import { R2_FOLDERS, uploadToR2Presigned } from "../services/r2Storage";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
@@ -131,37 +132,17 @@ export const StatusCreatorScreen = ({ navigation }) => {
 
   const uploadStatusImage = async (uri, pickedFile = null) => {
     const ext = getImageExtension(uri);
-    const fileName = `${sellerId || "unknown"}/${Date.now()}.${ext}`;
+    const fileName = `${Date.now()}.${ext}`;
+    const folder = `${R2_FOLDERS.STATUSES}/${sellerId || "unknown"}`;
     const contentType = getImageContentType(uri);
 
-    if (Platform.OS === "web") {
-      const { fileBody, contentType: resolvedContentType } =
-        await getWebUploadPayload({ uri, pickedFile, preferredContentType: contentType });
-      const { error } = await supabase.storage
-        .from("seller-statuses")
-        .upload(fileName, fileBody, {
-          contentType: resolvedContentType,
-          cacheControl: "3600",
-          upsert: false,
-        });
-      if (error) throw error;
-    } else {
-      const formDataUpload = new FormData();
-      formDataUpload.append("file", {
-        uri: uri,
-        type: contentType,
-        name: fileName.split("/").pop(),
-      });
-      const { error } = await supabase.storage
-        .from("seller-statuses")
-        .upload(fileName, formDataUpload, {
-          contentType,
-          cacheControl: "3600",
-          upsert: false,
-        });
-      if (error) throw error;
-    }
-    return fileName;
+    const { publicUrl } = await uploadToR2Presigned({
+      uri,
+      pickedFile,
+      folder,
+      fileName,
+    });
+    return publicUrl;
   };
 
   const handlePost = async () => {
@@ -177,17 +158,14 @@ export const StatusCreatorScreen = ({ navigation }) => {
     setLoading(true);
     try {
       if (statusMode === "image") {
-        const fileName = await uploadStatusImage(image, imageFile);
-        const { data: { publicUrl } = {} } = supabase.storage
-          .from("seller-statuses")
-          .getPublicUrl(fileName);
+        const mediaUrl = await uploadStatusImage(image, imageFile);
 
         const { error: dbError } = await supabase
           .from("express_seller_statuses")
           .insert({
             seller_id: sellerId,
             status_type: "image",
-            media_url: publicUrl,
+            media_url: mediaUrl,
             status_text: imageCaption || null,
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           });

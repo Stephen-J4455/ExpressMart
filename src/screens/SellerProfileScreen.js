@@ -24,24 +24,20 @@ import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 import { getImageContentType } from "../utils/webUpload";
+import {
+  R2_FOLDERS,
+  resolveMediaUrl,
+  uploadToR2Presigned,
+  deleteMediaByUrl,
+} from "../services/r2Storage";
 
-// Supabase storage bucket for seller profile images (mirrors Express-Store)
-const PROFILE_BUCKET = "profile";
+// R2 key prefix for seller profile images (mirrors Express-Store)
+const PROFILE_FOLDER = R2_FOLDERS.PROFILE;
 
 const THEME_OPTIONS = Object.values(THEMES).map((t) => t.primary);
 
-const resolveProfileImageUri = (rawValue) => {
-  const value = String(rawValue || "").trim();
-  if (!value) return "";
-  if (/^https?:\/\//i.test(value) || value.startsWith("file://")) {
-    return value;
-  }
-  const normalizedPath = value.replace(/^\/+/, "");
-  const { data } = supabase.storage
-    .from(PROFILE_BUCKET)
-    .getPublicUrl(normalizedPath);
-  return data?.publicUrl || "";
-};
+const resolveProfileImageUri = (rawValue) =>
+  resolveMediaUrl(rawValue, PROFILE_FOLDER);
 
 const getProfileAvatarValue = (profile) => {
   const candidates = [profile?.avatar, profile?.avatar_url, profile?.profile_image];
@@ -208,37 +204,35 @@ export const SellerProfileScreen = ({ navigation }) => {
     };
     const ext = getExt(uri);
     const fileName = `avatar-${Date.now()}.${ext}`;
-    const objectPath = sellerId ? `${sellerId}/${fileName}` : fileName;
-    const contentType = getImageContentType(uri);
+    const folder = sellerId
+      ? `${PROFILE_FOLDER}/${sellerId}`
+      : PROFILE_FOLDER;
 
     if (sellerId) {
       try {
-        const { data: existing } = await supabase.storage
-          .from(PROFILE_BUCKET)
-          .list(sellerId);
-        if (existing && existing.length > 0) {
-          await supabase.storage
-            .from(PROFILE_BUCKET)
-            .remove(existing.map((e) => `${sellerId}/${e.name}`));
+        // Best-effort cleanup of the previous avatar(s). Legacy avatars live in
+        // Supabase Storage; new ones in R2 — route each by its stored value.
+        const { data: sellerRow } = await supabase
+          .from("express_sellers")
+          .select("avatar")
+          .eq("id", sellerId)
+          .maybeSingle();
+        const previousAvatar = sellerRow?.avatar;
+        if (previousAvatar) {
+          await deleteMediaByUrl(previousAvatar).catch(() => {});
         }
       } catch (e) {
-        console.warn("Failed to list existing profile objects", e);
+        console.warn("Failed to clean up previous profile objects", e);
       }
     }
 
-    const fileBody = await getBlobFromAsset(uri, pickedFile);
-    const uploadRes = await supabase.storage
-      .from(PROFILE_BUCKET)
-      .upload(objectPath, fileBody, {
-        contentType: fileBody.type || contentType,
-        cacheControl: "3600",
-        upsert: true,
-      });
-    if (uploadRes.error) throw uploadRes.error;
-    const { data: urlData } = supabase.storage
-      .from(PROFILE_BUCKET)
-      .getPublicUrl(objectPath);
-    return urlData.publicUrl;
+    const { publicUrl } = await uploadToR2Presigned({
+      uri,
+      pickedFile,
+      folder,
+      fileName,
+    });
+    return publicUrl;
   };
 
   const saveProfile = async () => {

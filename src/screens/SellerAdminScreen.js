@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Video } from "react-native-video";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -31,7 +32,13 @@ import { notifyOrderStatusUpdate } from "../services/notificationService";
 import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
 import { getTheme, radius } from "../theme/colors";
 import { useAppStyles } from "../hooks/useAppStyles";
-import { getImageContentType, getWebUploadPayload } from "../utils/webUpload";
+import { getImageContentType } from "../utils/webUpload";
+import {
+  R2_FOLDERS,
+  getKeyFromUrl,
+  uploadToR2Presigned,
+  deleteMediaByUrl,
+} from "../services/r2Storage";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
 
@@ -235,6 +242,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [modalVisible, setModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Human-readable stage shown on the save button while submitting
+  // ("Uploading images…", "Saving product…", etc.) so the UI never just
+  // says "Saving..." with no feedback.
+  const [submitStage, setSubmitStage] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
@@ -260,6 +271,22 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [isPreorder, setIsPreorder] = useState(false);
   const [weightUnit, setWeightUnit] = useState("kg");
   const [slug, setSlug] = useState("");
+  const [tags, setTags] = useState([]);
+  const [tagInput, setTagInput] = useState("");
+
+  // Commit whatever is currently typed in the tag field into `tags`.
+  // Uses the functional updater so back-to-back calls (onSubmitEditing +
+  // onBlur firing for the same text) can never duplicate or drop a tag.
+  const commitPendingTag = useCallback(() => {
+    const t = tagInput.trim();
+    if (!t) return;
+    setTags((prev) =>
+      prev.length < 10 && !prev.some((x) => x.toLowerCase() === t.toLowerCase())
+        ? [...prev, t]
+        : prev,
+    );
+    setTagInput("");
+  }, [tagInput]);
   const [specifications, setSpecifications] = useState([]);
   const [productFormStep, setProductFormStep] = useState(1);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
@@ -594,6 +621,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setIsPreorder(false);
     setWeightUnit("kg");
     setSlug("");
+    setTags([]);
+    setTagInput("");
     setSpecifications([]);
     setProductFormStep(1);
     setVideoUri(null);
@@ -628,6 +657,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setSelectedColors(product.colors || []);
     setWeightUnit(product.weight_unit || "kg");
     setSlug(product.slug || "");
+    setTags(Array.isArray(product.tags) ? product.tags.filter(Boolean) : []);
+    setTagInput("");
     setTrackInventory(product.track_inventory ?? true);
     setAllowBackorder(product.allow_backorder ?? false);
     setIsPreorder(!!product.is_preorder);
@@ -658,25 +689,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setModalVisible(true);
   };
 
-  const getStoragePathFromUrl = (url) => {
-    if (!url || typeof url !== "string") return null;
-    const clean = url.split("?")[0];
-    const pub = "/storage/v1/object/public/express-products/";
-    const signed = "/storage/v1/object/sign/express-products/";
-    if (clean.includes(pub)) return decodeURIComponent(clean.split(pub)[1] || "");
-    if (clean.includes(signed))
-      return decodeURIComponent(clean.split(signed)[1] || "");
-    if (clean.startsWith("products/")) return clean;
-    return null;
-  };
+  const getStoragePathFromUrl = (url) => getKeyFromUrl(url);
 
   const deleteProductImageFromStorage = async (url) => {
-    const path = getStoragePathFromUrl(url);
-    if (!path) throw new Error("Could not determine image storage path");
-    const { error } = await supabase.storage
-      .from("express-products")
-      .remove([path]);
-    if (error) throw new Error(error.message || "Failed to remove image");
+    // Legacy files live in Supabase Storage, new ones in R2 — route by URL.
+    await deleteMediaByUrl(url);
   };
 
   const handleRemoveExistingImage = async (url) => {
@@ -759,47 +776,19 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       .toString(36)
       .substring(7)}.${ext}`;
     const folder = sellerId || "unknown";
-    const objectPath = `products/${folder}/${fileName}`;
-    const contentType = getImageContentType(uri);
+    const r2Folder = `${R2_FOLDERS.PRODUCTS}/products/${folder}`;
 
-    // Read the asset into a Blob — the reliable cross-platform upload payload
-    // for supabase-js v2 (the old FormData/{uri,type,name} approach fails on
-    // React Native). Mirrors the avatar upload fix.
-    let fileBody;
-    let finalContentType = contentType;
-    if (Platform.OS === "web") {
-      const picked = imageFiles?.[uri]?.file || null;
-      const pickedType = imageFiles?.[uri]?.type || null;
-      const payload = await getWebUploadPayload({
-        uri,
-        pickedFile: picked,
-        preferredContentType: pickedType || contentType,
-      });
-      fileBody = payload.fileBody;
-      finalContentType = payload.contentType || contentType;
-    } else {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      if (!blob) throw new Error("Could not read the selected image");
-      fileBody = blob;
-      finalContentType = blob.type || contentType;
-    }
+    // Upload to Cloudflare R2 via presigned URL (web Blob / native bytes).
+    const picked = Platform.OS === "web" ? imageFiles?.[uri]?.file || null : null;
+    const pickedType = Platform.OS === "web" ? imageFiles?.[uri]?.type || null : null;
 
-    const uploadRes = await Promise.race([
-      supabase.storage.from("express-products").upload(objectPath, fileBody, {
-        contentType: finalContentType,
-        cacheControl: "3600",
-        upsert: false,
-      }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Upload timed out")), 45000),
-      ),
-    ]);
-    if (uploadRes.error) throw uploadRes.error;
-    const { data: urlData } = supabase.storage
-      .from("express-products")
-      .getPublicUrl(objectPath);
-    return urlData.publicUrl;
+    const { publicUrl } = await uploadToR2Presigned({
+      uri,
+      pickedFile: picked,
+      folder: r2Folder,
+      fileName,
+    });
+    return publicUrl;
   };
 
   const uploadImages = async (uris) =>
@@ -1256,9 +1245,27 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       return;
     }
     setSubmitting(true);
+    setSubmitStage(null);
     try {
       let imageUrls = [];
-      if (imageUris.length > 0) imageUrls = await uploadImages(imageUris);
+      if (imageUris.length > 0) {
+        setSubmitStage(`Uploading ${imageUris.length} image${imageUris.length > 1 ? "s" : ""}…`);
+        console.log(
+          `[submitProduct] uploading ${imageUris.length} image(s) to R2`,
+        );
+        try {
+          imageUrls = await uploadImages(imageUris);
+          console.log(
+            `[submitProduct] image upload done: ${imageUrls.length} url(s)`,
+            imageUrls,
+          );
+        } catch (imgErr) {
+          console.error("[submitProduct] image upload failed:", imgErr);
+          throw new Error(
+            `Image upload failed: ${imgErr?.message || "Unknown error"}`,
+          );
+        }
+      }
       const merged = editingProduct
         ? [...existingImageUrls, ...imageUrls]
         : imageUrls;
@@ -1267,6 +1274,20 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       specifications.forEach((s) => {
         if (s.key && s.value) specsObj[s.key] = s.value;
       });
+
+      // A tag typed right before tapping Save is committed via onBlur, but
+      // this handler closed over the previous render's `tags` — so merge any
+      // still-pending tagInput here or the last tag would never be uploaded.
+      const pendingTag = tagInput.trim();
+      const tagsToSave = [
+        ...tags,
+        ...(pendingTag &&
+        !tags.some((x) => x.toLowerCase() === pendingTag.toLowerCase())
+          ? [pendingTag]
+          : []),
+      ]
+        .map((t) => String(t).trim())
+        .filter(Boolean);
 
       const productData = {
         title,
@@ -1295,6 +1316,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         barcode: barcode || null,
         vendor: vendor || null,
         slug: slug || null,
+        tags: tagsToSave,
         compare_at_price: compareAtPrice ? parseFloat(compareAtPrice) : null,
         cost_price: costPrice ? parseFloat(costPrice) : null,
         track_inventory: trackInventory,
@@ -1309,6 +1331,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
       let savedProductId = editingProduct?.id ?? null;
 
+      setSubmitStage(editingProduct ? "Updating product…" : "Creating product…");
+      console.log(
+        `[submitProduct] ${editingProduct ? "updating" : "creating"} product:`,
+        JSON.stringify({ ...productData, thumbnails: productData.thumbnails?.length, specifications: "object" }),
+      );
+
       if (editingProduct) {
         productData.status = "active";
         await updateProduct(editingProduct.id, productData);
@@ -1316,6 +1344,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       } else {
         const created = await createProduct(productData);
         savedProductId = created?.id ?? null;
+        console.log("[submitProduct] created product id:", savedProductId);
         toast.success("Created", "Product created and is now live");
       }
 
@@ -1331,9 +1360,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       resetProductFormState();
       setModalVisible(false);
     } catch (e) {
-      toast.error("Error", e.message);
+      console.error("[submitProduct] failed:", e);
+      toast.error("Save failed", e?.message || "Could not save the product");
     } finally {
       setSubmitting(false);
+      setSubmitStage(null);
     }
   };
 
@@ -2377,461 +2408,758 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       </ScrollView>
 
       {/* Product create/edit modal */}
-      <Modal visible={modalVisible} animationType="slide">
-        <View style={styles.modalContainer}>
+      <Modal visible={modalVisible} animationType="slide" statusBarTranslucent>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior="padding"
+          keyboardVerticalOffset={0}
+        >
+          <View
+            style={[
+              styles.modalHeader,
+              { paddingTop: insets.top + 8, borderBottomColor: themeColors.surface },
+            ]}
+          >
+            <Pressable
+              style={styles.modalHeaderBtn}
+              onPress={() => setModalVisible(false)}
+              hitSlop={8}
+            >
+              <Ionicons name="close" size={22} color={themeColors.dark} />
+            </Pressable>
+            <View style={styles.modalHeaderCenter}>
+              <Text style={styles.modalTitle} numberOfLines={1}>
+                {editingProduct ? "Edit Product" : "New Product"}
+              </Text>
+              <Text style={styles.modalSubtitle}>
+                {PRODUCT_FORM_STEPS[productFormStep - 1]?.label} · Step{" "}
+                {productFormStep} of {PRODUCT_FORM_STEPS.length}
+              </Text>
+            </View>
+            <View style={styles.modalHeaderBtn}>
+              {submitting ? (
+                <ActivityIndicator size="small" color={accent} />
+              ) : null}
+            </View>
+          </View>
+
+          {/* Progress rail */}
+          <View style={styles.progressRail}>
+            {PRODUCT_FORM_STEPS.map((step, index) => {
+              const stepNumber = index + 1;
+              const isActive = productFormStep === stepNumber;
+              const isCompleted = productFormStep > stepNumber;
+              return (
+                <Pressable
+                  key={step.key}
+                  style={styles.progressSegmentWrap}
+                  onPress={() => {
+                    if (!submitting && stepNumber < productFormStep)
+                      setProductFormStep(stepNumber);
+                  }}
+                  disabled={stepNumber >= productFormStep}
+                >
+                  <View
+                    style={[
+                      styles.progressSegment,
+                      isActive && { backgroundColor: accent },
+                      isCompleted && { backgroundColor: accent + "55" },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.progressLabel,
+                      isActive && { color: accent },
+                      isCompleted && { color: themeColors.dark },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {step.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
           <ScrollView
             style={styles.modalScroll}
             contentContainerStyle={styles.modalContent}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <View style={styles.modalHead}>
-              <Text style={styles.modalTitle}>
-                {editingProduct ? "Edit Product" : "New Product"}
-              </Text>
-              <Pressable onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color={themeColors.dark} />
-              </Pressable>
-            </View>
-
-            <View style={styles.stepper}>
-              {PRODUCT_FORM_STEPS.map((step, index) => {
-                const stepNumber = index + 1;
-                const isActive = productFormStep === stepNumber;
-                const isCompleted = productFormStep > stepNumber;
-                return (
-                  <View key={step.key} style={styles.stepperItem}>
-                    <View
-                      style={[
-                        styles.stepperCircle,
-                        isActive && styles.stepperCircleActive,
-                        isCompleted && styles.stepperCircleDone,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.stepperCircleText,
-                          (isActive || isCompleted) && styles.stepperCircleTextActive,
-                        ]}
-                      >
-                        {stepNumber}
-                      </Text>
-                    </View>
-                    <Text
-                      style={[
-                        styles.stepperLabel,
-                        isActive && styles.stepperLabelActive,
-                      ]}
-                    >
-                      {step.label}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-
-            <Text style={styles.stepHint}>
-              Step {productFormStep} of {PRODUCT_FORM_STEPS.length}
-            </Text>
-
             {productFormStep === 1 && (
               <>
-                <Text style={styles.label}>Title *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholder="Product title"
-                  placeholderTextColor={themeColors.muted}
-                />
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Product info</Text>
+                  <Text style={styles.label}>Title *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={title}
+                    onChangeText={setTitle}
+                    placeholder="e.g. Ankara two-piece set"
+                    placeholderTextColor={themeColors.muted}
+                    returnKeyType="next"
+                  />
 
-                <View style={styles.row}>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>Price (GH₵) *</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={price}
-                      onChangeText={setPrice}
-                      keyboardType="numeric"
-                      placeholder="0.00"
-                      placeholderTextColor={themeColors.muted}
-                    />
+                  <View style={styles.row}>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Price (GH₵) *</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={price}
+                        onChangeText={setPrice}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor={themeColors.muted}
+                      />
+                    </View>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Shipping (GH₵)</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={shippingFee}
+                        onChangeText={setShippingFee}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor={themeColors.muted}
+                      />
+                    </View>
                   </View>
-                  <View style={styles.col}>
-                    <Text style={styles.label}>Shipping (GH₵)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={shippingFee}
-                      onChangeText={setShippingFee}
-                      keyboardType="numeric"
-                      placeholder="0.00"
-                      placeholderTextColor={themeColors.muted}
-                    />
-                  </View>
-                </View>
-
-                <Text style={styles.label}>Category *</Text>
-                <View style={styles.categoryRow}>
-                  {categories.map((c) => (
-                    <Pressable
-                      key={c.id}
-                      style={[
-                        styles.catChip,
-                        category === c.name && {
-                          backgroundColor: accent,
-                          borderColor: accent,
-                        },
-                      ]}
-                      onPress={() => setCategory(c.name)}
-                    >
-                      <Text
-                        style={[
-                          styles.catChipText,
-                          category === c.name && { color: themeColors.light },
-                        ]}
-                      >
-                        {c.name}
+                  {!shippingFee || parseFloat(shippingFee) === 0 ? (
+                    <View style={styles.hintRow}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={14}
+                        color="#10B981"
+                      />
+                      <Text style={styles.hintText}>
+                        Free shipping badge will be applied
                       </Text>
-                    </Pressable>
-                  ))}
+                    </View>
+                  ) : null}
                 </View>
 
-                <Text style={styles.label}>Description</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Describe the product..."
-                  placeholderTextColor={themeColors.muted}
-                  multiline
-                  numberOfLines={4}
-                />
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Category *</Text>
+                  <View style={styles.categoryRow}>
+                    {categories.map((c) => {
+                      const selected = category === c.name;
+                      return (
+                        <Pressable
+                          key={c.id}
+                          style={[
+                            styles.catChip,
+                            selected && {
+                              backgroundColor: accent,
+                              borderColor: accent,
+                            },
+                          ]}
+                          onPress={() => setCategory(c.name)}
+                        >
+                          <Ionicons
+                            name={c.icon || "pricetag-outline"}
+                            size={14}
+                            color={selected ? themeColors.light : themeColors.muted}
+                          />
+                          <Text
+                            style={[
+                              styles.catChipText,
+                              selected && { color: themeColors.light },
+                            ]}
+                          >
+                            {c.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
 
-                <View style={styles.stepActions}>
-                  <View style={styles.stepSpacer} />
-                  <TouchableOpacity
-                    style={[styles.stepButton, { backgroundColor: accent }]}
-                    onPress={goToNextProductStep}
-                  >
-                    <Text style={styles.stepButtonText}>Next</Text>
-                  </TouchableOpacity>
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Description</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="Describe materials, fit, care instructions…"
+                    placeholderTextColor={themeColors.muted}
+                    multiline
+                    textAlignVertical="top"
+                  />
                 </View>
               </>
             )}
 
             {productFormStep === 2 && (
               <>
-                <View style={styles.row}>
-              <View style={styles.col}>
-                <Text style={styles.label}>Quantity *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={quantity}
-                  onChangeText={setQuantity}
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor={themeColors.muted}
-                />
-              </View>
-              <View style={styles.col}>
-                <Text style={styles.label}>Discount %</Text>
-                <TextInput
-                  style={styles.input}
-                  value={String(discount)}
-                  onChangeText={(t) => setDiscount(Number(t) || 0)}
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor={themeColors.muted}
-                />
-              </View>
-            </View>
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Stock & pricing</Text>
+                  <View style={styles.row}>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Quantity *</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={quantity}
+                        onChangeText={setQuantity}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                        placeholderTextColor={themeColors.muted}
+                      />
+                    </View>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Discount %</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={String(discount)}
+                        onChangeText={(t) => setDiscount(Number(t) || 0)}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                        placeholderTextColor={themeColors.muted}
+                      />
+                    </View>
+                  </View>
 
-            <Text style={styles.label}>Sizes</Text>
-            <View style={styles.categoryRow}>
-              {SIZES.map((s) => (
-                <Pressable
-                  key={s}
-                  style={[
-                    styles.catChip,
-                    selectedSizes.includes(s) && { backgroundColor: accent, borderColor: accent },
-                  ]}
-                  onPress={() =>
-                    setSelectedSizes((prev) =>
-                      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
-                    )
-                  }
-                >
-                  <Text style={[styles.catChipText, selectedSizes.includes(s) && { color: themeColors.light }]}>{s}</Text>
-                </Pressable>
-              ))}
-            </View>
+                  <View style={styles.row}>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Compare-at price</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={compareAtPrice}
+                        onChangeText={setCompareAtPrice}
+                        keyboardType="decimal-pad"
+                        placeholder="Optional"
+                        placeholderTextColor={themeColors.muted}
+                      />
+                    </View>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Cost per item</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={costPrice}
+                        onChangeText={setCostPrice}
+                        keyboardType="decimal-pad"
+                        placeholder="Optional"
+                        placeholderTextColor={themeColors.muted}
+                      />
+                    </View>
+                  </View>
+                </View>
 
-            <Text style={styles.label}>Colors</Text>
-            <View style={styles.colorRow}>
-              {AVAILABLE_COLORS.map((c) => (
-                <Pressable
-                  key={c.name}
-                  style={[
-                    styles.colorDot,
-                    { backgroundColor: c.hex },
-                    selectedColors.some((x) => x.name === c.name) && styles.colorDotActive,
-                  ]}
-                  onPress={() =>
-                    setSelectedColors((prev) =>
-                      prev.some((x) => x.name === c.name)
-                        ? prev.filter((x) => x.name !== c.name)
-                        : [...prev, c],
-                    )
-                  }
-                />
-              ))}
-            </View>
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Variants</Text>
+                  <Text style={styles.label}>Sizes</Text>
+                  <View style={styles.categoryRow}>
+                    {SIZES.map((s) => {
+                      const selected = selectedSizes.includes(s);
+                      return (
+                        <Pressable
+                          key={s}
+                          style={[
+                            styles.catChip,
+                            selected && {
+                              backgroundColor: accent,
+                              borderColor: accent,
+                            },
+                          ]}
+                          onPress={() =>
+                            setSelectedSizes((prev) =>
+                              prev.includes(s)
+                                ? prev.filter((x) => x !== s)
+                                : [...prev, s],
+                            )
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.catChipText,
+                              selected && { color: themeColors.light },
+                            ]}
+                          >
+                            {s}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
 
-            <View style={styles.checkRow}>
-              <Pressable
-                style={styles.checkbox}
-                onPress={() => setIsPreorder((v) => !v)}
-              >
-                <Ionicons
-                  name={isPreorder ? "checkbox" : "square-outline"}
-                  size={20}
-                  color={isPreorder ? accent : themeColors.muted}
-                />
-                <Text style={styles.checkLabel}>Preorder</Text>
-              </Pressable>
-              <Pressable
-                style={styles.checkbox}
-                onPress={() => setTrackInventory((v) => !v)}
-              >
-                <Ionicons
-                  name={trackInventory ? "checkbox" : "square-outline"}
-                  size={20}
-                  color={trackInventory ? accent : themeColors.muted}
-                />
-                <Text style={styles.checkLabel}>Track inventory</Text>
-              </Pressable>
-              <Pressable
-                style={styles.checkbox}
-                onPress={() => setAllowBackorder((v) => !v)}
-              >
-                <Ionicons
-                  name={allowBackorder ? "checkbox" : "square-outline"}
-                  size={20}
-                  color={allowBackorder ? accent : themeColors.muted}
-                />
-                <Text style={styles.checkLabel}>Allow backorder</Text>
-              </Pressable>
-            </View>
+                  <Text style={styles.label}>Colors</Text>
+                  <View style={styles.colorRow}>
+                    {AVAILABLE_COLORS.map((c) => {
+                      const selected = selectedColors.some(
+                        (x) => x.name === c.name,
+                      );
+                      return (
+                        <Pressable
+                          key={c.name}
+                          style={[
+                            styles.colorDot,
+                            { backgroundColor: c.hex },
+                            selected && styles.colorDotActive,
+                          ]}
+                          onPress={() =>
+                            setSelectedColors((prev) =>
+                              prev.some((x) => x.name === c.name)
+                                ? prev.filter((x) => x.name !== c.name)
+                                : [...prev, c],
+                            )
+                          }
+                        >
+                          {selected ? (
+                            <Ionicons
+                              name="checkmark"
+                              size={14}
+                              color={
+                                c.name === "White" || c.name === "Yellow"
+                                  ? "#111827"
+                                  : "#FFFFFF"
+                              }
+                            />
+                          ) : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
 
-                <View style={styles.stepActions}>
-                  <TouchableOpacity
-                    style={[styles.stepButton, styles.stepButtonSecondary]}
-                    onPress={goToPreviousProductStep}
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Inventory options</Text>
+                  <Pressable
+                    style={styles.checkRowItem}
+                    onPress={() => setIsPreorder((v) => !v)}
                   >
-                    <Text style={styles.stepButtonSecondaryText}>Back</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.stepButton, { backgroundColor: accent }]}
-                    onPress={goToNextProductStep}
+                    <Ionicons
+                      name={isPreorder ? "checkbox" : "square-outline"}
+                      size={20}
+                      color={isPreorder ? accent : themeColors.muted}
+                    />
+                    <View style={styles.checkTextWrap}>
+                      <Text style={styles.checkLabel}>Preorder</Text>
+                      <Text style={styles.checkHint}>
+                        Customers can order before stock arrives
+                      </Text>
+                    </View>
+                  </Pressable>
+                  <Pressable
+                    style={styles.checkRowItem}
+                    onPress={() => setTrackInventory((v) => !v)}
                   >
-                    <Text style={styles.stepButtonText}>Next</Text>
-                  </TouchableOpacity>
+                    <Ionicons
+                      name={trackInventory ? "checkbox" : "square-outline"}
+                      size={20}
+                      color={trackInventory ? accent : themeColors.muted}
+                    />
+                    <View style={styles.checkTextWrap}>
+                      <Text style={styles.checkLabel}>Track inventory</Text>
+                      <Text style={styles.checkHint}>
+                        Reduce quantity automatically on each sale
+                      </Text>
+                    </View>
+                  </Pressable>
+                  <Pressable
+                    style={styles.checkRowItem}
+                    onPress={() => setAllowBackorder((v) => !v)}
+                  >
+                    <Ionicons
+                      name={allowBackorder ? "checkbox" : "square-outline"}
+                      size={20}
+                      color={allowBackorder ? accent : themeColors.muted}
+                    />
+                    <View style={styles.checkTextWrap}>
+                      <Text style={styles.checkLabel}>Allow backorder</Text>
+                      <Text style={styles.checkHint}>
+                        Keep selling after stock runs out
+                      </Text>
+                    </View>
+                  </Pressable>
                 </View>
               </>
             )}
 
             {productFormStep === 3 && (
               <>
-            <Text style={styles.label}>Images (max 5)</Text>
-            <View style={styles.imageGrid}>
-              {existingImageUrls.map((u) => (
-                <View key={u} style={styles.imageWrap}>
-                  <Image source={{ uri: u }} style={styles.imageThumb} />
-                  <Pressable
-                    style={styles.imageRemove}
-                    onPress={() => handleRemoveExistingImage(u)}
-                    disabled={!!removingImageUrl}
-                  >
-                    <Ionicons name="close-circle" size={20} color="#EF4444" />
-                  </Pressable>
-                </View>
-              ))}
-              {imageUris.map((u) => (
-                <View key={u} style={styles.imageWrap}>
-                  <Image source={{ uri: u }} style={styles.imageThumb} />
-                  <Pressable
-                    style={styles.imageRemove}
-                    onPress={() => setImageUris((prev) => prev.filter((x) => x !== u))}
-                  >
-                    <Ionicons name="close-circle" size={20} color="#EF4444" />
-                  </Pressable>
-                </View>
-              ))}
-              {imageUris.length + existingImageUrls.length < 5 && (
-                <Pressable style={styles.imageAdd} onPress={pickImage}>
-                  <Ionicons name="add" size={28} color={accent} />
-                </Pressable>
-              )}
-            </View>
-
-            <Text style={styles.label}>Product Video (optional)</Text>
-            <View style={styles.videoGrid}>
-              {existingVideoUrl || videoUri ? (
-                <View style={styles.videoWrap}>
-                  {videoUri ? (
-                    <Video
-                      source={{ uri: videoUri }}
-                      style={styles.videoThumb}
-                      resizeMode="cover"
-                      repeat
-                      muted
-                      paused
-                    />
-                  ) : (
-                    <Video
-                      source={{ uri: existingVideoUrl }}
-                      style={styles.videoThumb}
-                      resizeMode="cover"
-                      repeat
-                      muted
-                      paused
-                    />
-                  )}
-                  <Pressable
-                    style={styles.videoRemove}
-                    onPress={
-                      videoUri
-                        ? () => setVideoUri(null)
-                        : handleRemoveExistingVideo
-                    }
-                    disabled={removingVideo}
-                  >
-                    <Ionicons name="close-circle" size={20} color="#EF4444" />
-                  </Pressable>
-                  <View style={styles.videoBadge}>
-                    <Ionicons name="videocam" size={14} color="#fff" />
-                    <Text style={styles.videoBadgeText}>
-                      {videoUri ? "New video" : "Current video"}
+                <View style={styles.card}>
+                  <View style={styles.cardTitleRow}>
+                    <Text style={styles.cardTitle}>Photos</Text>
+                    <Text style={styles.cardCounter}>
+                      {imageUris.length + existingImageUrls.length}/5
                     </Text>
                   </View>
-                </View>
-              ) : null}
-              {!videoUri && (
-                <Pressable
-                  style={styles.videoAdd}
-                  onPress={pickVideo}
-                  disabled={uploadingVideo}
-                >
-                  {uploadingVideo ? (
-                    <ActivityIndicator size="small" color={accent} />
-                  ) : (
-                    <>
-                      <Ionicons name="videocam-outline" size={28} color={accent} />
-                      <Text style={[styles.videoAddText, { color: accent }]}>
-                        Add video
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
-              )}
-            </View>
-
-            <View style={styles.stepActions}>
-              <TouchableOpacity
-                style={[styles.stepButton, styles.stepButtonSecondary]}
-                onPress={goToPreviousProductStep}
-              >
-                <Text style={styles.stepButtonSecondaryText}>Back</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.stepButton, { backgroundColor: accent }]}
-                onPress={goToNextProductStep}
-              >
-                <Text style={styles.stepButtonText}>Next</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
-            {productFormStep === 4 && (
-              <>
-                <Text style={styles.label}>Specifications</Text>
-                <View style={styles.specList}>
-                  {specifications.map((spec, index) => (
-                    <View key={index} style={styles.specRow}>
-                      <TextInput
-                        style={[styles.input, styles.specKey]}
-                        value={spec.key}
-                        onChangeText={(text) => {
-                          const updated = [...specifications];
-                          updated[index].key = text;
-                          setSpecifications(updated);
-                        }}
-                        placeholder="Name (e.g. Material)"
-                        placeholderTextColor={themeColors.muted}
-                      />
-                      <TextInput
-                        style={[styles.input, styles.specValue]}
-                        value={spec.value}
-                        onChangeText={(text) => {
-                          const updated = [...specifications];
-                          updated[index].value = text;
-                          setSpecifications(updated);
-                        }}
-                        placeholder="Value (e.g. Cotton)"
-                        placeholderTextColor={themeColors.muted}
-                      />
-                      <Pressable
-                        style={styles.specRemove}
-                        onPress={() =>
-                          setSpecifications(
-                            specifications.filter((_, i) => i !== index),
-                          )
-                        }
-                      >
-                        <Ionicons name="close-circle" size={22} color="#EF4444" />
+                  <View style={styles.imageGrid}>
+                    {existingImageUrls.map((u) => (
+                      <View key={u} style={styles.imageWrap}>
+                        <Image source={{ uri: u }} style={styles.imageThumb} />
+                        <Pressable
+                          style={styles.imageRemove}
+                          onPress={() => handleRemoveExistingImage(u)}
+                          disabled={!!removingImageUrl}
+                        >
+                          <Ionicons
+                            name="close-circle"
+                            size={20}
+                            color="#EF4444"
+                          />
+                        </Pressable>
+                      </View>
+                    ))}
+                    {imageUris.map((u) => (
+                      <View key={u} style={styles.imageWrap}>
+                        <Image source={{ uri: u }} style={styles.imageThumb} />
+                        <Pressable
+                          style={styles.imageRemove}
+                          onPress={() =>
+                            setImageUris((prev) => prev.filter((x) => x !== u))
+                          }
+                        >
+                          <Ionicons
+                            name="close-circle"
+                            size={20}
+                            color="#EF4444"
+                          />
+                        </Pressable>
+                      </View>
+                    ))}
+                    {imageUris.length + existingImageUrls.length < 5 && (
+                      <Pressable style={styles.imageAdd} onPress={pickImage}>
+                        <Ionicons name="camera-outline" size={26} color={accent} />
+                        <Text style={[styles.imageAddText, { color: accent }]}>
+                          Add photo
+                        </Text>
                       </Pressable>
-                    </View>
-                  ))}
+                    )}
+                  </View>
+                  <Text style={styles.hintText}>
+                    The first photo becomes the cover image.
+                  </Text>
                 </View>
-                <TouchableOpacity
-                  style={styles.addSpecButton}
-                  onPress={() =>
-                    setSpecifications([...specifications, { key: "", value: "" }])
-                  }
-                >
-                  <Ionicons name="add" size={18} color={accent} />
-                  <Text style={[styles.addSpecText, { color: accent }]}>Add Specification</Text>
-                </TouchableOpacity>
 
-                <View style={styles.stepActions}>
-                  <TouchableOpacity
-                    style={[styles.stepButton, styles.stepButtonSecondary]}
-                    onPress={goToPreviousProductStep}
-                  >
-                    <Text style={styles.stepButtonSecondaryText}>Back</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.stepButton,
-                      { backgroundColor: accent },
-                      submitting && { opacity: 0.6 },
-                    ]}
-                    onPress={submitProduct}
-                    disabled={submitting}
-                  >
-                    <Text style={styles.stepButtonText}>
-                      {submitting
-                        ? "Saving..."
-                        : editingProduct
-                          ? "Save Changes"
-                          : "Create Product"}
-                    </Text>
-                  </TouchableOpacity>
+                <View style={styles.card}>
+                  <View style={styles.cardTitleRow}>
+                    <Text style={styles.cardTitle}>Video</Text>
+                    <Text style={styles.cardCounter}>Optional · max 10 MB</Text>
+                  </View>
+                  <View style={styles.videoGrid}>
+                    {existingVideoUrl || videoUri ? (
+                      <View style={styles.videoWrap}>
+                        <Video
+                          source={{ uri: videoUri || existingVideoUrl }}
+                          style={styles.videoThumb}
+                          resizeMode="cover"
+                          repeat
+                          muted
+                          paused
+                        />
+                        <Pressable
+                          style={styles.videoRemove}
+                          onPress={
+                            videoUri
+                              ? () => {
+                                  setVideoUri(null);
+                                  setVideoFile(null);
+                                }
+                              : handleRemoveExistingVideo
+                          }
+                          disabled={removingVideo}
+                        >
+                          <Ionicons
+                            name="close-circle"
+                            size={20}
+                            color="#EF4444"
+                          />
+                        </Pressable>
+                        <View style={styles.videoBadge}>
+                          <Ionicons name="videocam" size={14} color="#fff" />
+                          <Text style={styles.videoBadgeText}>
+                            {videoUri ? "New video" : "Current video"}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    {!videoUri && (
+                      <Pressable
+                        style={styles.videoAdd}
+                        onPress={pickVideo}
+                        disabled={uploadingVideo}
+                      >
+                        {uploadingVideo ? (
+                          <ActivityIndicator size="small" color={accent} />
+                        ) : (
+                          <>
+                            <Ionicons
+                              name="videocam-outline"
+                              size={26}
+                              color={accent}
+                            />
+                            <Text style={[styles.imageAddText, { color: accent }]}>
+                              Add video
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
               </>
             )}
+
+            {productFormStep === 4 && (
+              <>
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Specifications</Text>
+                  <View style={styles.specList}>
+                    {specifications.map((spec, index) => (
+                      <View key={index} style={styles.specRow}>
+                        <TextInput
+                          style={[styles.input, styles.specKey]}
+                          value={spec.key}
+                          onChangeText={(text) => {
+                            const updated = [...specifications];
+                            updated[index].key = text;
+                            setSpecifications(updated);
+                          }}
+                          placeholder="Name (e.g. Material)"
+                          placeholderTextColor={themeColors.muted}
+                          returnKeyType="next"
+                        />
+                        <TextInput
+                          style={[styles.input, styles.specValue]}
+                          value={spec.value}
+                          onChangeText={(text) => {
+                            const updated = [...specifications];
+                            updated[index].value = text;
+                            setSpecifications(updated);
+                          }}
+                          placeholder="Value (e.g. Cotton)"
+                          placeholderTextColor={themeColors.muted}
+                        />
+                        <Pressable
+                          style={styles.specRemove}
+                          onPress={() =>
+                            setSpecifications(
+                              specifications.filter((_, i) => i !== index),
+                            )
+                          }
+                        >
+                          <Ionicons
+                            name="close-circle"
+                            size={22}
+                            color="#EF4444"
+                          />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.addSpecButton}
+                    onPress={() =>
+                      setSpecifications([
+                        ...specifications,
+                        { key: "", value: "" },
+                      ])
+                    }
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color={accent} />
+                    <Text style={[styles.addSpecText, { color: accent }]}>
+                      Add specification
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.card}>
+                  <View style={styles.cardTitleRow}>
+                    <Text style={styles.cardTitle}>Tags</Text>
+                    <Text style={styles.cardCounter}>
+                      Help customers find this in search
+                    </Text>
+                  </View>
+                  <View style={[styles.input, styles.tagInputWrap]}>
+                    <TextInput
+                      style={styles.tagInput}
+                      value={tagInput}
+                      onChangeText={setTagInput}
+                      placeholder="Type a tag and press enter"
+                      placeholderTextColor={themeColors.muted}
+                      returnKeyType="done"
+                      blurOnSubmit={false}
+                      onSubmitEditing={commitPendingTag}
+                      onBlur={commitPendingTag}
+                    />
+                  </View>
+                  {tags.length > 0 && (
+                    <View style={styles.categoryRow}>
+                      {tags.map((t) => (
+                        <Pressable
+                          key={t}
+                          style={styles.catChip}
+                          onPress={() =>
+                            setTags((prev) => prev.filter((x) => x !== t))
+                          }
+                        >
+                          <Text style={styles.catChipText}>{t}</Text>
+                          <Ionicons
+                            name="close-circle"
+                            size={14}
+                            color={themeColors.muted}
+                          />
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Organization</Text>
+                  <View style={styles.row}>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>SKU</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={sku}
+                        onChangeText={setSku}
+                        placeholder="e.g. ANK-001"
+                        placeholderTextColor={themeColors.muted}
+                        autoCapitalize="characters"
+                      />
+                    </View>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Barcode</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={barcode}
+                        onChangeText={setBarcode}
+                        placeholder="Optional"
+                        placeholderTextColor={themeColors.muted}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.row}>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Vendor</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={vendor}
+                        onChangeText={setVendor}
+                        placeholder="Optional"
+                        placeholderTextColor={themeColors.muted}
+                      />
+                    </View>
+                    <View style={styles.col}>
+                      <Text style={styles.label}>Weight ({weightUnit})</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={weight}
+                        onChangeText={setWeight}
+                        keyboardType="decimal-pad"
+                        placeholder="0.0"
+                        placeholderTextColor={themeColors.muted}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.summaryCard}>
+                  <Text style={styles.cardTitle}>Review</Text>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Title</Text>
+                    <Text style={styles.summaryValue} numberOfLines={1}>
+                      {title || "—"}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Price</Text>
+                    <Text style={styles.summaryValue}>
+                      {price ? `GH₵${price}` : "—"}
+                      {compareAtPrice ? `  (was GH₵${compareAtPrice})` : ""}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Stock</Text>
+                    <Text style={styles.summaryValue}>
+                      {isPreorder ? "Preorder" : quantity || "—"}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Media</Text>
+                    <Text style={styles.summaryValue}>
+                      {existingImageUrls.length + imageUris.length} photo
+                      {existingImageUrls.length + imageUris.length === 1 ? "" : "s"}
+                      {videoUri || existingVideoUrl ? " · 1 video" : ""}
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
+
+            <View style={{ height: 12 }} />
           </ScrollView>
-        </View>
+
+          {/* Sticky footer actions */}
+          <View
+            style={[
+              styles.stepActions,
+              {
+                paddingBottom: Math.max(insets.bottom, 12) + 8,
+                borderTopColor: themeColors.surface,
+              },
+            ]}
+          >
+            {productFormStep > 1 ? (
+              <TouchableOpacity
+                style={[styles.stepButton, styles.stepButtonSecondary]}
+                onPress={goToPreviousProductStep}
+                disabled={submitting}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={16}
+                  color={themeColors.dark}
+                />
+                <Text style={styles.stepButtonSecondaryText}>Back</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.stepSpacer} />
+            )}
+            {productFormStep < PRODUCT_FORM_STEPS.length ? (
+              <TouchableOpacity
+                style={[styles.stepButton, { backgroundColor: accent, flex: 1 }]}
+                onPress={goToNextProductStep}
+                disabled={submitting}
+              >
+                <Text style={styles.stepButtonText}>Continue</Text>
+                <Ionicons name="chevron-forward" size={16} color={themeColors.light} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.stepButton,
+                  { backgroundColor: accent, flex: 1 },
+                  submitting && { opacity: 0.6 },
+                ]}
+                onPress={submitProduct}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <>
+                    <ActivityIndicator size="small" color={themeColors.light} />
+                    <Text style={styles.stepButtonText}>
+                      {submitStage || "Saving…"}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons
+                      name={editingProduct ? "checkmark-circle-outline" : "add-circle-outline"}
+                      size={18}
+                      color={themeColors.light}
+                    />
+                    <Text style={styles.stepButtonText}>
+                      {editingProduct ? "Save Changes" : "Publish Product"}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Action sheet */}
@@ -3449,116 +3777,180 @@ const buildSellerAdminStyles = (c) =>
   insightLabel: { fontSize: 11, color: c.muted, marginTop: 4, fontWeight: "600", textAlign: "center" },
   insightSummary: {
     borderRadius: radius.md, fontSize: 13, color: c.muted, marginTop: 14, lineHeight: 19, textAlign: "center" },
-  modalContainer: { flex: 1, backgroundColor: c.background, paddingTop: 40 },
-  modalScroll: { flex: 1 },
-  modalContent: {
-    borderRadius: radius.md, padding: 16, paddingBottom: 40 },
-  modalHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  modalTitle: { fontSize: 20, fontWeight: "800", color: c.dark },
-  stepper: {
-    borderRadius: radius.md,
+  modalContainer: { flex: 1, backgroundColor: c.background },
+  modalHeader: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 10,
-  },
-  stepperItem: {
-    borderRadius: radius.sm,
     alignItems: "center",
-    minWidth: 68,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    backgroundColor: c.background,
   },
-  stepperCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: c.surface,
-    backgroundColor: c.light,
+  modalHeaderBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-  },
-  stepperCircleActive: {
-    backgroundColor: c.primary,
-    borderColor: c.primary,
-  },
-  stepperCircleDone: {
-    backgroundColor: c.dark,
-    borderColor: c.dark,
-  },
-  stepperCircleText: { fontSize: 11, fontWeight: "800", color: c.muted },
-  stepperCircleTextActive: { color: c.light },
-  stepperLabel: { fontSize: 10, fontWeight: "700", color: c.muted, marginTop: 4, textAlign: "center" },
-  stepperLabelActive: { color: c.dark },
-  stepHint: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: c.muted,
-    marginBottom: 8,
-  },
-  label: { fontSize: 13, fontWeight: "700", color: c.dark, marginBottom: 6, marginTop: 12 },
-  input: {
     backgroundColor: c.light,
+  },
+  modalHeaderCenter: {
+    flex: 1,
+    alignItems: "center",
+    marginHorizontal: 8,
+  },
+  modalTitle: { fontSize: 17, fontWeight: "800", color: c.dark },
+  modalSubtitle: { fontSize: 11, fontWeight: "600", color: c.muted, marginTop: 1 },
+  progressRail: {
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: c.background,
+  },
+  progressSegmentWrap: { flex: 1, alignItems: "center", gap: 5 },
+  progressSegment: {
+    height: 4,
+    width: "100%",
+    borderRadius: radius.full,
+    backgroundColor: c.surface,
+  },
+  progressLabel: { fontSize: 10, fontWeight: "700", color: c.muted },
+  modalScroll: { flex: 1 },
+  modalContent: { padding: 16, paddingBottom: 24 },
+  card: {
+    backgroundColor: c.light,
+    borderRadius: radius.lg,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: c.surface,
-    borderRadius: radius.sm,
+  },
+  cardTitle: { fontSize: 14, fontWeight: "800", color: c.dark },
+  cardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardCounter: { fontSize: 11, fontWeight: "600", color: c.muted },
+  summaryCard: {
+    backgroundColor: c.light,
+    borderRadius: radius.lg,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  summaryLabel: { fontSize: 13, color: c.muted, fontWeight: "600" },
+  summaryValue: {
+    fontSize: 13,
+    color: c.dark,
+    fontWeight: "700",
+    flexShrink: 1,
+    marginLeft: 12,
+    textAlign: "right",
+  },
+  hintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 8,
+  },
+  hintText: { fontSize: 11.5, color: c.muted, marginTop: 8, lineHeight: 16 },
+  label: { fontSize: 12.5, fontWeight: "700", color: c.dark, marginBottom: 6, marginTop: 12 },
+  input: {
+    backgroundColor: c.background,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 11,
     fontSize: 14,
     color: c.dark,
   },
-  textArea: { height: 90, textAlignVertical: "top" },
+  textArea: { height: 100 },
+  tagInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+    marginTop: 10,
+  },
+  tagInput: {
+    flex: 1,
+    fontSize: 14,
+    color: c.dark,
+    paddingVertical: 11,
+  },
   row: {
     borderRadius: radius.md, flexDirection: "row", gap: 12 },
   col: {
     borderRadius: radius.md, flex: 1 },
   categoryRow: {
-    borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
   catChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.sm,
-    backgroundColor: c.light,
+    paddingVertical: 9,
+    borderRadius: radius.full,
+    backgroundColor: c.background,
     borderWidth: 1,
-    borderColor: c.surface,
+    borderColor: c.border,
   },
-  catChipText: { fontSize: 12, fontWeight: "600", color: c.muted },
+  catChipText: { fontSize: 12.5, fontWeight: "700", color: c.muted },
   colorRow: {
-    borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+    flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 4 },
   colorDot: {
-    width: 30,
-    height: 30,
-    borderRadius: radius.md,
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
     borderWidth: 2,
     borderColor: "transparent",
-  },
-  colorDotActive: { borderColor: c.dark, transform: [{ scale: 1.1 }] },
-  checkRow: {
-    borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 12 },
-  checkbox: {
-    borderRadius: radius.sm, flexDirection: "row", alignItems: "center", gap: 6 },
-  checkLabel: { fontSize: 13, fontWeight: "600", color: c.dark },
-  imageGrid: {
-    borderRadius: radius.md, flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 },
-  imageWrap: {
-    borderRadius: radius.sm, position: "relative" },
-  imageThumb: { width: 80, height: 80, borderRadius: radius.sm },
-  imageRemove: { position: "absolute", top: -6, right: -6, backgroundColor: c.light, borderRadius: radius.md },
-  imageAdd: {
-    width: 80,
-    height: 80,
-    borderRadius: radius.sm,
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: c.muted,
     alignItems: "center",
     justifyContent: "center",
   },
-  videoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 },
+  colorDotActive: { borderColor: c.dark, transform: [{ scale: 1.12 }] },
+  checkRowItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginTop: 14,
+  },
+  checkTextWrap: { flex: 1, gap: 2 },
+  checkLabel: { fontSize: 13.5, fontWeight: "700", color: c.dark },
+  checkHint: { fontSize: 11.5, color: c.muted, lineHeight: 15 },
+  imageGrid: {
+    flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
+  imageWrap: {
+    position: "relative" },
+  imageThumb: { width: 84, height: 84, borderRadius: radius.md },
+  imageRemove: { position: "absolute", top: -6, right: -6, backgroundColor: c.light, borderRadius: radius.md },
+  imageAdd: {
+    width: 84,
+    height: 84,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: c.border,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  imageAddText: { fontSize: 11, fontWeight: "700" },
+  videoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
   videoWrap: {
     position: "relative",
     width: 140,
     height: 140,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     overflow: "hidden",
     backgroundColor: c.dark,
   },
@@ -3586,28 +3978,33 @@ const buildSellerAdminStyles = (c) =>
   videoAdd: {
     width: 140,
     height: 140,
-    borderRadius: radius.sm,
-    borderWidth: 2,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
     borderStyle: "dashed",
-    borderColor: c.muted,
+    borderColor: c.border,
     alignItems: "center",
     justifyContent: "center",
     gap: 4,
   },
-  videoAddText: { fontSize: 13, fontWeight: "700" },
   stepActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginTop: 18,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    backgroundColor: c.background,
   },
   stepSpacer: { flex: 1 },
   stepButton: {
     minWidth: 110,
-    paddingVertical: 13,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: radius.md,
     alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
   },
   stepButtonSecondary: {
     backgroundColor: c.light,
@@ -3778,26 +4175,30 @@ const buildSellerAdminStyles = (c) =>
     width: "80%",
   },
   specList: {
-    borderRadius: radius.md, gap: 12, marginTop: 4 },
+    gap: 12, marginTop: 4 },
   specRow: {
-    borderRadius: radius.sm,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
   specKey: {
-    borderRadius: radius.sm, flex: 1 },
+    flex: 1 },
   specValue: {
-    borderRadius: radius.sm, flex: 1 },
+    flex: 1 },
   specRemove: {
-    borderRadius: radius.sm, padding: 2 },
+    padding: 2 },
   addSpecButton: {
-    borderRadius: radius.sm,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 8,
+    marginTop: 12,
     alignSelf: "flex-start",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radius.full,
+    backgroundColor: c.background,
+    borderWidth: 1,
+    borderColor: c.border,
   },
   addSpecText: { fontSize: 14, fontWeight: "700" },
  });
