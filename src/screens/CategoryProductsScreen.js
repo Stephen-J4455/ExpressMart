@@ -10,7 +10,10 @@ import {
 } from "react-native";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
@@ -76,6 +79,8 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
           .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
           .eq("category", category.name || category)
           .eq("status", "active")
+          .not("seller_id", "is", null)
+          .eq("seller_id.is_active", true)
           .range(start, end);
 
         switch (sortKey) {
@@ -358,150 +363,150 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
 };
 
 const buildCategoryProductsStyles = (c) =>
-  StyleSheet.create({ 
-  container: {
-    flex: 1,
-  },
-  contentArea: {
-    flex: 1,
-    backgroundColor: c.background,
-  },
+  StyleSheet.create({
+    container: {
+      flex: 1,
+    },
+    contentArea: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
 
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 18,
-  },
-  backButton: {
-    width: 40,
-    alignItems: "flex-start",
-  },
-  backButtonInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.22)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerCenter: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-  headerIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.22)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: c.light,
-    letterSpacing: -0.3,
-  },
-  headerCount: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.82)",
-    fontWeight: "500",
-    marginTop: 1,
-  },
-  /* ── Sort Bar ── */
-  sortBarWrapper: {
-    backgroundColor: c.light,
-    borderBottomWidth: 1,
-    borderBottomColor: c.border,
-  },
-  sortBar: {
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  sortPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: c.surface,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  sortPillActive: {
-    backgroundColor: c.primary,
-    borderColor: c.primary,
-  },
-  sortLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: c.muted,
-  },
-  sortLabelActive: {
-    color: c.light,
-  },
-  /* ── Grid ── */
-  gridContent: {
-    paddingTop: 14,
-    paddingBottom: 32,
-    gap: 10,
-  },
-  gridContentDesktop: {
-    gap: 12,
-  },
-  loadMoreRow: {
-    paddingVertical: 20,
-    alignItems: "center",
-  },
-  /* ── Empty State ── */
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 40,
-    gap: 12,
-  },
-  emptyIconWrap: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: c.dark,
-    letterSpacing: -0.3,
-  },
-  emptySubtitle: {
-    fontSize: 15,
-    color: c.muted,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  browseButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 8,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  browseText: {
-    color: c.light,
-    fontSize: 15,
-    fontWeight: "700",
-  },
- });
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 18,
+    },
+    backButton: {
+      width: 40,
+      alignItems: "flex-start",
+    },
+    backButtonInner: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: "rgba(255,255,255,0.22)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    headerCenter: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+    },
+    headerIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: "rgba(255,255,255,0.22)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.light,
+      letterSpacing: -0.3,
+    },
+    headerCount: {
+      fontSize: 12,
+      color: "rgba(255,255,255,0.82)",
+      fontWeight: "500",
+      marginTop: 1,
+    },
+    /* ── Sort Bar ── */
+    sortBarWrapper: {
+      backgroundColor: c.light,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    sortBar: {
+      flexDirection: "row",
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    sortPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 20,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    sortPillActive: {
+      backgroundColor: c.primary,
+      borderColor: c.primary,
+    },
+    sortLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.muted,
+    },
+    sortLabelActive: {
+      color: c.light,
+    },
+    /* ── Grid ── */
+    gridContent: {
+      paddingTop: 14,
+      paddingBottom: 32,
+      gap: 10,
+    },
+    gridContentDesktop: {
+      gap: 12,
+    },
+    loadMoreRow: {
+      paddingVertical: 20,
+      alignItems: "center",
+    },
+    /* ── Empty State ── */
+    emptyContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 40,
+      gap: 12,
+    },
+    emptyIconWrap: {
+      width: 96,
+      height: 96,
+      borderRadius: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 8,
+    },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: c.dark,
+      letterSpacing: -0.3,
+    },
+    emptySubtitle: {
+      fontSize: 15,
+      color: c.muted,
+      textAlign: "center",
+      lineHeight: 22,
+    },
+    browseButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 8,
+      paddingHorizontal: 28,
+      paddingVertical: 14,
+      borderRadius: 14,
+    },
+    browseText: {
+      color: c.light,
+      fontSize: 15,
+      fontWeight: "700",
+    },
+  });

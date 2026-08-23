@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -149,10 +155,13 @@ export const StoreScreen = ({ route, navigation }) => {
   const theme =
     (sellerDetail?.theme_apply_customer
       ? getTheme(
-          sellerDetail?.theme_color || sellerDetail?.theme || themeColors.primary,
+          sellerDetail?.theme_color ||
+            sellerDetail?.theme ||
+            themeColors.primary,
         )
       : getTheme(themeColors.primary)) || getTheme(themeColors.primary);
-  const accent = (theme && theme.accent) || (theme && theme.primary) || themeColors.accent;
+  const accent =
+    (theme && theme.accent) || (theme && theme.primary) || themeColors.accent;
   const accentGradient = [
     (theme && theme.gradientStart) || themeColors.primary,
     (theme && theme.gradientEnd) || themeColors.primary,
@@ -443,6 +452,7 @@ export const StoreScreen = ({ route, navigation }) => {
           .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
           .eq("seller_id", sellerId)
           .eq("status", "active")
+          .eq("seller_id.is_active", true)
           .order("created_at", { ascending: false })
           .order("id", { ascending: false })
           .range(start, end);
@@ -501,7 +511,8 @@ export const StoreScreen = ({ route, navigation }) => {
 
         setStoreProducts(nextProducts);
         const receivedFullPage = rows.length === STORE_PAGE_SIZE;
-        const appendedNewProducts = reset || nextProducts.length > storeProducts.length;
+        const appendedNewProducts =
+          reset || nextProducts.length > storeProducts.length;
         setStoreHasMore(receivedFullPage && appendedNewProducts);
       } catch (err) {
         console.error("fetchStoreProducts error", err);
@@ -633,7 +644,9 @@ export const StoreScreen = ({ route, navigation }) => {
                             <Text
                               style={[
                                 styles.followButtonText,
-                                isFollowing(sellerId) && { color: themeColors.light },
+                                isFollowing(sellerId) && {
+                                  color: themeColors.light,
+                                },
                               ]}
                             >
                               {isFollowing(sellerId) ? "Following" : "Follow"}
@@ -1123,503 +1136,503 @@ export const StoreScreen = ({ route, navigation }) => {
 };
 
 const buildStoreStyles = (c) =>
-  StyleSheet.create({ 
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: c.light,
-  },
-  listContainer: {
-    flexGrow: 1,
-  },
-  hero: {
-    minHeight: 400,
-  },
-  heroBackground: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    resizeMode: "cover",
-  },
-  heroOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingTop: 80,
-    paddingHorizontal: 20,
-    justifyContent: "flex-start",
-  },
-  storeHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  storeAvatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: c.light,
-  },
-  avatarPlaceholder: {
-    backgroundColor: "rgba(255,255,255,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  storeInfo: {
-    flex: 1,
-    gap: 6,
-  },
-  storeName: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: c.light,
-  },
-  ratingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  rating: {
-    color: c.light,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  storeSubtitle: {
-    color: "rgba(255,255,255,0.9)",
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  followButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    borderWidth: 1.5,
-    borderColor: "#ef4444",
-  },
-  followButtonActive: {
-    backgroundColor: "#ef4444",
-    borderColor: "#ef4444",
-  },
-  followButtonText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#ef4444",
-  },
-  followButtonActiveText: {
-    color: "white",
-  },
-  badgesRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 32,
-    marginBottom: 24,
-  },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-  badgeText: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  statsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    paddingVertical: 16,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 12,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: c.light,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.8)",
-    fontWeight: "500",
-  },
-  divider: {
-    width: 1,
-    height: 40,
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
-  productItem: {
-    paddingHorizontal: 8,
-  },
-  columnWrapper: {
-    justifyContent: "space-between",
-    paddingHorizontal: 5,
-  },
-  gridItem: {
-    width: "49%",
-  },
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: c.dark,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: c.muted,
-  },
-  tabScrollView: {
-    flexGrow: 0,
-  },
-  tabPage: {
-    minHeight: 300,
-  },
-  tabContainer: {
-    flexDirection: "row",
-    backgroundColor: c.light,
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
-    padding: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  tabActive: {
-    backgroundColor: c.primary + "10",
-  },
-  tabText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: c.muted,
-  },
-  tabTextActive: {
-    color: c.primary,
-  },
-  tabContent: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: c.dark,
-    marginBottom: 12,
-  },
-  profileSection: {
-    backgroundColor: c.light,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  profileText: {
-    fontSize: 14,
-    color: c.dark,
-    lineHeight: 20,
-  },
-  statsGrid: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 8,
-  },
-  statBox: {
-    alignItems: "center",
-    gap: 4,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: c.primary,
-  },
-  statLabelSmall: {
-    fontSize: 12,
-    color: c.muted,
-    fontWeight: "500",
-  },
-  reviewsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  ratingSummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  ratingNumber: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: c.dark,
-  },
-  ratingCount: {
-    fontSize: 14,
-    color: c.muted,
-  },
-  reviewsList: {
-    gap: 16,
-  },
-  reviewItem: {
-    backgroundColor: c.light,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  reviewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 8,
-  },
-  reviewerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: c.light,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reviewerName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: c.dark,
-    marginBottom: 2,
-  },
-  productName: {
-    fontSize: 12,
-    color: c.muted,
-    marginBottom: 4,
-  },
-  reviewStars: {
-    flexDirection: "row",
-    gap: 2,
-  },
-  reviewText: {
-    fontSize: 14,
-    color: c.dark,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  reviewDate: {
-    fontSize: 12,
-    color: c.muted,
-  },
-  chatButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: c.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    gap: 8,
-  },
-  chatButtonText: {
-    color: c.light,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  socialLinks: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  socialButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: c.light,
-    minWidth: 100,
-    justifyContent: "center",
-  },
-  socialText: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: c.dark,
-  },
-  // Status Styles
-  storeAvatarContainer: {
-    position: "relative",
-    borderRadius: 50,
-    padding: 3,
-  },
-  statusActive: {
-    borderWidth: 3,
-    borderColor: c.primary,
-  },
-  statusBadge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: c.primary,
-    borderRadius: 12,
-    minWidth: 20,
-    height: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: c.light,
-  },
-  statusBadgeText: {
-    color: c.light,
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  fullStatusImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-  modalHeader: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
-    zIndex: 10,
-  },
-  progressBars: {
-    flexDirection: "row",
-    gap: 4,
-    marginBottom: 16,
-  },
-  progressBar: {
-    flex: 1,
-    height: 3,
-    backgroundColor: "rgba(255,255,255,0.3)",
-    borderRadius: 2,
-  },
-  progressBarActive: {
-    backgroundColor: c.light,
-  },
-  modalUserInfoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  modalUserInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  modalAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: c.light,
-  },
-  modalUserName: {
-    color: c.light,
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  modalTime: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 12,
-  },
-  closeButton: {
-    padding: 8,
-  },
-  statusTextContainer: {
-    position: "absolute",
-    bottom: 100,
-    left: 20,
-    right: 20,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 16,
-    borderRadius: 12,
-  },
-  fullStatusText: {
-    color: c.light,
-    fontSize: 16,
-    lineHeight: 22,
-    textAlign: "center",
-  },
-  statusFooter: {
-    position: "absolute",
-    bottom: 40,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
-  },
-  replyButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingVertical: 14,
-    borderRadius: 30,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-  replyButtonText: {
-    color: c.light,
-    fontWeight: "700",
-    fontSize: 16,
-  },
- });
+  StyleSheet.create({
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    backButton: {
+      padding: 8,
+      marginLeft: -8,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.light,
+    },
+    listContainer: {
+      flexGrow: 1,
+    },
+    hero: {
+      minHeight: 400,
+    },
+    heroBackground: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      resizeMode: "cover",
+    },
+    heroOverlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingTop: 80,
+      paddingHorizontal: 20,
+      justifyContent: "flex-start",
+    },
+    storeHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 16,
+    },
+    storeAvatar: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      borderWidth: 3,
+      borderColor: c.light,
+    },
+    avatarPlaceholder: {
+      backgroundColor: "rgba(255,255,255,0.3)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    storeInfo: {
+      flex: 1,
+      gap: 6,
+    },
+    storeName: {
+      fontSize: 24,
+      fontWeight: "800",
+      color: c.light,
+    },
+    ratingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    rating: {
+      color: c.light,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    storeSubtitle: {
+      color: "rgba(255,255,255,0.9)",
+      fontSize: 13,
+      fontWeight: "500",
+    },
+    followButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: "rgba(239, 68, 68, 0.1)",
+      borderWidth: 1.5,
+      borderColor: "#ef4444",
+    },
+    followButtonActive: {
+      backgroundColor: "#ef4444",
+      borderColor: "#ef4444",
+    },
+    followButtonText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: "#ef4444",
+    },
+    followButtonActiveText: {
+      color: "white",
+    },
+    badgesRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 32,
+      marginBottom: 24,
+    },
+    badge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.3)",
+    },
+    badgeText: {
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    statsContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-around",
+      paddingVertical: 16,
+      backgroundColor: "rgba(255,255,255,0.1)",
+      borderRadius: 12,
+    },
+    statItem: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 4,
+    },
+    statValue: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.light,
+    },
+    statLabel: {
+      fontSize: 12,
+      color: "rgba(255,255,255,0.8)",
+      fontWeight: "500",
+    },
+    divider: {
+      width: 1,
+      height: 40,
+      backgroundColor: "rgba(255,255,255,0.2)",
+    },
+    productItem: {
+      paddingHorizontal: 8,
+    },
+    columnWrapper: {
+      justifyContent: "space-between",
+      paddingHorizontal: 5,
+    },
+    gridItem: {
+      width: "49%",
+    },
+    emptyState: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 60,
+      gap: 12,
+    },
+    emptyText: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    emptySubtext: {
+      fontSize: 13,
+      color: c.muted,
+    },
+    tabScrollView: {
+      flexGrow: 0,
+    },
+    tabPage: {
+      minHeight: 300,
+    },
+    tabContainer: {
+      flexDirection: "row",
+      backgroundColor: c.light,
+      marginHorizontal: 16,
+      marginTop: 16,
+      borderRadius: 12,
+      padding: 4,
+      shadowColor: "#000",
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    tab: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+      borderRadius: 8,
+    },
+    tabActive: {
+      backgroundColor: c.primary + "10",
+    },
+    tabText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.muted,
+    },
+    tabTextActive: {
+      color: c.primary,
+    },
+    tabContent: {
+      padding: 16,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.dark,
+      marginBottom: 12,
+    },
+    profileSection: {
+      backgroundColor: c.light,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+      shadowColor: "#000",
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    profileText: {
+      fontSize: 14,
+      color: c.dark,
+      lineHeight: 20,
+    },
+    statsGrid: {
+      flexDirection: "row",
+      justifyContent: "space-around",
+      marginTop: 8,
+    },
+    statBox: {
+      alignItems: "center",
+      gap: 4,
+    },
+    statNumber: {
+      fontSize: 24,
+      fontWeight: "800",
+      color: c.primary,
+    },
+    statLabelSmall: {
+      fontSize: 12,
+      color: c.muted,
+      fontWeight: "500",
+    },
+    reviewsHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    ratingSummary: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    ratingNumber: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    ratingCount: {
+      fontSize: 14,
+      color: c.muted,
+    },
+    reviewsList: {
+      gap: 16,
+    },
+    reviewItem: {
+      backgroundColor: c.light,
+      borderRadius: 12,
+      padding: 16,
+      shadowColor: "#000",
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    reviewHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginBottom: 8,
+    },
+    reviewerAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: c.light,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    reviewerName: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.dark,
+      marginBottom: 2,
+    },
+    productName: {
+      fontSize: 12,
+      color: c.muted,
+      marginBottom: 4,
+    },
+    reviewStars: {
+      flexDirection: "row",
+      gap: 2,
+    },
+    reviewText: {
+      fontSize: 14,
+      color: c.dark,
+      lineHeight: 20,
+      marginBottom: 8,
+    },
+    reviewDate: {
+      fontSize: 12,
+      color: c.muted,
+    },
+    chatButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary,
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+      gap: 8,
+    },
+    chatButtonText: {
+      color: c.light,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    socialLinks: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    socialButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: c.light,
+      minWidth: 100,
+      justifyContent: "center",
+    },
+    socialText: {
+      fontSize: 12,
+      fontWeight: "500",
+      color: c.dark,
+    },
+    // Status Styles
+    storeAvatarContainer: {
+      position: "relative",
+      borderRadius: 50,
+      padding: 3,
+    },
+    statusActive: {
+      borderWidth: 3,
+      borderColor: c.primary,
+    },
+    statusBadge: {
+      position: "absolute",
+      bottom: 0,
+      right: 0,
+      backgroundColor: c.primary,
+      borderRadius: 12,
+      minWidth: 20,
+      height: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 2,
+      borderColor: c.light,
+    },
+    statusBadgeText: {
+      color: c.light,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    // Modal Styles
+    modalContainer: {
+      flex: 1,
+      backgroundColor: "#000",
+    },
+    fullStatusImage: {
+      width: "100%",
+      height: "100%",
+      resizeMode: "cover",
+    },
+    modalHeader: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      paddingHorizontal: 20,
+      zIndex: 10,
+    },
+    progressBars: {
+      flexDirection: "row",
+      gap: 4,
+      marginBottom: 16,
+    },
+    progressBar: {
+      flex: 1,
+      height: 3,
+      backgroundColor: "rgba(255,255,255,0.3)",
+      borderRadius: 2,
+    },
+    progressBarActive: {
+      backgroundColor: c.light,
+    },
+    modalUserInfoRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    modalUserInfo: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    modalAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      borderWidth: 2,
+      borderColor: c.light,
+    },
+    modalUserName: {
+      color: c.light,
+      fontWeight: "700",
+      fontSize: 16,
+    },
+    modalTime: {
+      color: "rgba(255,255,255,0.8)",
+      fontSize: 12,
+    },
+    closeButton: {
+      padding: 8,
+    },
+    statusTextContainer: {
+      position: "absolute",
+      bottom: 100,
+      left: 20,
+      right: 20,
+      backgroundColor: "rgba(0,0,0,0.5)",
+      padding: 16,
+      borderRadius: 12,
+    },
+    fullStatusText: {
+      color: c.light,
+      fontSize: 16,
+      lineHeight: 22,
+      textAlign: "center",
+    },
+    statusFooter: {
+      position: "absolute",
+      bottom: 40,
+      left: 0,
+      right: 0,
+      paddingHorizontal: 20,
+    },
+    replyButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(255,255,255,0.2)",
+      paddingVertical: 14,
+      borderRadius: 30,
+      gap: 10,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.3)",
+    },
+    replyButtonText: {
+      color: c.light,
+      fontWeight: "700",
+      fontSize: 16,
+    },
+  });

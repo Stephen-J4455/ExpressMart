@@ -6,17 +6,31 @@
 --    table stays untouched; 1:1 mapping via unique meta_retailer_id).
 CREATE TABLE IF NOT EXISTS public.product_catalog_mappings (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  product_id uuid NOT NULL REFERENCES public.express_products(id) ON DELETE CASCADE,
+  product_id uuid NOT NULL,
   meta_retailer_id text NOT NULL,
   meta_catalog_id text,
   synced_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT product_catalog_mappings_pkey PRIMARY KEY (id),
-  CONSTRAINT product_catalog_mappings_product_id_fkey
-    FOREIGN KEY (product_id) REFERENCES public.express_products(id) ON DELETE CASCADE,
   CONSTRAINT product_catalog_mappings_meta_retailer_id_key UNIQUE (meta_retailer_id)
 );
+
+-- Foreign keys are added separately with IF NOT EXISTS-style guards because
+-- Postgres has no "ADD CONSTRAINT IF NOT EXISTS" — re-running this file would
+-- otherwise fail with 42710 (constraint already exists).
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'product_catalog_mappings_product_id_fkey'
+      AND conrelid = 'public.product_catalog_mappings'::regclass
+  ) THEN
+    ALTER TABLE public.product_catalog_mappings
+      ADD CONSTRAINT product_catalog_mappings_product_id_fkey
+      FOREIGN KEY (product_id) REFERENCES public.express_products(id) ON DELETE CASCADE;
+  END IF;
+END $$;
 
 -- Index for webhook lookups by retailer id.
 CREATE INDEX IF NOT EXISTS idx_product_catalog_mappings_meta_retailer_id

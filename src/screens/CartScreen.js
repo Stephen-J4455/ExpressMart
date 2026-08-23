@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Image,
   Pressable,
@@ -12,6 +13,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useToast } from "../context/ToastContext";
+import { useShop } from "../context/ShopContext";
+import { useAds } from "../context/AdsContext";
+import { AdRenderer } from "../components/AdBanner";
+import { FeedProductCard } from "../components/FeedProductCard";
+import { SectionHeader } from "../components/SectionHeader";
+import { supabase } from "../lib/supabase";
 import { useResponsive } from "../hooks/useResponsive";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -71,10 +78,79 @@ export const CartScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { user, isAuthenticated } = useAuth();
   const { items, total, updateQuantity, removeFromCart, clearCart } = useCart();
+  const { products } = useShop();
+  const { fetchAdsByPlacement } = useAds();
   const toast = useToast();
   const { isWide, contentMaxWidth } = useResponsive();
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildCartStyles(c));
+
+  // ── Empty-cart discovery content: ads, liked products, trending feed ──
+  const [cartAds, setCartAds] = useState([]);
+  const [likedProducts, setLikedProducts] = useState([]);
+
+  useEffect(() => {
+    if (items.length > 0) return; // only needed for the empty state
+    fetchAdsByPlacement("cart").then((ads) => setCartAds(ads || []));
+  }, [items.length, fetchAdsByPlacement]);
+
+  useEffect(() => {
+    if (items.length > 0 || !user || !supabase) {
+      setLikedProducts([]);
+      return;
+    }
+    let mounted = true;
+    // Liked products: wishlist rows joined to product data (same two-step
+    // pattern as WishlistScreen — no FK join available).
+    (async () => {
+      try {
+        const { data: wishes } = await supabase
+          .from("express_wishlists")
+          .select("product_id")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        const ids = (wishes || []).map((w) => w.product_id);
+        if (!mounted) return;
+        if (ids.length === 0) {
+          setLikedProducts([]);
+          return;
+        }
+        const { data: prods } = await supabase
+          .from("express_products")
+          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+          .in("id", ids)
+          .eq("status", "active");
+        if (!mounted) return;
+        const mapped = (prods || []).map((p) => ({
+          ...p,
+          seller: p.seller_id,
+        }));
+        // Preserve wishlist recency order.
+        const order = new Map(ids.map((id, i) => [id, i]));
+        mapped.sort(
+          (a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99),
+        );
+        setLikedProducts(mapped);
+      } catch (e) {
+        console.warn("[CartScreen] liked products load failed:", e?.message);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [items.length, user]);
+
+  // Trending fallback: top-rated/discounted products from the shop feed.
+  const trendingProducts = useMemo(() => {
+    return [...products]
+      .sort((a, b) => {
+        const scoreA = Number(a.rating || 0) * 10 + Number(a.discount || 0);
+        const scoreB = Number(b.rating || 0) * 10 + Number(b.discount || 0);
+        return scoreB - scoreA;
+      })
+      .slice(0, 8);
+  }, [products]);
   const getAvailableStock = (product) =>
     Number(product?.quantity ?? product?.stock ?? 0);
   const hasInventoryValue = (product) =>
@@ -104,32 +180,134 @@ export const CartScreen = ({ navigation }) => {
     }
   };
 
+  // Total savings across all items (base price vs. effective price paid).
+  // Declared BEFORE the early return below so the hook count stays constant
+  // on every render (otherwise the empty-cart branch renders fewer hooks).
+  const totalSavings = useMemo(() => {
+    return items.reduce((sum, { product, price, quantity }) => {
+      const effective =
+        price != null && price > 0
+          ? price
+          : product.discount > 0
+            ? product.price * (1 - product.discount / 100)
+            : product.price;
+      const base = Number(product.price || 0);
+      const diff = (base - effective) * (quantity || 1);
+      return sum + (diff > 0 ? diff : 0);
+    }, 0);
+  }, [items]);
+
   if (!items.length) {
+    // Never show a bare empty cart — render a discovery page with the empty
+    // banner, ads, liked products and a trending feed instead.
+    const discoveryFeed =
+      likedProducts.length > 0 ? likedProducts : trendingProducts;
     return (
-      <View style={styles.emptyState}>
-        <View style={styles.emptyIconContainer}>
-          <Ionicons name="cart-outline" size={56} color={themeColors.primary} />
+      <View style={styles.container}>
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+          <View style={styles.headerRow}>
+            <Text style={styles.headerTitle}>Shopping Cart</Text>
+            <View style={styles.itemCountBadge}>
+              <Text style={styles.itemCountText}>0</Text>
+            </View>
+          </View>
+          <Text style={styles.headerSubtitle}>
+            Review your items before checkout
+          </Text>
         </View>
-        <Text style={styles.emptyTitle}>Your cart is empty</Text>
-        <Text style={styles.emptySubtitle}>
-          Add items from Home or Feed{"\n"}to see them here.
-        </Text>
-        <Pressable
-          style={styles.shopButton}
-          onPress={() => navigation.navigate("Main", { screen: "Home" })}
+
+        <ScrollView
+          style={styles.itemList}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
-          <Text style={styles.shopButtonText}>Start Shopping</Text>
-        </Pressable>
+          {/* Empty banner */}
+          <View style={styles.emptyBanner}>
+            <View style={styles.emptyIconContainer}>
+              <Ionicons
+                name="cart-outline"
+                size={44}
+                color={themeColors.primary}
+              />
+            </View>
+            <Text style={styles.emptyTitle}>Your cart is empty</Text>
+            <Text style={styles.emptySubtitle}>
+              Explore these picks while you decide what to add.
+            </Text>
+          </View>
+
+          {/* Ads */}
+          {cartAds.length > 0 && (
+            <View style={styles.discoveryAdsWrap}>
+              <AdRenderer ads={cartAds} />
+            </View>
+          )}
+
+          {/* Liked products (falls back to trending when no wishlist) */}
+          {discoveryFeed.length > 0 && (
+            <>
+              <SectionHeader
+                title={
+                  likedProducts.length > 0
+                    ? "Liked products"
+                    : "Trending right now"
+                }
+              />
+              <View style={styles.discoveryFeedWrap}>
+                {discoveryFeed.slice(0, 6).map((product) => (
+                  <FeedProductCard
+                    key={product.id}
+                    product={product}
+                    onPress={() =>
+                      navigation.navigate("ProductDetail", { product })
+                    }
+                  />
+                ))}
+              </View>
+            </>
+          )}
+        </ScrollView>
       </View>
     );
   }
 
   const summaryContent = (
-    <>
+    <View style={styles.summaryCard}>
+      <View style={styles.summaryCardHeader}>
+        <View style={styles.summaryCardHeaderLeft}>
+          <Ionicons
+            name="receipt-outline"
+            size={18}
+            color={themeColors.primary}
+          />
+          <Text style={styles.summaryCardTitle}>Order Summary</Text>
+        </View>
+        <View style={styles.summaryItemCountBadge}>
+          <Text style={styles.summaryItemCountText}>
+            {items.length} {items.length === 1 ? "item" : "items"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.summaryDivider} />
+
       <View style={styles.summaryRow}>
         <Text style={styles.summaryLabel}>Subtotal</Text>
         <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>
       </View>
+
+      {totalSavings > 0 && (
+        <View style={styles.summaryRow}>
+          <Text style={styles.savingsLabel}>
+            <Ionicons name="pricetag-outline" size={13} color="#10B981" /> You
+            save
+          </Text>
+          <Text style={styles.savingsValue}>
+            -GH₵{totalSavings.toLocaleString()}
+          </Text>
+        </View>
+      )}
+
       <View style={styles.shippingHintContainer}>
         <Ionicons
           name="information-circle-outline"
@@ -140,6 +318,7 @@ export const CartScreen = ({ navigation }) => {
           Shipping & service fees calculated at checkout
         </Text>
       </View>
+
       {hasOutOfStockItems && (
         <View style={styles.stockWarningContainer}>
           <Ionicons name="alert-circle-outline" size={14} color="#B91C1C" />
@@ -148,6 +327,12 @@ export const CartScreen = ({ navigation }) => {
           </Text>
         </View>
       )}
+
+      <View style={styles.totalRow}>
+        <Text style={styles.totalLabel}>Total</Text>
+        <Text style={styles.totalValue}>GH₵{total.toLocaleString()}</Text>
+      </View>
+
       <Pressable style={styles.checkout} onPress={handleCheckout}>
         <LinearGradient
           colors={
@@ -163,12 +348,12 @@ export const CartScreen = ({ navigation }) => {
           <Text style={styles.checkoutText}>Proceed to Checkout</Text>
         </LinearGradient>
       </Pressable>
-    </>
+    </View>
   );
 
   const summaryStyle = isWide
     ? styles.summaryWide
-    : [styles.summary, { paddingBottom: insets.bottom + 100 }];
+    : [styles.summary, { paddingBottom: insets.bottom + 16 }];
 
   return (
     <View style={styles.container}>
@@ -365,406 +550,439 @@ export const CartScreen = ({ navigation }) => {
 };
 
 const buildCartStyles = (c) =>
-  StyleSheet.create({ 
-  container: {
-    flex: 1,
-    backgroundColor: c.background,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    backgroundColor: c.light,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: c.dark,
-    letterSpacing: -0.5,
-  },
-  itemCountBadge: {
-    backgroundColor: c.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  itemCountText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: c.light,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: c.muted,
-    marginTop: 4,
-    fontWeight: "500",
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-    backgroundColor: c.light,
-  },
-  emptyIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 40,
-    backgroundColor: c.light,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-    shadowColor: c.primary,
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 5,
-  },
-  emptyTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: c.dark,
-  },
-  emptySubtitle: {
-    marginTop: 8,
-    color: c.muted,
-    textAlign: "center",
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  shopButton: {
-    marginTop: 28,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    backgroundColor: c.primary,
-    borderRadius: 20,
-    shadowColor: c.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  shopButtonText: {
-    color: c.light,
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  itemList: {
-    flex: 1,
-    padding: 16,
-    paddingTop: 20,
-  },
-  itemCard: {
-    backgroundColor: c.light,
-    borderRadius: 20,
-    marginBottom: 14,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-    overflow: "hidden",
-  },
-  itemCardOutOfStock: {
-    opacity: 0.72,
-  },
-  itemRow: {
-    flexDirection: "row",
-    padding: 12,
-    paddingBottom: 10,
-  },
-  thumbnailContainer: {
-    width: 90,
-    height: 90,
-    backgroundColor: c.light,
-    borderRadius: 14,
-    overflow: "hidden",
-    position: "relative",
-  },
-  thumbnail: {
-    width: "100%",
-    height: "100%",
-  },
-  discountBadge: {
-    position: "absolute",
-    top: 6,
-    left: 6,
-    backgroundColor: "#EF4444",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  flashBadge: {
-    backgroundColor: "#F97316",
-  },
-  discountText: {
-    color: c.light,
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  outOfStockBadge: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    backgroundColor: "rgba(31,41,55,0.9)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  outOfStockBadgeText: {
-    color: c.light,
-    fontSize: 9,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-  },
-  itemContent: {
-    flex: 1,
-    paddingLeft: 12,
-    justifyContent: "center",
-  },
-  title: {
-    fontWeight: "700",
-    fontSize: 15,
-    color: c.dark,
-    lineHeight: 20,
-    letterSpacing: -0.2,
-  },
-  specsRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-  },
-  specBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: c.surface,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  specText: {
-    fontSize: 11,
-    color: c.primary,
-    fontWeight: "600",
-  },
-  colorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  priceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 8,
-  },
-  price: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: c.primary,
-  },
-  originalPrice: {
-    fontSize: 13,
-    color: c.muted,
-    textDecorationLine: "line-through",
-  },
-  outOfStockText: {
-    marginTop: 6,
-    color: "#B91C1C",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  itemActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: c.surface,
-    backgroundColor: "#FAFBFC",
-  },
-  removeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#FEF2F2",
-  },
-  removeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#EF4444",
-  },
-  quantityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: c.surface,
-    borderRadius: 12,
-    padding: 4,
-  },
-  qtyButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: c.light,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  qtyButtonDisabled: {
-    backgroundColor: c.light,
-  },
-  qtyButtonAdd: {
-    backgroundColor: c.primary,
-  },
-  qtyButtonDisabledAdd: {
-    backgroundColor: c.surface,
-  },
-  qtyValueContainer: {
-    minWidth: 36,
-    alignItems: "center",
-  },
-  qtyValue: {
-    fontWeight: "700",
-    fontSize: 16,
-    color: c.dark,
-  },
-  summary: {
-    backgroundColor: c.light,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    padding: 24,
-    paddingBottom: 32,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: -6 },
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  summaryLabel: {
-    color: c.muted,
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  summaryValue: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: c.dark,
-  },
-  freeShipping: {
-    color: "#10B981",
-  },
-  shippingHintContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: c.surface,
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 14,
-  },
-  shippingHint: {
-    fontSize: 12,
-    color: c.primary,
-    fontWeight: "600",
-  },
-  stockWarningContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#FEF2F2",
-    borderWidth: 1,
-    borderColor: "#FECACA",
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 14,
-  },
-  stockWarningText: {
-    fontSize: 12,
-    color: "#B91C1C",
-    fontWeight: "600",
-    flex: 1,
-  },
-  totalRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: c.border,
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  totalLabel: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: c.dark,
-  },
-  totalValue: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: c.primary,
-  },
-  checkout: {
-    borderRadius: 18,
-    overflow: "hidden",
-  },
-  checkoutGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 18,
-    gap: 10,
-  },
-  checkoutText: {
-    color: c.light,
-    fontWeight: "700",
-    fontSize: 17,
-  },
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+      paddingBottom: 50,
+    },
+    header: {
+      paddingHorizontal: 20,
+      paddingBottom: 10,
+      backgroundColor: c.light,
+      shadowColor: "#000",
+      shadowOpacity: 0.05,
+      shadowRadius: 10,
+      elevation: 5,
+    },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    headerTitle: {
+      fontSize: 26,
+      fontWeight: "800",
+      color: c.dark,
+      letterSpacing: -0.5,
+    },
+    itemCountBadge: {
+      backgroundColor: c.primary,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    itemCountText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.light,
+    },
+    headerSubtitle: {
+      fontSize: 14,
+      color: c.muted,
+      marginTop: 4,
+      fontWeight: "500",
+    },
+    emptyBanner: {
+      alignItems: "center",
+      paddingVertical: 28,
+      paddingHorizontal: 24,
+      marginHorizontal: 16,
+      marginTop: 16,
+      backgroundColor: c.light,
+      borderRadius: 20,
+    },
+    emptyIconContainer: {
+      width: 84,
+      height: 84,
+      borderRadius: 30,
+      backgroundColor: c.primary + "15",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 14,
+    },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    emptySubtitle: {
+      marginTop: 6,
+      color: c.muted,
+      textAlign: "center",
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    discoveryAdsWrap: {
+      marginTop: 8,
+    },
+    discoveryFeedWrap: {
+      paddingHorizontal: 0,
+    },
+    itemList: {
+      flex: 1,
+      padding: 0,
+      paddingTop: 20,
+    },
+    itemCard: {
+      backgroundColor: c.light,
+      borderRadius: 20,
+      marginBottom: 14,
+      shadowColor: "#000",
+      shadowOpacity: 0.05,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 3,
+      overflow: "hidden",
+    },
+    itemCardOutOfStock: {
+      opacity: 0.72,
+    },
+    itemRow: {
+      flexDirection: "row",
+      padding: 12,
+      paddingBottom: 10,
+    },
+    thumbnailContainer: {
+      width: 90,
+      height: 90,
+      backgroundColor: c.light,
+      borderRadius: 14,
+      overflow: "hidden",
+      position: "relative",
+    },
+    thumbnail: {
+      width: "100%",
+      height: "100%",
+    },
+    discountBadge: {
+      position: "absolute",
+      top: 6,
+      left: 6,
+      backgroundColor: "#EF4444",
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+    },
+    flashBadge: {
+      backgroundColor: "#F97316",
+    },
+    discountText: {
+      color: c.light,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    outOfStockBadge: {
+      position: "absolute",
+      top: 6,
+      right: 6,
+      backgroundColor: "rgba(31,41,55,0.9)",
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    outOfStockBadgeText: {
+      color: c.light,
+      fontSize: 9,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.3,
+    },
+    itemContent: {
+      flex: 1,
+      paddingLeft: 12,
+      justifyContent: "center",
+    },
+    title: {
+      fontWeight: "700",
+      fontSize: 15,
+      color: c.dark,
+      lineHeight: 20,
+      letterSpacing: -0.2,
+    },
+    specsRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 8,
+    },
+    specBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: c.surface,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    specText: {
+      fontSize: 11,
+      color: c.primary,
+      fontWeight: "600",
+    },
+    colorDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    priceRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 8,
+    },
+    price: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: c.primary,
+    },
+    originalPrice: {
+      fontSize: 13,
+      color: c.muted,
+      textDecorationLine: "line-through",
+    },
+    outOfStockText: {
+      marginTop: 6,
+      color: "#B91C1C",
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    itemActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderTopWidth: 1,
+      borderTopColor: c.surface,
+      backgroundColor: "#FAFBFC",
+    },
+    removeButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: "#FEF2F2",
+    },
+    removeText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: "#EF4444",
+    },
+    quantityRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.surface,
+      borderRadius: 12,
+      padding: 4,
+    },
+    qtyButton: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: c.light,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    qtyButtonDisabled: {
+      backgroundColor: c.light,
+    },
+    qtyButtonAdd: {
+      backgroundColor: c.primary,
+    },
+    qtyButtonDisabledAdd: {
+      backgroundColor: c.surface,
+    },
+    qtyValueContainer: {
+      minWidth: 36,
+      alignItems: "center",
+    },
+    qtyValue: {
+      fontWeight: "700",
+      fontSize: 16,
+      color: c.dark,
+    },
+    summary: {
+      backgroundColor: "transparent",
+      paddingBottom: 0,
+    },
+    summaryCard: {
+      backgroundColor: c.light,
+      borderRadius: 30,
+      padding: 24,
+      paddingBottom: 28,
+      shadowColor: "#000",
+      shadowOpacity: 0.1,
+      shadowOffset: { width: 0, height: -6 },
+      shadowRadius: 16,
+      elevation: 12,
+    },
+    summaryCardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    summaryCardHeaderLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    summaryCardTitle: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: c.dark,
+      letterSpacing: -0.3,
+    },
+    summaryItemCountBadge: {
+      backgroundColor: c.primary + "15",
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    summaryItemCountText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.primary,
+    },
+    summaryDivider: {
+      height: 1,
+      backgroundColor: c.border,
+      marginVertical: 16,
+    },
+    summaryRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    summaryLabel: {
+      color: c.muted,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    summaryValue: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    savingsLabel: {
+      color: "#10B981",
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    savingsValue: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: "#10B981",
+    },
+    freeShipping: {
+      color: "#10B981",
+    },
+    shippingHintContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: c.surface,
+      padding: 10,
+      borderRadius: 12,
+      marginBottom: 14,
+    },
+    shippingHint: {
+      fontSize: 12,
+      color: c.primary,
+      fontWeight: "600",
+    },
+    stockWarningContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: "#FEF2F2",
+      borderWidth: 1,
+      borderColor: "#FECACA",
+      padding: 10,
+      borderRadius: 12,
+      marginBottom: 14,
+    },
+    stockWarningText: {
+      fontSize: 12,
+      color: "#B91C1C",
+      fontWeight: "600",
+      flex: 1,
+    },
+    totalRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingTop: 14,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      marginTop: 8,
+      marginBottom: 20,
+    },
+    totalLabel: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    totalValue: {
+      fontSize: 22,
+      fontWeight: "800",
+      color: c.primary,
+    },
+    checkout: {
+      borderRadius: 18,
+      overflow: "hidden",
+    },
+    checkoutGradient: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 18,
+      gap: 10,
+    },
+    checkoutText: {
+      color: c.light,
+      fontWeight: "700",
+      fontSize: 17,
+    },
 
-  // Wide-screen (tablet/desktop) - side-by-side layout
-  wideBody: {
-    flex: 1,
-    flexDirection: "row",
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    gap: 24,
-  },
-  mobileBody: {
-    flex: 1,
-  },
-  itemListWide: {
-    flex: 1,
-  },
-  summaryWide: {
-    width: 360,
-    backgroundColor: c.light,
-    borderRadius: 24,
-    padding: 24,
-    alignSelf: "flex-start",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 16,
-    elevation: 6,
-    marginBottom: 20,
-  },
- });
+    // Wide-screen (tablet/desktop) - side-by-side layout
+    wideBody: {
+      flex: 1,
+      flexDirection: "row",
+      paddingHorizontal: 24,
+      paddingTop: 20,
+      gap: 24,
+    },
+    mobileBody: {
+      flex: 1,
+    },
+    itemListWide: {
+      flex: 1,
+    },
+    summaryWide: {
+      width: 360,
+      backgroundColor: c.light,
+      borderRadius: 24,
+      padding: 24,
+      alignSelf: "flex-start",
+      shadowColor: "#000",
+      shadowOpacity: 0.08,
+      shadowOffset: { width: 0, height: 4 },
+      shadowRadius: 16,
+      elevation: 6,
+      marginBottom: 20,
+    },
+  });

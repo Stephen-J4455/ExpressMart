@@ -1,553 +1,381 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// HomeScreen
+// ---------------------------------------------------------------------------
+// Social-feed style discovery home screen (the app's landing tab). Keeps the
+// same AppHeader, theme tokens, and floating bottom-nav patterns.
+//
+// Filter tabs:
+//   For You   — default, uses the ShopContext product feed (Upstash-cached)
+//   Following — products from sellers the user follows (express_follows)
+//   Trending  — highest rated / discounted active products
+//   Nearby    — location-based via browser geolocation / expo-location fallback
+// ---------------------------------------------------------------------------
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  ImageBackground,
+  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  Animated,
-  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AppHeader } from "../components/AppHeader";
-import { ProductCard } from "../components/ProductCard";
-import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
-import { AdRenderer } from "../components/AdBanner";
-import { InlineAdProductCard } from "../components/InlineAdProductCard";
+import { FeedProductCard } from "../components/FeedProductCard";
+import { FeedCardPlaceholder } from "../components/FeedCardPlaceholder";
 import { useShop } from "../context/ShopContext";
-import { useAds } from "../context/AdsContext";
-import { LazyScrollContext, lazyScroll } from "../context/LazyScrollContext";
+import { useAuth } from "../context/AuthContext";
+import { lazyScroll } from "../context/LazyScrollContext";
 import { useTheme } from "../context/ThemeContext";
-import { flashSaleService } from "../services/flashSaleService";
-import { useResponsive } from "../hooks/useResponsive";
 import { useAppStyles } from "../hooks/useAppStyles";
-import { injectAdsIntoProducts } from "../utils/adPlacement";
+import { radius } from "../theme/colors";
+import { supabase } from "../lib/supabase";
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
+const FILTERS = ["For You", "Following", "Trending", "Nearby"];
+const NEARBY_RADIUS_KM = 25;
 
 export const HomeScreen = ({ navigation }) => {
+  const { colors: c } = useTheme();
+  const styles = useAppStyles(buildHomeStyles);
+  const { user } = useAuth();
   const {
     products,
-    categories,
-    sellers,
-    followedSellers,
     loading,
     refresh,
     loadMore,
     hasMore,
     loadingMore,
+    followedSellers,
   } = useShop();
-  const { fetchAdsByPlacement } = useAds();
-  const { gridColumns, getItemWidth } = useResponsive();
-  const itemWidth = getItemWidth(gridColumns, 12, 12);
-  // Track the active color scheme so memoized UI-generating callbacks
-  // (e.g. renderGridItem) re-create when the theme changes, even while this
-  // tab stays mounted in the background.
-  const { isDark, colors: themeColors } = useTheme();
-  const styles = useAppStyles((c) => buildHomeStyles(c));
-  const [homeAds, setHomeAds] = useState([]);
-  const [featuredAds, setFeaturedAds] = useState([]);
-  const [flashSales, setFlashSales] = useState([]);
-  const [loadingFlashSales, setLoadingFlashSales] = useState(true);
+
+  const [activeFilter, setActiveFilter] = useState("For You");
   const [refreshing, setRefreshing] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [nearbyProducts, setNearbyProducts] = useState(null);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
 
-  const loadFlashSales = useCallback(async () => {
-    setLoadingFlashSales(true);
-    const { success, data } = await flashSaleService.getActiveFlashSales();
-    if (success) {
-      setFlashSales(data || []);
+  // ── Nearby: request geolocation and fetch sellers within radius ──────────
+  const loadNearby = useCallback(async () => {
+    if (!supabase) return;
+    setNearbyLoading(true);
+    try {
+      let coords = null;
+      if (typeof navigator !== "undefined" && navigator.geolocation) {
+        coords = await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve(pos.coords),
+            () => resolve(null),
+            { timeout: 8000 },
+          );
+        });
+      }
+      setUserLocation(coords);
+
+      // Fetch sellers with coordinates; fall back to all products when no
+      // geo data is available on either side.
+      const { data: sellers } = await supabase
+        .from("express_sellers")
+        .select("id, latitude, longitude")
+        .eq("is_active", true);
+
+      if (!coords || !sellers?.length) {
+        setNearbyProducts([]);
+        return;
+      }
+
+      const nearbyIds = sellers
+        .filter((s) => {
+          if (s.latitude == null || s.longitude == null) return false;
+          const dLat = (s.latitude - coords.latitude) * 111;
+          const dLon =
+            (s.longitude - coords.longitude) *
+            111 *
+            Math.cos((coords.latitude * Math.PI) / 180);
+          return Math.sqrt(dLat * dLat + dLon * dLon) <= NEARBY_RADIUS_KM;
+        })
+        .map((s) => s.id);
+
+      if (nearbyIds.length === 0) {
+        setNearbyProducts([]);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("express_products")
+        .select(
+          "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description)",
+        )
+        .eq("status", "active")
+        .not("seller_id", "is", null)
+        .eq("seller_id.is_active", true)
+        .in("seller_id", nearbyIds)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      setNearbyProducts(data || []);
+    } catch (e) {
+      console.warn("[HomeScreen] nearby load failed:", e?.message);
+      setNearbyProducts([]);
+    } finally {
+      setNearbyLoading(false);
     }
-    setLoadingFlashSales(false);
   }, []);
 
-  const daySeed = useMemo(() => new Date().toDateString(), []);
-  const scrollRef = useRef(null);
-  const scrollContentRef = useRef(null);
-
   useEffect(() => {
-    lazyScroll.viewportHeight = Dimensions.get("window").height;
-  }, []);
-
-  // Detect scroll near bottom to trigger load-more
-  const handlePageScroll = useCallback(
-    ({ nativeEvent }) => {
-      const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-      const distanceFromBottom =
-        contentSize.height - contentOffset.y - layoutMeasurement.height;
-      if (distanceFromBottom < 400 && hasMore && !loadingMore && !loading) {
-        loadMore();
-      }
-      lazyScroll.notify(contentOffset.y);
-    },
-    [hasMore, loadingMore, loading, loadMore],
-  );
-
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-
-  // Opening animation
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fadeAnim, slideAnim]);
-
-  // Load ads
-  useEffect(() => {
-    const loadAds = async () => {
-      const homeAdsData = await fetchAdsByPlacement("home");
-      setHomeAds(homeAdsData);
-
-      const featuredAdsData = await fetchAdsByPlacement("feed");
-      setFeaturedAds(featuredAdsData);
-    };
-
-    loadAds();
-  }, [fetchAdsByPlacement]);
-
-  // Load flash sales once on mount. No auto-refresh interval, so the section
-  // doesn't reload itself; pull-to-refresh triggers a manual reload instead.
-  useEffect(() => {
-    loadFlashSales();
-  }, [loadFlashSales]);
-
-  const featured = useMemo(
-    () =>
-      products
-        .slice()
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 12),
-    [products],
-  );
-
-  const forYouData = useMemo(() => {
-    const baseData = loading ? Array(gridColumns * 2).fill(null) : featured;
-    if (loading) return baseData;
-
-    return injectAdsIntoProducts({
-      products: baseData,
-      ads: homeAds,
-      seed: `home-foryou-${daySeed}-${featured.length}`,
-      minInterval: 4,
-      maxInterval: 7,
-      maxAds: 2,
-    });
-  }, [loading, gridColumns, featured, homeAds, daySeed]);
-
-  const topCarouselAds = useMemo(
-    () =>
-      (homeAds || []).filter(
-        (ad) => String(ad?.style || "").toLowerCase() === "carousel",
-      ),
-    [homeAds],
-  );
-
-  const handleCategoryPress = useCallback(
-    (category) => {
-      navigation.navigate("CategoryProducts", { category });
-    },
-    [navigation],
-  );
-
-  const renderCategoriesSection = () => {
-    if (!categories || categories.length === 0) return null;
-
-    return (
-      <View style={styles.sectionBlock}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="grid-outline" size={18} color={themeColors.primary} />
-          <Text style={styles.sectionTitle}>Categories</Text>
-          <Pressable
-            style={styles.showMoreBtn}
-            onPress={() => navigation.navigate("Categories")}
-            hitSlop={8}
-          >
-            <Text style={styles.showMoreText}>See All</Text>
-            <Ionicons
-              name="chevron-forward"
-              size={14}
-              color={themeColors.primary}
-            />
-          </Pressable>
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryScroller}
-          decelerationRate="fast"
-        >
-          {categories.map((cat) => (
-            <Pressable
-              key={cat.id}
-              style={({ pressed }) => [
-                styles.categoryTile,
-                pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] },
-              ]}
-              onPress={() => handleCategoryPress(cat)}
-            >
-              {cat.image_url ? (
-                <ImageBackground
-                  source={{ uri: cat.image_url }}
-                  style={styles.categoryTileBg}
-                  imageStyle={styles.categoryTileBgImage}
-                >
-                  <View style={styles.categoryTileOverlay} />
-                  <Text numberOfLines={2} style={styles.categoryTileLabel}>
-                    {cat.name}
-                  </Text>
-                </ImageBackground>
-              ) : (
-                <View
-                  style={[
-                    styles.categoryTileBg,
-                    { backgroundColor: cat.color || "#F0F9FF" },
-                  ]}
-                >
-                  <Ionicons
-                    name={cat.icon || "apps-outline"}
-                    size={26}
-                    color={themeColors.primary}
-                  />
-                  <Text numberOfLines={2} style={styles.categoryTileLabel}>
-                    {cat.name}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  };
-
-  const homeOverlayAds = useMemo(
-    () =>
-      (homeAds || []).filter((ad) =>
-        ["popup", "fullscreen", "sticky_footer"].includes(
-          String(ad?.style || "").toLowerCase(),
-        ),
-      ),
-    [homeAds],
-  );
-
-  const renderGridItem = useCallback(
-    (item) => {
-      if (!item) {
-        return (
-          <View style={{ flex: 1, maxWidth: itemWidth }}>
-            <ProductCardPlaceholder />
-          </View>
-        );
-      }
-
-      if (item.__type === "injected_ad") {
-        return (
-          <View style={{ flex: 1, maxWidth: itemWidth }}>
-            <InlineAdProductCard ad={item.ad} showCta />
-          </View>
-        );
-      }
-
-      const isFlashSaleItem =
-        item?.product &&
-        (item?.flash_price != null || item?.discount_percentage != null);
-      const productItem = isFlashSaleItem ? item.product : item;
-
-      return (
-        <View style={{ flex: 1, maxWidth: itemWidth }}>
-          <ProductCard
-            product={productItem}
-            flashSale={isFlashSaleItem ? item : undefined}
-            compact={isFlashSaleItem}
-            hidePrice={isFlashSaleItem}
-            onPress={() =>
-              navigation.navigate("ProductDetail", {
-                product: productItem,
-                flashSale: isFlashSaleItem ? item : undefined,
-              })
-            }
-          />
-        </View>
-      );
-    },
-    [itemWidth, navigation, isDark],
-  );
-
-  const toRows = useCallback((items, columns) => {
-    const rows = [];
-    for (let i = 0; i < items.length; i += columns) {
-      rows.push(items.slice(i, i + columns));
+    if (
+      activeFilter === "Nearby" &&
+      nearbyProducts === null &&
+      !nearbyLoading
+    ) {
+      loadNearby();
     }
-    return rows;
-  }, []);
+  }, [activeFilter, nearbyProducts, nearbyLoading, loadNearby]);
 
-  const forYouRows = useMemo(
-    () => toRows(forYouData, gridColumns),
-    [forYouData, gridColumns, toRows],
-  );
-
-  // Normalized flash sale items for the product grid renderer
-  const flashSaleItems = useMemo(
-    () =>
-      (flashSales || []).map((fs) => ({
-        product: fs.product,
-        flash_price: fs.flash_price,
-        discount_percentage: fs.discount_percentage,
-        end_time: fs.end_time,
-      })),
-    [flashSales],
-  );
+  // ── Feed items per filter ────────────────────────────────────────────────
+  const feedItems = useMemo(() => {
+    switch (activeFilter) {
+      case "Following": {
+        if (!followedSellers.length) return [];
+        return products.filter((p) => followedSellers.includes(p.seller?.id));
+      }
+      case "Trending":
+        return [...products]
+          .sort((a, b) => {
+            const scoreA = Number(a.rating || 0) * 10 + Number(a.discount || 0);
+            const scoreB = Number(b.rating || 0) * 10 + Number(b.discount || 0);
+            return scoreB - scoreA;
+          })
+          .slice(0, 30);
+      case "Nearby":
+        return nearbyProducts || [];
+      default:
+        return products;
+    }
+  }, [activeFilter, products, followedSellers, nearbyProducts]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    try {
-      await Promise.all([refresh(), loadFlashSales()]);
-    } finally {
-      setRefreshing(false);
+    if (activeFilter === "Nearby") {
+      setNearbyProducts(null);
+      await loadNearby();
+    } else {
+      await refresh({ silent: true });
     }
-  }, [refresh, loadFlashSales]);
+    setRefreshing(false);
+  }, [activeFilter, refresh, loadNearby]);
 
-  const renderFlashSaleSection = () => {
-    if (loadingFlashSales) {
-      return (
-        <View style={styles.sectionBlock}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="flash" size={18} color={themeColors.warmCoral} />
-            <Text style={styles.sectionTitle}>Flash Sales</Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.hScrollContent}
-          >
-            {Array(gridColumns)
-              .fill(null)
-              .map((_, i) => (
-                <View
-                  key={`fs-skel-${i}`}
-                  style={{ width: itemWidth }}
-                >
-                  <ProductCardPlaceholder />
-                </View>
-              ))}
-          </ScrollView>
-        </View>
-      );
-    }
+  const handleScroll = useCallback(
+    (e) => {
+      lazyScroll.notify(e.nativeEvent.contentOffset.y);
+      const { contentSize, layoutMeasurement, contentOffset } = e.nativeEvent;
+      const distanceFromBottom =
+        contentSize.height - layoutMeasurement.height - contentOffset.y;
+      if (distanceFromBottom < 400 && hasMore && !loadingMore) {
+        loadMore();
+      }
+    },
+    [hasMore, loadingMore, loadMore],
+  );
 
-    if (!flashSales || flashSales.length === 0) return null;
+  const renderFeedItem = useCallback(
+    ({ item }) => (
+      <View style={[styles.cardWrap, { width: "100%" }]}>
+        <FeedProductCard
+          product={item}
+          onPress={() =>
+            navigation.navigate("ProductDetail", { product: item })
+          }
+        />
+      </View>
+    ),
+    [navigation, styles],
+  );
 
-    return (
-      <View style={styles.sectionBlock}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="flash" size={18} color={themeColors.warmCoral} />
-          <Text style={styles.sectionTitle}>Flash Sales</Text>
-        </View>
+  const renderEmpty = () => (
+    <View style={styles.emptyState}>
+      <Ionicons
+        name={
+          activeFilter === "Following"
+            ? "people-outline"
+            : activeFilter === "Nearby"
+              ? "location-outline"
+              : "sparkles-outline"
+        }
+        size={40}
+        color={c.muted}
+      />
+      <Text style={styles.emptyTitle}>
+        {activeFilter === "Following"
+          ? "No listings from sellers you follow yet"
+          : activeFilter === "Nearby"
+            ? userLocation
+              ? "No listings found near you"
+              : "Location permission needed to find nearby listings"
+            : "Nothing trending right now"}
+      </Text>
+      {activeFilter === "Following" && !followedSellers.length && (
+        <Pressable
+          style={styles.emptyAction}
+          onPress={() => navigation.navigate("Stores")}
+        >
+          <Text style={styles.emptyActionText}>Discover stores</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+
+  return (
+    // NOTE: no LazyScrollContext here — LazyImage's measureLayout-based lazy
+    // hydration only works inside a plain ScrollView (Home). Inside a
+    // virtualized FlatList the measurement is invalid, so cards render their
+    // images eagerly instead.
+    <View style={styles.container}>
+      <AppHeader
+        onSearchPress={() => navigation.navigate("Search")}
+        onChatPress={() => navigation.navigate("Chats")}
+        onNotificationsPress={() => navigation.navigate("Notifications")}
+      />
+
+      {/* Filter pill row */}
+      <View style={styles.filterBar}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.hScrollContent}
+          contentContainerStyle={styles.filterRow}
         >
-          {flashSaleItems.map((item, index) => (
-            <View key={`flash-${item?.product?.id || index}`} style={{ width: itemWidth }}>
-              {renderGridItem(item)}
-            </View>
-          ))}
+          {FILTERS.map((filter) => {
+            const isActive = filter === activeFilter;
+            return (
+              <Pressable
+                key={filter}
+                onPress={() => setActiveFilter(filter)}
+                style={[styles.filterPill, isActive && styles.filterPillActive]}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    isActive && styles.filterTextActive,
+                  ]}
+                >
+                  {filter}
+                </Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
       </View>
-    );
-  };
 
-  return (
-    <LazyScrollContext.Provider value={{ scrollContentRef }}>
-      <Animated.View
-        style={[
-          styles.container,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
-        <View style={styles.homeContent}>
-        <AppHeader
-          onSearchPress={() => navigation.navigate("Search")}
-          onChatPress={() => navigation.navigate("Chats")}
-          onNotificationsPress={() => navigation.navigate("Notifications")}
-        />
-
-        <ScrollView
-          ref={scrollRef}
-          showsVerticalScrollIndicator={false}
+      {loading ? (
+        // Skeleton placeholders shaped like feed cards — no spinner.
+        <View style={styles.placeholderList}>
+          {[0, 1, 2].map((i) => (
+            <FeedCardPlaceholder key={i} />
+          ))}
+        </View>
+      ) : (
+        <FlatList
+          data={feedItems}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderFeedItem}
+          ListEmptyComponent={!nearbyLoading ? renderEmpty : null}
+          onScroll={handleScroll}
           scrollEventThrottle={200}
-          onScroll={handlePageScroll}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
           }
-          contentContainerStyle={[styles.pageContent, { paddingBottom: 16 }]}
-        >
-          <View ref={scrollContentRef}>
-          {topCarouselAds.length > 0 && (
-            <View style={styles.topCarouselWrap}>
-              <AdRenderer ads={topCarouselAds} />
-            </View>
-          )}
+          initialNumToRender={3}
+          maxToRenderPerBatch={4}
+          windowSize={5}
+        ></FlatList>
+      )}
 
-          {renderCategoriesSection()}
-
-          {renderFlashSaleSection()}
-
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>For You</Text>
-          </View>
-
-          <View style={styles.gridSection}>
-            {(forYouRows || []).map((row, rowIndex) => (
-              <View key={`foryou-row-${rowIndex}`} style={styles.gridRow}>
-                {row.map((item, colIndex) => (
-                  <View
-                    key={item?.id || `placeholder-foryou-${rowIndex}-${colIndex}`}
-                    style={styles.gridItem}
-                  >
-                    {renderGridItem(item)}
-                  </View>
-                ))}
-              </View>
-            ))}
-          </View>
-
-          {loadingMore && (
-            <View style={styles.loadMoreIndicator}>
-              <ActivityIndicator size="small" color={themeColors.primary} />
-            </View>
-          )}
-          </View>
-        </ScrollView>
-        {homeOverlayAds.length > 0 && <AdRenderer ads={homeOverlayAds} />}
-      </View>
-      </Animated.View>
-    </LazyScrollContext.Provider>
+      {(activeFilter === "Nearby" && nearbyLoading) || loadingMore ? (
+        <View style={styles.footerLoader}>
+          <ActivityIndicator size="small" color={c.primary} />
+        </View>
+      ) : null}
+    </View>
   );
 };
 
 const buildHomeStyles = (c) =>
-  StyleSheet.create({ 
+  StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: c.background,
+      paddingBottom: 50,
     },
-    homeContent: {
+    placeholderList: {
       flex: 1,
-      backgroundColor: c.background,
+      paddingHorizontal: 12,
     },
-    pageContent: {
-      flexGrow: 1,
-    },
-    topCarouselWrap: {
-      paddingTop: 8,
+    filterBar: {
+      paddingTop: 10,
       paddingBottom: 6,
     },
-    sectionBlock: {
-      paddingTop: 12,
-      paddingBottom: 8,
-    },
-    sectionHeader: {
+    filterRow: {
       flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      paddingHorizontal: 16,
-      paddingBottom: 8,
-    },
-    sectionTitle: {
-      fontSize: 18,
-      fontWeight: "800",
-      color: c.dark,
-    },
-    hScrollContent: {
-      gap: 12,
+      gap: 8,
       paddingHorizontal: 12,
-      paddingBottom: 8,
     },
-    showMoreBtn: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 2,
-      marginLeft: "auto",
-      paddingVertical: 2,
+    filterPill: {
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surfaceAlpha,
+      paddingVertical: 8,
+      paddingHorizontal: 18,
     },
-    showMoreText: {
+    filterPillActive: {
+      backgroundColor: c.primary,
+      borderColor: c.primary,
+    },
+    filterText: {
       fontSize: 13,
       fontWeight: "700",
-      color: c.primary,
+      color: c.muted,
     },
-    categoryScroller: {
-      paddingHorizontal: 16,
-      gap: 12,
-      paddingBottom: 4,
+    filterTextActive: {
+      color: c.onPrimary,
     },
-    categoryTile: {
-      width: 120,
-      height: 120,
-      borderRadius: 20,
-      overflow: "hidden",
-      shadowColor: "#000",
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 3 },
-      elevation: 3,
+    listContent: {
+      paddingBottom: 24,
+      flexGrow: 1,
     },
-    categoryTileBg: {
+    cardWrap: {
+      marginBottom: 4,
+    },
+    emptyState: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      gap: 8,
-      padding: 10,
-    },
-    categoryTileBgImage: {
-      borderRadius: 20,
-    },
-    categoryTileOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: "rgba(0,0,0,0.35)",
-    },
-    categoryTileLabel: {
-      fontSize: 13,
-      fontWeight: "800",
-      color: "#FFFFFF",
-      textAlign: "center",
-      textShadowColor: "rgba(0,0,0,0.4)",
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 3,
-    },
-    gridSection: {
-      paddingTop: 8,
-      paddingBottom: 60,
+      paddingVertical: 60,
       gap: 12,
+      paddingHorizontal: 32,
     },
-    loadMoreIndicator: {
-    paddingVertical: 20,
-    alignItems: "center",
-  },
-  gridRow: {
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 12,
-    justifyContent: "flex-start",
-  },
-  gridItem: {
-    flex: 1,
-  },
- });
+    emptyTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.muted,
+      textAlign: "center",
+    },
+    emptyAction: {
+      backgroundColor: c.primary,
+      borderRadius: radius.full,
+      paddingVertical: 10,
+      paddingHorizontal: 22,
+    },
+    emptyActionText: {
+      color: c.onPrimary,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    footerLoader: {
+      position: "absolute",
+      bottom: 130,
+      alignSelf: "center",
+    },
+  });

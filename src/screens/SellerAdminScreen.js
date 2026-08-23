@@ -46,7 +46,11 @@ const DEFAULT_CATEGORIES = [
   { id: "default-fashion", name: "Fashion", icon: "shirt-outline" },
   { id: "default-grocery", name: "Grocery", icon: "basket-outline" },
   { id: "default-beauty", name: "Beauty", icon: "sparkles-outline" },
-  { id: "default-electronics", name: "Electronics", icon: "hardware-chip-outline" },
+  {
+    id: "default-electronics",
+    name: "Electronics",
+    icon: "hardware-chip-outline",
+  },
   { id: "default-home", name: "Home", icon: "home-outline" },
 ];
 
@@ -114,7 +118,8 @@ const getVideoUploadDetails = (uri, pickedFile = null) => {
 
   if (ext === "mov" || ext === "qt" || ext === "m4v") {
     return {
-      contentType: ext === "mov" || ext === "qt" ? "video/quicktime" : "video/mp4",
+      contentType:
+        ext === "mov" || ext === "qt" ? "video/quicktime" : "video/mp4",
       extension: ext === "qt" ? "mov" : ext,
     };
   }
@@ -201,13 +206,25 @@ const MENU_ITEMS = [
   { label: "Create Status", icon: "create-outline", screen: "StatusCreator" },
   { section: "Store Settings" },
   // Merge store profile editing into main ProfileEdit flow for sellers
-  { label: "Store Profile", icon: "storefront-outline", screen: "SellerProfile" },
+  {
+    label: "Store Profile",
+    icon: "storefront-outline",
+    screen: "SellerProfile",
+  },
   { label: "Payment Account", icon: "card-outline", screen: "Payments" },
-  { label: "Account settings", icon: "color-palette-outline", screen: "Settings" },
+  {
+    label: "Account settings",
+    icon: "color-palette-outline",
+    screen: "Settings",
+  },
   { section: "Account" },
   { label: "Security", icon: "shield-checkmark-outline", screen: "Security" },
   { label: "Privacy", icon: "lock-closed-outline", screen: "PrivacySettings" },
-  { label: "Help & Support", icon: "help-circle-outline", screen: "HelpSupport" },
+  {
+    label: "Help & Support",
+    icon: "help-circle-outline",
+    screen: "HelpSupport",
+  },
   { section: "Appearance" },
   { theme: true },
   { label: "Sign Out", icon: "log-out-outline", action: "signOut" },
@@ -218,21 +235,27 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const nav = useNavigation();
   const { user, profile: customerProfile, signOut } = useAuth();
   const toast = useToast();
-  const { theme: themeMode, setTheme: setThemeMode, colors: themeColors } = useTheme();
+  const {
+    theme: themeMode,
+    setTheme: setThemeMode,
+    colors: themeColors,
+  } = useTheme();
   const styles = useAppStyles((c) => buildSellerAdminStyles(c));
 
   // ── Seller data layer (mirrors Express-Store SellerContext) ──────────────
   const [seller, setSeller] = useState(null);
   const [sellerId, setSellerId] = useState(null);
+  // Whether the store is currently "live" (is_active). Drives the Go Live
+  // toggle and is kept in sync with the seller row.
+  const [isLive, setIsLive] = useState(false);
+  const [togglingLive, setTogglingLive] = useState(false);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const theme =
-    getTheme(seller?.theme_color) ||
-    getTheme(themeColors.primary);
+  const theme = getTheme(seller?.theme_color) || getTheme(themeColors.primary);
   const accent = (theme && theme.accent) || themeColors.accent;
 
   // ── Catalog UI state ─────────────────────────────────────────────────────
@@ -317,7 +340,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // When a video is picked for attach, we hold it here and show a product
   // picker so the seller chooses the target product from a modal.
   const [pendingVideo, setPendingVideo] = useState(null); // { uri, pickedFile, title }
-  const [productSelectModalVisible, setProductSelectModalVisible] = useState(false);
+  const [productSelectModalVisible, setProductSelectModalVisible] =
+    useState(false);
   // Per-video popup menu (kebab) — holds the reel being acted on.
   const [cardMenu, setCardMenu] = useState(null); // reel object or null
 
@@ -349,7 +373,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     if (!supabase || !user) return null;
     const { data: existing } = await supabase
       .from("express_sellers")
-      .select("id, name, theme_color, avatar, badges, store_description")
+      .select(
+        "id, name, theme_color, avatar, badges, store_description, payment_account, account_verified, is_active",
+      )
       .eq("user_id", user.id)
       .maybeSingle();
     if (existing) return existing;
@@ -379,6 +405,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       }
       setSellerId(s.id);
       setSeller(s);
+      setIsLive(Boolean(s.is_active));
 
       try {
         const [{ count: fc }, { count: ingc }] = await Promise.all([
@@ -398,9 +425,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       }
 
       const [catRes, prodRes, ordRes] = await Promise.all([
-        supabase
-          .from("express_categories")
-          .select("id,name,icon,color"),
+        supabase.from("express_categories").select("id,name,icon,color"),
         supabase
           .from("express_products")
           .select(
@@ -447,6 +472,47 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     }
   }, [supabase, user, fetchSellerId, toast]);
 
+  // A store can only go live when it has a Paystack payment account that is
+  // verified/synced. This mirrors the DB trigger (seller-go-live.sql) so the
+  // rule is enforced both client-side and server-side.
+  const canGoLive = useCallback(() => {
+    const acct = seller?.payment_account;
+    const verified = Boolean(seller?.account_verified);
+    return Boolean(acct) && String(acct).trim().length > 0 && verified;
+  }, [seller]);
+
+  const toggleGoLive = useCallback(async () => {
+    if (!supabase || !sellerId) return;
+    // Going live requires a synced Paystack account; going offline is always
+    // allowed (so a store can pause payouts without re-verifying).
+    if (!isLive && !canGoLive()) {
+      toast.error(
+        "Can't go live yet",
+        "Link and verify a Paystack payment account first.",
+      );
+      navigation.navigate("Payments");
+      return;
+    }
+    try {
+      setTogglingLive(true);
+      const next = !isLive;
+      const { error } = await supabase
+        .from("express_sellers")
+        .update({ is_active: next, updated_at: new Date().toISOString() })
+        .eq("id", sellerId);
+      if (error) throw error;
+      setIsLive(next);
+      setSeller((prev) => (prev ? { ...prev, is_active: next } : prev));
+      toast.success(next ? "Store is live" : "Store paused", "");
+    } catch (err) {
+      // Surface the DB-level guard message if the trigger blocked it.
+      const msg = err?.message || "Could not update store status";
+      toast.error("Go live failed", msg);
+    } finally {
+      setTogglingLive(false);
+    }
+  }, [supabase, sellerId, isLive, canGoLive, seller, toast, navigation]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
@@ -485,7 +551,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       .update({ status })
       .eq("id", id);
     if (error) throw error;
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, status } : p)),
+    );
   }, []);
 
   const deleteProduct = useCallback(async (id) => {
@@ -513,10 +581,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             console.warn("R2 object delete failed (continuing)", e);
           }
         }
-        const { error } = await supabase
-          .from("reels")
-          .delete()
-          .eq("id", id);
+        const { error } = await supabase.from("reels").delete().eq("id", id);
         if (error) throw error;
         setReels((prev) => prev.filter((r) => r.id !== id));
         toast.success("Reel deleted", "Removed from your store");
@@ -532,7 +597,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const deleteProductVideo = useCallback(
     async (product) => {
       if (!product?.video_url || deletingReelId) return;
-      const key = product.r2_video_key || getStoragePathFromUrl(product.video_url);
+      const key =
+        product.r2_video_key || getStoragePathFromUrl(product.video_url);
       if (!key) {
         throw new Error("Could not determine product video key");
       }
@@ -563,7 +629,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       const existing = orders.find((o) => o.id === orderId);
       const updates = { status, updated_at: new Date().toISOString() };
       if (status === "shipped") updates.shipped_at = new Date().toISOString();
-      if (status === "delivered") updates.delivered_at = new Date().toISOString();
+      if (status === "delivered")
+        updates.delivered_at = new Date().toISOString();
 
       const { error } = await supabase
         .from("express_orders")
@@ -587,7 +654,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           orderNumber = fresh?.order_number;
         }
         if (customerId)
-          await notifyOrderStatusUpdate(customerId, orderId, status, orderNumber);
+          await notifyOrderStatusUpdate(
+            customerId,
+            orderId,
+            status,
+            orderNumber,
+          );
       } catch (e) {
         console.warn("order notify failed", e);
       }
@@ -654,7 +726,19 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setCompareAtPrice(product.compare_at_price?.toString() || "");
     setCostPrice(product.cost_price?.toString() || "");
     setSelectedSizes(product.sizes || []);
-    setSelectedColors(product.colors || []);
+    // Legacy rows may store plain strings — normalize to {name, hex} objects.
+    setSelectedColors(
+      (Array.isArray(product.colors) ? product.colors : [])
+        .map((c) =>
+          typeof c === "string"
+            ? AVAILABLE_COLORS.find((a) => a.name === c) || {
+                name: c,
+                hex: "#CCC",
+              }
+            : c,
+        )
+        .filter((c) => c?.name),
+    );
     setWeightUnit(product.weight_unit || "kg");
     setSlug(product.slug || "");
     setTags(Array.isArray(product.tags) ? product.tags.filter(Boolean) : []);
@@ -674,7 +758,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       setSpecifications([]);
     }
     const current =
-      Array.isArray(product.thumbnails) && product.thumbnails.filter(Boolean).length
+      Array.isArray(product.thumbnails) &&
+      product.thumbnails.filter(Boolean).length
         ? product.thumbnails.filter(Boolean)
         : product.thumbnail
           ? [product.thumbnail]
@@ -713,7 +798,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       );
       setViewingProduct((p) =>
         p && p.id === editingProduct.id
-          ? { ...p, thumbnail: next[0] || null, thumbnails: next, status: "active" }
+          ? {
+              ...p,
+              thumbnail: next[0] || null,
+              thumbnails: next,
+              status: "active",
+            }
           : p,
       );
       toast.success("Image removed", "Image deleted from storage");
@@ -731,9 +821,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       return;
     }
     if (Platform.OS !== "web") {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        toast.error("Permission needed", "Please grant camera roll permissions");
+        toast.error(
+          "Permission needed",
+          "Please grant camera roll permissions",
+        );
         return;
       }
     }
@@ -767,7 +861,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const uploadImage = async (uri) => {
     const getExt = (u) => {
       const seg = u?.split("?")[0]?.split("/").pop() || "";
-      const ext = seg.includes(".") ? seg.split(".").pop()?.toLowerCase() : null;
+      const ext = seg.includes(".")
+        ? seg.split(".").pop()?.toLowerCase()
+        : null;
       if (!ext || ext.length > 5) return "jpg";
       return ext === "jpeg" ? "jpg" : ext;
     };
@@ -779,8 +875,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     const r2Folder = `${R2_FOLDERS.PRODUCTS}/products/${folder}`;
 
     // Upload to Cloudflare R2 via presigned URL (web Blob / native bytes).
-    const picked = Platform.OS === "web" ? imageFiles?.[uri]?.file || null : null;
-    const pickedType = Platform.OS === "web" ? imageFiles?.[uri]?.type || null : null;
+    const picked =
+      Platform.OS === "web" ? imageFiles?.[uri]?.file || null : null;
+    const pickedType =
+      Platform.OS === "web" ? imageFiles?.[uri]?.type || null : null;
 
     const { publicUrl } = await uploadToR2Presigned({
       uri,
@@ -797,9 +895,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // ── Product video: pick + upload to Cloudflare R2 ──────────────────────
   const pickVideo = async () => {
     if (Platform.OS !== "web") {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        toast.error("Permission needed", "Please grant camera roll permissions");
+        toast.error(
+          "Permission needed",
+          "Please grant camera roll permissions",
+        );
         return;
       }
     }
@@ -811,7 +913,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     });
     if (!result.canceled && result.assets?.length) {
       const asset = result.assets[0];
-      const sizeBytes = Number(asset?.fileSize || asset?.size || asset?.file?.size || 0);
+      const sizeBytes = Number(
+        asset?.fileSize || asset?.size || asset?.file?.size || 0,
+      );
       if (sizeBytes > MAX_VIDEO_UPLOAD_BYTES) {
         toast.error(
           "Video too large",
@@ -835,9 +939,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
   const pickVideoForProductAttach = async () => {
     if (Platform.OS !== "web") {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        toast.error("Permission needed", "Please grant camera roll permissions");
+        toast.error(
+          "Permission needed",
+          "Please grant camera roll permissions",
+        );
         return;
       }
     }
@@ -852,7 +960,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     if (result.canceled || !result.assets?.length) return;
 
     const asset = result.assets[0];
-    const sizeBytes = Number(asset?.fileSize || asset?.size || asset?.file?.size || 0);
+    const sizeBytes = Number(
+      asset?.fileSize || asset?.size || asset?.file?.size || 0,
+    );
     if (sizeBytes > MAX_VIDEO_UPLOAD_BYTES) {
       toast.error(
         "Video too large",
@@ -907,9 +1017,16 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     // ── 1. Request a presigned PUT URL from the edge function ────────────────
     let presigned;
     try {
-      const { data, error } = await supabase.functions.invoke("get-r2-upload-url", {
-        body: { fileName, fileType: contentType, folder: `products/${uploadFolderOwnerId}` },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "get-r2-upload-url",
+        {
+          body: {
+            fileName,
+            fileType: contentType,
+            folder: `products/${uploadFolderOwnerId}`,
+          },
+        },
+      );
       if (error) throw new Error(error.message || "Failed to get upload URL");
       if (!data?.uploadUrl || !data?.publicUrl) {
         throw new Error("Edge function returned an invalid response");
@@ -944,7 +1061,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               resolve();
               return;
             }
-            reject(new Error(`R2 video upload failed with status ${xhr.status}`));
+            reject(
+              new Error(`R2 video upload failed with status ${xhr.status}`),
+            );
           };
           xhr.onerror = () => reject(new Error("R2 video upload failed"));
           xhr.send(body);
@@ -976,7 +1095,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             result.status,
             result.body,
           );
-          throw new Error(`R2 video upload failed with status ${result.status}`);
+          throw new Error(
+            `R2 video upload failed with status ${result.status}`,
+          );
         }
         onProgress?.(1);
       }
@@ -1140,7 +1261,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     });
     setSubmitting(false);
     if (success) {
-      toast.success("Flash Sale Created", `Flash sale for ${selectedProduct.title}`);
+      toast.success(
+        "Flash Sale Created",
+        `Flash sale for ${selectedProduct.title}`,
+      );
       setFlashSaleModalVisible(false);
       setSelectedProduct(null);
     } else {
@@ -1181,14 +1305,20 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           message: "Preparing upload URL",
         });
 
-        const { publicUrl, key } = await uploadVideoToR2(uri, pickedFile, (progress) => {
-          upsertVideoUploadJob(jobId, {
-            status: "uploading",
-            progress,
-            message:
-              progress >= 1 ? "Finalizing upload" : `Uploading ${Math.round(progress * 100)}%`,
-          });
-        });
+        const { publicUrl, key } = await uploadVideoToR2(
+          uri,
+          pickedFile,
+          (progress) => {
+            upsertVideoUploadJob(jobId, {
+              status: "uploading",
+              progress,
+              message:
+                progress >= 1
+                  ? "Finalizing upload"
+                  : `Uploading ${Math.round(progress * 100)}%`,
+            });
+          },
+        );
 
         upsertVideoUploadJob(jobId, {
           status: "saving",
@@ -1211,7 +1341,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             },
           });
         } catch (transcodeErr) {
-          console.warn("Failed to enqueue product video transcode:", transcodeErr);
+          console.warn(
+            "Failed to enqueue product video transcode:",
+            transcodeErr,
+          );
         }
 
         upsertVideoUploadJob(jobId, {
@@ -1221,14 +1354,20 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           publicUrl,
           r2Key: key,
         });
-        toast.success("Video uploaded", `${productTitle || "Product"} video is now live`);
+        toast.success(
+          "Video uploaded",
+          `${productTitle || "Product"} video is now live`,
+        );
       } catch (error) {
         upsertVideoUploadJob(jobId, {
           status: "error",
           progress: 0,
           message: error.message || "Upload failed",
         });
-        toast.error("Video upload failed", error.message || "Could not upload the video");
+        toast.error(
+          "Video upload failed",
+          error.message || "Could not upload the video",
+        );
       }
     },
     [toast, updateProduct, upsertVideoUploadJob],
@@ -1249,7 +1388,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     try {
       let imageUrls = [];
       if (imageUris.length > 0) {
-        setSubmitStage(`Uploading ${imageUris.length} image${imageUris.length > 1 ? "s" : ""}…`);
+        setSubmitStage(
+          `Uploading ${imageUris.length} image${imageUris.length > 1 ? "s" : ""}…`,
+        );
         console.log(
           `[submitProduct] uploading ${imageUris.length} image(s) to R2`,
         );
@@ -1308,7 +1449,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             ? ["limited_stock"]
             : []),
         ],
-        colors: selectedColors,
+        // selectedColors holds {name, hex} objects — persist only the names
+        // so the customer app (which expects plain strings) renders correctly.
+        colors: selectedColors
+          .map((c) => (typeof c === "string" ? c : c?.name))
+          .filter(Boolean),
         quantity: quantity ? parseInt(quantity) : 0,
         sku: sku || null,
         weight: weight ? parseFloat(weight) : null,
@@ -1327,14 +1472,22 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       productData.thumbnail = merged[0] || null;
       productData.thumbnails = merged.length ? merged : null;
       productData.video_url = editingProduct ? existingVideoUrl || null : null;
-      productData.r2_video_key = editingProduct ? editingProduct.r2_video_key || null : null;
+      productData.r2_video_key = editingProduct
+        ? editingProduct.r2_video_key || null
+        : null;
 
       let savedProductId = editingProduct?.id ?? null;
 
-      setSubmitStage(editingProduct ? "Updating product…" : "Creating product…");
+      setSubmitStage(
+        editingProduct ? "Updating product…" : "Creating product…",
+      );
       console.log(
         `[submitProduct] ${editingProduct ? "updating" : "creating"} product:`,
-        JSON.stringify({ ...productData, thumbnails: productData.thumbnails?.length, specifications: "object" }),
+        JSON.stringify({
+          ...productData,
+          thumbnails: productData.thumbnails?.length,
+          specifications: "object",
+        }),
       );
 
       if (editingProduct) {
@@ -1451,7 +1604,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       .reduce((s, o) => s + Number(o.total || 0), 0);
     const netRevenue = orders
       .filter((o) => o.payment_status === "success")
-      .reduce((s, o) => s + (Number(o.total || 0) - Number(o.service_fee || 0)), 0);
+      .reduce(
+        (s, o) => s + (Number(o.total || 0) - Number(o.service_fee || 0)),
+        0,
+      );
     const inProgress = orders.filter((o) =>
       ["processing", "packed"].includes(o.status),
     ).length;
@@ -1485,7 +1641,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipRow}
+      >
         {inventorySummary.map(({ status, total }) => (
           <View key={status} style={styles.summaryChip}>
             <Text style={styles.summaryChipLabel}>{status}</Text>
@@ -1504,7 +1664,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <Ionicons name="flash" size={16} color="#EF4444" />
             <Text style={styles.flashBannerTitle}>Active Flash Sales</Text>
             <View style={styles.flashCountPill}>
-              <Text style={styles.flashCountText}>{activeFlashSales.length} live</Text>
+              <Text style={styles.flashCountText}>
+                {activeFlashSales.length} live
+              </Text>
             </View>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -1513,11 +1675,14 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               const pct =
                 fs.discount_percentage ||
                 Math.round(
-                  ((fs.original_price - fs.flash_price) / fs.original_price) * 100,
+                  ((fs.original_price - fs.flash_price) / fs.original_price) *
+                    100,
                 );
               const hrs = Math.max(
                 0,
-                Math.round((new Date(fs.end_time) - new Date()) / (1000 * 60 * 60)),
+                Math.round(
+                  (new Date(fs.end_time) - new Date()) / (1000 * 60 * 60),
+                ),
               );
               return (
                 <Pressable
@@ -1531,8 +1696,14 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   {thumb ? (
                     <Image source={{ uri: thumb }} style={styles.flashThumb} />
                   ) : (
-                    <View style={[styles.flashThumb, styles.flashThumbPlaceholder]}>
-                      <Ionicons name="image-outline" size={20} color={themeColors.muted} />
+                    <View
+                      style={[styles.flashThumb, styles.flashThumbPlaceholder]}
+                    >
+                      <Ionicons
+                        name="image-outline"
+                        size={20}
+                        color={themeColors.muted}
+                      />
                     </View>
                   )}
                   <Text style={styles.flashName} numberOfLines={1}>
@@ -1541,7 +1712,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   <Text style={styles.flashPrice}>
                     {formatPrice(fs.flash_price)}
                   </Text>
-                  <Text style={styles.flashDiscount}>{pct}% off · {hrs}h left</Text>
+                  <Text style={styles.flashDiscount}>
+                    {pct}% off · {hrs}h left
+                  </Text>
                 </Pressable>
               );
             })}
@@ -1565,7 +1738,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         ) : null}
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipRow}
+      >
         <Pressable
           style={[
             styles.filterChip,
@@ -1670,9 +1847,14 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               }}
             >
               {p.thumbnail ? (
-                <Image source={{ uri: p.thumbnail }} style={styles.productImage} />
+                <Image
+                  source={{ uri: p.thumbnail }}
+                  style={styles.productImage}
+                />
               ) : (
-                <View style={[styles.productImage, styles.productImagePlaceholder]}>
+                <View
+                  style={[styles.productImage, styles.productImagePlaceholder]}
+                >
                   <Ionicons name="cube" size={28} color="#fff" />
                 </View>
               )}
@@ -1710,7 +1892,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   style={[
                     styles.pipelineSegment,
                     {
-                      flex: total / Math.max(statusSummary.reduce((s, x) => s + x.total, 0), 1),
+                      flex:
+                        total /
+                        Math.max(
+                          statusSummary.reduce((s, x) => s + x.total, 0),
+                          1,
+                        ),
                       backgroundColor:
                         status === "processing"
                           ? themeColors.primary
@@ -1747,7 +1934,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         />
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipRow}
+      >
         {ORDER_STATUS_FILTERS.map((status) => (
           <Pressable
             key={status}
@@ -1777,7 +1968,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <View style={styles.orderSkeletonLine} />
                 <View
-                  style={[styles.orderSkeletonLine, { width: "60%", marginTop: 8 }]}
+                  style={[
+                    styles.orderSkeletonLine,
+                    { width: "60%", marginTop: 8 },
+                  ]}
                 />
               </View>
             </View>
@@ -1799,7 +1993,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.orderNo}>#{o.order_number}</Text>
-              <Text style={styles.orderMeta}>{o.customer?.name || "Guest"}</Text>
+              <Text style={styles.orderMeta}>
+                {o.customer?.name || "Guest"}
+              </Text>
             </View>
             <View style={{ alignItems: "flex-end", gap: 6 }}>
               <Text style={styles.orderTotal}>{formatPrice(o.total)}</Text>
@@ -1809,7 +2005,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             </View>
             {nextStatusMap[o.status] ? (
               <TouchableOpacity
-                style={[styles.progressButton, { backgroundColor: accent + "14" }]}
+                style={[
+                  styles.progressButton,
+                  { backgroundColor: accent + "14" },
+                ]}
                 onPress={() =>
                   advanceOrderStatus(o.id, nextStatusMap[o.status])
                 }
@@ -1820,7 +2019,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </TouchableOpacity>
             ) : o.status === "delivered" ? (
               <View style={styles.successBadge}>
-                <Ionicons name="checkmark-circle" size={14} color={themeColors.success} />
+                <Ionicons
+                  name="checkmark-circle"
+                  size={14}
+                  color={themeColors.success}
+                />
                 <Text style={styles.successText}>Delivered</Text>
               </View>
             ) : null}
@@ -1854,9 +2057,17 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 }}
               >
                 {p.thumbnail ? (
-                  <Image source={{ uri: p.thumbnail }} style={styles.productImage} />
+                  <Image
+                    source={{ uri: p.thumbnail }}
+                    style={styles.productImage}
+                  />
                 ) : (
-                  <View style={[styles.productImage, styles.productImagePlaceholder]}>
+                  <View
+                    style={[
+                      styles.productImage,
+                      styles.productImagePlaceholder,
+                    ]}
+                  >
                     <Ionicons name="cube" size={28} color="#fff" />
                   </View>
                 )}
@@ -1883,7 +2094,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       <View style={styles.insightCards}>
         <View style={styles.insightCard}>
           <Ionicons name="cash-outline" size={20} color="#10B981" />
-          <Text style={styles.insightValue}>{formatPrice(metrics.revenue)}</Text>
+          <Text style={styles.insightValue}>
+            {formatPrice(metrics.revenue)}
+          </Text>
           <Text style={styles.insightLabel}>Total Revenue</Text>
         </View>
         <View style={styles.insightCard}>
@@ -1900,8 +2113,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       <Text style={styles.insightSummary}>
         You have {metrics.totalProducts} product
         {metrics.totalProducts === 1 ? "" : "s"} and {orders.length} order
-        {orders.length === 1 ? "" : "s"}, generating {formatPrice(metrics.netRevenue)}{" "}
-        in net revenue after fees.
+        {orders.length === 1 ? "" : "s"}, generating{" "}
+        {formatPrice(metrics.netRevenue)} in net revenue after fees.
       </Text>
     </View>
   );
@@ -1946,7 +2159,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       <View style={styles.uploadQueueSection}>
         <View style={styles.uploadQueueHeader}>
           <Text style={styles.uploadQueueTitle}>Video uploads</Text>
-          <Text style={styles.uploadQueueSub}>{videoUploadJobs.length} queued</Text>
+          <Text style={styles.uploadQueueSub}>
+            {videoUploadJobs.length} queued
+          </Text>
         </View>
         {videoUploadJobs.map((job) => (
           <View key={job.id} style={styles.uploadJobCard}>
@@ -1960,7 +2175,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 </Text>
               </View>
               <Text style={styles.uploadJobPct}>
-                {job.status === "error" ? "!" : `${Math.round((job.progress || 0) * 100)}%`}
+                {job.status === "error"
+                  ? "!"
+                  : `${Math.round((job.progress || 0) * 100)}%`}
               </Text>
             </View>
             <View style={styles.uploadJobBarTrack}>
@@ -1993,7 +2210,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         <View style={{ flex: 1 }}>
           <Text style={styles.attachVideoTitle}>Attach video to a product</Text>
           <Text style={styles.attachVideoSubtitle}>
-            Choose a video, then pick the product to attach it to. Uploads continue in the background.
+            Choose a video, then pick the product to attach it to. Uploads
+            continue in the background.
           </Text>
         </View>
         <View style={styles.attachVideoActions}>
@@ -2047,7 +2265,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             return (
               <View key={item.id} style={styles.reelCard}>
                 {item.thumbnail_url ? (
-                  <Image source={{ uri: item.thumbnail_url }} style={styles.reelThumb} />
+                  <Image
+                    source={{ uri: item.thumbnail_url }}
+                    style={styles.reelThumb}
+                  />
                 ) : (
                   <Video
                     source={{ uri: item.video_url }}
@@ -2104,7 +2325,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <Ionicons
               name="trash-outline"
               size={20}
-              color={deletingReelId === cardMenu?.id ? themeColors.muted : "#EF4444"}
+              color={
+                deletingReelId === cardMenu?.id ? themeColors.muted : "#EF4444"
+              }
             />
             <Text
               style={[
@@ -2115,7 +2338,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               {deletingReelId === cardMenu?.id ? "Deleting…" : "Delete"}
             </Text>
           </Pressable>
-          <Pressable style={styles.menuItemRow} onPress={() => setCardMenu(null)}>
+          <Pressable
+            style={styles.menuItemRow}
+            onPress={() => setCardMenu(null)}
+          >
             <Ionicons name="close-outline" size={20} color={themeColors.dark} />
             <Text style={styles.menuItemText}>Cancel</Text>
           </Pressable>
@@ -2152,12 +2378,18 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <Ionicons name="cube-outline" size={20} color="#fff" />
             <Text style={styles.modalHeaderTitle}>Select a product</Text>
           </LinearGradient>
-          <ScrollView style={styles.videoDeleteList} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.videoDeleteList}
+            showsVerticalScrollIndicator={false}
+          >
             {products.length === 0 ? (
-              <Text style={styles.videoDeleteEmpty}>No products available yet.</Text>
+              <Text style={styles.videoDeleteEmpty}>
+                No products available yet.
+              </Text>
             ) : (
               products.map((product) => {
-                const thumb = product.thumbnail || product.thumbnails?.[0] || null;
+                const thumb =
+                  product.thumbnail || product.thumbnails?.[0] || null;
                 return (
                   <Pressable
                     key={product.id}
@@ -2166,10 +2398,17 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   >
                     <View style={styles.sortOptionLeft}>
                       {thumb ? (
-                        <Image source={{ uri: thumb }} style={styles.videoDeleteThumb} />
+                        <Image
+                          source={{ uri: thumb }}
+                          style={styles.videoDeleteThumb}
+                        />
                       ) : (
                         <View style={styles.videoDeleteThumbFallback}>
-                          <Ionicons name="cube-outline" size={16} color={themeColors.primary} />
+                          <Ionicons
+                            name="cube-outline"
+                            size={16}
+                            color={themeColors.primary}
+                          />
                         </View>
                       )}
                       <View style={{ flex: 1, minWidth: 0 }}>
@@ -2181,7 +2420,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                         </Text>
                       </View>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color={themeColors.muted} />
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color={themeColors.muted}
+                    />
                   </Pressable>
                 );
               })
@@ -2204,17 +2447,17 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         style={styles.drawerOverlay}
         onPress={() => setMenuVisible(false)}
       >
-        <View
-          style={styles.drawer}
-          onStartShouldSetResponder={() => true}
-        >
+        <View style={styles.drawer} onStartShouldSetResponder={() => true}>
           <View style={styles.drawerHeader}>
             <Text style={styles.drawerTitle}>Store Menu</Text>
             <Pressable onPress={() => setMenuVisible(false)} hitSlop={8}>
               <Ionicons name="close" size={24} color={themeColors.dark} />
             </Pressable>
           </View>
-          <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.drawerScroll}
+            showsVerticalScrollIndicator={false}
+          >
             {MENU_ITEMS.map((item, i) =>
               item.section ? (
                 <Text key={`sec-${i}`} style={styles.menuSection}>
@@ -2244,7 +2487,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                         <Ionicons
                           name={opt.icon}
                           size={18}
-                          color={selected ? themeColors.primary : themeColors.muted}
+                          color={
+                            selected ? themeColors.primary : themeColors.muted
+                          }
                         />
                         <Text
                           style={[
@@ -2345,7 +2590,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <Ionicons name="menu-outline" size={26} color="#fff" />
           </Pressable>
           {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={styles.coverImage} resizeMode="cover" />
+            <Image
+              source={{ uri: avatarUri }}
+              style={styles.coverImage}
+              resizeMode="cover"
+            />
           ) : null}
           <View style={styles.coverOverlay} />
         </View>
@@ -2372,6 +2621,56 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               <Text style={styles.statLabelSeller}>Following</Text>
             </View>
           </View>
+
+          {/* Go Live toggle — only enabled when a verified Paystack account exists */}
+          <Pressable
+            style={[
+              styles.goLiveRow,
+              isLive && styles.goLiveRowActive,
+              !canGoLive() && !isLive && styles.goLiveRowDisabled,
+            ]}
+            onPress={toggleGoLive}
+            disabled={togglingLive}
+          >
+            <View style={styles.goLiveLeft}>
+              <Ionicons
+                name={isLive ? "radio-button-on" : "radio-button-off"}
+                size={20}
+                color={isLive ? "#fff" : themeColors.muted}
+              />
+              <View style={styles.goLiveTextWrap}>
+                <Text
+                  style={[
+                    styles.goLiveTitle,
+                    isLive && styles.goLiveTitleActive,
+                  ]}
+                >
+                  {isLive ? "Store is Live" : "Go Live"}
+                </Text>
+                <Text
+                  style={[styles.goLiveSub, isLive && styles.goLiveSubActive]}
+                >
+                  {isLive
+                    ? "Customers can browse and buy"
+                    : canGoLive()
+                      ? "Tap to publish your store"
+                      : "Link a verified Paystack account"}
+                </Text>
+              </View>
+            </View>
+            {togglingLive ? (
+              <ActivityIndicator
+                size="small"
+                color={isLive ? "#fff" : accent}
+              />
+            ) : (
+              <View
+                style={[styles.goLiveSwitch, isLive && styles.goLiveSwitchOn]}
+              >
+                <View style={styles.goLiveKnob} />
+              </View>
+            )}
+          </Pressable>
         </View>
 
         <View style={styles.tabBar}>
@@ -2417,7 +2716,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           <View
             style={[
               styles.modalHeader,
-              { paddingTop: insets.top + 8, borderBottomColor: themeColors.surface },
+              {
+                paddingTop: insets.top + 8,
+                borderBottomColor: themeColors.surface,
+              },
             ]}
           >
             <Pressable
@@ -2559,7 +2861,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                           <Ionicons
                             name={c.icon || "pricetag-outline"}
                             size={14}
-                            color={selected ? themeColors.light : themeColors.muted}
+                            color={
+                              selected ? themeColors.light : themeColors.muted
+                            }
                           />
                           <Text
                             style={[
@@ -2820,7 +3124,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     ))}
                     {imageUris.length + existingImageUrls.length < 5 && (
                       <Pressable style={styles.imageAdd} onPress={pickImage}>
-                        <Ionicons name="camera-outline" size={26} color={accent} />
+                        <Ionicons
+                          name="camera-outline"
+                          size={26}
+                          color={accent}
+                        />
                         <Text style={[styles.imageAddText, { color: accent }]}>
                           Add photo
                         </Text>
@@ -2889,7 +3197,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                               size={26}
                               color={accent}
                             />
-                            <Text style={[styles.imageAddText, { color: accent }]}>
+                            <Text
+                              style={[styles.imageAddText, { color: accent }]}
+                            >
                               Add video
                             </Text>
                           </>
@@ -2957,7 +3267,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       ])
                     }
                   >
-                    <Ionicons name="add-circle-outline" size={18} color={accent} />
+                    <Ionicons
+                      name="add-circle-outline"
+                      size={18}
+                      color={accent}
+                    />
                     <Text style={[styles.addSpecText, { color: accent }]}>
                       Add specification
                     </Text>
@@ -3081,7 +3395,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     <Text style={styles.summaryLabel}>Media</Text>
                     <Text style={styles.summaryValue}>
                       {existingImageUrls.length + imageUris.length} photo
-                      {existingImageUrls.length + imageUris.length === 1 ? "" : "s"}
+                      {existingImageUrls.length + imageUris.length === 1
+                        ? ""
+                        : "s"}
                       {videoUri || existingVideoUrl ? " · 1 video" : ""}
                     </Text>
                   </View>
@@ -3120,12 +3436,19 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             )}
             {productFormStep < PRODUCT_FORM_STEPS.length ? (
               <TouchableOpacity
-                style={[styles.stepButton, { backgroundColor: accent, flex: 1 }]}
+                style={[
+                  styles.stepButton,
+                  { backgroundColor: accent, flex: 1 },
+                ]}
                 onPress={goToNextProductStep}
                 disabled={submitting}
               >
                 <Text style={styles.stepButtonText}>Continue</Text>
-                <Ionicons name="chevron-forward" size={16} color={themeColors.light} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={themeColors.light}
+                />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -3147,7 +3470,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 ) : (
                   <>
                     <Ionicons
-                      name={editingProduct ? "checkmark-circle-outline" : "add-circle-outline"}
+                      name={
+                        editingProduct
+                          ? "checkmark-circle-outline"
+                          : "add-circle-outline"
+                      }
                       size={18}
                       color={themeColors.light}
                     />
@@ -3164,35 +3491,81 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
       {/* Action sheet */}
       <Modal visible={actionSheetVisible} transparent animationType="fade">
-        <Pressable style={styles.sheetOverlay} onPress={() => setActionSheetVisible(false)}>
+        <Pressable
+          style={styles.sheetOverlay}
+          onPress={() => setActionSheetVisible(false)}
+        >
           <View style={styles.sheet}>
-            <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("view")}>
+            <Pressable
+              style={styles.sheetItem}
+              onPress={() => handleActionSheet("view")}
+            >
               <Ionicons name="eye-outline" size={20} color={themeColors.dark} />
               <Text style={styles.sheetText}>View</Text>
             </Pressable>
-            <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("edit")}>
-              <Ionicons name="create-outline" size={20} color={themeColors.dark} />
+            <Pressable
+              style={styles.sheetItem}
+              onPress={() => handleActionSheet("edit")}
+            >
+              <Ionicons
+                name="create-outline"
+                size={20}
+                color={themeColors.dark}
+              />
               <Text style={styles.sheetText}>Edit</Text>
             </Pressable>
-            <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("restock")}>
-              <Ionicons name="add-circle-outline" size={20} color={themeColors.dark} />
+            <Pressable
+              style={styles.sheetItem}
+              onPress={() => handleActionSheet("restock")}
+            >
+              <Ionicons
+                name="add-circle-outline"
+                size={20}
+                color={themeColors.dark}
+              />
               <Text style={styles.sheetText}>Restock</Text>
             </Pressable>
-            <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("flash_sale")}>
-              <Ionicons name="flash-outline" size={20} color={themeColors.dark} />
+            <Pressable
+              style={styles.sheetItem}
+              onPress={() => handleActionSheet("flash_sale")}
+            >
+              <Ionicons
+                name="flash-outline"
+                size={20}
+                color={themeColors.dark}
+              />
               <Text style={styles.sheetText}>Flash Sale</Text>
             </Pressable>
-            <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("duplicate")}>
-              <Ionicons name="copy-outline" size={20} color={themeColors.dark} />
+            <Pressable
+              style={styles.sheetItem}
+              onPress={() => handleActionSheet("duplicate")}
+            >
+              <Ionicons
+                name="copy-outline"
+                size={20}
+                color={themeColors.dark}
+              />
               <Text style={styles.sheetText}>Duplicate as draft</Text>
             </Pressable>
-            <Pressable style={styles.sheetItem} onPress={() => handleActionSheet("toggle_status")}>
-              <Ionicons name="swap-horizontal-outline" size={20} color={themeColors.dark} />
+            <Pressable
+              style={styles.sheetItem}
+              onPress={() => handleActionSheet("toggle_status")}
+            >
+              <Ionicons
+                name="swap-horizontal-outline"
+                size={20}
+                color={themeColors.dark}
+              />
               <Text style={styles.sheetText}>Toggle status</Text>
             </Pressable>
-            <Pressable style={[styles.sheetItem, styles.sheetItemDanger]} onPress={() => handleActionSheet("delete")}>
+            <Pressable
+              style={[styles.sheetItem, styles.sheetItemDanger]}
+              onPress={() => handleActionSheet("delete")}
+            >
               <Ionicons name="trash-outline" size={20} color="#EF4444" />
-              <Text style={[styles.sheetText, { color: "#EF4444" }]}>Delete</Text>
+              <Text style={[styles.sheetText, { color: "#EF4444" }]}>
+                Delete
+              </Text>
             </Pressable>
           </View>
         </Pressable>
@@ -3209,24 +3582,47 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </Pressable>
             </View>
             {viewingProduct?.thumbnail ? (
-              <Image source={{ uri: viewingProduct.thumbnail }} style={styles.detailImage} />
+              <Image
+                source={{ uri: viewingProduct.thumbnail }}
+                style={styles.detailImage}
+              />
             ) : null}
-            <Text style={styles.detailPrice}>{formatPrice(viewingProduct?.price)}</Text>
-            <Text style={styles.detailStatus}>Status: {viewingProduct?.status}</Text>
+            <Text style={styles.detailPrice}>
+              {formatPrice(viewingProduct?.price)}
+            </Text>
+            <Text style={styles.detailStatus}>
+              Status: {viewingProduct?.status}
+            </Text>
             <Text style={styles.detailDesc}>{viewingProduct?.description}</Text>
-            <Text style={styles.detailMeta}>Quantity: {viewingProduct?.quantity || 0}</Text>
+            <Text style={styles.detailMeta}>
+              Quantity: {viewingProduct?.quantity || 0}
+            </Text>
           </ScrollView>
         </View>
       </Modal>
 
       {/* Restock modal */}
       <Modal visible={restockModalVisible} transparent animationType="fade">
-        <Pressable style={styles.sheetOverlay} onPress={() => setRestockModalVisible(false)}>
+        <Pressable
+          style={styles.sheetOverlay}
+          onPress={() => setRestockModalVisible(false)}
+        >
           <View style={styles.innerModal}>
             <Text style={styles.modalTitle}>Restock</Text>
-            <TextInput style={styles.input} value={restockQuantity} onChangeText={setRestockQuantity} keyboardType="numeric" placeholder="Quantity to add" placeholderTextColor={themeColors.muted} />
+            <TextInput
+              style={styles.input}
+              value={restockQuantity}
+              onChangeText={setRestockQuantity}
+              keyboardType="numeric"
+              placeholder="Quantity to add"
+              placeholderTextColor={themeColors.muted}
+            />
             <TouchableOpacity
-              style={[styles.submitButton, { backgroundColor: accent }, restockSubmitting && { opacity: 0.6 }]}
+              style={[
+                styles.submitButton,
+                { backgroundColor: accent },
+                restockSubmitting && { opacity: 0.6 },
+              ]}
               onPress={handleRestock}
               disabled={restockSubmitting}
             >
@@ -3248,13 +3644,33 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 <Ionicons name="close" size={24} color={themeColors.dark} />
               </Pressable>
             </View>
-            <Text style={styles.detailPrice}>Original: {formatPrice(selectedProduct?.price)}</Text>
+            <Text style={styles.detailPrice}>
+              Original: {formatPrice(selectedProduct?.price)}
+            </Text>
             <Text style={styles.label}>Flash Price (GH₵) *</Text>
-            <TextInput style={styles.input} value={flashSalePrice} onChangeText={setFlashSalePrice} keyboardType="numeric" placeholder="0.00" placeholderTextColor={themeColors.muted} />
+            <TextInput
+              style={styles.input}
+              value={flashSalePrice}
+              onChangeText={setFlashSalePrice}
+              keyboardType="numeric"
+              placeholder="0.00"
+              placeholderTextColor={themeColors.muted}
+            />
             <Text style={styles.label}>Max Quantity (optional)</Text>
-            <TextInput style={styles.input} value={flashSaleMaxQty} onChangeText={setFlashSaleMaxQty} keyboardType="numeric" placeholder="Unlimited" placeholderTextColor={themeColors.muted} />
+            <TextInput
+              style={styles.input}
+              value={flashSaleMaxQty}
+              onChangeText={setFlashSaleMaxQty}
+              keyboardType="numeric"
+              placeholder="Unlimited"
+              placeholderTextColor={themeColors.muted}
+            />
             <TouchableOpacity
-              style={[styles.submitButton, { backgroundColor: accent }, submitting && { opacity: 0.6 }]}
+              style={[
+                styles.submitButton,
+                { backgroundColor: accent },
+                submitting && { opacity: 0.6 },
+              ]}
               onPress={handleCreateFlashSale}
               disabled={submitting}
             >
@@ -3272,935 +3688,1218 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 };
 
 const buildSellerAdminStyles = (c) =>
-  StyleSheet.create({ 
-  container: { flex: 1, backgroundColor: c.background },
-  center: { alignItems: "center", justifyContent: "center" },
-  scrollContent: { flexGrow: 1, paddingBottom: 20 },
-  cover: {
-    borderRadius: radius.lg, height: 160, position: "relative", overflow: "hidden" },
-  coverImage: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  coverOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.25)",
-  },
-  profileBlock: {
-    borderRadius: radius.lg, alignItems: "center", marginTop: -50, paddingHorizontal: 20 },
-  avatarWrap: {
-    borderRadius: radius.full,
-    borderWidth: 4,
-    backgroundColor: c.light,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  avatar: { width: 100, height: 100, borderRadius: radius.full },
-  avatarPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: c.primary,
-  },
-  name: { fontSize: 20, fontWeight: "800", color: c.dark, marginTop: 12, textAlign: "center" },
-  tabBar: {
-    flexDirection: "row",
-    marginHorizontal: 16,
-    marginTop: 16,
-    backgroundColor: c.surface,
-    borderRadius: radius.lg,
-    padding: 4,
-  },
-  tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10, borderRadius: radius.md },
-  tabContent: {
-    borderRadius: radius.lg, marginTop: 16, paddingHorizontal: 16 },
-  reelsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  reelCard: {
-    width: "47%",
-    backgroundColor: c.light,
-    borderRadius: radius.md,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: c.surface,
-    height: 200,
-    position: "relative",
-  },
-  reelThumb: { width: "100%", height: "100%" },
-  reelOverlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: c.overlay,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  reelTitle: { color: c.light, fontSize: 12, fontWeight: "700" },
-  reelDelete: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: "rgba(239,68,68,0.92)",
-    borderRadius: radius.lg,
-    width: 34,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reelMenuButton: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    width: 34,
-    height: 34,
-    borderRadius: radius.full,
-    backgroundColor: c.overlay,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuBackdrop: {
-    flex: 1,
-    backgroundColor: c.overlay,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  menuCard: {
-    width: "80%",
-    maxWidth: 320,
-    backgroundColor: c.light,
-    borderRadius: radius.lg,
-    padding: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-  menuTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: c.dark,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  menuItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: radius.sm,
-  },
-  menuItemText: { fontSize: 15, fontWeight: "600", color: c.dark },
-  uploadQueueSection: {
-    marginBottom: 14,
-    gap: 10,
-  },
-  uploadQueueHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  uploadQueueTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: c.dark,
-  },
-  uploadQueueSub: {
-    fontSize: 12,
-    color: c.muted,
-  },
-  uploadJobCard: {
-    backgroundColor: c.light,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 12,
-    gap: 8,
-  },
-  uploadJobTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  uploadJobTitle: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: c.dark,
-  },
-  uploadJobMeta: {
-    fontSize: 12,
-    color: c.muted,
-    marginTop: 2,
-  },
-  uploadJobPct: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: c.primary,
-  },
-  uploadJobBarTrack: {
-    height: 8,
-    borderRadius: radius.full,
-    backgroundColor: c.border,
-    overflow: "hidden",
-  },
-  uploadJobBarFill: {
-    height: "100%",
-    borderRadius: radius.full,
-  },
-  attachVideoCard: {
-    backgroundColor: c.light,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 14,
-    marginBottom: 14,
-    gap: 12,
-  },
-  attachVideoHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  attachVideoActions: {
-    gap: 8,
-    alignItems: "flex-end",
-  },
-  attachVideoTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: c.dark,
-  },
-  attachVideoSubtitle: {
-    marginTop: 4,
-    fontSize: 12,
-    color: c.muted,
-    lineHeight: 17,
-  },
-  attachVideoButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: radius.md,
-  },
-  attachVideoButtonText: {
-    color: c.light,
-    fontWeight: "800",
-    fontSize: 13,
-  },
-  attachVideoLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: c.muted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  attachProductRow: {
-    gap: 10,
-  },
-  attachProductChip: {
-    width: 140,
-    padding: 10,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.light,
-    gap: 8,
-  },
-  attachProductChipText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: c.dark,
-  },
-  attachProductChipMeta: {
-    fontSize: 11,
-    color: c.muted,
-    marginTop: 4,
-  },
-  deleteVideosButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: c.primary,
-    backgroundColor: c.light,
-  },
-  deleteVideosButtonText: {
-    color: c.primary,
-    fontWeight: "800",
-    fontSize: 13,
-  },
-  attachProductChipMeta: {
-    fontSize: 11,
-    color: c.muted,
-    marginTop: 4,
-  },
-  attachProductThumb: {
-    width: "100%",
-    height: 84,
-    borderRadius: radius.sm,
-    backgroundColor: c.border,
-  },
-  attachProductThumbFallback: {
-    width: "100%",
-    height: 84,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: c.border,
-  },
-  primaryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: radius.pill,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  primaryButtonText: { color: c.light, fontWeight: "700", fontSize: 13 },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-    borderRadius: radius.md,
-  },
-  chipRow: {
-    borderRadius: radius.md, marginBottom: 12 },
-  videoDeleteList: {
-    maxHeight: 460,
-  },
-  videoDeleteEmpty: {
-    padding: 24,
-    textAlign: "center",
-    color: c.muted,
-    fontSize: 14,
-  },
-  videoDeleteThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.md,
-    backgroundColor: c.border,
-  },
-  videoDeleteThumbFallback: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(239,68,68,0.10)",
-  },
-  // ── Select-a-product sheet (video attach flow) ─────────────────────────
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: c.overlay,
-    justifyContent: "flex-end",
-  },
-  modalCard: {
-    backgroundColor: c.light,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    maxHeight: "88%",
-    paddingBottom: 24,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 10,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-  },
-  modalHeaderTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: c.light,
-  },
-  sortOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: c.surface,
-  },
-  sortOptionLeft: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    minWidth: 0,
-  },
-  sortOptionText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: c.dark,
-  },
-  videoDeleteMeta: {
-    fontSize: 12,
-    color: c.muted,
-    marginTop: 2,
-    textTransform: "capitalize",
-  },
-  summaryChip: {
-    backgroundColor: c.light,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: c.surface,
-  },
-  summaryChipLabel: { color: c.muted, fontSize: 10, fontWeight: "700", textTransform: "uppercase" },
-  summaryChipValue: { fontWeight: "900", color: c.dark, fontSize: 16, marginTop: 2 },
-  flashBanner: {
-    backgroundColor: "rgba(239,68,68,0.08)",
-    borderRadius: radius.md,
-    padding: 12,
-    marginBottom: 12,
-  },
-  flashBannerHead: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-  flashBannerTitle: { fontWeight: "800", color: "#EF4444", fontSize: 14 },
-  flashCountPill: { backgroundColor: "#EF4444", borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 2 },
-  flashCountText: { color: c.light, fontSize: 11, fontWeight: "700" },
-  flashCard: { width: 120, marginRight: 10, backgroundColor: c.light, borderRadius: radius.md, padding: 8, borderWidth: 1, borderColor: c.surface },
-  flashThumb: { width: "100%", height: 70, borderRadius: radius.xs },
-  flashThumbPlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: c.primary },
-  flashName: { fontSize: 12, fontWeight: "700", color: c.dark, marginTop: 6 },
-  flashPrice: { fontSize: 13, fontWeight: "800", color: "#EF4444", marginTop: 2 },
-  flashDiscount: { fontSize: 10, color: c.muted, marginTop: 2 },
-  searchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: c.light,
-    borderRadius: radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: c.surface,
-  },
-  searchInput: { flex: 1, marginLeft: 8, color: c.dark, fontSize: 14 },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: radius.sm,
-    backgroundColor: c.light,
-    borderWidth: 1,
-    borderColor: c.surface,
-    marginRight: 8,
-  },
-  filterChipActive: { backgroundColor: c.dark, borderColor: c.dark },
-  filterChipText: { color: c.muted, fontWeight: "600", fontSize: 12 },
-  filterChipTextActive: { color: c.light, fontWeight: "700" },
-  sortRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  sortLabel: { fontSize: 12, fontWeight: "700", color: c.muted },
-  sortChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.xs, backgroundColor: c.light, borderWidth: 1, borderColor: c.surface },
-  sortChipActive: { backgroundColor: c.primary, borderColor: c.primary },
-  sortChipText: { fontSize: 11, fontWeight: "600", color: c.muted },
-  sortChipTextActive: { color: c.light, fontWeight: "700" },
-  productGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  productCard: { width: "47%", backgroundColor: c.light, borderRadius: radius.md, overflow: "hidden", borderWidth: 1, borderColor: c.surface },
-  productPlaceholderCard: { width: "47%", borderRadius: radius.md, overflow: "hidden" },
-  productImage: { width: "100%", height: 110 },
-  productImagePlaceholder: { alignItems: "center", justifyContent: "center", backgroundColor: c.primary },
-  productBody: { padding: 10 },
-  productTitle: { fontSize: 13, fontWeight: "700", color: c.dark },
-  productRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
-  productPrice: { fontSize: 13, fontWeight: "800" },
-  productStatus: { fontSize: 10, fontWeight: "700", textTransform: "capitalize", color: c.muted },
-  emptyNote: { textAlign: "center", color: c.muted, fontSize: 14, marginTop: 20 },
-  pipeline: { marginBottom: 12 },
-  pipelineBar: { flexDirection: "row", height: 8, borderRadius: radius.xxs, overflow: "hidden", backgroundColor: c.surface },
-  pipelineSegment: { height: "100%" },
-  pipelineLegend: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 6 },
-  legendText: { fontSize: 11, color: c.muted, fontWeight: "600" },
-  orderCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    backgroundColor: c.light,
-    borderRadius: radius.md,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: c.surface,
-  },
-  orderIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    backgroundColor: c.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  orderNo: { fontSize: 14, fontWeight: "700", color: c.dark },
-  orderMeta: { fontSize: 12, color: c.muted, marginTop: 2 },
-  orderTotal: { fontSize: 14, fontWeight: "800", color: c.dark },
-  orderStatus: { fontSize: 11, fontWeight: "700", textTransform: "capitalize", marginTop: 2 },
-  progressButton: { marginTop: 10, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.sm },
-  progressText: { fontWeight: "700", fontSize: 13 },
-  successBadge: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10 },
-  successText: { color: c.success, fontWeight: "700", fontSize: 13 },
-  insightCards: { flexDirection: "row", gap: 12 },
-  insightCard: {
-    flex: 1,
-    backgroundColor: c.light,
-    borderRadius: radius.md,
-    padding: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: c.surface,
-  },
-  insightValue: { fontSize: 18, fontWeight: "900", color: c.dark, marginTop: 6 },
-  insightLabel: { fontSize: 11, color: c.muted, marginTop: 4, fontWeight: "600", textAlign: "center" },
-  insightSummary: {
-    borderRadius: radius.md, fontSize: 13, color: c.muted, marginTop: 14, lineHeight: 19, textAlign: "center" },
-  modalContainer: { flex: 1, backgroundColor: c.background },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    backgroundColor: c.background,
-  },
-  modalHeaderBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: c.light,
-  },
-  modalHeaderCenter: {
-    flex: 1,
-    alignItems: "center",
-    marginHorizontal: 8,
-  },
-  modalTitle: { fontSize: 17, fontWeight: "800", color: c.dark },
-  modalSubtitle: { fontSize: 11, fontWeight: "600", color: c.muted, marginTop: 1 },
-  progressRail: {
-    flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: c.background,
-  },
-  progressSegmentWrap: { flex: 1, alignItems: "center", gap: 5 },
-  progressSegment: {
-    height: 4,
-    width: "100%",
-    borderRadius: radius.full,
-    backgroundColor: c.surface,
-  },
-  progressLabel: { fontSize: 10, fontWeight: "700", color: c.muted },
-  modalScroll: { flex: 1 },
-  modalContent: { padding: 16, paddingBottom: 24 },
-  card: {
-    backgroundColor: c.light,
-    borderRadius: radius.lg,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: c.surface,
-  },
-  cardTitle: { fontSize: 14, fontWeight: "800", color: c.dark },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  cardCounter: { fontSize: 11, fontWeight: "600", color: c.muted },
-  summaryCard: {
-    backgroundColor: c.light,
-    borderRadius: radius.lg,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 10,
-  },
-  summaryLabel: { fontSize: 13, color: c.muted, fontWeight: "600" },
-  summaryValue: {
-    fontSize: 13,
-    color: c.dark,
-    fontWeight: "700",
-    flexShrink: 1,
-    marginLeft: 12,
-    textAlign: "right",
-  },
-  hintRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginTop: 8,
-  },
-  hintText: { fontSize: 11.5, color: c.muted, marginTop: 8, lineHeight: 16 },
-  label: { fontSize: 12.5, fontWeight: "700", color: c.dark, marginBottom: 6, marginTop: 12 },
-  input: {
-    backgroundColor: c.background,
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    fontSize: 14,
-    color: c.dark,
-  },
-  textArea: { height: 100 },
-  tagInputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 0,
-    marginTop: 10,
-  },
-  tagInput: {
-    flex: 1,
-    fontSize: 14,
-    color: c.dark,
-    paddingVertical: 11,
-  },
-  row: {
-    borderRadius: radius.md, flexDirection: "row", gap: 12 },
-  col: {
-    borderRadius: radius.md, flex: 1 },
-  categoryRow: {
-    flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
-  catChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: radius.full,
-    backgroundColor: c.background,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  catChipText: { fontSize: 12.5, fontWeight: "700", color: c.muted },
-  colorRow: {
-    flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 4 },
-  colorDot: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    borderWidth: 2,
-    borderColor: "transparent",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  colorDotActive: { borderColor: c.dark, transform: [{ scale: 1.12 }] },
-  checkRowItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginTop: 14,
-  },
-  checkTextWrap: { flex: 1, gap: 2 },
-  checkLabel: { fontSize: 13.5, fontWeight: "700", color: c.dark },
-  checkHint: { fontSize: 11.5, color: c.muted, lineHeight: 15 },
-  imageGrid: {
-    flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
-  imageWrap: {
-    position: "relative" },
-  imageThumb: { width: 84, height: 84, borderRadius: radius.md },
-  imageRemove: { position: "absolute", top: -6, right: -6, backgroundColor: c.light, borderRadius: radius.md },
-  imageAdd: {
-    width: 84,
-    height: 84,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: c.border,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  imageAddText: { fontSize: 11, fontWeight: "700" },
-  videoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
-  videoWrap: {
-    position: "relative",
-    width: 140,
-    height: 140,
-    borderRadius: radius.md,
-    overflow: "hidden",
-    backgroundColor: c.dark,
-  },
-  videoThumb: { width: "100%", height: "100%" },
-  videoRemove: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    backgroundColor: c.light,
-    borderRadius: radius.md,
-  },
-  videoBadge: {
-    position: "absolute",
-    left: 6,
-    bottom: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    borderRadius: radius.xs,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  videoBadgeText: { color: c.light, fontSize: 10, fontWeight: "700" },
-  videoAdd: {
-    width: 140,
-    height: 140,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: c.border,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  stepActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    backgroundColor: c.background,
-  },
-  stepSpacer: { flex: 1 },
-  stepButton: {
-    minWidth: 110,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-  stepButtonSecondary: {
-    backgroundColor: c.light,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  stepButtonText: { color: c.light, fontWeight: "800", fontSize: 15 },
-  stepButtonSecondaryText: { color: c.dark, fontWeight: "800", fontSize: 15 },
-  submitButton: { marginTop: 20, paddingVertical: 14, borderRadius: radius.md, alignItems: "center" },
-  submitButtonText: { color: c.light, fontWeight: "700", fontSize: 15 },
-  detailImage: { width: "100%", height: 200, borderRadius: radius.md, marginBottom: 12 },
-  detailPrice: { fontSize: 20, fontWeight: "800", color: c.accent, marginBottom: 4 },
-  detailStatus: { fontSize: 14, color: c.muted, marginBottom: 8 },
-  detailDesc: { fontSize: 14, color: c.dark, lineHeight: 20 },
-  detailMeta: { fontSize: 13, color: c.muted, marginTop: 8 },
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: c.overlay,
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: c.light,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 16,
-    paddingBottom: 30,
-  },
-  sheetItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14 },
-  sheetText: { fontSize: 15, fontWeight: "600", color: c.dark },
-  sheetItemDanger: { borderTopWidth: 1, borderTopColor: c.surface },
-  innerModal: {
-    backgroundColor: c.light,
-    borderRadius: radius.lg,
-    padding: 20,
-    margin: 24,
-  },
-  menuButton: {
-    position: "absolute",
-    right: 16,
-    zIndex: 5,
-    width: 38,
-    height: 38,
-    borderRadius: radius.full,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  drawerOverlay: {
-    flex: 1,
-    flexDirection: "row",
-    backgroundColor: c.overlay,
-  },
-  drawer: {
-    borderRadius: radius.lg,
-    width: "78%",
-    maxWidth: 320,
-    backgroundColor: c.light,
-    paddingTop: 12,
-    paddingBottom: 24,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 2, height: 0 },
-    elevation: 8,
-  },
-  drawerHeader: {
-    borderRadius: radius.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: c.surface,
-  },
-  drawerTitle: { fontSize: 18, fontWeight: "800", color: c.dark },
-  drawerScroll: {
-    borderRadius: radius.md, flex: 1, paddingHorizontal: 8, paddingTop: 8 },
-  menuSection: {
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    color: c.muted,
-    marginTop: 16,
-    marginBottom: 4,
-    marginLeft: 12,
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: radius.sm,
-  },
-  menuItemText: { fontSize: 15, fontWeight: "600", color: c.dark },
-  themeOptions: {
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  themeOption: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.light,
-  },
-  themeOptionActive: {
-    borderColor: c.primary,
-    backgroundColor: "rgba(255, 90, 121, 0.10)",
-  },
-  themeOptionText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: c.muted,
-  },
-  themeOptionTextActive: {
-    color: c.primary,
-    fontWeight: "700",
-  },
-  statRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 14,
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: radius.lg,
-    paddingVertical: 10,
-    paddingHorizontal: 22,
-  },
-  statItemSeller: {
-    borderRadius: radius.sm, alignItems: "center", paddingHorizontal: 14 },
-  statValueSeller: { fontSize: 18, fontWeight: "900", color: c.dark },
-  statLabelSeller: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: c.muted,
-    marginTop: 2,
-  },
-  statDivider: { width: 1, height: 30, backgroundColor: c.border },
-  orderSkeleton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: c.light,
-    borderRadius: radius.md,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: c.surface,
-  },
-  orderSkeletonIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    backgroundColor: c.border,
-  },
-  orderSkeletonLine: {
-    height: 12,
-    borderRadius: radius.xxs,
-    backgroundColor: c.border,
-    width: "80%",
-  },
-  specList: {
-    gap: 12, marginTop: 4 },
-  specRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  specKey: {
-    flex: 1 },
-  specValue: {
-    flex: 1 },
-  specRemove: {
-    padding: 2 },
-  addSpecButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 12,
-    alignSelf: "flex-start",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: radius.full,
-    backgroundColor: c.background,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  addSpecText: { fontSize: 14, fontWeight: "700" },
- });
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    center: { alignItems: "center", justifyContent: "center" },
+    scrollContent: { flexGrow: 1, paddingBottom: 20 },
+    cover: {
+      borderRadius: radius.lg,
+      height: 160,
+      position: "relative",
+      overflow: "hidden",
+    },
+    coverImage: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+    coverOverlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0,0,0,0.25)",
+    },
+    profileBlock: {
+      borderRadius: radius.lg,
+      alignItems: "center",
+      marginTop: -50,
+      paddingHorizontal: 20,
+    },
+    avatarWrap: {
+      borderRadius: radius.full,
+      borderWidth: 4,
+      backgroundColor: c.light,
+      shadowColor: "#000",
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 4,
+    },
+    avatar: { width: 100, height: 100, borderRadius: radius.full },
+    avatarPlaceholder: {
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary,
+    },
+    name: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: c.dark,
+      marginTop: 12,
+      textAlign: "center",
+    },
+    tabBar: {
+      flexDirection: "row",
+      marginHorizontal: 16,
+      marginTop: 16,
+      backgroundColor: c.surface,
+      borderRadius: radius.lg,
+      padding: 4,
+    },
+    tab: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 10,
+      borderRadius: radius.md,
+    },
+    tabContent: {
+      borderRadius: radius.lg,
+      marginTop: 16,
+      paddingHorizontal: 16,
+    },
+    reelsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+    reelCard: {
+      width: "47%",
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: c.surface,
+      height: 200,
+      position: "relative",
+    },
+    reelThumb: { width: "100%", height: "100%" },
+    reelOverlay: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: c.overlay,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    reelTitle: { color: c.light, fontSize: 12, fontWeight: "700" },
+    reelDelete: {
+      position: "absolute",
+      top: 8,
+      right: 8,
+      backgroundColor: "rgba(239,68,68,0.92)",
+      borderRadius: radius.lg,
+      width: 34,
+      height: 34,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    reelMenuButton: {
+      position: "absolute",
+      top: 8,
+      right: 8,
+      width: 34,
+      height: 34,
+      borderRadius: radius.full,
+      backgroundColor: c.overlay,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    menuBackdrop: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    menuCard: {
+      width: "80%",
+      maxWidth: 320,
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      padding: 10,
+      shadowColor: "#000",
+      shadowOpacity: 0.18,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
+    },
+    menuTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.dark,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+    },
+    menuItemRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 12,
+      borderRadius: radius.sm,
+    },
+    menuItemText: { fontSize: 15, fontWeight: "600", color: c.dark },
+    uploadQueueSection: {
+      marginBottom: 14,
+      gap: 10,
+    },
+    uploadQueueHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    uploadQueueTitle: {
+      fontSize: 14,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    uploadQueueSub: {
+      fontSize: 12,
+      color: c.muted,
+    },
+    uploadJobCard: {
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: 12,
+      gap: 8,
+    },
+    uploadJobTopRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 10,
+    },
+    uploadJobTitle: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    uploadJobMeta: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: 2,
+    },
+    uploadJobPct: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: c.primary,
+    },
+    uploadJobBarTrack: {
+      height: 8,
+      borderRadius: radius.full,
+      backgroundColor: c.border,
+      overflow: "hidden",
+    },
+    uploadJobBarFill: {
+      height: "100%",
+      borderRadius: radius.full,
+    },
+    attachVideoCard: {
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: 14,
+      marginBottom: 14,
+      gap: 12,
+    },
+    attachVideoHeader: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12,
+    },
+    attachVideoActions: {
+      gap: 8,
+      alignItems: "flex-end",
+    },
+    attachVideoTitle: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    attachVideoSubtitle: {
+      marginTop: 4,
+      fontSize: 12,
+      color: c.muted,
+      lineHeight: 17,
+    },
+    attachVideoButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: radius.md,
+    },
+    attachVideoButtonText: {
+      color: c.light,
+      fontWeight: "800",
+      fontSize: 13,
+    },
+    attachVideoLabel: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.muted,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+    },
+    attachProductRow: {
+      gap: 10,
+    },
+    attachProductChip: {
+      width: 140,
+      padding: 10,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.light,
+      gap: 8,
+    },
+    attachProductChipText: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    attachProductChipMeta: {
+      fontSize: 11,
+      color: c.muted,
+      marginTop: 4,
+    },
+    deleteVideosButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.primary,
+      backgroundColor: c.light,
+    },
+    deleteVideosButtonText: {
+      color: c.primary,
+      fontWeight: "800",
+      fontSize: 13,
+    },
+    attachProductChipMeta: {
+      fontSize: 11,
+      color: c.muted,
+      marginTop: 4,
+    },
+    attachProductThumb: {
+      width: "100%",
+      height: 84,
+      borderRadius: radius.sm,
+      backgroundColor: c.border,
+    },
+    attachProductThumbFallback: {
+      width: "100%",
+      height: 84,
+      borderRadius: radius.sm,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.border,
+    },
+    primaryButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      borderRadius: radius.pill,
+      elevation: 3,
+      shadowColor: "#000",
+      shadowOpacity: 0.12,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+    },
+    primaryButtonText: { color: c.light, fontWeight: "700", fontSize: 13 },
+    sectionHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
+      borderRadius: radius.md,
+    },
+    chipRow: {
+      borderRadius: radius.md,
+      marginBottom: 12,
+    },
+    videoDeleteList: {
+      maxHeight: 460,
+    },
+    videoDeleteEmpty: {
+      padding: 24,
+      textAlign: "center",
+      color: c.muted,
+      fontSize: 14,
+    },
+    videoDeleteThumb: {
+      width: 56,
+      height: 56,
+      borderRadius: radius.md,
+      backgroundColor: c.border,
+    },
+    videoDeleteThumbFallback: {
+      width: 56,
+      height: 56,
+      borderRadius: radius.md,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(239,68,68,0.10)",
+    },
+    // ── Select-a-product sheet (video attach flow) ─────────────────────────
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "flex-end",
+    },
+    modalCard: {
+      backgroundColor: c.light,
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+      maxHeight: "88%",
+      paddingBottom: 24,
+      shadowColor: "#000",
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: -4 },
+      elevation: 10,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 18,
+      paddingVertical: 18,
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+    },
+    modalHeaderTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.light,
+    },
+    sortOption: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 14,
+      paddingHorizontal: 18,
+      gap: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.surface,
+    },
+    sortOptionLeft: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      minWidth: 0,
+    },
+    sortOptionText: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    videoDeleteMeta: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: 2,
+      textTransform: "capitalize",
+    },
+    summaryChip: {
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      marginRight: 8,
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    summaryChipLabel: {
+      color: c.muted,
+      fontSize: 10,
+      fontWeight: "700",
+      textTransform: "uppercase",
+    },
+    summaryChipValue: {
+      fontWeight: "900",
+      color: c.dark,
+      fontSize: 16,
+      marginTop: 2,
+    },
+    flashBanner: {
+      backgroundColor: "rgba(239,68,68,0.08)",
+      borderRadius: radius.md,
+      padding: 12,
+      marginBottom: 12,
+    },
+    flashBannerHead: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 8,
+    },
+    flashBannerTitle: { fontWeight: "800", color: "#EF4444", fontSize: 14 },
+    flashCountPill: {
+      backgroundColor: "#EF4444",
+      borderRadius: radius.sm,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    flashCountText: { color: c.light, fontSize: 11, fontWeight: "700" },
+    flashCard: {
+      width: 120,
+      marginRight: 10,
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      padding: 8,
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    flashThumb: { width: "100%", height: 70, borderRadius: radius.xs },
+    flashThumbPlaceholder: {
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary,
+    },
+    flashName: { fontSize: 12, fontWeight: "700", color: c.dark, marginTop: 6 },
+    flashPrice: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: "#EF4444",
+      marginTop: 2,
+    },
+    flashDiscount: { fontSize: 10, color: c.muted, marginTop: 2 },
+    searchBox: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    searchInput: { flex: 1, marginLeft: 8, color: c.dark, fontSize: 14 },
+    filterChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: radius.sm,
+      backgroundColor: c.light,
+      borderWidth: 1,
+      borderColor: c.surface,
+      marginRight: 8,
+    },
+    filterChipActive: { backgroundColor: c.dark, borderColor: c.dark },
+    filterChipText: { color: c.muted, fontWeight: "600", fontSize: 12 },
+    filterChipTextActive: { color: c.light, fontWeight: "700" },
+    sortRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 12,
+    },
+    sortLabel: { fontSize: 12, fontWeight: "700", color: c.muted },
+    sortChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: radius.xs,
+      backgroundColor: c.light,
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    sortChipActive: { backgroundColor: c.primary, borderColor: c.primary },
+    sortChipText: { fontSize: 11, fontWeight: "600", color: c.muted },
+    sortChipTextActive: { color: c.light, fontWeight: "700" },
+    productGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+    productCard: {
+      width: "47%",
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    productPlaceholderCard: {
+      width: "47%",
+      borderRadius: radius.md,
+      overflow: "hidden",
+    },
+    productImage: { width: "100%", height: 110 },
+    productImagePlaceholder: {
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary,
+    },
+    productBody: { padding: 10 },
+    productTitle: { fontSize: 13, fontWeight: "700", color: c.dark },
+    productRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: 4,
+    },
+    productPrice: { fontSize: 13, fontWeight: "800" },
+    productStatus: {
+      fontSize: 10,
+      fontWeight: "700",
+      textTransform: "capitalize",
+      color: c.muted,
+    },
+    emptyNote: {
+      textAlign: "center",
+      color: c.muted,
+      fontSize: 14,
+      marginTop: 20,
+    },
+    pipeline: { marginBottom: 12 },
+    pipelineBar: {
+      flexDirection: "row",
+      height: 8,
+      borderRadius: radius.xxs,
+      overflow: "hidden",
+      backgroundColor: c.surface,
+    },
+    pipelineSegment: { height: "100%" },
+    pipelineLegend: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      marginTop: 6,
+    },
+    legendText: { fontSize: 11, color: c.muted, fontWeight: "600" },
+    orderCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      padding: 14,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    orderIconBox: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.sm,
+      backgroundColor: c.surface,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
+    },
+    orderNo: { fontSize: 14, fontWeight: "700", color: c.dark },
+    orderMeta: { fontSize: 12, color: c.muted, marginTop: 2 },
+    orderTotal: { fontSize: 14, fontWeight: "800", color: c.dark },
+    orderStatus: {
+      fontSize: 11,
+      fontWeight: "700",
+      textTransform: "capitalize",
+      marginTop: 2,
+    },
+    progressButton: {
+      marginTop: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: radius.sm,
+    },
+    progressText: { fontWeight: "700", fontSize: 13 },
+    successBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      marginTop: 10,
+    },
+    successText: { color: c.success, fontWeight: "700", fontSize: 13 },
+    insightCards: { flexDirection: "row", gap: 12 },
+    insightCard: {
+      flex: 1,
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      padding: 14,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    insightValue: {
+      fontSize: 18,
+      fontWeight: "900",
+      color: c.dark,
+      marginTop: 6,
+    },
+    insightLabel: {
+      fontSize: 11,
+      color: c.muted,
+      marginTop: 4,
+      fontWeight: "600",
+      textAlign: "center",
+    },
+    insightSummary: {
+      borderRadius: radius.md,
+      fontSize: 13,
+      color: c.muted,
+      marginTop: 14,
+      lineHeight: 19,
+      textAlign: "center",
+    },
+    modalContainer: { flex: 1, backgroundColor: c.background },
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+      borderBottomWidth: 1,
+      backgroundColor: c.background,
+    },
+    modalHeaderBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: radius.full,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.light,
+    },
+    modalHeaderCenter: {
+      flex: 1,
+      alignItems: "center",
+      marginHorizontal: 8,
+    },
+    modalTitle: { fontSize: 17, fontWeight: "800", color: c.dark },
+    modalSubtitle: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: c.muted,
+      marginTop: 1,
+    },
+    progressRail: {
+      flexDirection: "row",
+      gap: 6,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: c.background,
+    },
+    progressSegmentWrap: { flex: 1, alignItems: "center", gap: 5 },
+    progressSegment: {
+      height: 4,
+      width: "100%",
+      borderRadius: radius.full,
+      backgroundColor: c.surface,
+    },
+    progressLabel: { fontSize: 10, fontWeight: "700", color: c.muted },
+    modalScroll: { flex: 1 },
+    modalContent: { padding: 16, paddingBottom: 24 },
+    card: {
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      padding: 14,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    cardTitle: { fontSize: 14, fontWeight: "800", color: c.dark },
+    cardTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    cardCounter: { fontSize: 11, fontWeight: "600", color: c.muted },
+    summaryCard: {
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      padding: 14,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    summaryRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 10,
+    },
+    summaryLabel: { fontSize: 13, color: c.muted, fontWeight: "600" },
+    summaryValue: {
+      fontSize: 13,
+      color: c.dark,
+      fontWeight: "700",
+      flexShrink: 1,
+      marginLeft: 12,
+      textAlign: "right",
+    },
+    hintRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      marginTop: 8,
+    },
+    hintText: { fontSize: 11.5, color: c.muted, marginTop: 8, lineHeight: 16 },
+    label: {
+      fontSize: 12.5,
+      fontWeight: "700",
+      color: c.dark,
+      marginBottom: 6,
+      marginTop: 12,
+    },
+    input: {
+      backgroundColor: c.background,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.md,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+      fontSize: 14,
+      color: c.dark,
+    },
+    textArea: { height: 100 },
+    tagInputWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 0,
+      marginTop: 10,
+    },
+    tagInput: {
+      flex: 1,
+      fontSize: 14,
+      color: c.dark,
+      paddingVertical: 11,
+    },
+    row: {
+      borderRadius: radius.md,
+      flexDirection: "row",
+      gap: 12,
+    },
+    col: {
+      borderRadius: radius.md,
+      flex: 1,
+    },
+    categoryRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 4,
+    },
+    catChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: radius.full,
+      backgroundColor: c.background,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    catChipText: { fontSize: 12.5, fontWeight: "700", color: c.muted },
+    colorRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      marginTop: 4,
+    },
+    colorDot: {
+      width: 32,
+      height: 32,
+      borderRadius: radius.full,
+      borderWidth: 2,
+      borderColor: "transparent",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    colorDotActive: { borderColor: c.dark, transform: [{ scale: 1.12 }] },
+    checkRowItem: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 10,
+      marginTop: 14,
+    },
+    checkTextWrap: { flex: 1, gap: 2 },
+    checkLabel: { fontSize: 13.5, fontWeight: "700", color: c.dark },
+    checkHint: { fontSize: 11.5, color: c.muted, lineHeight: 15 },
+    imageGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      marginTop: 10,
+    },
+    imageWrap: {
+      position: "relative",
+    },
+    imageThumb: { width: 84, height: 84, borderRadius: radius.md },
+    imageRemove: {
+      position: "absolute",
+      top: -6,
+      right: -6,
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+    },
+    imageAdd: {
+      width: 84,
+      height: 84,
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+      borderStyle: "dashed",
+      borderColor: c.border,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 4,
+    },
+    imageAddText: { fontSize: 11, fontWeight: "700" },
+    videoGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      marginTop: 10,
+    },
+    videoWrap: {
+      position: "relative",
+      width: 140,
+      height: 140,
+      borderRadius: radius.md,
+      overflow: "hidden",
+      backgroundColor: c.dark,
+    },
+    videoThumb: { width: "100%", height: "100%" },
+    videoRemove: {
+      position: "absolute",
+      top: 6,
+      right: 6,
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+    },
+    videoBadge: {
+      position: "absolute",
+      left: 6,
+      bottom: 6,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: "rgba(0,0,0,0.55)",
+      borderRadius: radius.xs,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    videoBadgeText: { color: c.light, fontSize: 10, fontWeight: "700" },
+    videoAdd: {
+      width: 140,
+      height: 140,
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+      borderStyle: "dashed",
+      borderColor: c.border,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 4,
+    },
+    stepActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      backgroundColor: c.background,
+    },
+    stepSpacer: { flex: 1 },
+    stepButton: {
+      minWidth: 110,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: radius.md,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 6,
+    },
+    stepButtonSecondary: {
+      backgroundColor: c.light,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    stepButtonText: { color: c.light, fontWeight: "800", fontSize: 15 },
+    stepButtonSecondaryText: { color: c.dark, fontWeight: "800", fontSize: 15 },
+    submitButton: {
+      marginTop: 20,
+      paddingVertical: 14,
+      borderRadius: radius.md,
+      alignItems: "center",
+    },
+    submitButtonText: { color: c.light, fontWeight: "700", fontSize: 15 },
+    detailImage: {
+      width: "100%",
+      height: 200,
+      borderRadius: radius.md,
+      marginBottom: 12,
+    },
+    detailPrice: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: c.accent,
+      marginBottom: 4,
+    },
+    detailStatus: { fontSize: 14, color: c.muted, marginBottom: 8 },
+    detailDesc: { fontSize: 14, color: c.dark, lineHeight: 20 },
+    detailMeta: { fontSize: 13, color: c.muted, marginTop: 8 },
+    sheetOverlay: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "flex-end",
+    },
+    sheet: {
+      backgroundColor: c.light,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      padding: 16,
+      paddingBottom: 30,
+    },
+    sheetItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 14,
+    },
+    sheetText: { fontSize: 15, fontWeight: "600", color: c.dark },
+    sheetItemDanger: { borderTopWidth: 1, borderTopColor: c.surface },
+    innerModal: {
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      padding: 20,
+      margin: 24,
+    },
+    menuButton: {
+      position: "absolute",
+      right: 16,
+      zIndex: 5,
+      width: 38,
+      height: 38,
+      borderRadius: radius.full,
+      backgroundColor: "rgba(0,0,0,0.18)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    drawerOverlay: {
+      flex: 1,
+      flexDirection: "row",
+      backgroundColor: c.overlay,
+    },
+    drawer: {
+      borderRadius: radius.lg,
+      width: "78%",
+      maxWidth: 320,
+      backgroundColor: c.light,
+      paddingTop: 12,
+      paddingBottom: 24,
+      shadowColor: "#000",
+      shadowOpacity: 0.2,
+      shadowRadius: 12,
+      shadowOffset: { width: 2, height: 0 },
+      elevation: 8,
+    },
+    drawerHeader: {
+      borderRadius: radius.md,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.surface,
+    },
+    drawerTitle: { fontSize: 18, fontWeight: "800", color: c.dark },
+    drawerScroll: {
+      borderRadius: radius.md,
+      flex: 1,
+      paddingHorizontal: 8,
+      paddingTop: 8,
+    },
+    menuSection: {
+      fontSize: 11,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      color: c.muted,
+      marginTop: 16,
+      marginBottom: 4,
+      marginLeft: 12,
+    },
+    menuItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderRadius: radius.sm,
+    },
+    menuItemText: { fontSize: 15, fontWeight: "600", color: c.dark },
+    themeOptions: {
+      flexDirection: "row",
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    themeOption: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingVertical: 10,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.light,
+    },
+    themeOptionActive: {
+      borderColor: c.primary,
+      backgroundColor: "rgba(255, 90, 121, 0.10)",
+    },
+    themeOptionText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.muted,
+    },
+    themeOptionTextActive: {
+      color: c.primary,
+      fontWeight: "700",
+    },
+    statRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 14,
+      backgroundColor: "rgba(255,255,255,0.92)",
+      borderRadius: radius.lg,
+      paddingVertical: 10,
+      paddingHorizontal: 22,
+    },
+    statItemSeller: {
+      borderRadius: radius.sm,
+      alignItems: "center",
+      paddingHorizontal: 14,
+    },
+    statValueSeller: { fontSize: 18, fontWeight: "900", color: c.dark },
+    statLabelSeller: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.muted,
+      marginTop: 2,
+    },
+    statDivider: { width: 1, height: 30, backgroundColor: c.border },
+
+    // Go Live toggle
+    goLiveRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: 18,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 16,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    goLiveRowActive: {
+      backgroundColor: c.primary,
+      borderColor: c.primary,
+    },
+    goLiveRowDisabled: {
+      opacity: 0.85,
+    },
+    goLiveLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      flex: 1,
+    },
+    goLiveTextWrap: {
+      flex: 1,
+    },
+    goLiveTitle: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    goLiveTitleActive: {
+      color: c.light,
+    },
+    goLiveSub: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: 2,
+    },
+    goLiveSubActive: {
+      color: "rgba(255,255,255,0.85)",
+    },
+    goLiveSwitch: {
+      width: 46,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: c.border,
+      padding: 3,
+      justifyContent: "center",
+    },
+    goLiveSwitchOn: {
+      backgroundColor: "rgba(255,255,255,0.4)",
+      alignItems: "flex-end",
+    },
+    goLiveKnob: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: c.light,
+    },
+    orderSkeleton: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      padding: 14,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    orderSkeletonIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.sm,
+      backgroundColor: c.border,
+    },
+    orderSkeletonLine: {
+      height: 12,
+      borderRadius: radius.xxs,
+      backgroundColor: c.border,
+      width: "80%",
+    },
+    specList: {
+      gap: 12,
+      marginTop: 4,
+    },
+    specRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    specKey: {
+      flex: 1,
+    },
+    specValue: {
+      flex: 1,
+    },
+    specRemove: {
+      padding: 2,
+    },
+    addSpecButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 12,
+      alignSelf: "flex-start",
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: radius.full,
+      backgroundColor: c.background,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    addSpecText: { fontSize: 14, fontWeight: "700" },
+  });
 
 export default SellerAdminScreen;

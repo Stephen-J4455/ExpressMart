@@ -100,8 +100,11 @@ export const AccountScreen = ({ navigation }) => {
   const { user, profile, isAuthenticated, loading, signOut } = useAuth();
   const { orders } = useOrder();
   const { fetchAdsByPlacement } = useAds();
-  const { theme: themeMode, setTheme: setThemeMode, colors: themeColors } =
-    useTheme();
+  const {
+    theme: themeMode,
+    setTheme: setThemeMode,
+    colors: themeColors,
+  } = useTheme();
   const styles = useAppStyles((c) => buildAccountStyles(c));
   const [showLoadingPreview, setShowLoadingPreview] = useState(false);
   const [profileAds, setProfileAds] = useState([]);
@@ -158,6 +161,7 @@ export const AccountScreen = ({ navigation }) => {
     };
   }, [isAuthenticated, user, profile?.role, sellerRecord]);
 
+  const totalOrders = orders.length;
   const activeOrders = orders.filter((o) =>
     ["processing", "packed", "shipped"].includes(o.status),
   ).length;
@@ -236,7 +240,12 @@ export const AccountScreen = ({ navigation }) => {
 
   // Sellers get a dedicated seller admin page (Facebook-style)
   if (sellerRecord !== null) {
-    return <SellerAdminScreen navigation={navigation} seller={sellerRecord && sellerRecord.id ? sellerRecord : undefined} />;
+    return (
+      <SellerAdminScreen
+        navigation={navigation}
+        seller={sellerRecord && sellerRecord.id ? sellerRecord : undefined}
+      />
+    );
   }
 
   return (
@@ -251,40 +260,59 @@ export const AccountScreen = ({ navigation }) => {
           <RefreshControl refreshing={false} onRefresh={() => {}} />
         }
       >
-        {/* Profile Header */}
-        <View style={[styles.profileHeader, { paddingTop: insets.top + 20 }]}>
-          <View style={styles.profileTopRow}>
-            <View style={styles.profileInfo}>
-              <View style={styles.avatarContainer}>
-                <LinearGradient
-                  colors={[themeColors.primary, themeColors.accent]}
-                  style={styles.avatarGradient}
-                >
-                  <Text style={styles.avatarText}>
-                    {(profile?.full_name || user?.email)?.[0]?.toUpperCase()}
-                  </Text>
-                </LinearGradient>
-                <View style={styles.onlineDot} />
-              </View>
-              <View style={styles.profileText}>
-                <Text style={styles.profileName}>
-                  {profile?.full_name || "tagit User"}
+        {/* Hero Profile Header */}
+        <LinearGradient
+          colors={[themeColors.primary, themeColors.accent]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.heroHeader, { paddingTop: insets.top + 24 }]}
+        >
+          <View style={styles.heroTopRow}>
+            <View style={styles.avatarContainer}>
+              <LinearGradient
+                colors={["rgba(255,255,255,0.28)", "rgba(255,255,255,0.12)"]}
+                style={styles.avatarGradient}
+              >
+                <Text style={styles.avatarText}>
+                  {(profile?.full_name || user?.email)?.[0]?.toUpperCase() ||
+                    "?"}
                 </Text>
-                <Text style={styles.profileEmail}>{user?.email}</Text>
-              </View>
+              </LinearGradient>
+              <View style={styles.onlineDot} />
+            </View>
+            <View style={styles.heroText}>
+              <Text style={styles.profileName}>
+                {profile?.full_name || "tagit User"}
+              </Text>
+              <Text style={styles.profileEmail}>{user?.email}</Text>
             </View>
             <Pressable
               style={styles.editButton}
               onPress={() => navigation.navigate("ProfileEdit")}
             >
-              <Ionicons
-                name="create-outline"
-                size={18}
-                color={themeColors.primary}
-              />
+              <Ionicons name="create-outline" size={18} color="#fff" />
             </Pressable>
           </View>
-        </View>
+
+          <View style={styles.heroStats}>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatValue}>{totalOrders}</Text>
+              <Text style={styles.heroStatLabel}>Orders</Text>
+            </View>
+            <View style={styles.heroStatDivider} />
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatValue}>{activeOrders}</Text>
+              <Text style={styles.heroStatLabel}>Active</Text>
+            </View>
+            <View style={styles.heroStatDivider} />
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatValue}>
+                GH₵{Math.round(totalSpent).toLocaleString()}
+              </Text>
+              <Text style={styles.heroStatLabel}>Spent</Text>
+            </View>
+          </View>
+        </LinearGradient>
 
         {profileAds.length > 0 && (
           <View style={styles.adSection}>
@@ -301,9 +329,7 @@ export const AccountScreen = ({ navigation }) => {
             end={{ x: 1, y: 1 }}
           >
             <View style={styles.registerStoreTextWrap}>
-              <Text style={styles.registerStoreTitle}>
-                Sell on tagit
-              </Text>
+              <Text style={styles.registerStoreTitle}>Sell on tagit</Text>
               <Text style={styles.registerStoreSubtitle}>
                 Open your own store and reach thousands of customers.
               </Text>
@@ -312,7 +338,11 @@ export const AccountScreen = ({ navigation }) => {
               style={styles.registerStoreButton}
               onPress={() => navigation.navigate("StoreRegistration")}
             >
-              <Ionicons name="storefront" size={18} color={themeColors.primary} />
+              <Ionicons
+                name="storefront"
+                size={18}
+                color={themeColors.primary}
+              />
               <Text style={styles.registerStoreButtonText}>
                 Register a Store
               </Text>
@@ -323,7 +353,7 @@ export const AccountScreen = ({ navigation }) => {
         {/* Quick Actions */}
         <View style={styles.quickActionsSection}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActionsGrid}>
+          <View style={styles.quickActionsCard}>
             {quickActions.map((action) => (
               <Pressable
                 key={action.label}
@@ -390,16 +420,17 @@ export const AccountScreen = ({ navigation }) => {
             {[
               { key: "light", label: "Light", icon: "sunny-outline" },
               { key: "dark", label: "Dark", icon: "moon-outline" },
-              { key: "system", label: "System", icon: "phone-portrait-outline" },
+              {
+                key: "system",
+                label: "System",
+                icon: "phone-portrait-outline",
+              },
             ].map((opt, index) => {
               const selected = themeMode === opt.key;
               return (
                 <Pressable
                   key={opt.key}
-                  style={[
-                    styles.menuItem,
-                    index < 2 && styles.menuItemBorder,
-                  ]}
+                  style={[styles.menuItem, index < 2 && styles.menuItemBorder]}
                   onPress={() => setThemeMode(opt.key)}
                 >
                   <View style={styles.menuItemLeft}>
@@ -472,7 +503,7 @@ export const AccountScreen = ({ navigation }) => {
 };
 
 const buildAccountStyles = (c) =>
-  StyleSheet.create({ 
+  StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: c.background,
@@ -552,81 +583,107 @@ const buildAccountStyles = (c) =>
       fontWeight: "600",
     },
 
-    // Profile Header
-    profileHeader: {
-      backgroundColor: c.background,
+    // Hero Profile Header
+    heroHeader: {
       paddingHorizontal: 20,
-      paddingBottom: 20,
-      borderBottomLeftRadius: 28,
-      borderBottomRightRadius: 28,
+      paddingBottom: 24,
+      borderBottomLeftRadius: 30,
+      borderBottomRightRadius: 30,
       shadowColor: "#000",
-      shadowOpacity: 0.04,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 4,
+      shadowOpacity: 0.12,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 8,
     },
     adSection: {
       paddingTop: 8,
       paddingBottom: 6,
     },
-    profileTopRow: {
+    heroTopRow: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 20,
-    },
-    profileInfo: {
-      flexDirection: "row",
-      alignItems: "center",
+      marginBottom: 22,
     },
     avatarContainer: {
       position: "relative",
       marginRight: 14,
     },
     avatarGradient: {
-      width: 60,
-      height: 60,
-      borderRadius: 20,
+      width: 64,
+      height: 64,
+      borderRadius: 22,
       alignItems: "center",
       justifyContent: "center",
+      borderWidth: 2,
+      borderColor: "rgba(255,255,255,0.45)",
     },
     avatarText: {
-      fontSize: 24,
-      fontWeight: "700",
+      fontSize: 26,
+      fontWeight: "800",
       color: c.light,
     },
     onlineDot: {
       position: "absolute",
       bottom: 2,
       right: 2,
-      width: 14,
-      height: 14,
-      borderRadius: 7,
+      width: 15,
+      height: 15,
+      borderRadius: 7.5,
       backgroundColor: "#22C55E",
-      borderWidth: 2,
-      borderColor: c.light,
+      borderWidth: 2.5,
+      borderColor: c.primary,
     },
-    profileText: {
+    heroText: {
+      flex: 1,
       justifyContent: "center",
     },
     profileName: {
-      fontSize: 18,
-      fontWeight: "700",
-      color: c.dark,
+      fontSize: 20,
+      fontWeight: "800",
+      color: c.light,
       letterSpacing: -0.3,
     },
     profileEmail: {
       fontSize: 13,
-      color: c.muted,
-      marginTop: 2,
+      color: "rgba(255,255,255,0.85)",
+      marginTop: 3,
     },
     editButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      backgroundColor: c.surface,
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      backgroundColor: "rgba(255,255,255,0.22)",
       alignItems: "center",
       justifyContent: "center",
+    },
+    heroStats: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "rgba(255,255,255,0.16)",
+      borderRadius: 18,
+      paddingVertical: 16,
+    },
+    heroStat: {
+      flex: 1,
+      alignItems: "center",
+    },
+    heroStatValue: {
+      fontSize: 19,
+      fontWeight: "800",
+      color: c.light,
+    },
+    heroStatLabel: {
+      fontSize: 11,
+      color: "rgba(255,255,255,0.85)",
+      marginTop: 4,
+      fontWeight: "600",
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+    },
+    heroStatDivider: {
+      width: 1,
+      height: 32,
+      backgroundColor: "rgba(255,255,255,0.25)",
     },
 
     // Membership Card
@@ -750,9 +807,18 @@ const buildAccountStyles = (c) =>
       marginBottom: 14,
       letterSpacing: -0.3,
     },
-    quickActionsGrid: {
+    quickActionsCard: {
       flexDirection: "row",
       justifyContent: "space-between",
+      backgroundColor: c.surface,
+      borderRadius: 20,
+      paddingVertical: 18,
+      paddingHorizontal: 12,
+      shadowColor: "#000",
+      shadowOpacity: 0.03,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
     },
     quickActionCard: {
       width: "23%",
@@ -875,4 +941,4 @@ const buildAccountStyles = (c) =>
       shadowRadius: 8,
       elevation: 4,
     },
-   });
+  });

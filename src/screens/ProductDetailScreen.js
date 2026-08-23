@@ -79,12 +79,34 @@ const toBoolean = (value) => {
   return false;
 };
 
+// Some legacy rows store colors as objects ({name, hex}) or JSON strings.
+// Normalize to an array of plain name strings for rendering.
+const normalizeColors = (raw) => {
+  let list = raw;
+  if (typeof list === "string") {
+    try {
+      const parsed = JSON.parse(list);
+      list = Array.isArray(parsed) ? parsed : [list];
+    } catch {
+      list = list.split(",");
+    }
+  }
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((c) =>
+      typeof c === "string" ? c : c?.name || c?.color || c?.value || null,
+    )
+    .filter((c) => typeof c === "string" && c.trim());
+};
+
 const REVIEW_STAR_COLOR = "#F97316";
 
 export const ProductDetailScreen = ({ route, navigation }) => {
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildProductDetailStyles(c));
-  const markdownStyles = useAppStyles((c) => buildProductDetailMarkdownStyles(c));
+  const markdownStyles = useAppStyles((c) =>
+    buildProductDetailMarkdownStyles(c),
+  );
   // When opened via a universal link (https://www.expressmart.me/product/:id)
   // only `productId` is present; otherwise a full `product` object is passed.
   // SKU deep links (tagit://product/[sku], /p/[sku]) pass `sku` + optional
@@ -162,7 +184,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const isOutOfStock =
     !isPreorder && hasInventoryValue && availableStock <= 0 && !allowsBackorder;
   const originalDisplayPrice = Number(
-    hasFlashSale ? flashSale?.original_price || product.price || 0 : product.price || 0,
+    hasFlashSale
+      ? flashSale?.original_price || product.price || 0
+      : product.price || 0,
   );
   const currentDisplayPrice = Number(
     hasFlashSale
@@ -246,8 +270,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           setProduct({
             ...data,
             seller: data.seller_id,
-            quantity:
-              data.quantity ?? data.stock ?? data.stock_quantity ?? 0,
+            quantity: data.quantity ?? data.stock ?? data.stock_quantity ?? 0,
             stock: data.stock ?? data.quantity ?? data.stock_quantity ?? 0,
           });
         }
@@ -343,30 +366,27 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     );
   }, [fetchAdsByPlacement]);
 
-  const productTagList = useMemo(
-    () => {
-      const rawTags = product?.tags;
-      let tags = [];
+  const productTagList = useMemo(() => {
+    const rawTags = product?.tags;
+    let tags = [];
 
-      if (Array.isArray(rawTags)) {
-        tags = rawTags;
-      } else if (typeof rawTags === "string") {
-        try {
-          const parsed = JSON.parse(rawTags);
-          if (Array.isArray(parsed)) {
-            tags = parsed;
-          } else {
-            tags = rawTags.split(",");
-          }
-        } catch {
+    if (Array.isArray(rawTags)) {
+      tags = rawTags;
+    } else if (typeof rawTags === "string") {
+      try {
+        const parsed = JSON.parse(rawTags);
+        if (Array.isArray(parsed)) {
+          tags = parsed;
+        } else {
           tags = rawTags.split(",");
         }
+      } catch {
+        tags = rawTags.split(",");
       }
+    }
 
-      return tags.map((tag) => String(tag || "").trim()).filter(Boolean);
-    },
-    [product?.tags],
-  );
+    return tags.map((tag) => String(tag || "").trim()).filter(Boolean);
+  }, [product?.tags]);
 
   const productDetailsText = useMemo(() => {
     const baseDescription = String(
@@ -379,13 +399,16 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       extraBits.push(`Category: ${product.category}.`);
     }
     if (product?.weight) {
-      extraBits.push(`Weight: ${product.weight} ${product.weight_unit || "kg"}.`);
+      extraBits.push(
+        `Weight: ${product.weight} ${product.weight_unit || "kg"}.`,
+      );
     }
     if (Array.isArray(product?.sizes) && product.sizes.length > 0) {
       extraBits.push(`Available sizes: ${product.sizes.join(", ")}.`);
     }
-    if (Array.isArray(product?.colors) && product.colors.length > 0) {
-      extraBits.push(`Available colors: ${product.colors.join(", ")}.`);
+    const normalizedColors = normalizeColors(product?.colors);
+    if (normalizedColors.length > 0) {
+      extraBits.push(`Available colors: ${normalizedColors.join(", ")}.`);
     }
     if (Array.isArray(productTagList) && productTagList.length > 0) {
       extraBits.push(`Popular tags: ${productTagList.join(", ")}.`);
@@ -762,13 +785,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     try {
       const result = await shareProduct(product.id, product.title);
       if (result.success) {
-        toast.success('Product shared!', 'Share link copied to clipboard');
+        toast.success("Product shared!", "Share link copied to clipboard");
       } else {
-        toast.error('Failed to share', result.error || 'Please try again');
+        toast.error("Failed to share", result.error || "Please try again");
       }
     } catch (error) {
-      toast.error('Error', 'Failed to share product');
-      console.error('Error sharing product:', error);
+      toast.error("Error", "Failed to share product");
+      console.error("Error sharing product:", error);
     }
   };
 
@@ -787,12 +810,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       return;
     }
 
-    const hasMultipleColors = product.colors && product.colors.length > 1;
+    const productColors = normalizeColors(product.colors);
+    const hasMultipleColors = productColors.length > 1;
     const hasMultipleSizes = product.sizes && product.sizes.length > 1;
 
     if (hasMultipleColors || hasMultipleSizes) {
       // Reset selections and show modal
-      setSelectedColor(hasMultipleColors ? null : product.colors?.[0] || null);
+      setSelectedColor(hasMultipleColors ? null : productColors[0] || null);
       setSelectedSize(hasMultipleSizes ? null : product.sizes?.[0] || null);
       setShowVariantModal(true);
     } else {
@@ -801,7 +825,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         product,
         1,
         product.sizes?.[0] || null,
-        product.colors?.[0] || null,
+        productColors[0] || null,
         hasFlashSale ? flashSale.flash_price : null,
       );
       toast.success(
@@ -891,7 +915,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         </Text>
         <Pressable
           onPress={() =>
-            navigation.canGoBack() ? navigation.goBack() : navigation.navigate("Main")
+            navigation.canGoBack()
+              ? navigation.goBack()
+              : navigation.navigate("Main")
           }
           style={{
             marginTop: 20,
@@ -950,6 +976,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             ))}
           </ScrollView>
 
+          {/* Soft scrim so the white status-bar icons stay readable */}
+          <LinearGradient
+            colors={["rgba(15,23,42,0.35)", "rgba(15,23,42,0)"]}
+            style={styles.imageTopScrim}
+            pointerEvents="none"
+          />
+
           {product.thumbnails && product.thumbnails.length > 1 && (
             <View style={styles.pagination}>
               {product.thumbnails.map((_, index) => (
@@ -965,221 +998,220 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           )}
         </View>
 
+        {/* Floating glass-style controls over the hero image */}
         <Pressable
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
+          <Ionicons name="arrow-back" size={22} color={themeColors.dark} />
         </Pressable>
-        <Pressable
-          style={styles.shareButton}
-          onPress={() => handleShareProduct()}
-        >
-          <Ionicons name="share-outline" size={24} color={themeColors.dark} />
-        </Pressable>
-        <Pressable
-          style={styles.wishlistButton}
-          onPress={toggleWishlist}
-          disabled={wishlistLoading}
-        >
-          {wishlistLoading ? (
-            <ActivityIndicator size="small" color={themeColors.accent} />
-          ) : (
-            <Ionicons
-              name={isWishlisted ? "heart" : "heart-outline"}
-              size={24}
-              color={isWishlisted ? themeColors.accent : themeColors.dark}
-            />
-          )}
-        </Pressable>
+        <View style={styles.topActions}>
+          <Pressable
+            style={styles.topActionButton}
+            onPress={() => handleShareProduct()}
+          >
+            <Ionicons name="share-outline" size={20} color={themeColors.dark} />
+          </Pressable>
+          <Pressable
+            style={styles.topActionButton}
+            onPress={toggleWishlist}
+            disabled={wishlistLoading}
+          >
+            {wishlistLoading ? (
+              <ActivityIndicator size="small" color={themeColors.primary} />
+            ) : (
+              <Ionicons
+                name={isWishlisted ? "heart" : "heart-outline"}
+                size={20}
+                color={isWishlisted ? themeColors.primary : themeColors.dark}
+              />
+            )}
+          </Pressable>
+        </View>
 
         <View style={styles.content}>
-            <View style={styles.vendorRow}>
-              <View style={styles.sellerPill}>
-                <Ionicons
-                  name="storefront-outline"
-                  size={14}
-                  color={themeColors.primary}
-                />
-                <Text style={styles.vendor}>
-                  {product.seller?.name || product.vendor}
-                </Text>
-              </View>
-              {!!product.category && (
-                <View style={styles.categoryPill}>
-                  <Text style={styles.categoryPillText}>{product.category}</Text>
-                </View>
-              )}
+          <View style={styles.vendorRow}>
+            <View style={styles.sellerPill}>
+              <Ionicons
+                name="storefront-outline"
+                size={14}
+                color={themeColors.primary}
+              />
+              <Text style={styles.vendor}>
+                {product.seller?.name || product.vendor}
+              </Text>
             </View>
+            {!!product.category && (
+              <View style={styles.categoryPill}>
+                <Text style={styles.categoryPillText}>{product.category}</Text>
+              </View>
+            )}
+          </View>
 
-            {product.seller?.badges && product.seller.badges.length > 0 && (
-              <View style={styles.sellerBadgesRow}>
-                {product.seller.badges.slice(0, 3).map((badgeId) => {
-                  const badge = SELLER_BADGE_CONFIG[badgeId];
-                  if (!badge) return null;
-                  return (
-                    <View
-                      key={badgeId}
-                      style={[
-                        styles.sellerBadge,
-                        { backgroundColor: badge.color + "20" },
-                      ]}
+          {product.seller?.badges && product.seller.badges.length > 0 && (
+            <View style={styles.sellerBadgesRow}>
+              {product.seller.badges.slice(0, 3).map((badgeId) => {
+                const badge = SELLER_BADGE_CONFIG[badgeId];
+                if (!badge) return null;
+                return (
+                  <View
+                    key={badgeId}
+                    style={[
+                      styles.sellerBadge,
+                      { backgroundColor: badge.color + "20" },
+                    ]}
+                  >
+                    <Ionicons name={badge.icon} size={14} color={badge.color} />
+                    <Text
+                      style={[styles.sellerBadgeText, { color: badge.color }]}
                     >
-                      <Ionicons
-                        name={badge.icon}
-                        size={14}
-                        color={badge.color}
-                      />
-                      <Text
-                        style={[styles.sellerBadgeText, { color: badge.color }]}
-                      >
-                        {badge.label}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-
-            <Text style={styles.title}>{product.title}</Text>
-
-            <View style={styles.ratingRow}>
-              <View style={styles.ratingChip}>
-                <Ionicons name="star" size={16} color="#F59E0B" />
-                <Text style={styles.ratingText}>
-                  {reviewCount > 0
-                    ? product.rating?.toFixed(1) || "0.0"
-                    : "No reviews"}
-                </Text>
-              </View>
-              {reviewCount > 0 && (
-                <Text style={styles.ratingCount}>{reviewCount} reviews</Text>
-              )}
+                      {badge.label}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
+          )}
 
-            {hasFlashSale && (
-              <View style={styles.flashSaleSection}>
-                <FlashSaleCountdown
-                  endTime={flashSale.end_time}
-                  startTime={flashSale.start_time}
-                  withProgressBar
-                  onExpire={() => {
-                    setFlashSale(null);
-                    refreshProductData();
-                  }}
-                  availableQty={
-                    flashSale.max_quantity != null
-                      ? Math.max(
-                          0,
-                          (flashSale.max_quantity || 0) -
-                            (flashSale.sold_quantity || 0),
-                        )
-                      : null
-                  }
-                />
-              </View>
+          <Text style={styles.title}>{product.title}</Text>
+
+          <View style={styles.ratingRow}>
+            <View style={styles.ratingChip}>
+              <Ionicons name="star" size={16} color="#F59E0B" />
+              <Text style={styles.ratingText}>
+                {reviewCount > 0
+                  ? product.rating?.toFixed(1) || "0.0"
+                  : "No reviews"}
+              </Text>
+            </View>
+            {reviewCount > 0 && (
+              <Text style={styles.ratingCount}>{reviewCount} reviews</Text>
             )}
+          </View>
 
-            <View style={styles.priceSection}>
-              <View style={styles.priceRow}>
-                <View style={styles.priceContainer}>
-                  <Text style={styles.price}>
-                    {formatPrice(product.price, product.discount)}
-                  </Text>
-                  {hasFlashSale ? (
+          {hasFlashSale && (
+            <View style={styles.flashSaleSection}>
+              <FlashSaleCountdown
+                endTime={flashSale.end_time}
+                startTime={flashSale.start_time}
+                withProgressBar
+                onExpire={() => {
+                  setFlashSale(null);
+                  refreshProductData();
+                }}
+                availableQty={
+                  flashSale.max_quantity != null
+                    ? Math.max(
+                        0,
+                        (flashSale.max_quantity || 0) -
+                          (flashSale.sold_quantity || 0),
+                      )
+                    : null
+                }
+              />
+            </View>
+          )}
+
+          <View style={styles.priceSection}>
+            <View style={styles.priceRow}>
+              <View style={styles.priceContainer}>
+                <Text style={styles.price}>
+                  {formatPrice(product.price, product.discount)}
+                </Text>
+                {hasFlashSale ? (
+                  <>
+                    <Text style={styles.originalPrice}>
+                      GH₵{originalDisplayPrice.toLocaleString()}
+                    </Text>
+                    <View style={styles.flashDiscountBadge}>
+                      <LinearGradient
+                        colors={["#EF4444", "#DC2626"]}
+                        style={styles.flashBadgeGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        <Ionicons name="flash" size={12} color="#fff" />
+                        <Text style={styles.flashDiscountText}>
+                          {Math.round(flashSale.discount_percentage)}% OFF
+                        </Text>
+                      </LinearGradient>
+                    </View>
+                  </>
+                ) : (
+                  product.discount > 0 && (
                     <>
                       <Text style={styles.originalPrice}>
                         GH₵{originalDisplayPrice.toLocaleString()}
                       </Text>
-                      <View style={styles.flashDiscountBadge}>
-                        <LinearGradient
-                          colors={["#EF4444", "#DC2626"]}
-                          style={styles.flashBadgeGradient}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                        >
-                          <Ionicons name="flash" size={12} color="#fff" />
-                          <Text style={styles.flashDiscountText}>
-                            {Math.round(flashSale.discount_percentage)}% OFF
-                          </Text>
-                        </LinearGradient>
+                      <View style={styles.discountBadge}>
+                        <Text style={styles.discountText}>
+                          {product.discount}% OFF
+                        </Text>
                       </View>
                     </>
-                  ) : (
-                    product.discount > 0 && (
-                      <>
-                        <Text style={styles.originalPrice}>
-                          GH₵{originalDisplayPrice.toLocaleString()}
-                        </Text>
-                        <View style={styles.discountBadge}>
-                          <Text style={styles.discountText}>
-                            {product.discount}% OFF
-                          </Text>
-                        </View>
-                      </>
-                    )
-                  )}
-                </View>
+                  )
+                )}
               </View>
-              {savingsAmount > 0 && (
-                <Text style={styles.savingsText}>
-                  You save GH₵{savingsAmount.toLocaleString()}
-                </Text>
-              )}
             </View>
+            {savingsAmount > 0 && (
+              <Text style={styles.savingsText}>
+                You save GH₵{savingsAmount.toLocaleString()}
+              </Text>
+            )}
+          </View>
 
-            {/* Product Badges — fall back to seller badges when product has none */}
-            {(() => {
-              const productBadges = product.badges || [];
-              const sellerBadges = product.seller?.badges || [];
-              const displayBadges =
-                productBadges.length > 0 ? productBadges : sellerBadges;
-              if (displayBadges.length === 0) return null;
-              return (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.badgeRow}
-                  contentContainerStyle={styles.badgeRowContent}
-                >
-                  {displayBadges.map((label) => {
-                    const normalizedLabel = label.toLowerCase();
-                    const badgeConfig =
-                      PRODUCT_BADGE_CONFIG[normalizedLabel] ||
-                      SELLER_BADGE_CONFIG[normalizedLabel];
-                    const displayLabel = badgeConfig?.label || label;
-                    return (
-                      <View
-                        key={label}
+          {/* Product Badges — fall back to seller badges when product has none */}
+          {(() => {
+            const productBadges = product.badges || [];
+            const sellerBadges = product.seller?.badges || [];
+            const displayBadges =
+              productBadges.length > 0 ? productBadges : sellerBadges;
+            if (displayBadges.length === 0) return null;
+            return (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.badgeRow}
+                contentContainerStyle={styles.badgeRowContent}
+              >
+                {displayBadges.map((label) => {
+                  const normalizedLabel = label.toLowerCase();
+                  const badgeConfig =
+                    PRODUCT_BADGE_CONFIG[normalizedLabel] ||
+                    SELLER_BADGE_CONFIG[normalizedLabel];
+                  const displayLabel = badgeConfig?.label || label;
+                  return (
+                    <View
+                      key={label}
+                      style={[
+                        styles.productBadge,
+                        {
+                          backgroundColor:
+                            (badgeConfig?.color || themeColors.primary) + "20",
+                        },
+                      ]}
+                    >
+                      {badgeConfig?.icon && (
+                        <Ionicons
+                          name={badgeConfig.icon}
+                          size={12}
+                          color={badgeConfig.color || themeColors.primary}
+                        />
+                      )}
+                      <Text
                         style={[
-                          styles.productBadge,
-                          {
-                            backgroundColor:
-                              (badgeConfig?.color || themeColors.primary) + "20",
-                          },
+                          styles.productBadgeText,
+                          { color: badgeConfig?.color || themeColors.primary },
                         ]}
                       >
-                        {badgeConfig?.icon && (
-                          <Ionicons
-                            name={badgeConfig.icon}
-                            size={12}
-                            color={badgeConfig.color || themeColors.primary}
-                          />
-                        )}
-                        <Text
-                          style={[
-                            styles.productBadgeText,
-                            { color: badgeConfig?.color || themeColors.primary },
-                          ]}
-                        >
-                          {displayLabel}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              );
-            })()}
+                        {displayLabel}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            );
+          })()}
 
           {/* Shipping & Stock Info Row */}
           <View style={styles.deliveryRow}>
@@ -1210,7 +1242,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                       : "rocket-outline"
                   }
                   size={18}
-                  color={product.shipping_fee > 0 ? themeColors.primary : "#059669"}
+                  color={
+                    product.shipping_fee > 0 ? themeColors.primary : "#059669"
+                  }
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -1335,7 +1369,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 <View style={styles.specRow}>
                   <Text style={styles.specLabel}>Available Colors</Text>
                   <View style={styles.colorGrid}>
-                    {product.colors.map((colorName, index) => {
+                    {normalizeColors(product.colors).map((colorName, index) => {
                       const COLOR_MAP = {
                         Black: "#000000",
                         White: "#FFFFFF",
@@ -1402,11 +1436,10 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Description</Text>
             <View>
-              <Markdown
-                style={markdownStyles}
-                onLinkPress={(url) => {}}
-              >
-                {!isDetailsExpanded ? productDetailsText.split('\n').slice(0, 5).join('\n') : productDetailsText}
+              <Markdown style={markdownStyles} onLinkPress={(url) => {}}>
+                {!isDetailsExpanded
+                  ? productDetailsText.split("\n").slice(0, 5).join("\n")
+                  : productDetailsText}
               </Markdown>
               {canExpandDetails && (
                 <Pressable
@@ -1467,10 +1500,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                       <InlineAdProductCard ad={item.ad} />
                     </View>
                   ) : (
-                    <View
-                      key={item.id}
-                      style={styles.relatedProductItem}
-                    >
+                    <View key={item.id} style={styles.relatedProductItem}>
                       <ProductCard
                         product={item}
                         compact
@@ -1851,7 +1881,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                       name={star <= reviewRating ? "star" : "star-outline"}
                       size={32}
                       color={
-                        star <= reviewRating ? REVIEW_STAR_COLOR : themeColors.muted
+                        star <= reviewRating
+                          ? REVIEW_STAR_COLOR
+                          : themeColors.muted
                       }
                     />
                   </Pressable>
@@ -1927,7 +1959,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               <View style={styles.variantSection}>
                 <Text style={styles.variantLabel}>Color</Text>
                 <View style={styles.variantOptionsRow}>
-                  {product.colors.map((colorName, index) => {
+                  {normalizeColors(product.colors).map((colorName, index) => {
                     const COLOR_MAP = {
                       Black: "#000000",
                       White: "#FFFFFF",
@@ -2021,1073 +2053,1102 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 };
 
 const buildProductDetailStyles = (c) =>
-  StyleSheet.create({ 
-  container: {
-    flex: 1,
-    backgroundColor: c.background,
-  },
-  loadingContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  imageContainer: {
-    position: "relative",
-  },
-  image: {
-    height: 400,
-    backgroundColor: "#f0f0f0",
-  },
-  pagination: {
-    position: "absolute",
-    bottom: 20,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 6,
-  },
-  paginationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.5)",
-  },
-  paginationDotActive: {
-    backgroundColor: c.light,
-    width: 24,
-  },
-  backButton: {
-    position: "absolute",
-    top: 50,
-    left: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: c.light,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  wishlistButton: {
-    position: "absolute",
-    top: 50,
-    right: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: c.light,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  content: {
-    padding: 20,
-    backgroundColor: c.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    marginTop: -24,
-  },
-  vendorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    marginBottom: 10,
-  },
-  sellerPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: c.primary + "12",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: c.primary + "22",
-  },
-  categoryPill: {
-    backgroundColor: c.light,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  categoryPillText: {
-    fontSize: 11,
-    color: c.muted,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  vendor: {
-    fontSize: 12,
-    color: c.primary,
-    fontWeight: "700",
-  },
-  sellerBadgesRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 12,
-  },
-  sellerBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  sellerBadgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  title: {
-    fontSize: 25,
-    fontWeight: "800",
-    color: c.dark,
-    lineHeight: 32,
-    letterSpacing: -0.3,
-    marginBottom: 10,
-  },
-  similarProductsScroll: {
-    width: "100%",
-  },
-  relatedProductsScroller: {
-    gap: 12,
-    paddingVertical: 4,
-  },
-  relatedProductItem: {
-    width: 220,
-  },
-  badgeRow: {
-    marginTop: 10,
-  },
-  badgeRowContent: {
-    flexDirection: "row",
-    gap: 6,
-    paddingVertical: 2,
-  },
-  productBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.08)",
-  },
-  productBadgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  badge: {
-    backgroundColor: c.light,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  badgeText: {
-    fontSize: 12,
-    color: c.primary,
-    fontWeight: "600",
-  },
-  priceSection: {
-    marginBottom: 10,
-  },
-  priceRow: {
-    marginBottom: 6,
-  },
-  price: {
-    fontSize: 30,
-    fontWeight: "800",
-    color: c.primary,
-  },
-  priceContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  originalPrice: {
-    fontSize: 16,
-    color: c.muted,
-    textDecorationLine: "line-through",
-  },
-  discountBadge: {
-    backgroundColor: c.accent,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  discountText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: c.light,
-    textTransform: "uppercase",
-  },
-  flashSaleSection: {
-    marginBottom: 12,
-  },
-  savingsText: {
-    marginTop: 2,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#059669",
-  },
-  availableTextDetail: {
-    marginTop: 6,
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#DC2626",
-  },
-  flashDiscountBadge: {
-    borderRadius: 6,
-    overflow: "hidden",
-  },
-  flashBadgeGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  flashDiscountText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: c.light,
-    textTransform: "uppercase",
-  },
-  ratingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-  },
-  ratingChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FDBA74",
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  ratingText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: c.dark,
-  },
-  ratingCount: {
-    fontSize: 13,
-    color: c.muted,
-    fontWeight: "500",
-  },
-  stockRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 24,
-    paddingBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: c.light,
-  },
-  stockText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionPanel: {
-    backgroundColor: c.light,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.border,
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-  },
-  detailsPanel: {
-    backgroundColor: c.light,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: c.dark,
-    marginBottom: 12,
-  },
-  description: {
-    fontSize: 15,
-    color: c.muted,
-    lineHeight: 24,
-  },
-  expandDetailsButton: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 4,
-  },
-  expandDetailsText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: c.primary,
-  },
-  similarProductsLoader: {
-    paddingVertical: 20,
-    alignItems: "center",
-  },
-  similarProductsEmpty: {
-    fontSize: 14,
-    color: c.muted,
-    fontWeight: "500",
-  },
-  specRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: c.light,
-  },
-  specLabel: {
-    fontSize: 15,
-    color: c.muted,
-  },
-  specValue: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: c.dark,
-  },
-  reviewItem: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: c.light,
-  },
-  reviewHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  reviewStars: {
-    flexDirection: "row",
-    gap: 2,
-  },
-  reviewDate: {
-    fontSize: 12,
-    color: c.muted,
-  },
-  reviewText: {
-    fontSize: 14,
-    color: c.dark,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  commentsSection: {
-    marginTop: 12,
-    paddingLeft: 12,
-    borderLeftWidth: 2,
-    borderLeftColor: c.light,
-    gap: 12,
-  },
-  commentItem: {
-    backgroundColor: c.light + "40",
-    padding: 10,
-    borderRadius: 10,
-  },
-  sellerReplyItem: {
-    backgroundColor: c.primary + "10",
-    borderColor: c.primary + "30",
-    borderWidth: 1,
-  },
-  commentHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  commentAuthor: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: c.dark,
-  },
-  commentDate: {
-    fontSize: 10,
-    color: c.muted,
-  },
-  commentBody: {
-    fontSize: 13,
-    color: c.dark,
-    lineHeight: 18,
-  },
-  sellerReplyBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: c.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    gap: 4,
-  },
-  sellerReplyText: {
-    color: c.light,
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  footer: {
-    padding: 16,
-    paddingBottom: 24,
-    backgroundColor: c.background,
-    borderTopWidth: 1,
-    borderTopColor: c.light,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  chatButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: c.light,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
-    borderColor: c.primary + "40",
-  },
-  ctaButton: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  ctaDisabled: {
-    opacity: 0.6,
-  },
-  ctaGradient: {
-    height: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-  ctaText: {
-    color: c.light,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  reviewsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  writeReviewButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: c.light,
-    borderRadius: 20,
-  },
-  writeReviewText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: c.primary,
-  },
-  noReviews: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  noReviewsText: {
-    fontSize: 16,
-    color: c.muted,
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  writeFirstReviewButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: c.primary,
-    borderRadius: 8,
-  },
-  writeFirstReviewText: {
-    color: c.light,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: c.background,
-    paddingTop: 24,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: c.light,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: c.dark,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  modalContent: {
-    flex: 1,
-    padding: 16,
-  },
-  productInfo: {
-    flexDirection: "row",
-    padding: 16,
-    backgroundColor: c.light,
-    borderRadius: 12,
-    marginBottom: 24,
-  },
-  productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0",
-  },
-  productDetails: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: "center",
-  },
-  productTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: c.dark,
-    marginBottom: 4,
-  },
-  productVendor: {
-    fontSize: 14,
-    color: c.muted,
-  },
-  ratingSection: {
-    marginBottom: 24,
-  },
-  sectionLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: c.dark,
-    marginBottom: 12,
-  },
-  starRating: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  commentSection: {
-    marginBottom: 24,
-  },
-  commentInput: {
-    borderWidth: 1,
-    borderColor: c.light,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    minHeight: 100,
-    textAlignVertical: "top",
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
-  },
-  modalFooter: {
-    flexDirection: "row",
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: c.light,
-    gap: 12,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: "center",
-    backgroundColor: c.light,
-    borderRadius: 8,
-  },
-  cancelText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: c.dark,
-  },
-  submitButton: {
-    flex: 2,
-    paddingVertical: 14,
-    alignItems: "center",
-    backgroundColor: c.primary,
-    borderRadius: 8,
-  },
-  submitDisabled: {
-    opacity: 0.6,
-  },
-  submitText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: c.light,
-  },
-  editReviewButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: c.light,
-    borderRadius: 20,
-  },
-  editReviewText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: c.primary,
-  },
-  commentsSection: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: c.light,
-  },
-  commentItem: {
-    marginBottom: 8,
-    padding: 8,
-    backgroundColor: c.light,
-    borderRadius: 8,
-  },
-  commentText: {
-    fontSize: 14,
-    color: c.dark,
-    lineHeight: 20,
-  },
-  commentAuthor: {
-    fontWeight: "600",
-    color: c.primary,
-  },
-  commentDate: {
-    fontSize: 12,
-    color: c.muted,
-    marginTop: 4,
-  },
-  addCommentSection: {
-    marginTop: 12,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "flex-end",
-  },
-  commentInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: c.light,
-    borderRadius: 8,
-    padding: 8,
-    fontSize: 14,
-    minHeight: 40,
-    maxHeight: 80,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : {}),
-  },
-  commentButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: c.primary,
-    borderRadius: 8,
-    justifyContent: "center",
-  },
-  commentButtonDisabled: {
-    opacity: 0.6,
-  },
-  commentButtonText: {
-    color: c.light,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  colorGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    flex: 1,
-  },
-  colorBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: c.light,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    gap: 6,
-  },
-  colorDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.1)",
-  },
-  colorName: {
-    fontSize: 13,
-    color: c.dark,
-    fontWeight: "500",
-  },
-  sizeGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    flex: 1,
-  },
-  sizeBadge: {
-    backgroundColor: c.primary + "15",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: c.primary + "30",
-  },
-  sizeName: {
-    fontSize: 13,
-    color: c.primary,
-    fontWeight: "600",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: c.light,
-    marginVertical: 12,
-  },
-  tagsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  tagChip: {
-    backgroundColor: c.primary + "15",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: c.primary + "30",
-  },
-  tagText: {
-    fontSize: 13,
-    color: c.primary,
-    fontWeight: "500",
-  },
-  variantOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  variantModal: {
-    backgroundColor: c.background,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 20,
-    maxHeight: "50%",
-  },
-  variantHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  variantTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: c.dark,
-  },
-  variantSection: {
-    marginBottom: 14,
-  },
-  variantLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: c.dark,
-    marginBottom: 8,
-  },
-  variantOptionsRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  colorOption: {
-    padding: 2,
-  },
-  colorOptionSelected: {
-    opacity: 1,
-  },
-  smallColorDot: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: "#ddd",
-  },
-  smallColorDotSelected: {
-    borderColor: c.primary,
-    borderWidth: 3,
-  },
-  sizeOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: c.light,
-    backgroundColor: c.light,
-    minWidth: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sizeOptionSelected: {
-    borderColor: c.primary,
-    backgroundColor: c.primary + "10",
-  },
-  sizeOptionText: {
-    fontSize: 12,
-    color: c.dark,
-    fontWeight: "500",
-  },
-  sizeOptionTextSelected: {
-    color: c.primary,
-    fontWeight: "600",
-  },
-  variantAddButton: {
-    marginTop: 16,
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  variantAddGradient: {
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  variantAddText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: c.light,
-  },
-  productPrice: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: c.primary,
-    marginTop: 4,
-  },
-  // Review dropdown header
-  reviewHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  reviewHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  commentCountBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: c.primary + "15",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  commentCountText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: c.primary,
-  },
-  // Shipping & stock redesign
-  deliveryRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 24,
-  },
-  deliveryPill: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-  },
-  deliveryPillFree: {
-    backgroundColor: "#F0FDF4",
-    borderColor: "#BBF7D0",
-  },
-  deliveryPillPaid: {
-    backgroundColor: c.primary + "08",
-    borderColor: c.primary + "28",
-  },
-  deliveryPillInStock: {
-    backgroundColor: "#F0FDF4",
-    borderColor: "#BBF7D0",
-  },
-  deliveryPillOutOfStock: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#FECACA",
-  },
-  deliveryIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  deliveryLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: c.muted,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    lineHeight: 16,
-  },
-  deliveryValue: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: c.primary,
-    lineHeight: 20,
-  },
-  // Fullscreen image preview
-  previewOverlay: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  previewClose: {
-    position: "absolute",
-    top: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + 12 : 60,
-    right: 18,
-    zIndex: 20,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  previewPage: {
-    width: Dimensions.get("window").width,
-    height: Dimensions.get("window").height,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  previewImage: {
-    width: Dimensions.get("window").width,
-    height: Dimensions.get("window").height * 0.8,
-  },
-  previewDotsRow: {
-    position: "absolute",
-    bottom: 52,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 6,
-  },
-  previewDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: "rgba(255,255,255,0.35)",
-  },
-  previewDotActive: {
-    width: 20,
-    backgroundColor: c.light,
-  },
-  previewCounter: {
-    position: "absolute",
-    bottom: 24,
-    left: 0,
-    right: 0,
-    textAlign: "center",
-    color: "rgba(255,255,255,0.55)",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-});
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    loadingContainer: {
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    scrollView: {
+      flex: 1,
+    },
+    imageContainer: {
+      position: "relative",
+      backgroundColor: c.border,
+    },
+    image: {
+      height: 400,
+      backgroundColor: c.border,
+    },
+    imageTopScrim: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 120,
+    },
+    pagination: {
+      position: "absolute",
+      bottom: 20,
+      left: 0,
+      right: 0,
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 6,
+    },
+    paginationDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: "rgba(255, 255, 255, 0.5)",
+    },
+    paginationDotActive: {
+      backgroundColor: c.light,
+      width: 24,
+    },
+    backButton: {
+      position: "absolute",
+      top: 50,
+      left: 16,
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor: c.whiteAlpha,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: "#000",
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4,
+    },
+    topActions: {
+      position: "absolute",
+      top: 50,
+      right: 16,
+      flexDirection: "row",
+      gap: 10,
+    },
+    topActionButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor: c.whiteAlpha,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: "#000",
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4,
+    },
+    content: {
+      padding: 20,
+      paddingTop: 24,
+      backgroundColor: c.background,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      marginTop: -28,
+    },
+    vendorRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      marginBottom: 10,
+    },
+    sellerPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: c.primary + "12",
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: c.primary + "22",
+    },
+    categoryPill: {
+      backgroundColor: c.light,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    categoryPillText: {
+      fontSize: 11,
+      color: c.muted,
+      fontWeight: "700",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    vendor: {
+      fontSize: 12,
+      color: c.primary,
+      fontWeight: "700",
+    },
+    sellerBadgesRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      marginBottom: 12,
+    },
+    sellerBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    sellerBadgeText: {
+      fontSize: 11,
+      fontWeight: "600",
+    },
+    title: {
+      fontSize: 25,
+      fontWeight: "800",
+      color: c.dark,
+      lineHeight: 32,
+      letterSpacing: -0.3,
+      marginBottom: 10,
+    },
+    similarProductsScroll: {
+      width: "100%",
+    },
+    relatedProductsScroller: {
+      gap: 12,
+      paddingVertical: 4,
+    },
+    relatedProductItem: {
+      width: 220,
+    },
+    badgeRow: {
+      marginTop: 10,
+    },
+    badgeRowContent: {
+      flexDirection: "row",
+      gap: 6,
+      paddingVertical: 2,
+    },
+    productBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: "rgba(0, 0, 0, 0.08)",
+    },
+    productBadgeText: {
+      fontSize: 11,
+      fontWeight: "600",
+    },
+    badge: {
+      backgroundColor: c.light,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    badgeText: {
+      fontSize: 12,
+      color: c.primary,
+      fontWeight: "600",
+    },
+    priceSection: {
+      backgroundColor: c.light,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: 14,
+      marginBottom: 14,
+    },
+    priceRow: {
+      marginBottom: 0,
+    },
+    price: {
+      fontSize: 30,
+      fontWeight: "900",
+      color: c.primary,
+      letterSpacing: -0.5,
+    },
+    priceContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      flexWrap: "wrap",
+    },
+    originalPrice: {
+      fontSize: 16,
+      color: c.muted,
+      textDecorationLine: "line-through",
+    },
+    discountBadge: {
+      backgroundColor: c.accent,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    discountText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.light,
+      textTransform: "uppercase",
+    },
+    flashSaleSection: {
+      marginBottom: 12,
+    },
+    savingsText: {
+      marginTop: 2,
+      fontSize: 13,
+      fontWeight: "700",
+      color: "#059669",
+    },
+    availableTextDetail: {
+      marginTop: 6,
+      fontSize: 14,
+      fontWeight: "600",
+      color: "#DC2626",
+    },
+    flashDiscountBadge: {
+      borderRadius: 6,
+      overflow: "hidden",
+    },
+    flashBadgeGradient: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    flashDiscountText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.light,
+      textTransform: "uppercase",
+    },
+    ratingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 12,
+    },
+    ratingChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: "#FFF7ED",
+      borderColor: "#FDBA74",
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    ratingText: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    ratingCount: {
+      fontSize: 13,
+      color: c.muted,
+      fontWeight: "500",
+    },
+    stockRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 24,
+      paddingBottom: 24,
+      borderBottomWidth: 1,
+      borderBottomColor: c.light,
+    },
+    stockText: {
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    section: {
+      marginBottom: 24,
+    },
+    sectionPanel: {
+      backgroundColor: c.light,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: c.border,
+      paddingHorizontal: 14,
+      paddingVertical: 4,
+    },
+    detailsPanel: {
+      backgroundColor: c.light,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: 16,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.dark,
+      marginBottom: 12,
+    },
+    description: {
+      fontSize: 15,
+      color: c.muted,
+      lineHeight: 24,
+    },
+    expandDetailsButton: {
+      marginTop: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 4,
+    },
+    expandDetailsText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.primary,
+    },
+    similarProductsLoader: {
+      paddingVertical: 20,
+      alignItems: "center",
+    },
+    similarProductsEmpty: {
+      fontSize: 14,
+      color: c.muted,
+      fontWeight: "500",
+    },
+    specRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.light,
+    },
+    specLabel: {
+      fontSize: 15,
+      color: c.muted,
+    },
+    specValue: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: c.dark,
+    },
+    reviewItem: {
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.light,
+    },
+    reviewHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    reviewStars: {
+      flexDirection: "row",
+      gap: 2,
+    },
+    reviewDate: {
+      fontSize: 12,
+      color: c.muted,
+    },
+    reviewText: {
+      fontSize: 14,
+      color: c.dark,
+      lineHeight: 20,
+      marginBottom: 8,
+    },
+    commentsSection: {
+      marginTop: 12,
+      paddingLeft: 12,
+      borderLeftWidth: 2,
+      borderLeftColor: c.light,
+      gap: 12,
+    },
+    commentItem: {
+      backgroundColor: c.light + "40",
+      padding: 10,
+      borderRadius: 10,
+    },
+    sellerReplyItem: {
+      backgroundColor: c.primary + "10",
+      borderColor: c.primary + "30",
+      borderWidth: 1,
+    },
+    commentHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 4,
+    },
+    commentAuthor: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    commentDate: {
+      fontSize: 10,
+      color: c.muted,
+    },
+    commentBody: {
+      fontSize: 13,
+      color: c.dark,
+      lineHeight: 18,
+    },
+    sellerReplyBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.primary,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+      gap: 4,
+    },
+    sellerReplyText: {
+      color: c.light,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    footer: {
+      padding: 14,
+      paddingBottom: 24,
+      backgroundColor: c.background,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    chatButton: {
+      width: 54,
+      height: 54,
+      borderRadius: 18,
+      backgroundColor: c.primary + "12",
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1.5,
+      borderColor: c.primary + "40",
+    },
+    ctaButton: {
+      flex: 1,
+      borderRadius: 18,
+      overflow: "hidden",
+      shadowColor: c.primary,
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
+    },
+    ctaDisabled: {
+      opacity: 0.6,
+    },
+    ctaGradient: {
+      height: 56,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+    },
+    ctaText: {
+      color: c.light,
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    reviewsHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    writeReviewButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: c.light,
+      borderRadius: 20,
+    },
+    writeReviewText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.primary,
+    },
+    noReviews: {
+      alignItems: "center",
+      paddingVertical: 40,
+    },
+    noReviewsText: {
+      fontSize: 16,
+      color: c.muted,
+      marginTop: 12,
+      marginBottom: 16,
+    },
+    writeFirstReviewButton: {
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+    },
+    writeFirstReviewText: {
+      color: c.light,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    modalContainer: {
+      flex: 1,
+      backgroundColor: c.background,
+      paddingTop: 24,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: c.light,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    closeButton: {
+      padding: 4,
+    },
+    modalContent: {
+      flex: 1,
+      padding: 16,
+    },
+    productInfo: {
+      flexDirection: "row",
+      padding: 16,
+      backgroundColor: c.light,
+      borderRadius: 12,
+      marginBottom: 24,
+    },
+    productImage: {
+      width: 60,
+      height: 60,
+      borderRadius: 8,
+      backgroundColor: "#f0f0f0",
+    },
+    productDetails: {
+      flex: 1,
+      marginLeft: 12,
+      justifyContent: "center",
+    },
+    productTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: c.dark,
+      marginBottom: 4,
+    },
+    productVendor: {
+      fontSize: 14,
+      color: c.muted,
+    },
+    ratingSection: {
+      marginBottom: 24,
+    },
+    sectionLabel: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: c.dark,
+      marginBottom: 12,
+    },
+    starRating: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    commentSection: {
+      marginBottom: 24,
+    },
+    commentInput: {
+      borderWidth: 1,
+      borderColor: c.light,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      minHeight: 100,
+      textAlignVertical: "top",
+      ...(Platform.OS === "web"
+        ? { outlineStyle: "none", outlineWidth: 0 }
+        : {}),
+    },
+    modalFooter: {
+      flexDirection: "row",
+      padding: 16,
+      borderTopWidth: 1,
+      borderTopColor: c.light,
+      gap: 12,
+    },
+    cancelButton: {
+      flex: 1,
+      paddingVertical: 14,
+      alignItems: "center",
+      backgroundColor: c.light,
+      borderRadius: 8,
+    },
+    cancelText: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: c.dark,
+    },
+    submitButton: {
+      flex: 2,
+      paddingVertical: 14,
+      alignItems: "center",
+      backgroundColor: c.primary,
+      borderRadius: 8,
+    },
+    submitDisabled: {
+      opacity: 0.6,
+    },
+    submitText: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: c.light,
+    },
+    editReviewButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: c.light,
+      borderRadius: 20,
+    },
+    editReviewText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.primary,
+    },
+    commentsSection: {
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: c.light,
+    },
+    commentItem: {
+      marginBottom: 8,
+      padding: 8,
+      backgroundColor: c.light,
+      borderRadius: 8,
+    },
+    commentText: {
+      fontSize: 14,
+      color: c.dark,
+      lineHeight: 20,
+    },
+    commentAuthor: {
+      fontWeight: "600",
+      color: c.primary,
+    },
+    commentDate: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: 4,
+    },
+    addCommentSection: {
+      marginTop: 12,
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "flex-end",
+    },
+    commentInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: c.light,
+      borderRadius: 8,
+      padding: 8,
+      fontSize: 14,
+      minHeight: 40,
+      maxHeight: 80,
+      ...(Platform.OS === "web"
+        ? { outlineStyle: "none", outlineWidth: 0 }
+        : {}),
+    },
+    commentButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      justifyContent: "center",
+    },
+    commentButtonDisabled: {
+      opacity: 0.6,
+    },
+    commentButtonText: {
+      color: c.light,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    colorGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      flex: 1,
+    },
+    colorBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.light,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      gap: 6,
+    },
+    colorDot: {
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: "rgba(0, 0, 0, 0.1)",
+    },
+    colorName: {
+      fontSize: 13,
+      color: c.dark,
+      fontWeight: "500",
+    },
+    sizeGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      flex: 1,
+    },
+    sizeBadge: {
+      backgroundColor: c.primary + "15",
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: c.primary + "30",
+    },
+    sizeName: {
+      fontSize: 13,
+      color: c.primary,
+      fontWeight: "600",
+    },
+    divider: {
+      height: 1,
+      backgroundColor: c.light,
+      marginVertical: 12,
+    },
+    tagsContainer: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    tagChip: {
+      backgroundColor: c.primary + "15",
+      borderRadius: 16,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: c.primary + "30",
+    },
+    tagText: {
+      fontSize: 13,
+      color: c.primary,
+      fontWeight: "500",
+    },
+    variantOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "flex-end",
+    },
+    variantModal: {
+      backgroundColor: c.background,
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 20,
+      maxHeight: "50%",
+    },
+    variantHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    variantTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    variantSection: {
+      marginBottom: 14,
+    },
+    variantLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.dark,
+      marginBottom: 8,
+    },
+    variantOptionsRow: {
+      flexDirection: "row",
+      gap: 8,
+      flexWrap: "wrap",
+    },
+    colorOption: {
+      padding: 2,
+    },
+    colorOptionSelected: {
+      opacity: 1,
+    },
+    smallColorDot: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      borderWidth: 2,
+      borderColor: "#ddd",
+    },
+    smallColorDotSelected: {
+      borderColor: c.primary,
+      borderWidth: 3,
+    },
+    sizeOption: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 6,
+      borderWidth: 1.5,
+      borderColor: c.light,
+      backgroundColor: c.light,
+      minWidth: 40,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    sizeOptionSelected: {
+      borderColor: c.primary,
+      backgroundColor: c.primary + "10",
+    },
+    sizeOptionText: {
+      fontSize: 12,
+      color: c.dark,
+      fontWeight: "500",
+    },
+    sizeOptionTextSelected: {
+      color: c.primary,
+      fontWeight: "600",
+    },
+    variantAddButton: {
+      marginTop: 16,
+      borderRadius: 8,
+      overflow: "hidden",
+    },
+    variantAddGradient: {
+      paddingVertical: 12,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    variantAddText: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: c.light,
+    },
+    productPrice: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: c.primary,
+      marginTop: 4,
+    },
+    // Review dropdown header
+    reviewHeaderLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      flex: 1,
+    },
+    reviewHeaderRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    commentCountBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+      backgroundColor: c.primary + "15",
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: 10,
+    },
+    commentCountText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: c.primary,
+    },
+    // Shipping & stock redesign
+    deliveryRow: {
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 24,
+    },
+    deliveryPill: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      borderRadius: 16,
+      padding: 12,
+      borderWidth: 1,
+    },
+    deliveryPillFree: {
+      backgroundColor: "#F0FDF4",
+      borderColor: "#BBF7D0",
+    },
+    deliveryPillPaid: {
+      backgroundColor: c.primary + "08",
+      borderColor: c.primary + "28",
+    },
+    deliveryPillInStock: {
+      backgroundColor: "#F0FDF4",
+      borderColor: "#BBF7D0",
+    },
+    deliveryPillOutOfStock: {
+      backgroundColor: "#FEF2F2",
+      borderColor: "#FECACA",
+    },
+    deliveryIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    deliveryLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.muted,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+      lineHeight: 16,
+    },
+    deliveryValue: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: c.primary,
+      lineHeight: 20,
+    },
+    // Fullscreen image preview
+    previewOverlay: {
+      flex: 1,
+      backgroundColor: "#000",
+    },
+    previewClose: {
+      position: "absolute",
+      top:
+        Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + 12 : 60,
+      right: 18,
+      zIndex: 20,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: "rgba(255,255,255,0.15)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.25)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    previewPage: {
+      width: Dimensions.get("window").width,
+      height: Dimensions.get("window").height,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    previewImage: {
+      width: Dimensions.get("window").width,
+      height: Dimensions.get("window").height * 0.8,
+    },
+    previewDotsRow: {
+      position: "absolute",
+      bottom: 52,
+      left: 0,
+      right: 0,
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 6,
+    },
+    previewDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: "rgba(255,255,255,0.35)",
+    },
+    previewDotActive: {
+      width: 20,
+      backgroundColor: c.light,
+    },
+    previewCounter: {
+      position: "absolute",
+      bottom: 24,
+      left: 0,
+      right: 0,
+      textAlign: "center",
+      color: "rgba(255,255,255,0.55)",
+      fontSize: 13,
+      fontWeight: "600",
+    },
+  });
 
 const buildProductDetailMarkdownStyles = (c) =>
-  StyleSheet.create({ 
-  body: {
-    fontSize: 15,
-    color: c.muted,
-    lineHeight: 24,
-  },
-  heading1: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: c.dark,
-    marginVertical: 8,
-  },
-  heading2: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: c.dark,
-    marginVertical: 6,
-  },
-  heading3: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: c.dark,
-    marginVertical: 4,
-  },
-  text: {
-    fontSize: 15,
-    color: c.muted,
-    lineHeight: 24,
-  },
-  strong: {
-    fontWeight: "700",
-    color: c.dark,
-  },
-  em: {
-    fontStyle: "italic",
-  },
-  list_item: {
-    marginLeft: 16,
-    marginVertical: 4,
-  },
-  bullet_list: {
-    marginVertical: 8,
-  },
-  code_inline: {
-    backgroundColor: c.light,
-    color: c.primary,
-    paddingHorizontal: 4,
-    borderRadius: 4,
-    fontFamily: "monospace",
-  },
-  code_block: {
-    backgroundColor: c.light,
-    color: c.dark,
-    padding: 12,
-    borderRadius: 8,
-    marginVertical: 8,
-    fontFamily: "monospace",
-    fontSize: 13,
-  },
-  link: {
-    color: c.primary,
-  },
- });
+  StyleSheet.create({
+    body: {
+      fontSize: 15,
+      color: c.muted,
+      lineHeight: 24,
+    },
+    heading1: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: c.dark,
+      marginVertical: 8,
+    },
+    heading2: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.dark,
+      marginVertical: 6,
+    },
+    heading3: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: c.dark,
+      marginVertical: 4,
+    },
+    text: {
+      fontSize: 15,
+      color: c.muted,
+      lineHeight: 24,
+    },
+    strong: {
+      fontWeight: "700",
+      color: c.dark,
+    },
+    em: {
+      fontStyle: "italic",
+    },
+    list_item: {
+      marginLeft: 16,
+      marginVertical: 4,
+    },
+    bullet_list: {
+      marginVertical: 8,
+    },
+    code_inline: {
+      backgroundColor: c.light,
+      color: c.primary,
+      paddingHorizontal: 4,
+      borderRadius: 4,
+      fontFamily: "monospace",
+    },
+    code_block: {
+      backgroundColor: c.light,
+      color: c.dark,
+      padding: 12,
+      borderRadius: 8,
+      marginVertical: 8,
+      fontFamily: "monospace",
+      fontSize: 13,
+    },
+    link: {
+      color: c.primary,
+    },
+  });

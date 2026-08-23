@@ -10,17 +10,16 @@ export const colors = {
   gradientEnd: "#F03A70", // Vibrant Magenta
   success: "#10B981",
   info: "#00E2C8",
-  // NOTE: dark/light/surface/border/background/splashback/muted are theme
-  // NEUTRAL tokens. They are intentionally NOT defined here as static values —
-  // read them from the resolved palette returned by buildPalette() / useTheme()
-  // instead. They are kept below only as the LIGHT default for any legacy code
-  // that still imports `colors.dark` etc. directly (to be removed at the end of
-  // the theming migration).
+  onPrimary: "#FFFFFF", // content rendered on top of `primary` fills
+  accentYellow: "#F59E0B", // trophy / top-seller badges
+  accentBlue: "#3B82F6", // link-style tags, fast-shipping badges
+  accentPurple: "#8B5CF6", // local-business badges, secondary accents
+  badgeDanger: "#EF4444", // discount / urgency badges
   dark: "#0F172A",
   light: "#ffffff",
   muted: "#64748B",
   surface: "#E2E6E9", // Cool Grey canvas
-  border: "#E2E6E9",
+  border: "#d9dddf",
   background: "#E2E6E9", // Cool Grey canvas
   splashback: "#B7B8BF",
 };
@@ -35,7 +34,7 @@ const LIGHT_NEUTRALS = {
   dark: "#0F172A",
   light: "#ffffff",
   surface: "#E2E6E9",
-  border: "#E2E6E9",
+  border: "#b8bbbd2f",
   background: "#E2E6E9",
   splashback: "#B7B8BF",
   muted: "#64748B",
@@ -66,7 +65,8 @@ const DARK_NEUTRALS = {
 export const THEME_STORAGE_KEY = "expressmart.theme.mode";
 
 export const resolveNeutrals = (mode, systemScheme) => {
-  if (mode === "system") return systemScheme === "dark" ? DARK_NEUTRALS : LIGHT_NEUTRALS;
+  if (mode === "system")
+    return systemScheme === "dark" ? DARK_NEUTRALS : LIGHT_NEUTRALS;
   return mode === "dark" ? DARK_NEUTRALS : LIGHT_NEUTRALS;
 };
 

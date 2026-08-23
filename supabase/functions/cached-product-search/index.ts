@@ -74,7 +74,9 @@ serve(async (req) => {
       let dbQuery = supabase
         .from("express_products")
         .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
-        .eq("status", "active");
+        .eq("status", "active")
+        .not("seller_id", "is", null)
+        .eq("seller_id.is_active", true);
 
       if (queryText) {
         dbQuery = dbQuery.ilike("title", `%${queryText}%`);
@@ -99,7 +101,7 @@ serve(async (req) => {
     const normalizedQuery = queryText.toLowerCase();
     const normalizedTag = tag.toLowerCase();
     const cacheKey =
-      `expressmart:products:search:v1:` +
+      `expressmart:products:search:v3:` +
       `${encodeURIComponent(normalizedQuery)}:` +
       `${encodeURIComponent(normalizedTag)}:` +
       `${offset}:${limit}`;
@@ -124,7 +126,10 @@ serve(async (req) => {
     }
 
     try {
-      const redisGet = await redisRequest(redisUrl, redisToken, ["GET", cacheKey]);
+      const redisGet = await redisRequest(redisUrl, redisToken, [
+        "GET",
+        cacheKey,
+      ]);
       const cachedValue = redisGet?.result;
       if (typeof cachedValue === "string" && cachedValue.trim()) {
         console.info(
@@ -144,7 +149,10 @@ serve(async (req) => {
         );
       }
     } catch (cacheReadError) {
-      console.warn("Redis read failed, falling back to database:", cacheReadError);
+      console.warn(
+        "Redis read failed, falling back to database:",
+        cacheReadError,
+      );
     }
 
     const products = await queryProducts();

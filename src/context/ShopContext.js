@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -65,6 +66,13 @@ export const ShopProvider = ({ children }) => {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState(null);
   const [followedSellers, setFollowedSellers] = useState([]);
+
+  // Guard so the initial bootstrap (loadCache + first fetchProducts) runs
+  // exactly once. Without this, the effect re-runs whenever a dependency's
+  // identity changes (e.g. `supabase` resolves after auth init, which changes
+  // `fetchProducts`), causing a second fetch that overwrites the feed and
+  // produces a visible flicker.
+  const bootstrappedRef = useRef(false);
 
   const loadCache = useCallback(async () => {
     try {
@@ -128,10 +136,7 @@ export const ShopProvider = ({ children }) => {
     async (offset, limit) => {
       if (!supabase) throw new Error("Supabase not initialized");
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Upstash request timed out")),
-          4000,
-        ),
+        setTimeout(() => reject(new Error("Upstash request timed out")), 4000),
       );
       const call = supabase.functions.invoke("cached-products", {
         body: { offset, limit },
@@ -143,194 +148,202 @@ export const ShopProvider = ({ children }) => {
     [supabase],
   );
 
-  const fetchProducts = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
-    setError(null);
-    if (!supabase) {
-      console.error("Supabase not initialized");
-      if (!silent) setLoading(false);
-      return;
-    }
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      const [
-        { data: categoriesData, error: categoriesError },
-        { data: sellersData, error: sellersError },
-        { data: reviewsData, error: reviewsError },
-        { data: settingsData, error: settingsError },
-        { data: followsData, error: followsError },
-      ] = await Promise.all([
-        supabase
-          .from("express_categories")
-          .select("id,name,icon,color")
-          .eq("is_active", true)
-          .order("sort_order"),
-        supabase
-          .from("express_sellers")
-          .select(
-            "id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
-          )
-          .eq("is_active", true)
-          .order("rating", { ascending: false })
-          .limit(10),
-        supabase
-          .from("express_reviews")
-          .select("product_id, rating")
-          .eq("is_approved", true),
-        supabase.from("express_settings").select("key, value"),
-        user
-          ? supabase
-              .from("express_follows")
-              .select("seller_id")
-              .eq("user_id", user.id)
-          : { data: [], error: null },
-      ]);
-
-      if (categoriesError) throw categoriesError;
-      if (sellersError) throw sellersError;
-      if (reviewsError) throw reviewsError;
-      if (settingsError) throw settingsError;
-      if (followsError) throw followsError;
-
-      // Extract followed seller IDs
-      const followedIds = (followsData || []).map((f) => f.seller_id);
-      setFollowedSellers(followedIds);
-
-      // Map settings to object
-      const settingsMap = {};
-      (settingsData || []).forEach((s) => {
-        settingsMap[s.key] = s.value;
-      });
-      setSettings(settingsMap);
-
-      const redisProductsCacheEnabled = isTruthySetting(
-        settingsMap.redis_products_cache_enabled,
-      );
-
-      let productsData = [];
-      let fromLocalCache = false;
-      if (redisProductsCacheEnabled) {
-        // Upstash Redis first; fall back to local cache, then database on failure or slow network
-        try {
-          const cachedData = await fetchFromUpstash(0, PAGE_SIZE);
-          const cacheSource = cachedData?.cache?.source || "database";
-          console.info(
-            `[ShopContext] Network sync fetched products from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}`,
-          );
-          productsData = cachedData?.products || [];
-        } catch (upstashErr) {
-          console.warn(
-            "[ShopContext] Upstash fetch failed or timed out, falling back to local cache:",
-            upstashErr?.message || JSON.stringify(upstashErr),
-          );
-          // The "For You" feed is served from Upstash only. On a cache miss /
-          // timeout we keep the user's view stable by using the existing local
-          // cache and deliberately NOT re-querying the live database — a direct
-          // DB read would reshuffle/replace the products the user is looking at.
-          const localProducts = await readCacheProducts();
-          if (localProducts && localProducts.length > 0) {
-            productsData = localProducts;
-            fromLocalCache = true;
-          } else if (products.length === 0) {
-            // Only fall back to the database on a brand-new device with no
-            // cached snapshot yet AND no products currently rendered, so first
-            // launch still shows something without disrupting an existing view.
-            console.warn(
-              "[ShopContext] No local cache available, falling back to database (first launch).",
-            );
-            const { data, error: productError } = await supabase
-              .from("express_products")
-              .select(
-                "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-              )
-              .eq("status", "active")
-              .or("quantity.gt.0,is_preorder.eq.true")
-              .order("created_at", { ascending: false })
-              .range(0, PAGE_SIZE - 1);
-            if (productError) throw productError;
-            productsData = data || [];
-          } else {
-            // We already have products on screen and no cache snapshot — keep the
-            // current "For You" view exactly as-is instead of querying the DB
-            // (which would change the products the user is viewing).
-            console.warn(
-              "[ShopContext] Upstash failed and no local cache; keeping current feed to avoid changing the user's view.",
-            );
-          }
-        }
+  const fetchProducts = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!silent) setLoading(true);
+      setError(null);
+      if (!supabase) {
+        console.error("Supabase not initialized");
+        if (!silent) setLoading(false);
+        return;
       }
 
-      // Local cache already stores mapped products, so skip re-mapping there.
-      const mappedProducts = fromLocalCache
-        ? productsData || []
-        : (productsData || []).map(mapProduct);
-      setProducts(mappedProducts);
-      setHasMore(mappedProducts.length === PAGE_SIZE);
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      // Calculate seller ratings from actual reviews
-      const sellerRatings = {};
-      (reviewsData || []).forEach((review) => {
-        // Find the product to get the seller_id
-        const product = mappedProducts.find((p) => p.id === review.product_id);
-        if (product?.seller?.id) {
-          if (!sellerRatings[product.seller.id]) {
-            sellerRatings[product.seller.id] = {
-              totalRating: 0,
-              count: 0,
+        const [
+          { data: categoriesData, error: categoriesError },
+          { data: sellersData, error: sellersError },
+          { data: reviewsData, error: reviewsError },
+          { data: settingsData, error: settingsError },
+          { data: followsData, error: followsError },
+        ] = await Promise.all([
+          supabase
+            .from("express_categories")
+            .select("id,name,icon,color")
+            .eq("is_active", true)
+            .order("sort_order"),
+          supabase
+            .from("express_sellers")
+            .select(
+              "id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
+            )
+            .eq("is_active", true)
+            .order("rating", { ascending: false })
+            .limit(10),
+          supabase
+            .from("express_reviews")
+            .select("product_id, rating")
+            .eq("is_approved", true),
+          supabase.from("express_settings").select("key, value"),
+          user
+            ? supabase
+                .from("express_follows")
+                .select("seller_id")
+                .eq("user_id", user.id)
+            : { data: [], error: null },
+        ]);
+
+        if (categoriesError) throw categoriesError;
+        if (sellersError) throw sellersError;
+        if (reviewsError) throw reviewsError;
+        if (settingsError) throw settingsError;
+        if (followsError) throw followsError;
+
+        // Extract followed seller IDs
+        const followedIds = (followsData || []).map((f) => f.seller_id);
+        setFollowedSellers(followedIds);
+
+        // Map settings to object
+        const settingsMap = {};
+        (settingsData || []).forEach((s) => {
+          settingsMap[s.key] = s.value;
+        });
+        setSettings(settingsMap);
+
+        const redisProductsCacheEnabled = isTruthySetting(
+          settingsMap.redis_products_cache_enabled,
+        );
+
+        let productsData = [];
+        let fromLocalCache = false;
+        if (redisProductsCacheEnabled) {
+          // Upstash Redis first; fall back to local cache, then database on failure or slow network
+          try {
+            const cachedData = await fetchFromUpstash(0, PAGE_SIZE);
+            const cacheSource = cachedData?.cache?.source || "database";
+            console.info(
+              `[ShopContext] Network sync fetched products from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}`,
+            );
+            productsData = cachedData?.products || [];
+          } catch (upstashErr) {
+            console.warn(
+              "[ShopContext] Upstash fetch failed or timed out, falling back to local cache:",
+              upstashErr?.message || JSON.stringify(upstashErr),
+            );
+            // The "For You" feed is served from Upstash only. On a cache miss /
+            // timeout we keep the user's view stable by using the existing local
+            // cache and deliberately NOT re-querying the live database — a direct
+            // DB read would reshuffle/replace the products the user is looking at.
+            const localProducts = await readCacheProducts();
+            if (localProducts && localProducts.length > 0) {
+              productsData = localProducts;
+              fromLocalCache = true;
+            } else if (products.length === 0) {
+              // Only fall back to the database on a brand-new device with no
+              // cached snapshot yet AND no products currently rendered, so first
+              // launch still shows something without disrupting an existing view.
+              console.warn(
+                "[ShopContext] No local cache available, falling back to database (first launch).",
+              );
+              const { data, error: productError } = await supabase
+                .from("express_products")
+                .select(
+                  "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+                )
+                .eq("status", "active")
+                .not("seller_id", "is", null)
+                .eq("seller_id.is_active", true)
+                .or("quantity.gt.0,is_preorder.eq.true")
+                .order("created_at", { ascending: false })
+                .range(0, PAGE_SIZE - 1);
+              if (productError) throw productError;
+              productsData = data || [];
+            } else {
+              // We already have products on screen and no cache snapshot — keep the
+              // current "For You" view exactly as-is instead of querying the DB
+              // (which would change the products the user is viewing).
+              console.warn(
+                "[ShopContext] Upstash failed and no local cache; keeping current feed to avoid changing the user's view.",
+              );
+            }
+          }
+        }
+
+        // Local cache already stores mapped products, so skip re-mapping there.
+        const mappedProducts = fromLocalCache
+          ? productsData || []
+          : (productsData || []).map(mapProduct);
+        setProducts(mappedProducts);
+        setHasMore(mappedProducts.length === PAGE_SIZE);
+
+        // Calculate seller ratings from actual reviews
+        const sellerRatings = {};
+        (reviewsData || []).forEach((review) => {
+          // Find the product to get the seller_id
+          const product = mappedProducts.find(
+            (p) => p.id === review.product_id,
+          );
+          if (product?.seller?.id) {
+            if (!sellerRatings[product.seller.id]) {
+              sellerRatings[product.seller.id] = {
+                totalRating: 0,
+                count: 0,
+              };
+            }
+            sellerRatings[product.seller.id].totalRating += review.rating;
+            sellerRatings[product.seller.id].count += 1;
+          }
+        });
+
+        // Update sellers with calculated ratings
+        const updatedSellers = (sellersData || []).map((seller) => {
+          const sellerStats = sellerRatings[seller.id];
+          if (sellerStats && sellerStats.count > 0) {
+            const calculatedRating =
+              sellerStats.totalRating / sellerStats.count;
+            return {
+              ...seller,
+              rating: Number(calculatedRating.toFixed(1)),
+              total_ratings: sellerStats.count,
             };
           }
-          sellerRatings[product.seller.id].totalRating += review.rating;
-          sellerRatings[product.seller.id].count += 1;
-        }
-      });
-
-      // Update sellers with calculated ratings
-      const updatedSellers = (sellersData || []).map((seller) => {
-        const sellerStats = sellerRatings[seller.id];
-        if (sellerStats && sellerStats.count > 0) {
-          const calculatedRating = sellerStats.totalRating / sellerStats.count;
           return {
             ...seller,
-            rating: Number(calculatedRating.toFixed(1)),
-            total_ratings: sellerStats.count,
+            rating: 0,
+            total_ratings: 0,
           };
+        });
+
+        setCategories(categoriesData || []);
+        setSellers(updatedSellers);
+
+        // Persist to cache for instant loads next time
+        saveCache(CACHE_KEYS.products, mappedProducts);
+        saveCache(CACHE_KEYS.categories, categoriesData || []);
+        saveCache(CACHE_KEYS.sellers, updatedSellers);
+        saveCache(CACHE_KEYS.settings, settingsMap);
+      } catch (err) {
+        if (products.length === 0) {
+          setError(err?.message || JSON.stringify(err));
+        } else {
+          console.warn(
+            "Network sync failed, continuing with local cache:",
+            err?.message || JSON.stringify(err),
+          );
         }
-        return {
-          ...seller,
-          rating: 0,
-          total_ratings: 0,
-        };
-      });
-
-      setCategories(categoriesData || []);
-      setSellers(updatedSellers);
-
-      // Persist to cache for instant loads next time
-      saveCache(CACHE_KEYS.products, mappedProducts);
-      saveCache(CACHE_KEYS.categories, categoriesData || []);
-      saveCache(CACHE_KEYS.sellers, updatedSellers);
-      saveCache(CACHE_KEYS.settings, settingsMap);
-    } catch (err) {
-      if (products.length === 0) {
-        setError(err?.message || JSON.stringify(err));
-      } else {
-        console.warn(
-          "Network sync failed, continuing with local cache:",
+        console.error(
+          "Error fetching products:",
           err?.message || JSON.stringify(err),
         );
+      } finally {
+        if (!silent) setLoading(false);
       }
-      console.error(
-        "Error fetching products:",
-        err?.message || JSON.stringify(err),
-      );
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, [products.length, saveCache, fetchFromUpstash, readCacheProducts]);
+    },
+    [products.length, saveCache, fetchFromUpstash, readCacheProducts],
+  );
 
   const loadMore = useCallback(async () => {
     if (!hasMore || loadingMore || loading) return;
@@ -370,6 +383,8 @@ export const ShopProvider = ({ children }) => {
             "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
           )
           .eq("status", "active")
+          .not("seller_id", "is", null)
+          .eq("seller_id.is_active", true)
           .or("quantity.gt.0,is_preorder.eq.true")
           .order("created_at", { ascending: false })
           .range(start, end);
@@ -388,7 +403,15 @@ export const ShopProvider = ({ children }) => {
     } finally {
       setLoadingMore(false);
     }
-  }, [hasMore, loadingMore, loading, products, saveCache, settings, fetchFromUpstash]);
+  }, [
+    hasMore,
+    loadingMore,
+    loading,
+    products,
+    saveCache,
+    settings,
+    fetchFromUpstash,
+  ]);
 
   const refreshSellers = useCallback(async () => {
     await fetchProducts({ silent: true });
@@ -445,6 +468,8 @@ export const ShopProvider = ({ children }) => {
   );
 
   useEffect(() => {
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
     const bootstrap = async () => {
       // Categories/sellers/settings are pre-hydrated from local cache for a
       // fast first paint, but PRODUCTS are NOT — the "For You" feed must load
@@ -457,7 +482,11 @@ export const ShopProvider = ({ children }) => {
       await fetchProducts();
     };
     bootstrap();
-  }, [fetchProducts, loadCache]);
+    // Run once on mount. Dependencies are intentionally omitted: the ref guard
+    // guarantees a single execution, and re-running on dependency changes is
+    // exactly what caused the duplicate fetch + feed flicker.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Realtime subscriptions — update products/sellers in-place without full reload
   useEffect(() => {

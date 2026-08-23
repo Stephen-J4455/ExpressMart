@@ -75,8 +75,10 @@ serve(async (req) => {
         .from("express_products")
         .select(
           "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-         )
-        .eq("status", "active");
+        )
+        .eq("status", "active")
+        .not("seller_id", "is", null)
+        .eq("seller_id.is_active", true);
 
       if (sellerId) {
         productsQuery = productsQuery.eq("seller_id", sellerId);
@@ -102,7 +104,7 @@ serve(async (req) => {
     );
     const sellerCacheSegment = encodeURIComponent(sellerId || "all");
     const stockCacheSegment = includeOutOfStock ? "all_stock" : "in_stock_only";
-    const cacheKey = `expressmart:products:active:v2:${sellerCacheSegment}:${stockCacheSegment}:${offset}:${limit}`;
+    const cacheKey = `expressmart:products:active:v4:${sellerCacheSegment}:${stockCacheSegment}:${offset}:${limit}`;
 
     if (!redisEnabled || !redisUrl || !redisToken) {
       const products = await queryProducts();
@@ -124,7 +126,10 @@ serve(async (req) => {
     }
 
     try {
-      const redisGet = await redisRequest(redisUrl, redisToken, ["GET", cacheKey]);
+      const redisGet = await redisRequest(redisUrl, redisToken, [
+        "GET",
+        cacheKey,
+      ]);
       const cachedValue = redisGet?.result;
       if (typeof cachedValue === "string" && cachedValue.trim()) {
         console.info(
@@ -144,7 +149,10 @@ serve(async (req) => {
         );
       }
     } catch (cacheReadError) {
-      console.warn("Redis read failed, falling back to database:", cacheReadError);
+      console.warn(
+        "Redis read failed, falling back to database:",
+        cacheReadError,
+      );
     }
 
     const products = await queryProducts();

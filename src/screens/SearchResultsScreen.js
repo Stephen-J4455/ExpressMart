@@ -197,7 +197,9 @@ export const SearchResultsScreen = ({ navigation, route }) => {
           let dbQuery = supabase
             .from("express_products")
             .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
-            .eq("status", "active");
+            .eq("status", "active")
+            .not("seller_id", "is", null)
+            .eq("seller_id.is_active", true);
 
           if (text) {
             dbQuery = dbQuery.ilike("title", `%${text}%`);
@@ -255,7 +257,9 @@ export const SearchResultsScreen = ({ navigation, route }) => {
         let dbQuery = supabase
           .from("express_products")
           .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
-          .eq("status", "active");
+          .eq("status", "active")
+          .not("seller_id", "is", null)
+          .eq("seller_id.is_active", true);
         if (query) dbQuery = dbQuery.ilike("title", `%${query}%`);
         if (tag) dbQuery = dbQuery.contains("tags", [tag]);
         const { data, error } = await dbQuery.range(
@@ -459,7 +463,11 @@ export const SearchResultsScreen = ({ navigation, route }) => {
           />
           {query ? (
             <Pressable onPress={() => setQuery("")} style={styles.clearIcon}>
-              <Ionicons name="close-circle" size={20} color={themeColors.muted} />
+              <Ionicons
+                name="close-circle"
+                size={20}
+                color={themeColors.muted}
+              />
             </Pressable>
           ) : null}
         </View>
@@ -531,7 +539,11 @@ export const SearchResultsScreen = ({ navigation, route }) => {
             {tag && (
               <View style={styles.tagFilterSection}>
                 <View style={styles.tagIndicator}>
-                  <Ionicons name="pricetag" size={16} color={themeColors.primary} />
+                  <Ionicons
+                    name="pricetag"
+                    size={16}
+                    color={themeColors.primary}
+                  />
                   <Text style={styles.tagText}>Tag: "{tag}"</Text>
                 </View>
                 <Pressable
@@ -735,286 +747,288 @@ export const SearchResultsScreen = ({ navigation, route }) => {
 };
 
 const buildSearchResultsStyles = (c) =>
-  StyleSheet.create({ 
-  container: {
-    flex: 1,
-    backgroundColor: c.background,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: c.light,
-    paddingTop: Platform.OS === "ios" ? 54 : 44,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: c.surface,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: c.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  searchInputContainer: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: c.surface,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: c.dark,
-    paddingVertical: 0,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
-  },
-  clearIcon: {
-    padding: 4,
-  },
-  tabsContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: c.light,
-    gap: 12,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: c.primary,
-    gap: 8,
-  },
-  activeTab: {
-    backgroundColor: c.primary,
-    borderColor: c.primary,
-  },
-  tabText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: c.primary,
-    letterSpacing: -0.2,
-  },
-  activeTabText: {
-    color: c.light,
-  },
-  content: {
-    flex: 1,
-  },
-  suggestionsContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  suggestionSection: {
-    marginBottom: 32,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: c.dark,
-    letterSpacing: -0.3,
-  },
-  clearButton: {
-    marginLeft: "auto",
-  },
-  clearButtonText: {
-    fontSize: 14,
-    color: c.primary,
-    fontWeight: "600",
-  },
-  suggestionGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  suggestionChip: {
-    backgroundColor: c.light,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: c.border,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  suggestionText: {
-    fontSize: 14,
-    color: c.dark,
-    fontWeight: "500",
-  },
-  tagFilterSection: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    backgroundColor: c.primary + "10",
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  tagIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  tagText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: c.primary,
-  },
-  clearTagButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  clearTagText: {
-    color: c.primary,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  storeList: {
-    padding: 20,
-    gap: 12,
-  },
-  storeItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: c.light,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  storeAvatarContainer: {
-    position: "relative",
-    marginRight: 16,
-  },
-  storeAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-  },
-  storeAvatarPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: c.border,
-    marginRight: 16,
-  },
-  storeBadge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: c.primary,
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: c.light,
-  },
-  storeInfo: {
-    flex: 1,
-  },
-  storeInfoPlaceholder: {
-    flex: 1,
-  },
-  storeName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: c.dark,
-    marginBottom: 4,
-    letterSpacing: -0.3,
-  },
-  storeNamePlaceholder: {
-    height: 18,
-    backgroundColor: c.border,
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  storeAddress: {
-    fontSize: 14,
-    color: c.muted,
-    marginBottom: 8,
-  },
-  storeAddressPlaceholder: {
-    height: 14,
-    backgroundColor: c.border,
-    borderRadius: 4,
-    width: "70%",
-  },
-  storeStats: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  stat: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  statText: {
-    fontSize: 13,
-    color: c.muted,
-    fontWeight: "500",
-  },
-  empty: {
-    alignItems: "center",
-    marginTop: 60,
-    paddingHorizontal: 24,
-  },
-  emptyIcon: {
-    marginBottom: 20,
-    opacity: 0.6,
-  },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: c.dark,
-    letterSpacing: -0.3,
-    marginBottom: 8,
-  },
-  emptySub: {
-    fontSize: 16,
-    color: c.muted,
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  emptyAction: {
-    backgroundColor: c.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 25,
-  },
-  emptyActionText: {
-    color: c.light,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.light,
+      paddingTop: Platform.OS === "ios" ? 54 : 44,
+      paddingBottom: 12,
+      paddingHorizontal: 16,
+      gap: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.surface,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: c.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    searchInputContainer: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.surface,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 8,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 16,
+      color: c.dark,
+      paddingVertical: 0,
+      ...(Platform.OS === "web"
+        ? { outlineStyle: "none", outlineWidth: 0 }
+        : {}),
+    },
+    clearIcon: {
+      padding: 4,
+    },
+    tabsContainer: {
+      flexDirection: "row",
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      backgroundColor: c.light,
+      gap: 12,
+    },
+    tab: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: c.primary,
+      gap: 8,
+    },
+    activeTab: {
+      backgroundColor: c.primary,
+      borderColor: c.primary,
+    },
+    tabText: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: c.primary,
+      letterSpacing: -0.2,
+    },
+    activeTabText: {
+      color: c.light,
+    },
+    content: {
+      flex: 1,
+    },
+    suggestionsContainer: {
+      paddingHorizontal: 20,
+      paddingTop: 20,
+    },
+    suggestionSection: {
+      marginBottom: 32,
+    },
+    sectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 16,
+      gap: 8,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.dark,
+      letterSpacing: -0.3,
+    },
+    clearButton: {
+      marginLeft: "auto",
+    },
+    clearButtonText: {
+      fontSize: 14,
+      color: c.primary,
+      fontWeight: "600",
+    },
+    suggestionGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    suggestionChip: {
+      backgroundColor: c.light,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: c.border,
+      shadowColor: "#000",
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    suggestionText: {
+      fontSize: 14,
+      color: c.dark,
+      fontWeight: "500",
+    },
+    tagFilterSection: {
+      marginHorizontal: 20,
+      marginBottom: 20,
+      backgroundColor: c.primary + "10",
+      borderRadius: 16,
+      padding: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    tagIndicator: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    tagText: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: c.primary,
+    },
+    clearTagButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    clearTagText: {
+      color: c.primary,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    storeList: {
+      padding: 20,
+      gap: 12,
+    },
+    storeItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: 16,
+      backgroundColor: c.light,
+      borderRadius: 16,
+      shadowColor: "#000",
+      shadowOpacity: 0.06,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 3,
+    },
+    storeAvatarContainer: {
+      position: "relative",
+      marginRight: 16,
+    },
+    storeAvatar: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+    },
+    storeAvatarPlaceholder: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: c.border,
+      marginRight: 16,
+    },
+    storeBadge: {
+      position: "absolute",
+      bottom: 0,
+      right: 0,
+      backgroundColor: c.primary,
+      borderRadius: 10,
+      width: 20,
+      height: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 2,
+      borderColor: c.light,
+    },
+    storeInfo: {
+      flex: 1,
+    },
+    storeInfoPlaceholder: {
+      flex: 1,
+    },
+    storeName: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.dark,
+      marginBottom: 4,
+      letterSpacing: -0.3,
+    },
+    storeNamePlaceholder: {
+      height: 18,
+      backgroundColor: c.border,
+      borderRadius: 4,
+      marginBottom: 8,
+    },
+    storeAddress: {
+      fontSize: 14,
+      color: c.muted,
+      marginBottom: 8,
+    },
+    storeAddressPlaceholder: {
+      height: 14,
+      backgroundColor: c.border,
+      borderRadius: 4,
+      width: "70%",
+    },
+    storeStats: {
+      flexDirection: "row",
+      gap: 16,
+    },
+    stat: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    statText: {
+      fontSize: 13,
+      color: c.muted,
+      fontWeight: "500",
+    },
+    empty: {
+      alignItems: "center",
+      marginTop: 60,
+      paddingHorizontal: 24,
+    },
+    emptyIcon: {
+      marginBottom: 20,
+      opacity: 0.6,
+    },
+    emptyText: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: c.dark,
+      letterSpacing: -0.3,
+      marginBottom: 8,
+    },
+    emptySub: {
+      fontSize: 16,
+      color: c.muted,
+      textAlign: "center",
+      lineHeight: 22,
+      marginBottom: 24,
+    },
+    emptyAction: {
+      backgroundColor: c.primary,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 25,
+    },
+    emptyActionText: {
+      color: c.light,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+  });

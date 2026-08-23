@@ -13,12 +13,16 @@ import {
   View,
   StyleSheet,
   Animated,
+  Easing,
   Pressable,
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import * as Linking from "expo-linking";
 import { useResponsive } from "./src/hooks/useResponsive";
@@ -32,8 +36,8 @@ import { ToastProvider } from "./src/context/ToastContext";
 import { ChatProvider } from "./src/context/ChatContext";
 import { AdsProvider } from "./src/context/AdsContext";
 import { NotificationProvider } from "./src/context/NotificationContext";
-import { HomeScreen } from "./src/screens/HomeScreen";
 import { FeedScreen } from "./src/screens/FeedScreen";
+import { HomeScreen } from "./src/screens/HomeScreen";
 import { CartScreen } from "./src/screens/CartScreen";
 import { AccountScreen } from "./src/screens/AccountScreen";
 import { SearchScreen } from "./src/screens/SearchScreen";
@@ -75,7 +79,7 @@ import { StoreRegistrationScreen } from "./src/screens/StoreRegistrationScreen";
 // PasswordResetScreen handles recovery links on both web and native.
 
 import { supabase } from "./src/lib/supabase";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import UpdateModal from "./src/components/UpdateModal";
 import { checkForUpdate } from "./src/services/updateService";
 
@@ -121,7 +125,7 @@ const TabNavigator = () => {
     >
       <Tab.Screen
         name="Home"
-        component={HomeScreen}
+        component={TransitionedHomeScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
@@ -134,7 +138,7 @@ const TabNavigator = () => {
       />
       <Tab.Screen
         name="Stores"
-        component={StoresScreen}
+        component={TransitionedStoresScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
@@ -147,7 +151,7 @@ const TabNavigator = () => {
       />
       <Tab.Screen
         name="Feed"
-        component={FeedScreen}
+        component={TransitionedFeedScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
@@ -160,7 +164,7 @@ const TabNavigator = () => {
       />
       <Tab.Screen
         name="Cart"
-        component={CartScreen}
+        component={TransitionedCartScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
@@ -173,7 +177,7 @@ const TabNavigator = () => {
       />
       <Tab.Screen
         name="Account"
-        component={AccountScreen}
+        component={TransitionedAccountScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
@@ -188,130 +192,184 @@ const TabNavigator = () => {
   );
 };
 
-/** Floating, rounded, icon-only, theme-colored mobile bottom tab bar */
-const DefaultTabBar = ({
-  state,
-  descriptors,
-  navigation,
-  cartCount,
-}) => {
+/**
+ * AnimatedScreen — wraps tab screen content with a quick fade + subtle
+ * upward-slide transition that plays when the tab mounts (first focus),
+ * giving tab switches a polished entrance without a heavy animation library.
+ */
+const AnimatedScreen = ({ children }) => {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    progress.setValue(0);
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [progress]);
+
+  return (
+    <Animated.View
+      style={[
+        StyleSheet.absoluteFill,
+        {
+          opacity: progress,
+          transform: [
+            {
+              translateY: progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [14, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+};
+
+/**
+ * withTabTransition — HOC that keeps React Navigation's injected props
+ * (navigation, route) intact while wrapping the screen in AnimatedScreen.
+ * Using Tab.Screen's `children` prop instead would strip those props and
+ * crash any screen that calls navigation.navigate.
+ *
+ * IMPORTANT: the wrapped screens below are created ONCE at module level.
+ * Calling withTabTransition(...) inline inside the JSX would produce a new
+ * component type on every TabNavigator render (e.g. whenever a toast shows),
+ * causing React to unmount + remount the whole tab screen.
+ */
+const withTabTransition = (Wrapped) => {
+  const Transitioned = (props) => (
+    <AnimatedScreen>
+      <Wrapped {...props} />
+    </AnimatedScreen>
+  );
+  Transitioned.displayName = `withTabTransition(${
+    Wrapped.displayName || Wrapped.name || "Screen"
+  })`;
+  return Transitioned;
+};
+
+const TransitionedHomeScreen = withTabTransition(HomeScreen);
+const TransitionedStoresScreen = withTabTransition(StoresScreen);
+const TransitionedFeedScreen = withTabTransition(FeedScreen);
+const TransitionedCartScreen = withTabTransition(CartScreen);
+const TransitionedAccountScreen = withTabTransition(AccountScreen);
+
+/** Docked, flat, theme-aware mobile bottom tab bar */
+const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = insets.bottom > 0 ? insets.bottom : 0;
   const { colors } = useTheme();
 
-  const pill = (
-    <View style={tabStyles.pill}>
-      {state.routes.map((route, index) => {
-        const { options } = descriptors[route.key];
-        const isFocused = state.index === index;
-        const color = isFocused ? colors.primary : "rgba(255,255,255,0.75)";
-        const onPress = () => {
-          const event = navigation.emit({
-            type: "tabPress",
-            target: route.key,
-            canPreventDefault: true,
-          });
-          if (!isFocused && !event.defaultPrevented)
-            navigation.navigate(route.name);
-        };
-        return (
-          <Pressable
-            key={route.key}
-            onPress={onPress}
-            style={({ pressed }) => [
-              tabStyles.mobileTab,
-              pressed && tabStyles.mobileTabPressed,
-            ]}
-          >
-            <View
-              style={[
-                tabStyles.iconWrap,
-                isFocused && tabStyles.mobileTabIconBg,
-              ]}
-            >
-              {options.tabBarIcon({ color, size: 24, focused: isFocused })}
-              {route.name === "Cart" && cartCount > 0 && (
-                <View
-                  style={[
-                    tabStyles.badge,
-                    {
-                      backgroundColor: colors.primary,
-                    },
-                  ]}
-                >
-                  <Text style={tabStyles.badgeText}>{cartCount}</Text>
-                </View>
-              )}
-            </View>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-
   return (
     <View
       style={[
-        tabStyles.floatingWrapper,
-        { bottom: bottomInset + MOBILE_TAB_BAR_PADDING_BOTTOM },
+        tabStyles.dockedWrapper,
+        { backgroundColor: colors.surface, borderTopColor: colors.border },
       ]}
-      pointerEvents="box-none"
     >
-      <LinearGradient
-        colors={[colors.primary, colors.gradientEnd || colors.primary]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={tabStyles.blurContainer}
+      <View
+        style={[
+          tabStyles.bar,
+          {
+            borderTopColor: colors.border,
+            paddingBottom: Math.max(bottomInset, MOBILE_TAB_BAR_PADDING_BOTTOM),
+          },
+        ]}
       >
-        {pill}
-      </LinearGradient>
+        {state.routes.map((route, index) => {
+          const { options } = descriptors[route.key];
+          const isFocused = state.index === index;
+          // Icons use the theme tint directly — no filled backgrounds.
+          const color = isFocused ? colors.primary : colors.muted;
+          const onPress = () => {
+            const event = navigation.emit({
+              type: "tabPress",
+              target: route.key,
+              canPreventDefault: true,
+            });
+            if (!isFocused && !event.defaultPrevented)
+              navigation.navigate(route.name);
+          };
+          return (
+            <Pressable
+              key={route.key}
+              onPress={onPress}
+              style={({ pressed }) => [
+                tabStyles.tab,
+                pressed && tabStyles.tabPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isFocused }}
+            >
+              {/* Active indicator dot above the icon */}
+              <View
+                style={[
+                  tabStyles.indicator,
+                  isFocused && { backgroundColor: colors.primary },
+                ]}
+              />
+              <View style={tabStyles.iconWrap}>
+                {options.tabBarIcon({ color, size: 24, focused: isFocused })}
+                {route.name === "Cart" && cartCount > 0 && (
+                  <View
+                    style={[
+                      tabStyles.badge,
+                      { backgroundColor: colors.primary },
+                    ]}
+                  >
+                    <Text style={tabStyles.badgeText}>{cartCount}</Text>
+                  </View>
+                )}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 };
 
 const tabStyles = StyleSheet.create({
-  floatingWrapper: {
+  // Full-width docked bar pinned to the bottom edge — no floating margins.
+  // The wrapper carries the surface background so the safe-area zone below
+  // the icons is filled too (no transparent gap under the bar).
+  dockedWrapper: {
     position: "absolute",
-    left: 26,
-    right: 26,
-    alignItems: "center",
+    left: 0,
+    right: 0,
+    bottom: 0,
     zIndex: 1000,
+    borderTopWidth: 1,
+    // borderTopColor is applied inline from the theme at the usage site
   },
-  blurContainer: {
-    width: "100%",
-    borderRadius: 40,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 20,
-    elevation: 12,
-  },
-  pill: {
+  bar: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    paddingVertical: 0,
-    paddingHorizontal: 0,
+    alignItems: "stretch",
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  mobileTab: {
+  tab: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: 40,
-     
+    paddingTop: 6,
+    paddingBottom: 4,
   },
-  
-  mobileTabIconBg: {
-    backgroundColor: "rgba(255,255,255,0.85)",
-    borderRadius: 40,
-    padding: 8,
+  tabPressed: {
+    opacity: 0.6,
   },
-  mobileTabPressed: {
-    opacity: 0.7,
+  indicator: {
+    width: 18,
+    height: 3,
+    borderRadius: 2,
+    marginBottom: 5,
+    backgroundColor: "transparent",
   },
   iconWrap: {
     position: "relative",
@@ -473,7 +531,8 @@ const isWebRecoveryResetLink = (value) => {
   if (isAuthCallback) return false;
 
   const { queryParams, hashParams } = getUrlParamsFromValue(raw);
-  const getParam = (name) => hashParams.get(name) || queryParams.get(name) || "";
+  const getParam = (name) =>
+    hashParams.get(name) || queryParams.get(name) || "";
 
   const type = String(getParam("type")).toLowerCase();
   const tokenHash = getParam("token_hash");
@@ -498,7 +557,8 @@ const normalizeRecoveryDeepLink = (url) => {
 
   const raw = String(url);
   const normalized = raw.toLowerCase();
-  const hasWebResetScreen = normalized.includes("screen=reset-password") ||
+  const hasWebResetScreen =
+    normalized.includes("screen=reset-password") ||
     normalized.includes("screen=password-reset");
   const hasResetPath =
     normalized.includes("reset-password") ||
@@ -517,7 +577,9 @@ const normalizeRecoveryDeepLink = (url) => {
   const isNativeRecoveryDeepLink =
     hasRecoveryType || (hasRecoveryToken && !isAuthCallback);
   const isRecoveryDeepLink =
-    Platform.OS === "web" ? isWebRecoveryResetLink(raw) : isNativeRecoveryDeepLink;
+    Platform.OS === "web"
+      ? isWebRecoveryResetLink(raw)
+      : isNativeRecoveryDeepLink;
 
   if (Platform.OS === "web" && hasWebResetScreen) {
     const hashIndex = raw.indexOf("#");
@@ -911,7 +973,7 @@ const AuthenticatedApp = () => {
         screenOptions={{
           headerShown: false,
           animation: "slide_from_right",
-          animationDuration: .3
+          animationDuration: 0.3,
         }}
       >
         <Stack.Screen name="Main" component={TabNavigator} />
@@ -928,7 +990,10 @@ const AuthenticatedApp = () => {
         <Stack.Screen name="Store" component={StoreScreen} />
         <Stack.Screen name="Stores" component={StoresScreen} />
         <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
-        <Stack.Screen name="ProductDetailBySku" component={ProductDetailScreen} />
+        <Stack.Screen
+          name="ProductDetailBySku"
+          component={ProductDetailScreen}
+        />
         <Stack.Screen name="Chat" component={GuardedChat} />
         <Stack.Screen name="Chats" component={GuardedChats} />
         <Stack.Screen name="SellerChat" component={SellerChatScreen} />
@@ -936,7 +1001,10 @@ const AuthenticatedApp = () => {
         <Stack.Screen name="StatusCreator" component={GuardedStatusCreator} />
         <Stack.Screen name="Checkout" component={GuardedCheckout} />
         <Stack.Screen name="PaymentWebView" component={PaymentWebViewScreen} />
-        <Stack.Screen name="StoreRegistration" component={StoreRegistrationScreen} />
+        <Stack.Screen
+          name="StoreRegistration"
+          component={StoreRegistrationScreen}
+        />
         <Stack.Screen name="Orders" component={GuardedOrders} />
         <Stack.Screen name="OrderDetail" component={GuardedOrderDetail} />
         <Stack.Screen name="Wishlist" component={GuardedWishlist} />
@@ -950,10 +1018,7 @@ const AuthenticatedApp = () => {
         <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="ProfileEdit" component={GuardedProfileEdit} />
         <Stack.Screen name="SellerProfile" component={GuardedSellerProfile} />
-        <Stack.Screen
-          name="ChangePassword"
-          component={GuardedChangePassword}
-        />
+        <Stack.Screen name="ChangePassword" component={GuardedChangePassword} />
         <Stack.Screen name="ChangeEmail" component={GuardedChangeEmail} />
         <Stack.Screen
           name="PrivacySettings"
@@ -995,7 +1060,9 @@ const DeepLinkHandler = () => {
         const tokenHash = params.get("token_hash");
 
         const isRecovery =
-          (accessToken && type === "recovery") || tokenHash || type === "recovery";
+          (accessToken && type === "recovery") ||
+          tokenHash ||
+          type === "recovery";
 
         if (isRecovery) {
           console.log("DeepLinkHandler: recovery link detected");

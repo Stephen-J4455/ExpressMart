@@ -275,6 +275,7 @@ const buildStoresStyles = (c) =>
     container: {
       flex: 1,
       backgroundColor: c.background,
+      paddingBottom: 50,
     },
     header: {
       paddingHorizontal: 20,
