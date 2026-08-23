@@ -24,7 +24,12 @@ import * as ImagePicker from "expo-image-picker";
 // exactly what we need to stream the raw video bytes to R2 via a binary PUT.
 import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "@expo/vector-icons";
-import { supabase, callEdgeFunction } from "../lib/supabase";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
+import { supabase, callEdgeFunction, supabaseUrl } from "../lib/supabase";
+
+// Required so openAuthSessionAsync resolves the Meta OAuth redirect on native.
+WebBrowser.maybeCompleteAuthSession();
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
@@ -249,6 +254,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // toggle and is kept in sync with the seller row.
   const [isLive, setIsLive] = useState(false);
   const [togglingLive, setTogglingLive] = useState(false);
+  // WhatsApp catalog sync state.
+  const [waConnected, setWaConnected] = useState(false);
+  const [waCatalogName, setWaCatalogName] = useState(null);
+  const [waLastSynced, setWaLastSynced] = useState(null);
+  const [waSyncing, setWaSyncing] = useState(false);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -265,6 +275,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [modalVisible, setModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // WhatsApp catalog connect state (Meta Embedded Signup / OAuth).
+  const [waModalVisible, setWaModalVisible] = useState(false);
+  const [waConnecting, setWaConnecting] = useState(false);
   // Human-readable stage shown on the save button while submitting
   // ("Uploading images…", "Saving product…", etc.) so the UI never just
   // says "Saving..." with no feedback.
@@ -463,6 +476,21 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       } catch (re) {
         console.warn("reels load failed", re);
       }
+
+      // ── Load WhatsApp catalog connection (owner RLS) ──────────────────────
+      try {
+        const { data: wa, error: waErr } = await supabase
+          .from("seller_meta_connections")
+          .select("catalog_name, last_synced_at")
+          .eq("seller_id", s.id)
+          .maybeSingle();
+        if (waErr) throw waErr;
+        setWaConnected(Boolean(wa));
+        setWaCatalogName(wa?.catalog_name || null);
+        setWaLastSynced(wa?.last_synced_at || null);
+      } catch (we) {
+        console.warn("whatsapp connection load failed", we);
+      }
     } catch (err) {
       console.error("SellerAdmin load error:", err);
       toast.error("Failed to load", err.message || "Please try again");
@@ -512,6 +540,129 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       setTogglingLive(false);
     }
   }, [supabase, sellerId, isLive, canGoLive, seller, toast, navigation]);
+
+  // Trigger the edge function that pulls this store's Meta catalog into
+  // express_products. Only live stores' products appear in the buyer feed.
+  const syncWhatsAppCatalog = useCallback(async () => {
+    if (!sellerId || waSyncing) return;
+    setWaSyncing(true);
+    try {
+      const res = await callEdgeFunction("sync-whatsapp-catalog", {
+        sellerId,
+      });
+      if (!res || !res.success) {
+        throw new Error(res?.error || "Sync failed");
+      }
+      toast.success(
+        "Catalog synced",
+        `${res.total || 0} item(s) imported from WhatsApp`,
+      );
+      setWaLastSynced(new Date().toISOString());
+      // Refresh products so newly synced items show immediately.
+      loadData();
+    } catch (err) {
+      toast.error(
+        "Sync failed",
+        err?.message || "Check your WhatsApp catalog connection",
+      );
+    } finally {
+      setWaSyncing(false);
+    }
+  }, [sellerId, waSyncing, toast, loadData]);
+
+  // ── Meta Embedded Signup (OAuth) ──────────────────────────────────────────
+  // Meta's dashboard rejects custom schemes in "Valid OAuth Redirect URIs", so
+  // we send THIS app's https edge-function URL as the redirect_uri (registered
+  // in the Meta dashboard). The function does the token exchange server-side,
+  // then 302-redirects back into the app via the custom scheme
+  // (expressmart://wa/callback?result=...). The merchant never sees a token.
+  const connectWhatsAppCatalog = useCallback(async () => {
+    if (!sellerId || waConnecting) return;
+    setWaConnecting(true);
+    try {
+      // https endpoint registered in the Meta App dashboard. The function
+      // redirects back to the app scheme after the exchange.
+      const metaRedirectUri = `${supabaseUrl}/functions/v1/meta-oauth-callback`;
+      const metaAppId = "1498454985301405"; // also set via META_APP_ID secret.
+      const state = encodeURIComponent(
+        JSON.stringify({ sellerId, scheme: "expressmart", ts: Date.now() }),
+      );
+      const authUrl =
+        `https://www.facebook.com/v19.0/dialog/oauth?` +
+        `client_id=${metaAppId}` +
+        `&redirect_uri=${encodeURIComponent(metaRedirectUri)}` +
+        `&state=${state}` +
+        `&scope=whatsapp_business_management,catalog_management,` +
+        `business_management`;
+
+      // The second arg is the CUSTOM SCHEME the browser should return to.
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrl,
+        "expressmart://wa/callback",
+      );
+
+      if (result.type === "cancel" || result.type === "dismiss") {
+        return; // user aborted
+      }
+      if (result.type === "success" && result.url) {
+        await completeWaOAuth(result.url);
+      }
+      // On native, the redirect may arrive via the Linking listener instead.
+    } catch (err) {
+      toast.error(
+        "Connection failed",
+        err?.message || "Could not connect your WhatsApp catalog",
+      );
+    } finally {
+      setWaConnecting(false);
+    }
+  }, [sellerId, waConnecting, toast]);
+
+  // Handle the app deep-link that the edge function redirects to after the
+  // server-side token exchange (expressmart://wa/callback?result=...).
+  const completeWaOAuth = useCallback(
+    async (url) => {
+      try {
+        const parsed = Linking.parse(url);
+        const params = parsed.queryParams || {};
+        if (params.result === "error") {
+          throw new Error(
+            typeof params.error === "string"
+              ? params.error
+              : "Meta denied the connection request",
+          );
+        }
+        if (params.result !== "success") {
+          throw new Error("WhatsApp connection did not complete");
+        }
+        setWaConnected(true);
+        setWaCatalogName(
+          typeof params.catalogName === "string" ? params.catalogName : null,
+        );
+        setWaModalVisible(false);
+        toast.success("WhatsApp connected", "Tap Sync to import your products");
+        loadData();
+      } catch (err) {
+        toast.error(
+          "Connection failed",
+          err?.message || "Could not finish WhatsApp setup",
+        );
+      }
+    },
+    [toast, loadData],
+  );
+
+  // Handle the OAuth redirect on native when the browser returns via deep-link
+  // (covers the case where openAuthSessionAsync resolves without a url).
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const subscription = Linking.addEventListener("url", async ({ url }) => {
+      if (url && url.includes("wa/callback")) {
+        await completeWaOAuth(url);
+      }
+    });
+    return () => subscription.remove();
+  }, [completeWaOAuth]);
 
   useEffect(() => {
     loadData();
@@ -2671,6 +2822,65 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </View>
             )}
           </Pressable>
+
+          {/* WhatsApp catalog sync — import products from a Meta catalog */}
+          <Pressable
+            style={[styles.waRow, waConnected && styles.waRowActive]}
+            onPress={() =>
+              waConnected ? setWaModalVisible(true) : connectWhatsAppCatalog()
+            }
+            disabled={waConnecting}
+          >
+            <View style={styles.waLeft}>
+              <Ionicons
+                name="logo-whatsapp"
+                size={20}
+                color={waConnected ? "#fff" : "#25D366"}
+              />
+              <View style={styles.waTextWrap}>
+                <Text
+                  style={[styles.waTitle, waConnected && styles.waTitleActive]}
+                >
+                  {waConnected
+                    ? "WhatsApp Catalog Linked"
+                    : "Link WhatsApp Catalog"}
+                </Text>
+                <Text style={[styles.waSub, waConnected && styles.waSubActive]}>
+                  {waConnected
+                    ? waCatalogName
+                      ? `Synced from ${waCatalogName}`
+                      : "Import products from your Meta catalog"
+                    : "Connect a WABA catalog to auto-import products"}
+                </Text>
+              </View>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={waConnected ? "#fff" : themeColors.muted}
+            />
+          </Pressable>
+
+          {waConnected && (
+            <Pressable
+              style={styles.waSyncButton}
+              onPress={syncWhatsAppCatalog}
+              disabled={waSyncing}
+            >
+              {waSyncing ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="refresh" size={16} color="#fff" />
+              )}
+              <Text style={styles.waSyncText}>
+                {waSyncing
+                  ? "Syncing…"
+                  : waLastSynced
+                    ? "Sync now"
+                    : "Sync catalog"}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.tabBar}>
@@ -3485,6 +3695,87 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 )}
               </TouchableOpacity>
             )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* WhatsApp catalog connect modal */}
+      <Modal
+        visible={waModalVisible}
+        animationType="slide"
+        statusBarTranslucent
+      >
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior="padding"
+          keyboardVerticalOffset={0}
+        >
+          <View
+            style={[
+              styles.modalHeader,
+              {
+                paddingTop: insets.top + 8,
+                borderBottomColor: themeColors.surface,
+              },
+            ]}
+          >
+            <Pressable
+              style={styles.modalHeaderBtn}
+              onPress={() => setWaModalVisible(false)}
+              hitSlop={8}
+            >
+              <Ionicons name="close" size={22} color={themeColors.dark} />
+            </Pressable>
+            <View style={styles.modalHeaderCenter}>
+              <Text style={styles.modalTitle} numberOfLines={1}>
+                Connect WhatsApp Catalog
+              </Text>
+              <Text style={styles.modalSubtitle}>
+                Sign in with your Meta account
+              </Text>
+            </View>
+            <View style={styles.modalHeaderBtn}>
+              {waConnecting ? (
+                <ActivityIndicator size="small" color={accent} />
+              ) : null}
+            </View>
+          </View>
+
+          <ScrollView
+            style={styles.modalBody}
+            contentContainerStyle={styles.modalBodyContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.waOauthCard}>
+              <Ionicons name="logo-whatsapp" size={40} color="#25D366" />
+              <Text style={styles.waOauthTitle}>Connect with Facebook</Text>
+              <Text style={styles.waHint}>
+                Tap below to securely sign in to your Meta Business account.
+                Select your Business Portfolio, WhatsApp Business Account, and
+                Catalog — we'll import your products automatically. You'll never
+                need to copy or paste a token.
+              </Text>
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={[
+                styles.waFacebookButton,
+                waConnecting && styles.waFacebookButtonDisabled,
+              ]}
+              onPress={connectWhatsAppCatalog}
+              disabled={waConnecting}
+            >
+              {waConnecting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="logo-facebook" size={20} color="#fff" />
+              )}
+              <Text style={styles.waFacebookText}>
+                {waConnecting ? "Connecting…" : "Continue with Facebook"}
+              </Text>
+            </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -4845,6 +5136,97 @@ const buildSellerAdminStyles = (c) =>
       height: 20,
       borderRadius: 10,
       backgroundColor: c.light,
+    },
+    // WhatsApp catalog sync
+    waRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      marginTop: 10,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    waRowActive: {
+      backgroundColor: "#25D366",
+      borderColor: "#25D366",
+    },
+    waLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      flex: 1,
+    },
+    waTextWrap: { flex: 1 },
+    waTitle: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    waTitleActive: { color: "#fff" },
+    waSub: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: 2,
+    },
+    waSubActive: { color: "rgba(255,255,255,0.85)" },
+    waSyncButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      backgroundColor: c.primary,
+      borderRadius: radius.md,
+      paddingVertical: 12,
+      marginTop: 10,
+    },
+    waSyncText: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: "#fff",
+    },
+    waOauthCard: {
+      alignItems: "center",
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      padding: 24,
+      marginTop: 8,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    waOauthTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.dark,
+      marginTop: 12,
+      marginBottom: 8,
+    },
+    waHint: {
+      fontSize: 13,
+      color: c.muted,
+      lineHeight: 19,
+      textAlign: "center",
+      marginTop: 4,
+    },
+    waFacebookButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      backgroundColor: "#1877F2",
+      borderRadius: radius.md,
+      paddingVertical: 14,
+    },
+    waFacebookButtonDisabled: {
+      opacity: 0.6,
+    },
+    waFacebookText: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: "#fff",
     },
     orderSkeleton: {
       flexDirection: "row",

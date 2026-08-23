@@ -69,6 +69,16 @@
               "scheme": "https",
               "host": "expressmart.me",
               "pathPrefix": "/p"
+            },
+            {
+              "scheme": "https",
+              "host": "www.expressmart.me",
+              "pathPrefix": "/wa/callback"
+            },
+            {
+              "scheme": "https",
+              "host": "expressmart.me",
+              "pathPrefix": "/wa/callback"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
@@ -121,5 +131,4 @@
       }
     }
   }
-    
 }
