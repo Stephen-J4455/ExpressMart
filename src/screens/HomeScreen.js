@@ -10,10 +10,13 @@
 //   Nearby    — location-based via browser geolocation / expo-location fallback
 // ---------------------------------------------------------------------------
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   FlatList,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -22,6 +25,8 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppHeader } from "../components/AppHeader";
 import { FeedProductCard } from "../components/FeedProductCard";
 import { FeedCardPlaceholder } from "../components/FeedCardPlaceholder";
@@ -32,9 +37,13 @@ import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { radius } from "../theme/colors";
 import { supabase } from "../lib/supabase";
+import { updateTabBarOnScroll, showTabBar } from "../utils/tabBarAutoHide";
 
 const FILTERS = ["For You", "Following", "Trending", "Nearby"];
 const NEARBY_RADIUS_KM = 25;
+// Number of categories shown in the horizontal strip on Home — ranked by the
+// most active products. Tapping "See More" opens the full Categories tab.
+const TOP_CATEGORIES_LIMIT = 5;
 
 export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
@@ -55,6 +64,138 @@ export const HomeScreen = ({ navigation }) => {
   const [userLocation, setUserLocation] = useState(null);
   const [nearbyProducts, setNearbyProducts] = useState(null);
   const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [topCategories, setTopCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  // ── Auto-hiding header (direction-aware) ─────────────────────────────────
+  // Same convention as the tab bar auto-hide util: finger swipe UP (reading
+  // further down the feed) hides the header; swipe DOWN or being near the top
+  // reveals it again. While hidden, the feed scrolls edge-to-edge — including
+  // under the status bar.
+  const insets = useSafeAreaInsets();
+  // 1 = shown, 0 = hidden. The value is animated IMPERATIVELY from the scroll
+  // handler (same pattern as the bottom tab bar in App.js) so the motion
+  // starts in the same tick as the gesture instead of waiting for a React
+  // re-render round-trip — that round-trip is what made it feel laggy.
+  const headerAnim = useRef(new Animated.Value(1)).current;
+  const headerHiddenRef = useRef(false);
+  // Mirrors headerHiddenRef for pointerEvents only — never gates animation.
+  const [headerHidden, setHeaderHidden] = useState(false);
+  // Measured from the rendered header via onLayout (falls back to an estimate
+  // for the first frame). Drives both the slide distance and the list's top
+  // content inset.
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 76);
+  const lastScrollYRef = useRef(0);
+
+  const animateHeader = useCallback(
+    (hide) => {
+      if (headerHiddenRef.current === hide) return;
+      headerHiddenRef.current = hide;
+      setHeaderHidden(hide);
+      Animated.timing(headerAnim, {
+        toValue: hide ? 0 : 1,
+        duration: 150, // snappier than the tab bar's 220ms
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true, // translateY only
+      }).start();
+    },
+    [headerAnim],
+  );
+
+  const showHeader = useCallback(() => animateHeader(false), [animateHeader]);
+
+  // ── Top categories: the 5 categories with the most active products ────────
+  const loadTopCategories = useCallback(async () => {
+    if (!supabase) {
+      setTopCategories([]);
+      setCategoriesLoading(false);
+      return;
+    }
+
+    const toRanked = (rows) =>
+      rows
+        .map((cat) => ({
+          id: cat.id,
+          name: cat.name,
+          icon: cat.icon,
+          color: cat.color,
+          image_url: cat.image_url,
+          productCount: Number(cat.products_count?.[0]?.count || 0),
+        }))
+        .sort(
+          (a, b) =>
+            b.productCount - a.productCount ||
+            String(a.name).localeCompare(String(b.name)),
+        )
+        .slice(0, TOP_CATEGORIES_LIMIT);
+
+    try {
+      // Preferred: server-side count via an embedded aggregate. The FK hint
+      // disambiguates between the two relationships products has with
+      // categories (category_id → id and category → name).
+      const { data, error } = await supabase
+        .from("express_categories")
+        .select(
+          "id,name,icon,color,image_url," +
+            "products_count:express_products!express_products_category_fkey(count)",
+        )
+        .eq("is_active", true)
+        .eq("express_products.status", "active")
+        .order("sort_order");
+
+      if (error) throw error;
+      if (data) {
+        setTopCategories(toRanked(data));
+        setCategoriesLoading(false);
+        return;
+      }
+    } catch (embedErr) {
+      console.warn(
+        "[HomeScreen] embedded category count failed, falling back:",
+        embedErr?.message,
+      );
+    }
+
+    // Fallback: aggregate counts client-side from the product `category`
+    // name column (same field CategoryProductsScreen filters on).
+    try {
+      const [{ data: cats }, { data: prods }] = await Promise.all([
+        supabase
+          .from("express_categories")
+          .select("id,name,icon,color,image_url")
+          .eq("is_active", true)
+          .order("sort_order"),
+        supabase.from("express_products").select("category").eq("status", "active"),
+      ]);
+
+      const counts = new Map();
+      (prods || []).forEach((p) => {
+        const key = String(p.category || "").toLowerCase();
+        if (!key) return;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      });
+
+      const ranked = (cats || [])
+        .map((cat) => ({
+          ...cat,
+          productCount: counts.get(String(cat.name).toLowerCase()) || 0,
+        }))
+        .filter((cat) => cat.productCount > 0)
+        .sort((a, b) => b.productCount - a.productCount)
+        .slice(0, TOP_CATEGORIES_LIMIT);
+
+      setTopCategories(ranked);
+    } catch (fallbackErr) {
+      console.warn("[HomeScreen] top categories load failed:", fallbackErr?.message);
+      setTopCategories([]);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTopCategories();
+  }, [loadTopCategories]);
 
   // ── Nearby: request geolocation and fetch sellers within radius ──────────
   const loadNearby = useCallback(async () => {
@@ -156,18 +297,36 @@ export const HomeScreen = ({ navigation }) => {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
+    showHeader();
     if (activeFilter === "Nearby") {
       setNearbyProducts(null);
       await loadNearby();
     } else {
       await refresh({ silent: true });
     }
+    loadTopCategories();
     setRefreshing(false);
-  }, [activeFilter, refresh, loadNearby]);
+  }, [activeFilter, refresh, loadNearby, loadTopCategories, showHeader]);
 
   const handleScroll = useCallback(
     (e) => {
       lazyScroll.notify(e.nativeEvent.contentOffset.y);
+      // Direction-aware tab bar auto-hide (hide on upward swipe, show on
+      // downward swipe / near top).
+      updateTabBarOnScroll(e.nativeEvent.contentOffset.y);
+      const y = e.nativeEvent.contentOffset.y;
+      // Direction-aware header auto-hide (same convention as the tab bar:
+      // swipe up → hide, swipe down or near top → show). Animated directly
+      // here so it reacts instantly, no re-render round-trip.
+      const delta = y - lastScrollYRef.current;
+      lastScrollYRef.current = y;
+      if (y <= 60) {
+        animateHeader(false);
+      } else if (delta > 8) {
+        animateHeader(true);
+      } else if (delta < -8) {
+        animateHeader(false);
+      }
       const { contentSize, layoutMeasurement, contentOffset } = e.nativeEvent;
       const distanceFromBottom =
         contentSize.height - layoutMeasurement.height - contentOffset.y;
@@ -175,7 +334,7 @@ export const HomeScreen = ({ navigation }) => {
         loadMore();
       }
     },
-    [hasMore, loadingMore, loadMore],
+    [hasMore, loadingMore, loadMore, animateHeader],
   );
 
   const renderFeedItem = useCallback(
@@ -225,19 +384,12 @@ export const HomeScreen = ({ navigation }) => {
     </View>
   );
 
-  return (
-    // NOTE: no LazyScrollContext here — LazyImage's measureLayout-based lazy
-    // hydration only works inside a plain ScrollView (Home). Inside a
-    // virtualized FlatList the measurement is invalid, so cards render their
-    // images eagerly instead.
-    <View style={styles.container}>
-      <AppHeader
-        onSearchPress={() => navigation.navigate("Search")}
-        onChatPress={() => navigation.navigate("Chats")}
-        onNotificationsPress={() => navigation.navigate("Notifications")}
-      />
-
-      {/* Filter pill row */}
+  // Categories strip rendered as the FlatList's header so it scrolls away
+  // together with the feed cards.
+  const listHeader = (
+    <View style={styles.catSection}>
+      {/* Filter pills — scroll with the feed: hide as you read down, come
+          back when you scroll up. */}
       <View style={styles.filterBar}>
         <ScrollView
           horizontal
@@ -249,14 +401,16 @@ export const HomeScreen = ({ navigation }) => {
             return (
               <Pressable
                 key={filter}
-                onPress={() => setActiveFilter(filter)}
+                onPress={() => {
+                  setActiveFilter(filter);
+                  // Content resets on filter switch — keep bars visible.
+                  showTabBar();
+                  showHeader();
+                }}
                 style={[styles.filterPill, isActive && styles.filterPillActive]}
               >
                 <Text
-                  style={[
-                    styles.filterText,
-                    isActive && styles.filterTextActive,
-                  ]}
+                  style={[styles.filterText, isActive && styles.filterTextActive]}
                 >
                   {filter}
                 </Text>
@@ -266,9 +420,151 @@ export const HomeScreen = ({ navigation }) => {
         </ScrollView>
       </View>
 
+      <View style={styles.catHeaderRow}>
+        <Text style={styles.catSectionTitle}>Categories</Text>
+        <Pressable
+          hitSlop={8}
+          style={styles.seeMoreBtn}
+          onPress={() => navigation.navigate("Categories")}
+          accessibilityRole="button"
+          accessibilityLabel="See more categories"
+        >
+          <Text style={styles.seeMoreText}>See More</Text>
+          <Ionicons name="chevron-forward" size={14} color={c.primary} />
+        </Pressable>
+      </View>
+
+      {categoriesLoading && !topCategories.length ? (
+        // Skeleton cards shaped like the category cards
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.catRow}
+        >
+          {Array.from({ length: TOP_CATEGORIES_LIMIT }).map((_, i) => (
+            <View key={i} style={styles.catCard}>
+              <View style={[styles.catImageFallback, styles.catSkeletonBg]} />
+              <View style={styles.catInfo}>
+                <View style={[styles.catSkeletonLine, { width: 80 }]} />
+                <View style={[styles.catSkeletonLine, { width: 44 }]} />
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      ) : topCategories.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.catRow}
+        >
+          {topCategories.map((cat) => (
+            <Pressable
+              key={cat.id}
+              style={({ pressed }) => [
+                styles.catCard,
+                pressed && styles.catCardPressed,
+              ]}
+              onPress={() =>
+                navigation.navigate("CategoryProducts", {
+                  category: { id: cat.id, name: cat.name },
+                })
+              }
+            >
+              {/* Background: photo if one exists, otherwise brand color with
+                  the category icon. Only ever one of the two renders, so the
+                  card reads as a single surface. */}
+              {cat.image_url ? (
+                <Image
+                  source={{ uri: cat.image_url }}
+                  style={styles.catImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.catImageFallback,
+                    cat.color ? { backgroundColor: cat.color } : null,
+                  ]}
+                >
+                  <Ionicons
+                    name={cat.icon || "apps"}
+                    size={40}
+                    color="rgba(255,255,255,0.9)"
+                  />
+                </View>
+              )}
+
+              {/* Layer 3: bottom-weighted gradient — one continuous surface
+                  under both the photo and the label, no seam */}
+              <LinearGradient
+                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.25)", "rgba(0,0,0,0.75)"]}
+                locations={[0.45, 0.7, 1]}
+                style={styles.catScrim}
+              />
+
+              {/* Layer 4: label overlaid on the gradient */}
+              <View style={styles.catInfo}>
+                <Text style={styles.catName} numberOfLines={1}>
+                  {cat.name}
+                </Text>
+                <Text style={styles.catCount}>
+                  {cat.productCount} {cat.productCount === 1 ? "item" : "items"}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
+    </View>
+  );
+
+  return (
+    // NOTE: no LazyScrollContext here — LazyImage's measureLayout-based lazy
+    // hydration only works inside a plain ScrollView (Home). Inside a
+    // virtualized FlatList the measurement is invalid, so cards render their
+    // images eagerly instead.
+    <View style={styles.container}>
+      {/* Auto-hide header: overlays the feed (not in flow) and slides up out
+          of view on upward swipe. While hidden, cards scroll edge-to-edge,
+          including under the status bar. */}
+      <Animated.View
+        pointerEvents={headerHidden ? "none" : "auto"}
+        style={[
+          styles.headerOverlay,
+          {
+            transform: [
+              {
+                translateY: headerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-headerHeight, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h > 0 && Math.abs(h - headerHeight) > 1) setHeaderHeight(h);
+        }}
+      >
+        <AppHeader
+          onSearchPress={() => navigation.navigate("Search")}
+          onStoresPress={() => navigation.navigate("Stores")}
+          onNotificationsPress={() => navigation.navigate("Notifications")}
+        />
+      </Animated.View>
+
+      {/* Categories strip renders inside the FlatList header so it scrolls
+          together with the feed — see listHeader below. */}
+
+      {/* Filter pill row lives inside the FlatList header (see listHeader)
+          so it scrolls away with the feed and back again. */}
+
       {loading ? (
         // Skeleton placeholders shaped like feed cards — no spinner.
-        <View style={styles.placeholderList}>
+        <View
+          style={[styles.placeholderList, { paddingTop: headerHeight + 8 }]}
+        >
           {[0, 1, 2].map((i) => (
             <FeedCardPlaceholder key={i} />
           ))}
@@ -278,13 +574,21 @@ export const HomeScreen = ({ navigation }) => {
           data={feedItems}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderFeedItem}
+          ListHeaderComponent={listHeader}
           ListEmptyComponent={!nearbyLoading ? renderEmpty : null}
           onScroll={handleScroll}
-          scrollEventThrottle={200}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingTop: headerHeight + 8 },
+          ]}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              progressViewOffset={headerHeight}
+            />
           }
           initialNumToRender={3}
           maxToRenderPerBatch={4}
@@ -306,11 +610,20 @@ const buildHomeStyles = (c) =>
     container: {
       flex: 1,
       backgroundColor: c.background,
-      paddingBottom: 50,
+      
     },
     placeholderList: {
       flex: 1,
       paddingHorizontal: 12,
+    },
+    // Header floats above the feed; translateY slides it fully off-screen.
+    headerOverlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10,
+      elevation: 10,
     },
     filterBar: {
       paddingTop: 10,
@@ -342,11 +655,10 @@ const buildHomeStyles = (c) =>
       color: c.onPrimary,
     },
     listContent: {
-      paddingBottom: 24,
       flexGrow: 1,
     },
     cardWrap: {
-      marginBottom: 4,
+      marginBottom: 0,
     },
     emptyState: {
       flex: 1,
@@ -377,5 +689,111 @@ const buildHomeStyles = (c) =>
       position: "absolute",
       bottom: 130,
       alignSelf: "center",
+    },
+    // ── Top categories strip (ProductCard-style cards) ──────────────────────
+    catSection: {
+      paddingTop: 8,
+    },
+    catHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 14,
+      paddingBottom: 10,
+    },
+    catSectionTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    seeMoreBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 2,
+    },
+    seeMoreText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.primary,
+    },
+    catRow: {
+      flexDirection: "row",
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingBottom: 6,
+    },
+    // Mirrors ProductCard's card treatment: rounded, bordered, soft shadow
+    catCard: {
+      width: 170,
+      height: 220,
+      backgroundColor: c.surface,
+      borderRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: c.border,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.08,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 5,
+    },
+    catCardPressed: {
+      opacity: 0.8,
+      transform: [{ scale: 0.98 }],
+    },
+    catImage: {
+      ...StyleSheet.absoluteFillObject,
+      width: "100%",
+      height: "100%",
+      zIndex: 0,
+    },
+    catImageFallback: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: c.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      // Nudge the icon's optical center up so it sits in the open space
+      // above the name/count block instead of crowding it.
+      paddingBottom: 40,
+      zIndex: 0,
+    },
+    // Bottom-weighted gradient dim — spans the whole card so image and label
+    // share one continuous surface with no visible seam.
+    catScrim: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 1,
+    },
+    // Label is a true overlay pinned to the card's bottom edge — same surface
+    // as the image behind it, never a separate block.
+    catInfo: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 2,
+      paddingHorizontal: 12,
+      paddingBottom: 10,
+      gap: 1,
+    },
+    catName: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: "#FFFFFF",
+      textShadowColor: "rgba(0, 0, 0, 0.4)",
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
+    },
+    catCount: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: "rgba(255, 255, 255, 0.9)",
+    },
+    catSkeletonBg: {
+      backgroundColor: c.surfaceAlpha,
+    },
+    catSkeletonLine: {
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: "rgba(255, 255, 255, 0.5)",
     },
   });

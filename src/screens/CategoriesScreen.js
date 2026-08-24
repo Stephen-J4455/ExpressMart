@@ -16,6 +16,7 @@ import { ProductCard } from "../components/ProductCard";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
+import { radius } from "../theme/colors";
 
 export const CategoriesScreen = ({ navigation }) => {
   const { colors: themeColors } = useTheme();
@@ -281,7 +282,7 @@ const buildCategoriesStyles = (c) =>
     gap: 2,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 999,
+    borderRadius: radius.full,
     backgroundColor: c.primary + "14",
   },
   moreText: {

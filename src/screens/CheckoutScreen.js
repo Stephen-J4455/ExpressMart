@@ -29,6 +29,7 @@ import {
 } from "../services/payment";
 import { callEdgeFunction } from "../lib/supabase";
 import { useResponsive } from "../hooks/useResponsive";
+import { radius } from "../theme/colors";
 
 export const CheckoutScreen = ({ navigation }) => {
   const { colors: themeColors } = useTheme();
@@ -625,7 +626,7 @@ const buildCheckoutStyles = (c) =>
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: radius.full,
     backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
@@ -694,7 +695,7 @@ const buildCheckoutStyles = (c) =>
     alignItems: "center",
     padding: 16,
     backgroundColor: c.light,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     borderStyle: "dashed",
     borderWidth: 1,
     borderColor: c.primary,
@@ -747,7 +748,7 @@ const buildCheckoutStyles = (c) =>
   },
   input: {
     backgroundColor: c.light,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     padding: 14,
     fontSize: 16,
     marginBottom: 12,
@@ -766,7 +767,7 @@ const buildCheckoutStyles = (c) =>
   cancelButton: {
     flex: 1,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: "#E4E8F0",
     alignItems: "center",
@@ -778,7 +779,7 @@ const buildCheckoutStyles = (c) =>
   saveButton: {
     flex: 1,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     backgroundColor: c.primary,
     alignItems: "center",
   },
@@ -898,7 +899,7 @@ const buildCheckoutStyles = (c) =>
   },
   checkoutButton: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: radius.xl,
     overflow: "hidden",
   },
   checkoutButtonDisabled: {

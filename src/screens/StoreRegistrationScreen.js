@@ -22,7 +22,7 @@ import { useResponsive } from "../hooks/useResponsive";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase, callEdgeFunction } from "../lib/supabase";
-import { getTheme } from "../theme/colors";
+import {getTheme, radius } from "../theme/colors";
 import { getImageContentType } from "../utils/webUpload";
 import {
   R2_FOLDERS,
@@ -917,7 +917,7 @@ const buildStoreRegStyles = (c) =>
     backButton: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: radius.full,
       backgroundColor: c.light,
       alignItems: "center",
       justifyContent: "center",
@@ -1072,7 +1072,7 @@ const buildStoreRegStyles = (c) =>
     input: {
       borderWidth: 1.5,
       borderColor: c.border,
-      borderRadius: 12,
+      borderRadius: radius.xl,
       paddingHorizontal: 14,
       paddingVertical: 13,
       fontSize: 15,
@@ -1122,7 +1122,7 @@ const buildStoreRegStyles = (c) =>
     },
     typeBtn: {
       padding: 18,
-      borderRadius: 14,
+      borderRadius: radius.xl,
       borderWidth: 1.5,
       borderColor: c.border,
       alignItems: "center",
@@ -1151,7 +1151,7 @@ const buildStoreRegStyles = (c) =>
     chip: {
       paddingVertical: 14,
       paddingHorizontal: 16,
-      borderRadius: 12,
+      borderRadius: radius.xl,
       borderWidth: 1.5,
       borderColor: c.border,
       marginVertical: 5,
@@ -1222,7 +1222,7 @@ const buildStoreRegStyles = (c) =>
     },
     primaryBtn: {
       paddingVertical: 15,
-      borderRadius: 14,
+      borderRadius: radius.xl,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -1234,7 +1234,7 @@ const buildStoreRegStyles = (c) =>
     },
     cancelBtn: {
       paddingVertical: 15,
-      borderRadius: 14,
+      borderRadius: radius.xl,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: c.surface,

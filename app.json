@@ -90,6 +90,7 @@
       "favicon": "./assets/icon.png"
     },
     "plugins": [
+      "./plugins/withMedia3Fix",
       [
         "expo-notifications",
         {

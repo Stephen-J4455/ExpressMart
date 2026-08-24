@@ -9,21 +9,30 @@ import {
   Image,
   Modal,
   Alert,
+  Platform,
 } from "react-native";
 import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useOrder } from "../context/OrderContext";
 import { useAds } from "../context/AdsContext";
 import { useTheme } from "../context/ThemeContext";
+import { useToast } from "../context/ToastContext";
 import { AdRenderer } from "../components/AdBanner";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
 import { useResponsive } from "../hooks/useResponsive";
 import { useAppStyles } from "../hooks/useAppStyles";
+import {
+  R2_FOLDERS,
+  uploadToR2Presigned,
+  deleteMediaByUrl,
+} from "../services/r2Storage";
 import { supabase } from "../lib/supabase";
 import { SellerAdminScreen } from "./SellerAdminScreen";
+import { radius } from "../theme/colors";
 
 const quickActions = [
   {
@@ -97,9 +106,11 @@ const menuSections = [
 
 export const AccountScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { user, profile, isAuthenticated, loading, signOut } = useAuth();
+  const { user, profile, isAuthenticated, loading, signOut, updateProfile } =
+    useAuth();
   const { orders } = useOrder();
   const { fetchAdsByPlacement } = useAds();
+  const toast = useToast();
   const {
     theme: themeMode,
     setTheme: setThemeMode,
@@ -108,6 +119,58 @@ export const AccountScreen = ({ navigation }) => {
   const styles = useAppStyles((c) => buildAccountStyles(c));
   const [showLoadingPreview, setShowLoadingPreview] = useState(false);
   const [profileAds, setProfileAds] = useState([]);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // ── Profile picture upload (customer avatars) ────────────────────────────
+  // Mirrors SellerProfileScreen's flow: pick from gallery → read as Blob →
+  // upload to R2 via presigned URL → persist public URL on express_profiles.
+  const handleChangeAvatar = async () => {
+    if (uploadingAvatar) return;
+    try {
+      if (Platform.OS !== "web") {
+        const { status } =
+          await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          toast.error("Gallery permission is required");
+          return;
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+
+      setUploadingAvatar(true);
+
+      // Only hand over a Blob on web (where asset.file exists). On native we
+      // MUST pass null so r2Storage's readAssetBody reads the file itself
+      // (base64 → bytes) — pre-converting to a React Native Blob breaks the
+      // presigned PUT and makes the upload fail.
+      const pickedFile = asset.file instanceof Blob ? asset.file : null;
+
+      // Best-effort cleanup of the previous avatar (R2 or legacy Supabase).
+      if (profile?.avatar_url) {
+        await deleteMediaByUrl(profile.avatar_url).catch(() => {});
+      }
+
+      const { publicUrl } = await uploadToR2Presigned({
+        uri: asset.uri,
+        pickedFile,
+        folder: `${R2_FOLDERS.PROFILE}/${user.id}`,
+      });
+
+      const { error } = await updateProfile({ avatar_url: publicUrl });
+      if (error) throw error;
+      toast.success("Profile photo updated");
+    } catch (e) {
+      console.error("Avatar upload failed:", e);
+      toast.error(e.message || "Could not update profile photo");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
   const { isWide, contentMaxWidth } = useResponsive();
 
   const [sellerRecord, setSellerRecord] = useState(
@@ -268,18 +331,43 @@ export const AccountScreen = ({ navigation }) => {
           style={[styles.heroHeader, { paddingTop: insets.top + 24 }]}
         >
           <View style={styles.heroTopRow}>
-            <View style={styles.avatarContainer}>
-              <LinearGradient
-                colors={["rgba(255,255,255,0.28)", "rgba(255,255,255,0.12)"]}
-                style={styles.avatarGradient}
-              >
-                <Text style={styles.avatarText}>
-                  {(profile?.full_name || user?.email)?.[0]?.toUpperCase() ||
-                    "?"}
-                </Text>
-              </LinearGradient>
-              <View style={styles.onlineDot} />
-            </View>
+            <Pressable
+              style={styles.avatarContainer}
+              onPress={handleChangeAvatar}
+              disabled={uploadingAvatar}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile photo"
+            >
+              {profile?.avatar_url ? (
+                <Image
+                  source={{ uri: profile.avatar_url }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <LinearGradient
+                  colors={["rgba(255,255,255,0.28)", "rgba(255,255,255,0.12)"]}
+                  style={styles.avatarGradient}
+                >
+                  <Text style={styles.avatarText}>
+                    {(profile?.full_name || user?.email)?.[0]?.toUpperCase() ||
+                      "?"}
+                  </Text>
+                </LinearGradient>
+              )}
+              {/* Camera badge — tap target hint; swaps to a spinner while the
+                  upload is in flight. */}
+              {uploadingAvatar ? (
+                <View
+                  style={[styles.avatarCameraBadge, styles.avatarCameraUploading]}
+                >
+                  <ActivityIndicator size="small" color="#fff" />
+                </View>
+              ) : (
+                <View style={styles.avatarCameraBadge}>
+                  <Ionicons name="camera" size={11} color="#fff" />
+                </View>
+              )}
+            </Pressable>
             <View style={styles.heroText}>
               <Text style={styles.profileName}>
                 {profile?.full_name || "tagit User"}
@@ -551,7 +639,7 @@ const buildAccountStyles = (c) =>
     },
     signInButton: {
       marginTop: 32,
-      borderRadius: 16,
+      borderRadius: radius.lg,
       overflow: "hidden",
       width: "100%",
       shadowColor: c.primary,
@@ -622,6 +710,29 @@ const buildAccountStyles = (c) =>
       fontWeight: "800",
       color: c.light,
     },
+    avatarImage: {
+      width: 64,
+      height: 64,
+      borderRadius: 22,
+      borderWidth: 2,
+      borderColor: "rgba(255,255,255,0.45)",
+    },
+    avatarCameraBadge: {
+      position: "absolute",
+      bottom: -3,
+      right: -3,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: c.dark,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 2,
+      borderColor: "#fff",
+    },
+    avatarCameraUploading: {
+      backgroundColor: "rgba(0,0,0,0.55)",
+    },
     onlineDot: {
       position: "absolute",
       bottom: 2,
@@ -651,7 +762,7 @@ const buildAccountStyles = (c) =>
     editButton: {
       width: 42,
       height: 42,
-      borderRadius: 14,
+      borderRadius: radius.xl,
       backgroundColor: "rgba(255,255,255,0.22)",
       alignItems: "center",
       justifyContent: "center",
@@ -784,7 +895,7 @@ const buildAccountStyles = (c) =>
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: c.light,
-      borderRadius: 14,
+      borderRadius: radius.xl,
       paddingVertical: 11,
       paddingHorizontal: 16,
       gap: 6,
@@ -811,7 +922,7 @@ const buildAccountStyles = (c) =>
       flexDirection: "row",
       justifyContent: "space-between",
       backgroundColor: c.surface,
-      borderRadius: 20,
+      borderRadius: radius.xl,
       paddingVertical: 18,
       paddingHorizontal: 12,
       shadowColor: "#000",
@@ -827,7 +938,7 @@ const buildAccountStyles = (c) =>
     quickActionIcon: {
       width: 54,
       height: 54,
-      borderRadius: 16,
+      borderRadius: radius.xl,
       alignItems: "center",
       justifyContent: "center",
       marginBottom: 8,
@@ -897,7 +1008,7 @@ const buildAccountStyles = (c) =>
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: c.light,
-      borderRadius: 16,
+      borderRadius: radius.xl,
       paddingVertical: 16,
       gap: 8,
       borderWidth: 1.5,
@@ -931,7 +1042,7 @@ const buildAccountStyles = (c) =>
     closeButtonInner: {
       width: 44,
       height: 44,
-      borderRadius: 22,
+      borderRadius: radius.full,
       backgroundColor: c.light,
       alignItems: "center",
       justifyContent: "center",

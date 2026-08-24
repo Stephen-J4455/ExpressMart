@@ -45,6 +45,116 @@ const mapStoryAdToStatus = (ad) => ({
   cta_url: ad?.cta_url || null,
 });
 
+// ── Background prefetch cache ────────────────────────────────────────────────
+// ChatsScreen used to fetch its own data (seller conversations, followed
+// statuses, story ads) only after mounting, so the first open showed an empty
+// list while the requests were in flight. These loaders + module cache let the
+// data be warmed up in the background (see prefetchChatsScreenData, called
+// from App.js on login) and re-played instantly when the screen mounts.
+const chatsCache = {
+  sellerConversations: null,
+  followedStatuses: null,
+  messageStoryAds: null,
+};
+
+let prefetchInFlight = false;
+
+// Pure data loaders — shared by the screen and the background prefetcher.
+const loadSellerConversationsData = async (user) => {
+  if (!user) return [];
+  const { data: sellerRow } = await supabase
+    .from("express_sellers")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!sellerRow) return [];
+  const { data, error } = await supabase
+    .from("express_chat_conversations")
+    .select(
+      `
+      id,
+      user_id,
+      seller_id,
+      last_message,
+      last_message_at,
+      created_at,
+      express_profiles!user_id(id, full_name, avatar_url, email)
+    `,
+    )
+    .eq("seller_id", sellerRow.id)
+    .order("last_message_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map((conv) => ({
+    ...conv,
+    customer: {
+      id: conv.express_profiles?.id,
+      name:
+        conv.express_profiles?.full_name ||
+        conv.express_profiles?.email ||
+        "Customer",
+      avatar: conv.express_profiles?.avatar_url || null,
+    },
+  }));
+};
+
+const loadFollowedStatusesData = async (followedSellers) => {
+  if (!followedSellers || followedSellers.length === 0) return [];
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("express_seller_statuses")
+    .select("*, seller:express_sellers(id, name, avatar)")
+    .in("seller_id", followedSellers)
+    .eq("is_active", true)
+    .gt("expires_at", now)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  // de-duplicate by seller_id, keeping latest per seller
+  const unique = [];
+  const seen = new Set();
+  (data || []).forEach((row) => {
+    if (!seen.has(row.seller_id)) {
+      seen.add(row.seller_id);
+      unique.push(row);
+    }
+  });
+  return unique;
+};
+
+const loadMessageStoryAdsData = async (fetchAdsByPlacement) => {
+  const ads = await fetchAdsByPlacement("messages");
+  return (ads || [])
+    .filter((ad) => String(ad?.style || "").toLowerCase() === "story")
+    .map(mapStoryAdToStatus);
+};
+
+/**
+ * Warm up all ChatsScreen data in the background. Fire-and-forget: safe to
+ * call at app startup / on login so the screen renders with content the
+ * moment it's opened. Results land in chatsCache; the screen seeds its state
+ * from there synchronously on mount.
+ */
+export const prefetchChatsScreenData = async ({
+  user,
+  followedSellers,
+  fetchAdsByPlacement,
+}) => {
+  if (!user || prefetchInFlight) return;
+  prefetchInFlight = true;
+  try {
+    const [sellerConversations, statuses, ads] = await Promise.all([
+      loadSellerConversationsData(user).catch(() => []),
+      loadFollowedStatusesData(followedSellers).catch(() => []),
+      loadMessageStoryAdsData(fetchAdsByPlacement).catch(() => []),
+    ]);
+    chatsCache.sellerConversations = sellerConversations;
+    chatsCache.followedStatuses = statuses;
+    chatsCache.messageStoryAds = ads;
+  } finally {
+    prefetchInFlight = false;
+  }
+};
+
+
 export const ChatsScreen = ({ navigation }) => {
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildChatsStyles(c));
@@ -56,10 +166,18 @@ export const ChatsScreen = ({ navigation }) => {
   const { followedSellers } = useShop();
   const { fetchAdsByPlacement } = useAds();
   const [refreshing, setRefreshing] = useState(false);
-  const [followedStatuses, setFollowedStatuses] = useState([]);
-  const [messageStoryAds, setMessageStoryAds] = useState([]);
+  // Seeded synchronously from the background prefetch cache so the screen
+  // renders with content on the very first paint (no empty flash).
+  const [followedStatuses, setFollowedStatuses] = useState(
+    chatsCache.followedStatuses || [],
+  );
+  const [messageStoryAds, setMessageStoryAds] = useState(
+    chatsCache.messageStoryAds || [],
+  );
   const [selectedItem, setSelectedItem] = useState(null);
-  const [sellerConversations, setSellerConversations] = useState([]);
+  const [sellerConversations, setSellerConversations] = useState(
+    chatsCache.sellerConversations || [],
+  );
   const [sellerLoading, setSellerLoading] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -84,53 +202,17 @@ export const ChatsScreen = ({ navigation }) => {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
+  // Screen-local fetchers — thin wrappers around the shared module loaders
+  // that also keep the prefetch cache warm for the next mount.
   const fetchSellerConversations = async () => {
-    if (!user) {
-      setSellerConversations([]);
-      return;
-    }
     try {
       setSellerLoading(true);
-      const { data: sellerRow } = await supabase
-        .from("express_sellers")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (!sellerRow) {
-        setSellerConversations([]);
-        return;
-      }
-      const { data, error } = await supabase
-        .from("express_chat_conversations")
-        .select(
-          `
-          id,
-          user_id,
-          seller_id,
-          last_message,
-          last_message_at,
-          created_at,
-          express_profiles!user_id(id, full_name, avatar_url, email)
-        `,
-        )
-        .eq("seller_id", sellerRow.id)
-        .order("last_message_at", { ascending: false });
-      if (error) throw error;
-      const mapped = (data || []).map((conv) => ({
-        ...conv,
-        customer: {
-          id: conv.express_profiles?.id,
-          name:
-            conv.express_profiles?.full_name ||
-            conv.express_profiles?.email ||
-            "Customer",
-          avatar: conv.express_profiles?.avatar_url || null,
-        },
-      }));
+      const mapped = await loadSellerConversationsData(user);
       setSellerConversations(mapped);
+      chatsCache.sellerConversations = mapped;
     } catch (err) {
       console.error("Error fetching seller conversations:", err);
-      setSellerConversations([]);
+      if (!chatsCache.sellerConversations) setSellerConversations([]);
     } finally {
       setSellerLoading(false);
     }
@@ -147,11 +229,9 @@ export const ChatsScreen = ({ navigation }) => {
 
   const fetchMessageStoryAds = async () => {
     try {
-      const ads = await fetchAdsByPlacement("messages");
-      const mapped = (ads || [])
-        .filter((ad) => String(ad?.style || "").toLowerCase() === "story")
-        .map(mapStoryAdToStatus);
+      const mapped = await loadMessageStoryAdsData(fetchAdsByPlacement);
       setMessageStoryAds(mapped);
+      chatsCache.messageStoryAds = mapped;
     } catch (err) {
       console.error("Error fetching message story ads:", err);
       setMessageStoryAds([]);
@@ -160,33 +240,9 @@ export const ChatsScreen = ({ navigation }) => {
 
   const fetchFollowedStatuses = async () => {
     try {
-      if (!followedSellers || followedSellers.length === 0) {
-        setFollowedStatuses([]);
-        return;
-      }
-
-      const now = new Date().toISOString();
-      const { data, error } = await supabase
-        .from("express_seller_statuses")
-        .select("*, seller:express_sellers(id, name, avatar)")
-        .in("seller_id", followedSellers)
-        .eq("is_active", true)
-        .gt("expires_at", now)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      // de-duplicate by seller_id, keeping latest per seller
-      const unique = [];
-      const seen = new Set();
-      (data || []).forEach((row) => {
-        if (!seen.has(row.seller_id)) {
-          seen.add(row.seller_id);
-          unique.push(row);
-        }
-      });
-
+      const unique = await loadFollowedStatusesData(followedSellers);
       setFollowedStatuses(unique);
+      chatsCache.followedStatuses = unique;
     } catch (err) {
       console.error("Error fetching followed statuses:", err);
     }
@@ -371,7 +427,10 @@ export const ChatsScreen = ({ navigation }) => {
     return renderConversation({ item });
   };
 
-  if (isLoading && !refreshing) {
+  // Only block the whole screen while there is nothing to render at all.
+  // With prefetched/cached data the list stays visible during background
+  // re-syncs instead of flashing the loading state.
+  if (isLoading && !refreshing && mergedConversations.length === 0) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={themeColors.primary} />
@@ -390,12 +449,6 @@ export const ChatsScreen = ({ navigation }) => {
     >
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerRow}>
-          <Pressable
-            style={styles.searchBackButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={22} color={themeColors.light} />
-          </Pressable>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>Messages</Text>
             {!isOnline && (
@@ -442,54 +495,66 @@ export const ChatsScreen = ({ navigation }) => {
             )}
           </View>
         )}
-
-        {statusItems.length > 0 && (
-          <View style={styles.headerStatusSection}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.statusScrollContent}
-            >
-              {statusItems.map((status) => (
-                <Pressable
-                  key={status.id}
-                  style={styles.statusCircle}
-                  onPress={() =>
-                    navigation.navigate("StatusViewer", { status })
-                  }
-                >
-                  {status.seller?.avatar ? (
-                    <Image
-                      source={{ uri: status.seller.avatar }}
-                      style={styles.statusAvatar}
-                    />
-                  ) : (
-                    <View
-                      style={[styles.statusAvatar, styles.statusAvatarFallback]}
-                    >
-                      <Ionicons
-                        name={status.is_ad_story ? "megaphone" : "storefront"}
-                        size={20}
-                        color={themeColors.primary}
-                      />
-                    </View>
-                  )}
-                  <View style={styles.statusIndicator} />
-                  <Text style={styles.statusSellerName} numberOfLines={1}>
-                    {status.seller.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
       </View>
 
       <FlatList
         data={mergedConversations}
         keyExtractor={(item) => `${item.kind}-${item.id}`}
         renderItem={renderMergedConversation}
-        contentContainerStyle={styles.listContainer}
+        ListHeaderComponent={
+          statusItems.length > 0 ? (
+            // Status strip scrolls with the page content (as part of the
+            // list header) instead of being pinned in the header.
+            <View style={styles.statusSection}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.statusScrollContent}
+              >
+                {statusItems.map((status) => (
+                  <Pressable
+                    key={status.id}
+                    style={styles.statusCircle}
+                    onPress={() =>
+                      navigation.navigate("StatusViewer", { status })
+                    }
+                  >
+                    {status.seller?.avatar ? (
+                      <Image
+                        source={{ uri: status.seller.avatar }}
+                        style={styles.statusAvatar}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.statusAvatar,
+                          styles.statusAvatarFallback,
+                        ]}
+                      >
+                        <Ionicons
+                          name={status.is_ad_story ? "megaphone" : "storefront"}
+                          size={20}
+                          color={themeColors.primary}
+                        />
+                      </View>
+                    )}
+                    <View style={styles.statusIndicator} />
+                    <Text style={styles.statusSellerName} numberOfLines={1}>
+                      {status.seller.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null
+        }
+        contentContainerStyle={[
+          styles.listContainer,
+          // Extra bottom clearance so the last conversation isn't hidden
+          // behind the floating bottom nav (mobile only — web uses the left
+          // sidebar). Matches the ~130px tab-bar clearance used elsewhere.
+          !isWide && { paddingBottom: 50 + Math.max(insets.bottom, 10) },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -652,7 +717,6 @@ const buildChatsStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginLeft: 10,
   },
   headerTitle: {
     fontSize: 28,
@@ -696,14 +760,6 @@ const buildChatsStyles = (c) =>
     marginTop: 14,
     borderWidth: 1,
     borderColor: c.border,
-  },
-  searchBackButton: {
-    width: 42,
-    height: 42,
-    borderRadius: radius.pill,
-    backgroundColor: c.primary,
-    alignItems: "center",
-    justifyContent: "center",
   },
   searchIconButton: {
     width: 42,
@@ -831,15 +887,13 @@ const buildChatsStyles = (c) =>
     fontSize: 11,
     fontWeight: "700",
   },
-  headerStatusSection: {
-    marginTop: 16,
-    paddingVertical: 12,
-  },
   statusSection: {
-    backgroundColor: c.light,
+    // Counteract the list container's 16px horizontal padding so the strip
+    // runs edge-to-edge; the inner scroll keeps its own 20px content inset.
+    marginHorizontal: -16,
+    backgroundColor: c.background,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: c.border,
+    marginVertical: 5,
   },
   statusSectionTitle: {
     fontSize: 14,
@@ -849,7 +903,7 @@ const buildChatsStyles = (c) =>
     marginBottom: 12,
   },
   statusScrollContent: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 20,
     gap: 12,
   },
   statusCircle: {

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Platform, Pressable, StyleSheet, Text, View, Linking } from "react-native";
+import { radius } from "../theme/colors";
 
 const APP_STORE_URL = "https://apps.apple.com/app/tagit"; // TODO: real App Store ID
 const PLAY_STORE_URL =
@@ -57,7 +58,7 @@ const styles = StyleSheet.create({
   button: {
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: radius.lg,
     backgroundColor: "#4F46E5",
   },
   buttonText: { color: "#fff", fontWeight: "700", fontSize: 13 },

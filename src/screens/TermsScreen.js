@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { radius } from "../theme/colors";
 
 const LAST_UPDATED = "March 1, 2026";
 
@@ -163,7 +164,7 @@ const buildTermsStyles = (c) =>
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     backgroundColor: c.surface,
     alignItems: "center",
     justifyContent: "center",

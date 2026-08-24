@@ -18,6 +18,7 @@ import { supabase, callEdgeFunction } from "../lib/supabase";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
+import { radius } from "../theme/colors";
 
 export const PaymentsScreen = ({ navigation }) => {
   const { user, profile } = useAuth();
@@ -839,7 +840,7 @@ const buildPaymentsStyles = (c) =>
     justifyContent: "center",
     gap: 8,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     backgroundColor: c.surface,
   },
   detailEditBtn: {},
@@ -851,7 +852,7 @@ const buildPaymentsStyles = (c) =>
     gap: 8,
     marginTop: 14,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     backgroundColor: c.surface,
   },
   editButtonText: {
@@ -870,7 +871,7 @@ const buildPaymentsStyles = (c) =>
     justifyContent: "center",
     gap: 8,
     backgroundColor: c.primary,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     paddingVertical: 14,
   },
   setupButtonText: {
@@ -912,7 +913,7 @@ const buildPaymentsStyles = (c) =>
   setupTypeBtn: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     borderWidth: 1.5,
     borderColor: c.border,
     alignItems: "center",
@@ -923,7 +924,7 @@ const buildPaymentsStyles = (c) =>
   setupInput: {
     borderWidth: 1.5,
     borderColor: c.border,
-    borderRadius: 12,
+    borderRadius: radius.full,
     paddingHorizontal: 12,
     paddingVertical: 13,
     fontSize: 15,

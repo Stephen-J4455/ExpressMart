@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { radius } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -774,7 +775,7 @@ const buildAuthStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: c.light,
-    borderRadius: 16,
+    borderRadius: radius.full,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: "#E4E8F0",
@@ -804,7 +805,7 @@ const buildAuthStyles = (c) =>
     fontSize: 14,
   },
   submitButton: {
-    borderRadius: 16,
+    borderRadius: radius.full,
     overflow: "hidden",
     marginTop: 8,
     shadowColor: c.primary,
@@ -849,7 +850,7 @@ const buildAuthStyles = (c) =>
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: c.light,
-    borderRadius: 16,
+    borderRadius: radius.full,
     height: 56,
     borderWidth: 1,
     borderColor: "#E4E8F0",

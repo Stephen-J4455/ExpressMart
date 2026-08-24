@@ -175,6 +175,6 @@ const buildStyles = (c) =>
     cta: {
       height: 40,
       width: "100%",
-      borderRadius: 14,
+      borderRadius: radius.xl,
     },
   });

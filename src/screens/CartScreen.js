@@ -22,6 +22,7 @@ import { supabase } from "../lib/supabase";
 import { useResponsive } from "../hooks/useResponsive";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { radius } from "../theme/colors";
 
 // Map color names to hex values
 const colorMap = {
@@ -797,7 +798,7 @@ const buildCartStyles = (c) =>
       gap: 4,
       paddingHorizontal: 10,
       paddingVertical: 6,
-      borderRadius: 8,
+      borderRadius: radius.md,
       backgroundColor: "#FEF2F2",
     },
     removeText: {
@@ -815,7 +816,7 @@ const buildCartStyles = (c) =>
     qtyButton: {
       width: 34,
       height: 34,
-      borderRadius: 10,
+      borderRadius: radius.lg,
       backgroundColor: c.light,
       alignItems: "center",
       justifyContent: "center",

@@ -1,4 +1,5 @@
 import React from "react";
+import { radius } from "../theme/colors";
 import {
   View,
   Text,
@@ -658,7 +659,7 @@ const buildPasswordResetStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: c.light,
-    borderRadius: 16,
+    borderRadius: radius.xl,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: "#E4E8F0",
@@ -679,7 +680,7 @@ const buildPasswordResetStyles = (c) =>
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   submitButton: {
-    borderRadius: 16,
+    borderRadius: radius.lg,
     overflow: "hidden",
     marginTop: 8,
     shadowColor: c.primary,

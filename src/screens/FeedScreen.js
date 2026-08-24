@@ -25,7 +25,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
-import { Video } from "react-native-video";
+import { FeedVideo } from "../components/FeedVideo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -40,6 +40,7 @@ import { supabase } from "../lib/supabase";
 import { playLikeSound } from "../lib/sounds";
 import { R2_FOLDERS, resolveMediaUrl } from "../services/r2Storage";
 import { shareReel, shareProduct } from "../utils/shareUtils";
+import { radius } from "../theme/colors";
 
 const REVIEW_STAR_COLOR = "#F97316";
 
@@ -548,7 +549,7 @@ export const FeedScreen = ({ route, navigation }) => {
               togglePlay();
             }}
           >
-            <Video
+            <FeedVideo
               ref={videoRef}
               source={source}
               style={styles.video}
@@ -993,7 +994,7 @@ const buildFeedStyles = (c) =>
     centerPlayButton: {
       width: 64,
       height: 64,
-      borderRadius: 32,
+      borderRadius: radius.full,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: "rgba(0,0,0,0.42)",
@@ -1148,7 +1149,7 @@ const buildFeedStyles = (c) =>
     actionIconWrap: {
       width: 46,
       height: 46,
-      borderRadius: 23,
+      borderRadius: radius.full,
       backgroundColor: c.overlay,
       alignItems: "center",
       justifyContent: "center",
@@ -1286,7 +1287,7 @@ const buildFeedStyles = (c) =>
       maxHeight: 100,
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: 20,
+      borderRadius: radius.full,
       paddingHorizontal: 14,
       paddingVertical: 9,
       fontSize: 14,
@@ -1295,7 +1296,7 @@ const buildFeedStyles = (c) =>
     commentSendBtn: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: radius.full,
       backgroundColor: c.primary,
       alignItems: "center",
       justifyContent: "center",
@@ -1312,7 +1313,7 @@ const buildFeedStyles = (c) =>
     reelMenuButton: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: radius.full,
       backgroundColor: c.overlay,
       alignItems: "center",
       justifyContent: "center",

@@ -1283,7 +1283,7 @@ const buildAdStyles = (c) =>
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: radius.md,
     gap: 6,
   },
   ctaText: {
@@ -1333,7 +1333,7 @@ const buildAdStyles = (c) =>
   cardCta: {
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 6,
+    borderRadius: radius.md,
     alignItems: "center",
     marginTop: 4,
   },
@@ -1403,7 +1403,7 @@ const buildAdStyles = (c) =>
   carouselCta: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: radius.md,
+    borderRadius: radius.xl,
     alignItems: "center",
     marginTop: 6,
     alignSelf: "flex-start",
@@ -1484,7 +1484,7 @@ const buildAdStyles = (c) =>
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 14,
-    borderRadius: 10,
+    borderRadius: radius.lg,
     gap: 8,
     marginTop: 8,
   },
@@ -1549,7 +1549,7 @@ const buildAdStyles = (c) =>
   storyCta: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: radius.md,
     alignSelf: "flex-start",
   },
   storyCtaText: {
@@ -1627,7 +1627,7 @@ const buildAdStyles = (c) =>
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     gap: 10,
     marginTop: 12,
   },
@@ -1697,7 +1697,7 @@ const buildAdStyles = (c) =>
   stickyFooterCta: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: radius.md,
   },
   stickyFooterCtaText: {
     color: "#FFFFFF",

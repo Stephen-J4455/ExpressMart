@@ -1019,7 +1019,7 @@ const buildStyles = (c) =>
     },
     ctaGradient: {
       height: 40,
-      borderRadius: 14,
+      borderRadius: radius.xl,
       alignItems: "center",
       justifyContent: "center",
       flexDirection: "row",
@@ -1052,7 +1052,7 @@ const buildStyles = (c) =>
     listCtaGradient: {
       width: 46,
       height: 46,
-      borderRadius: 14,
+      borderRadius: radius.xl,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -1181,7 +1181,7 @@ const buildStyles = (c) =>
     },
     variantAddButton: {
       marginTop: 20,
-      borderRadius: 14,
+      borderRadius: radius.xl,
       overflow: "hidden",
     },
     variantAddGradient: {

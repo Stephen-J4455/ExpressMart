@@ -13,7 +13,7 @@ import {
   Platform,
   TouchableOpacity,
 } from "react-native";
-import { Video } from "react-native-video";
+import { FeedVideo } from "../components/FeedVideo";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,12 +24,8 @@ import * as ImagePicker from "expo-image-picker";
 // exactly what we need to stream the raw video bytes to R2 via a binary PUT.
 import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "@expo/vector-icons";
-import * as WebBrowser from "expo-web-browser";
-import * as Linking from "expo-linking";
+import { WebView } from "react-native-webview";
 import { supabase, callEdgeFunction, supabaseUrl } from "../lib/supabase";
-
-// Required so openAuthSessionAsync resolves the Meta OAuth redirect on native.
-WebBrowser.maybeCompleteAuthSession();
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
@@ -66,6 +62,21 @@ const PRODUCT_FILTERS = [
   { key: "draft", label: "Drafts" },
   { key: "rejected", label: "Rejected" },
 ];
+
+const SORT_OPTIONS = [
+  { key: "recent", label: "Most Recent", icon: "time-outline" },
+  { key: "price-desc", label: "Price: High to Low", icon: "arrow-down-outline" },
+  { key: "price-asc", label: "Price: Low to High", icon: "arrow-up-outline" },
+  { key: "alpha", label: "Alphabetical (A-Z)", icon: "text-outline" },
+];
+
+// Pill colors for the redesigned catalog product cards.
+const CATALOG_STATUS_COLORS = {
+  active: "#10B981",
+  pending: "#F59E0B",
+  draft: "#6B7280",
+  rejected: "#EF4444",
+};
 
 const ORDER_STATUS_FILTERS = [
   "processing",
@@ -186,6 +197,15 @@ const formatBytes = (bytes) => {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+// Compact count formatting for the profile stats line ("3.6K followers").
+const formatCount = (value) => {
+  const n = Number(value || 0);
+  if (n >= 1000000)
+    return `${(n / 1000000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(n);
+};
+
 const getVideoSizeBytes = async (uri, pickedFile = null) => {
   const pickedSize = Number(pickedFile?.size || pickedFile?.fileSize || 0);
   if (pickedSize > 0) return pickedSize;
@@ -272,12 +292,21 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [productFilter, setProductFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  // Categories to filter the catalog by ([] = all). Chips in the Sort &
+  // Filter popup can be freely selected and deselected.
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  // Bottom-sheet popup hosting the sort options + category toggles.
+  const [sortModalVisible, setSortModalVisible] = useState(false);
+  // Catalog layout: "grid" (2-column cards) or "list" (full-width rows).
+  const [catalogViewMode, setCatalogViewMode] = useState("grid");
   const [modalVisible, setModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  // WhatsApp catalog connect state (Meta Embedded Signup / OAuth).
+  // WhatsApp catalog connect state (Meta Embedded Signup via in-app WebView).
   const [waModalVisible, setWaModalVisible] = useState(false);
   const [waConnecting, setWaConnecting] = useState(false);
+  // URL of the edge-function launcher page currently loaded in the WebView
+  // (null = show the intro card / "Continue with Facebook" button instead).
+  const [waAuthUrl, setWaAuthUrl] = useState(null);
   // Human-readable stage shown on the save button while submitting
   // ("Uploading images…", "Saving product…", etc.) so the UI never just
   // says "Saving..." with no feedback.
@@ -340,6 +369,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   );
   const [flashSaleMaxQty, setFlashSaleMaxQty] = useState("");
   const [menuVisible, setMenuVisible] = useState(false);
+  // Chevron on the profile sheet collapses/expands the store controls
+  // (Go Live + WhatsApp catalog). Red dot on the chevron when not live.
+  const [controlsExpanded, setControlsExpanded] = useState(true);
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
 
@@ -369,12 +401,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
   // ── Tabs ────────────────────────────────────────────────────────────────
   const TABS = ["catalog", "orders", "flash", "reels", "insights"];
-  const TAB_ICONS = {
-    catalog: "grid-outline",
-    orders: "receipt-outline",
-    flash: "flash-outline",
-    reels: "videocam-outline",
-    insights: "bar-chart-outline",
+  const TAB_LABELS = {
+    catalog: "Catalog",
+    orders: "Orders",
+    flash: "Flash",
+    reels: "Reels",
+    insights: "Insights",
   };
   const [activeTab, setActiveTab] = useState("catalog");
 
@@ -570,99 +602,56 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     }
   }, [sellerId, waSyncing, toast, loadData]);
 
-  // ── Meta Embedded Signup (OAuth) ──────────────────────────────────────────
-  // Meta's dashboard rejects custom schemes in "Valid OAuth Redirect URIs", so
-  // we send THIS app's https edge-function URL as the redirect_uri (registered
-  // in the Meta dashboard). The function does the token exchange server-side,
-  // then 302-redirects back into the app via the custom scheme
-  // (expressmart://wa/callback?result=...). The merchant never sees a token.
-  const connectWhatsAppCatalog = useCallback(async () => {
+  // ── Meta Embedded Signup (in-app WebView, redirect-based) ─────────────────
+  // The edge function runs the whole flow: it 302s the WebView straight to
+  // Meta's Facebook Login for Business dialog (config_id — the Embedded Signup
+  // configuration created in App Dashboard → WhatsApp → Embedded Signup
+  // Builder). No popup is involved, so it behaves identically on iOS, Android,
+  // and web. Meta sends the authorization code back to the edge function,
+  // which exchanges it server-side and returns a small result page reporting
+  // the outcome here via postMessage. No redirect-URI handling and no
+  // deep-link listener in the app.
+  const connectWhatsAppCatalog = useCallback(() => {
     if (!sellerId || waConnecting) return;
+    // Open the host modal first — the WebView lives inside it.
+    setWaModalVisible(true);
     setWaConnecting(true);
-    try {
-      // https endpoint registered in the Meta App dashboard. The function
-      // redirects back to the app scheme after the exchange.
-      const metaRedirectUri = `${supabaseUrl}/functions/v1/meta-oauth-callback`;
-      const metaAppId = "1498454985301405"; // also set via META_APP_ID secret.
-      const state = encodeURIComponent(
-        JSON.stringify({ sellerId, scheme: "expressmart", ts: Date.now() }),
-      );
-      const authUrl =
-        `https://www.facebook.com/v19.0/dialog/oauth?` +
-        `client_id=${metaAppId}` +
-        `&redirect_uri=${encodeURIComponent(metaRedirectUri)}` +
-        `&state=${state}` +
-        `&scope=whatsapp_business_management,catalog_management,` +
-        `business_management`;
+    setWaAuthUrl(
+      `${supabaseUrl}/functions/v1/meta-oauth-callback?launch=1&sellerId=${encodeURIComponent(sellerId)}`,
+    );
+  }, [sellerId, waConnecting]);
 
-      // The second arg is the CUSTOM SCHEME the browser should return to.
-      const result = await WebBrowser.openAuthSessionAsync(
-        authUrl,
-        "expressmart://wa/callback",
-      );
-
-      if (result.type === "cancel" || result.type === "dismiss") {
-        return; // user aborted
-      }
-      if (result.type === "success" && result.url) {
-        await completeWaOAuth(result.url);
-      }
-      // On native, the redirect may arrive via the Linking listener instead.
-    } catch (err) {
-      toast.error(
-        "Connection failed",
-        err?.message || "Could not connect your WhatsApp catalog",
-      );
-    } finally {
-      setWaConnecting(false);
-    }
-  }, [sellerId, waConnecting, toast]);
-
-  // Handle the app deep-link that the edge function redirects to after the
-  // server-side token exchange (expressmart://wa/callback?result=...).
-  const completeWaOAuth = useCallback(
-    async (url) => {
+  // Receive the outcome posted by the edge function's result page.
+  const onWaWebViewMessage = useCallback(
+    async (event) => {
+      let data;
       try {
-        const parsed = Linking.parse(url);
-        const params = parsed.queryParams || {};
-        if (params.result === "error") {
-          throw new Error(
-            typeof params.error === "string"
-              ? params.error
-              : "Meta denied the connection request",
-          );
-        }
-        if (params.result !== "success") {
-          throw new Error("WhatsApp connection did not complete");
-        }
+        data = JSON.parse(event.nativeEvent.data);
+      } catch {
+        return;
+      }
+      if (data?.type !== "wa_oauth_result") return;
+      setWaConnecting(false);
+      setWaAuthUrl(null);
+      if (data.success) {
         setWaConnected(true);
         setWaCatalogName(
-          typeof params.catalogName === "string" ? params.catalogName : null,
+          typeof data.catalogName === "string" ? data.catalogName : null,
         );
         setWaModalVisible(false);
         toast.success("WhatsApp connected", "Tap Sync to import your products");
         loadData();
-      } catch (err) {
+      } else {
         toast.error(
           "Connection failed",
-          err?.message || "Could not finish WhatsApp setup",
+          typeof data.error === "string"
+            ? data.error
+            : "Could not finish WhatsApp setup",
         );
       }
     },
     [toast, loadData],
   );
-
-  // Handle the OAuth redirect on native when the browser returns via deep-link
-  // (covers the case where openAuthSessionAsync resolves without a url).
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    const subscription = Linking.addEventListener("url", async ({ url }) => {
-      if (url && url.includes("wa/callback")) {
-        await completeWaOAuth(url);
-      }
-    });
-    return () => subscription.remove();
-  }, [completeWaOAuth]);
 
   useEffect(() => {
     loadData();
@@ -1677,8 +1666,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     let filtered = products;
     if (productFilter !== "all")
       filtered = filtered.filter((p) => p.status === productFilter);
-    if (categoryFilter !== "all")
-      filtered = filtered.filter((p) => p.category === categoryFilter);
+    if (selectedCategories.length > 0)
+      filtered = filtered.filter((p) =>
+        selectedCategories.includes(p.category),
+      );
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(
@@ -1699,7 +1690,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     else if (sortBy === "alpha")
       filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title));
     return filtered;
-  }, [products, productFilter, categoryFilter, searchQuery, sortBy]);
+  }, [products, productFilter, selectedCategories, searchQuery, sortBy]);
 
   const inventorySummary = useMemo(
     () =>
@@ -1777,6 +1768,199 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const avatarUri = seller?.avatar || customerProfile?.avatar_url;
 
   const formatPrice = (v) => `GH₵${Number(v || 0).toLocaleString()}`;
+
+  // Currently active flash sale for a product, if any.
+  const getCatalogFlashSale = useCallback((p) => {
+    const now = new Date().toISOString();
+    return (
+      (Array.isArray(p?.flash_sale) ? p.flash_sale : []).find(
+        (fs) => fs.is_active && fs.end_time > now,
+      ) || null
+    );
+  }, []);
+
+  const getFlashDiscountPct = (fs) =>
+    fs.discount_percentage ||
+    (Number(fs.original_price) > 0
+      ? Math.round(
+          ((fs.original_price - fs.flash_price) / fs.original_price) * 100,
+        )
+      : 0);
+
+  const activeSortLabel =
+    SORT_OPTIONS.find((o) => o.key === sortBy)?.label || "Sort";
+
+  // Select/deselect a category chip inside the Sort & Filter popup.
+  const toggleCategorySelection = (name) =>
+    setSelectedCategories((prev) =>
+      prev.includes(name)
+        ? prev.filter((cName) => cName !== name)
+        : [...prev, name],
+    );
+
+  // ── Redesigned catalog product card (grid mode) ──────────────────────────
+  const renderCatalogGridCard = (p) => {
+    const flashSale = getCatalogFlashSale(p);
+    const statusColor = CATALOG_STATUS_COLORS[p.status] || "#6B7280";
+    return (
+      <Pressable
+        key={p.id}
+        style={({ pressed }) => [
+          styles.catalogCard,
+          pressed && { opacity: 0.85 },
+        ]}
+        onPress={() => {
+          setSelectedProduct(p);
+          setActionSheetVisible(true);
+        }}
+      >
+        <View style={styles.catalogCardMedia}>
+          {p.thumbnail ? (
+            <Image
+              source={{ uri: p.thumbnail }}
+              style={styles.catalogCardImage}
+            />
+          ) : (
+            <View
+              style={[
+                styles.catalogCardImage,
+                styles.catalogCardImagePlaceholder,
+              ]}
+            >
+              <Ionicons name="cube" size={28} color="#fff" />
+            </View>
+          )}
+          <View
+            style={[styles.catalogStatusPill, { backgroundColor: statusColor }]}
+          >
+            <Text style={styles.catalogStatusPillText}>{p.status}</Text>
+          </View>
+          {flashSale && (
+            <View style={styles.catalogFlashPill}>
+              <Ionicons name="flash" size={9} color="#fff" />
+              <Text style={styles.catalogFlashPillText}>
+                -{getFlashDiscountPct(flashSale)}%
+              </Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.catalogCardBody}>
+          <Text style={styles.catalogCardCategory} numberOfLines={1}>
+            {p.category || "Uncategorized"}
+          </Text>
+          <Text style={styles.catalogCardTitle} numberOfLines={2}>
+            {p.title}
+          </Text>
+          <View style={styles.catalogCardPriceRow}>
+            <Text style={[styles.catalogCardPrice, { color: accent }]}>
+              {formatPrice(flashSale ? flashSale.flash_price : p.price)}
+            </Text>
+            {flashSale &&
+            Number(flashSale.original_price) >
+              Number(flashSale.flash_price) ? (
+              <Text style={styles.catalogCardOriginal}>
+                {formatPrice(flashSale.original_price)}
+              </Text>
+            ) : null}
+          </View>
+          <View style={styles.catalogCardMetaRow}>
+            <View style={styles.catalogCardMeta}>
+              <Ionicons
+                name="trending-up"
+                size={11}
+                color={themeColors.muted}
+              />
+              <Text style={styles.catalogCardMetaText}>
+                {p.sold_count || 0} sold
+              </Text>
+            </View>
+            <Text style={styles.catalogCardMetaText}>
+              {p.is_preorder ? "Preorder" : `${p.quantity || 0} in stock`}
+            </Text>
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
+  // ── Redesigned catalog product row (list mode) ───────────────────────────
+  const renderCatalogListRow = (p) => {
+    const flashSale = getCatalogFlashSale(p);
+    const statusColor = CATALOG_STATUS_COLORS[p.status] || "#6B7280";
+    return (
+      <Pressable
+        key={p.id}
+        style={({ pressed }) => [
+          styles.catalogListCard,
+          pressed && { opacity: 0.85 },
+        ]}
+        onPress={() => {
+          setSelectedProduct(p);
+          setActionSheetVisible(true);
+        }}
+      >
+        {p.thumbnail ? (
+          <Image
+            source={{ uri: p.thumbnail }}
+            style={styles.catalogListThumb}
+          />
+        ) : (
+          <View
+            style={[
+              styles.catalogListThumb,
+              styles.catalogCardImagePlaceholder,
+            ]}
+          >
+            <Ionicons name="cube" size={22} color="#fff" />
+          </View>
+        )}
+        <View style={styles.catalogListBody}>
+          <View style={styles.catalogListTopRow}>
+            <Text style={styles.catalogCardCategory} numberOfLines={1}>
+              {p.category || "Uncategorized"}
+            </Text>
+            <View
+              style={[
+                styles.catalogStatusPillInline,
+                { backgroundColor: statusColor },
+              ]}
+            >
+              <Text style={styles.catalogStatusPillText}>{p.status}</Text>
+            </View>
+          </View>
+          <Text style={styles.catalogCardTitle} numberOfLines={2}>
+            {p.title}
+          </Text>
+          <View style={styles.catalogCardPriceRow}>
+            <Text style={[styles.catalogCardPrice, { color: accent }]}>
+              {formatPrice(flashSale ? flashSale.flash_price : p.price)}
+            </Text>
+            {flashSale && (
+              <View style={styles.catalogFlashPillInline}>
+                <Ionicons name="flash" size={9} color="#fff" />
+                <Text style={styles.catalogFlashPillText}>
+                  -{getFlashDiscountPct(flashSale)}%
+                </Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.catalogCardMeta}>
+            <Ionicons name="trending-up" size={11} color={themeColors.muted} />
+            <Text style={styles.catalogCardMetaText}>
+              {p.sold_count || 0} sold ·{" "}
+              {p.is_preorder ? "Preorder" : `${p.quantity || 0} in stock`}
+            </Text>
+          </View>
+        </View>
+        <Ionicons
+          name="chevron-forward"
+          size={16}
+          color={themeColors.muted}
+          style={styles.catalogListChevron}
+        />
+      </Pressable>
+    );
+  };
 
   // ── Catalog tab ─────────────────────────────────────────────────────────
   const renderCatalog = () => (
@@ -1929,99 +2113,97 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             </Text>
           </Pressable>
         ))}
-        {categories.map((c) => (
-          <Pressable
-            key={c.id}
-            style={[
-              styles.filterChip,
-              categoryFilter === c.name && styles.filterChipActive,
-            ]}
-            onPress={() => setCategoryFilter(c.name)}
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                categoryFilter === c.name && styles.filterChipTextActive,
-              ]}
-            >
-              {c.name}
-            </Text>
-          </Pressable>
-        ))}
       </ScrollView>
 
-      <View style={styles.sortRow}>
-        <Text style={styles.sortLabel}>Sort</Text>
-        {["recent", "price-desc", "price-asc", "alpha"].map((key) => (
+      {/* Toolbar: Sort & Filter popup trigger + grid/list view switch */}
+      <View style={styles.catalogToolbar}>
+        <Pressable
+          style={styles.catalogSortButton}
+          onPress={() => setSortModalVisible(true)}
+        >
+          <Ionicons name="swap-vertical" size={16} color="#fff" />
+          <Text style={styles.catalogSortButtonText} numberOfLines={1}>
+            {activeSortLabel}
+          </Text>
+          {selectedCategories.length > 0 && (
+            <View style={styles.catalogFilterBadge}>
+              <Text style={styles.catalogFilterBadgeText}>
+                {selectedCategories.length}
+              </Text>
+            </View>
+          )}
+          <Ionicons name="chevron-down" size={14} color="#fff" />
+        </Pressable>
+        <View style={styles.catalogViewToggle}>
           <Pressable
-            key={key}
-            style={[styles.sortChip, sortBy === key && styles.sortChipActive]}
-            onPress={() => setSortBy(key)}
+            style={[
+              styles.catalogViewToggleBtn,
+              catalogViewMode === "grid" && styles.catalogViewToggleBtnActive,
+            ]}
+            onPress={() => setCatalogViewMode("grid")}
+            accessibilityRole="button"
+            accessibilityLabel="Grid view"
           >
-            <Text
-              style={[
-                styles.sortChipText,
-                sortBy === key && styles.sortChipTextActive,
-              ]}
-            >
-              {key === "recent"
-                ? "Recent"
-                : key === "alpha"
-                  ? "A-Z"
-                  : key === "price-desc"
-                    ? "Price ↓"
-                    : "Price ↑"}
-            </Text>
+            <Ionicons
+              name="grid-outline"
+              size={16}
+              color={catalogViewMode === "grid" ? "#fff" : themeColors.muted}
+            />
           </Pressable>
-        ))}
+          <Pressable
+            style={[
+              styles.catalogViewToggleBtn,
+              catalogViewMode === "list" && styles.catalogViewToggleBtnActive,
+            ]}
+            onPress={() => setCatalogViewMode("list")}
+            accessibilityRole="button"
+            accessibilityLabel="List view"
+          >
+            <Ionicons
+              name="list-outline"
+              size={16}
+              color={catalogViewMode === "list" ? "#fff" : themeColors.muted}
+            />
+          </Pressable>
+        </View>
       </View>
 
       {loading ? (
-        <View style={styles.productGrid}>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <View key={`ph-${i}`} style={styles.productPlaceholderCard}>
-              <ProductCardPlaceholder />
-            </View>
-          ))}
-        </View>
-      ) : filteredProducts.length === 0 ? (
-        <Text style={styles.emptyNote}>No products found.</Text>
-      ) : (
-        <View style={styles.productGrid}>
-          {filteredProducts.map((p) => (
-            <Pressable
-              key={p.id}
-              style={styles.productCard}
-              onPress={() => {
-                setSelectedProduct(p);
-                setActionSheetVisible(true);
-              }}
-            >
-              {p.thumbnail ? (
-                <Image
-                  source={{ uri: p.thumbnail }}
-                  style={styles.productImage}
-                />
-              ) : (
-                <View
-                  style={[styles.productImage, styles.productImagePlaceholder]}
-                >
-                  <Ionicons name="cube" size={28} color="#fff" />
-                </View>
-              )}
-              <View style={styles.productBody}>
-                <Text style={styles.productTitle} numberOfLines={1}>
-                  {p.title}
-                </Text>
-                <View style={styles.productRow}>
-                  <Text style={[styles.productPrice, { color: accent }]}>
-                    {formatPrice(p.price)}
-                  </Text>
-                  <Text style={styles.productStatus}>{p.status}</Text>
+        catalogViewMode === "grid" ? (
+          <View style={styles.catalogGrid}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <View key={`ph-${i}`} style={styles.catalogGridItem}>
+                <ProductCardPlaceholder />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.catalogList}>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <View key={`lph-${i}`} style={styles.catalogListSkeleton}>
+                <View style={styles.catalogListThumbSkeleton} />
+                <View style={{ flex: 1 }}>
+                  <View style={styles.catalogListLine} />
+                  <View
+                    style={[
+                      styles.catalogListLine,
+                      { width: "60%", marginTop: 10 },
+                    ]}
+                  />
                 </View>
               </View>
-            </Pressable>
-          ))}
+            ))}
+          </View>
+        )
+      ) : filteredProducts.length === 0 ? (
+        <Text style={styles.emptyNote}>No products found.</Text>
+      ) : catalogViewMode === "grid" ? (
+        <View style={styles.catalogGrid}>
+          {filteredProducts.map(renderCatalogGridCard)}
+        </View>
+      ) : (
+        <View style={styles.catalogList}>
+          {filteredProducts.map(renderCatalogListRow)}
         </View>
       )}
     </View>
@@ -2421,7 +2603,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     style={styles.reelThumb}
                   />
                 ) : (
-                  <Video
+                  <FeedVideo
                     source={{ uri: item.video_url }}
                     style={styles.reelThumb}
                     resizeMode="cover"
@@ -2456,6 +2638,128 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   );
 
   // Per-video popup menu (shown above the reels grid) with a delete option.
+  // ── Sort & Filter popup (catalog tab) ────────────────────────────────────
+  // Bottom sheet with radio-style sort options and multi-select category
+  // chips. Changes apply live; "Clear" deselects all categories.
+  const renderCatalogSortModal = () => (
+    <Modal
+      visible={sortModalVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setSortModalVisible(false)}
+    >
+      <Pressable
+        style={styles.modalBackdrop}
+        onPress={() => setSortModalVisible(false)}
+      >
+        <Pressable style={styles.modalCard} onPress={() => {}}>
+          <LinearGradient
+            colors={[themeColors.primary, themeColors.accent]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.modalHeader}
+          >
+            <Ionicons name="swap-vertical" size={20} color="#fff" />
+            <Text style={styles.modalHeaderTitle}>Sort &amp; Filter</Text>
+            <Pressable
+              style={styles.catalogSheetClose}
+              onPress={() => setSortModalVisible(false)}
+            >
+              <Ionicons name="close" size={22} color="#fff" />
+            </Pressable>
+          </LinearGradient>
+
+          <Text style={styles.catalogSectionLabel}>Sort by</Text>
+          {SORT_OPTIONS.map((opt) => (
+            <Pressable
+              key={opt.key}
+              style={styles.catalogSortOption}
+              onPress={() => setSortBy(opt.key)}
+            >
+              <View style={styles.catalogSortOptionLeft}>
+                <Ionicons
+                  name={opt.icon}
+                  size={18}
+                  color={
+                    sortBy === opt.key ? themeColors.primary : themeColors.muted
+                  }
+                />
+                <Text
+                  style={[
+                    styles.catalogSortOptionText,
+                    sortBy === opt.key && { color: themeColors.primary },
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </View>
+              {sortBy === opt.key && (
+                <Ionicons
+                  name="checkmark-circle"
+                  size={20}
+                  color={themeColors.primary}
+                />
+              )}
+            </Pressable>
+          ))}
+
+          <View style={styles.catalogDivider} />
+
+          <View style={styles.catalogSectionHead}>
+            <Text style={styles.catalogSectionLabel}>Categories</Text>
+            {selectedCategories.length > 0 && (
+              <Pressable onPress={() => setSelectedCategories([])}>
+                <Text style={styles.catalogClearText}>Clear all</Text>
+              </Pressable>
+            )}
+          </View>
+          <View style={styles.catalogCategoryWrap}>
+            {categories.map((c) => {
+              const selected = selectedCategories.includes(c.name);
+              return (
+                <Pressable
+                  key={c.id}
+                  style={[
+                    styles.catalogCategoryChip,
+                    selected && styles.catalogCategoryChipActive,
+                  ]}
+                  onPress={() => toggleCategorySelection(c.name)}
+                >
+                  <Ionicons
+                    name={selected ? "checkmark" : c.icon || "pricetag-outline"}
+                    size={13}
+                    color={selected ? "#fff" : themeColors.muted}
+                  />
+                  <Text
+                    style={[
+                      styles.catalogCategoryChipText,
+                      selected && styles.catalogCategoryChipTextActive,
+                    ]}
+                  >
+                    {c.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.primaryButton,
+              { backgroundColor: accent, marginHorizontal: 18, marginTop: 18 },
+            ]}
+            onPress={() => setSortModalVisible(false)}
+          >
+            <Text style={styles.primaryButtonText}>
+              Show {filteredProducts.length} product
+              {filteredProducts.length === 1 ? "" : "s"}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+
   const renderCardMenu = () => (
     <Modal
       visible={Boolean(cardMenu)}
@@ -2724,55 +3028,158 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           />
         }
       >
-        <View
-          style={[
-            styles.cover,
-            {
-              paddingTop: insets.top,
-              backgroundColor: avatarUri ? "transparent" : accent,
-            },
-          ]}
-        >
-          <Pressable
-            style={[styles.menuButton, { top: insets.top + 12 }]}
-            onPress={() => setMenuVisible(true)}
-            hitSlop={12}
-          >
-            <Ionicons name="menu-outline" size={26} color="#fff" />
-          </Pressable>
+        {/* ── Cover ──────────────────────────────────────────────────── */}
+        <View style={[styles.cover, { paddingTop: insets.top }]}>
           {avatarUri ? (
             <Image
               source={{ uri: avatarUri }}
               style={styles.coverImage}
               resizeMode="cover"
             />
-          ) : null}
+          ) : (
+            <LinearGradient
+              style={styles.coverImage}
+              colors={[themeColors.gradientStart, themeColors.gradientEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            />
+          )}
           <View style={styles.coverOverlay} />
+
+          {/* Floating top action row — menu / edit / search / more */}
+          <View style={[styles.topBar, { top: insets.top + 8 }]}>
+            <Pressable
+              style={styles.topBarBtn}
+              onPress={() => setMenuVisible(true)}
+              hitSlop={10}
+            >
+              <Ionicons name="menu-outline" size={24} color="#fff" />
+            </Pressable>
+            <View style={styles.topBarRight}>
+              <Pressable
+                style={styles.topBarBtn}
+                onPress={() => nav.navigate("SellerProfile")}
+                hitSlop={10}
+              >
+                <Ionicons name="create-outline" size={20} color="#fff" />
+              </Pressable>
+              <Pressable
+                style={styles.topBarBtn}
+                onPress={() => setActiveTab("catalog")}
+                hitSlop={10}
+              >
+                <Ionicons name="search-outline" size={20} color="#fff" />
+              </Pressable>
+              <Pressable
+                style={styles.topBarBtn}
+                onPress={() => setMenuVisible(true)}
+                hitSlop={10}
+              >
+                <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Camera button (post a status — like "Share a note…") */}
+          <Pressable
+            style={styles.coverCameraBtn}
+            onPress={() => nav.navigate("StatusCreator")}
+            hitSlop={10}
+          >
+            <Ionicons name="camera-outline" size={20} color="#fff" />
+          </Pressable>
         </View>
 
-        <View style={styles.profileBlock}>
-          <View style={[styles.avatarWrap, { borderColor: accent }]}>
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <Ionicons name="storefront" size={48} color="#fff" />
+        {/* ── Profile sheet ──────────────────────────────────────────── */}
+        <View style={styles.profileSheet}>
+          <View style={styles.profileRow}>
+            <Pressable
+              style={styles.avatarWrap}
+              onPress={() => nav.navigate("SellerProfile")}
+            >
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                  <Ionicons name="storefront" size={40} color="#fff" />
+                </View>
+              )}
+              <View
+                style={[
+                  styles.avatarCameraBadge,
+                  { backgroundColor: themeColors.surface },
+                ]}
+              >
+                <Ionicons name="camera" size={13} color={themeColors.dark} />
               </View>
-            )}
-          </View>
-          <Text style={styles.name}>{sellerName}</Text>
-          <View style={styles.statRow}>
-            <View style={styles.statItemSeller}>
-              <Text style={styles.statValueSeller}>{followerCount}</Text>
-              <Text style={styles.statLabelSeller}>Followers</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItemSeller}>
-              <Text style={styles.statValueSeller}>{followingCount}</Text>
-              <Text style={styles.statLabelSeller}>Following</Text>
+            </Pressable>
+            <View style={styles.profileInfoCol}>
+              <View style={styles.nameRow}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {sellerName}
+                </Text>
+                <Pressable
+                  style={styles.chevronBtn}
+                  onPress={() => setControlsExpanded((v) => !v)}
+                  hitSlop={8}
+                >
+                  {!isLive && <View style={styles.chevronDot} />}
+                  <Ionicons
+                    name={controlsExpanded ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color={themeColors.dark}
+                  />
+                </Pressable>
+              </View>
+              <Text style={styles.statLine} numberOfLines={1}>
+                <Text style={styles.statBold}>{formatCount(followerCount)}</Text>
+                {" followers"}
+                <Text style={styles.statDot}>{" · "}</Text>
+                <Text style={styles.statBold}>
+                  {formatCount(followingCount)}
+                </Text>
+                {" following"}
+                <Text style={styles.statDot}>{" · "}</Text>
+                <Text style={styles.statBold}>{products.length}</Text>
+                {" products"}
+              </Text>
             </View>
           </View>
 
+          {/* Info line — mirrors "Digital creator · Self-Employed" */}
+          <View style={styles.infoRow}>
+            <Ionicons
+              name="storefront-outline"
+              size={15}
+              color={themeColors.dark}
+            />
+            <Text style={styles.infoText}>Store</Text>
+            <Text style={styles.infoDot}>{"·"}</Text>
+            <View
+              style={[
+                styles.liveDot,
+                {
+                  backgroundColor: isLive
+                    ? themeColors.success
+                    : themeColors.muted,
+                },
+              ]}
+            />
+            <Text
+              style={[
+                styles.infoText,
+                {
+                  color: isLive ? themeColors.success : themeColors.muted,
+                  fontWeight: "800",
+                },
+              ]}
+            >
+              {isLive ? "Open" : "Closed"}
+            </Text>
+          </View>
+
+          {controlsExpanded && (
+            <>
           {/* Go Live toggle — only enabled when a verified Paystack account exists */}
           <Pressable
             style={[
@@ -2881,29 +3288,58 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </Text>
             </Pressable>
           )}
+            </>
+          )}
+
+          {/* Action buttons — Dashboard / Create */}
+          <View style={styles.actionRow}>
+            <Pressable
+              style={[styles.actionBtn, styles.actionBtnPrimary]}
+              onPress={() => setActiveTab("insights")}
+            >
+              <Ionicons name="bar-chart" size={20} color="#fff" />
+              <Text style={styles.actionBtnPrimaryText}>Dashboard</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              onPress={openCreateModal}
+            >
+              <Ionicons name="add" size={22} color={themeColors.dark} />
+              <Text style={styles.actionBtnSecondaryText}>Create</Text>
+            </Pressable>
+          </View>
         </View>
 
-        <View style={styles.tabBar}>
+        {/* ── Tab pills ──────────────────────────────────────────────── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabBar}
+          contentContainerStyle={styles.tabBarContent}
+        >
           {TABS.map((tab) => {
             const isActive = activeTab === tab;
             return (
               <Pressable
                 key={tab}
                 style={[
-                  styles.tab,
-                  isActive && { backgroundColor: accent + "14" },
+                  styles.tabPill,
+                  isActive && { backgroundColor: accent + "1A" },
                 ]}
                 onPress={() => setActiveTab(tab)}
               >
-                <Ionicons
-                  name={TAB_ICONS[tab]}
-                  size={22}
-                  color={isActive ? accent : themeColors.muted}
-                />
+                <Text
+                  style={[
+                    styles.tabPillText,
+                    isActive && { color: accent },
+                  ]}
+                >
+                  {TAB_LABELS[tab]}
+                </Text>
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
         <View style={styles.tabContent}>
           {activeTab === "catalog" && renderCatalog()}
@@ -3358,7 +3794,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   <View style={styles.videoGrid}>
                     {existingVideoUrl || videoUri ? (
                       <View style={styles.videoWrap}>
-                        <Video
+                        <FeedVideo
                           source={{ uri: videoUri || existingVideoUrl }}
                           style={styles.videoThumb}
                           resizeMode="cover"
@@ -3721,7 +4157,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           >
             <Pressable
               style={styles.modalHeaderBtn}
-              onPress={() => setWaModalVisible(false)}
+              onPress={() => {
+                setWaModalVisible(false);
+                setWaAuthUrl(null);
+                setWaConnecting(false);
+              }}
               hitSlop={8}
             >
               <Ionicons name="close" size={22} color={themeColors.dark} />
@@ -3741,42 +4181,70 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          <ScrollView
-            style={styles.modalBody}
-            contentContainerStyle={styles.modalBodyContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.waOauthCard}>
-              <Ionicons name="logo-whatsapp" size={40} color="#25D366" />
-              <Text style={styles.waOauthTitle}>Connect with Facebook</Text>
-              <Text style={styles.waHint}>
-                Tap below to securely sign in to your Meta Business account.
-                Select your Business Portfolio, WhatsApp Business Account, and
-                Catalog — we'll import your products automatically. You'll never
-                need to copy or paste a token.
-              </Text>
-            </View>
-          </ScrollView>
+          {waAuthUrl ? (
+            // Embedded Signup runs entirely inside this WebView: the edge
+            // function 302s to Meta's dialog, Meta redirects back with the
+            // code, and the function's result page postMessages us the
+            // outcome (handled by onWaWebViewMessage). No popups needed.
+            <WebView
+              source={{ uri: waAuthUrl }}
+              style={{ flex: 1, backgroundColor: "#fff" }}
+              javaScriptEnabled
+              domStorageEnabled
+              thirdPartyCookiesEnabled
+              sharedCookiesEnabled
+              originWhitelist={["*"]}
+              setSupportMultipleWindows={false}
+              onMessage={onWaWebViewMessage}
+              onError={() => {
+                setWaConnecting(false);
+                setWaAuthUrl(null);
+                toast.error(
+                  "Connection failed",
+                  "Could not load the Meta signup page",
+                );
+              }}
+            />
+          ) : (
+            <>
+              <ScrollView
+                style={styles.modalBody}
+                contentContainerStyle={styles.modalBodyContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View style={styles.waOauthCard}>
+                  <Ionicons name="logo-whatsapp" size={40} color="#25D366" />
+                  <Text style={styles.waOauthTitle}>Connect with Facebook</Text>
+                  <Text style={styles.waHint}>
+                    Tap below to securely sign in to your Meta Business account.
+                    Select your Business Portfolio, WhatsApp Business Account,
+                    and Catalog — we'll import your products automatically.
+                    You'll never need to copy or paste a token.
+                  </Text>
+                </View>
+              </ScrollView>
 
-          <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={[
-                styles.waFacebookButton,
-                waConnecting && styles.waFacebookButtonDisabled,
-              ]}
-              onPress={connectWhatsAppCatalog}
-              disabled={waConnecting}
-            >
-              {waConnecting ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="logo-facebook" size={20} color="#fff" />
-              )}
-              <Text style={styles.waFacebookText}>
-                {waConnecting ? "Connecting…" : "Continue with Facebook"}
-              </Text>
-            </TouchableOpacity>
-          </View>
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[
+                    styles.waFacebookButton,
+                    waConnecting && styles.waFacebookButtonDisabled,
+                  ]}
+                  onPress={connectWhatsAppCatalog}
+                  disabled={waConnecting}
+                >
+                  {waConnecting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="logo-facebook" size={20} color="#fff" />
+                  )}
+                  <Text style={styles.waFacebookText}>
+                    {waConnecting ? "Connecting…" : "Continue with Facebook"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </KeyboardAvoidingView>
       </Modal>
 
@@ -3974,6 +4442,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       </Modal>
       {renderMenuDrawer()}
       {renderProductSelectModal()}
+      {renderCatalogSortModal()}
     </View>
   );
 };
@@ -3983,11 +4452,12 @@ const buildSellerAdminStyles = (c) =>
     container: { flex: 1, backgroundColor: c.background },
     center: { alignItems: "center", justifyContent: "center" },
     scrollContent: { flexGrow: 1, paddingBottom: 20 },
+    // ── Cover (full-bleed store banner) ────────────────────────────────────
     cover: {
-      borderRadius: radius.lg,
-      height: 160,
+      height: 220,
       position: "relative",
       overflow: "hidden",
+      backgroundColor: c.primary,
     },
     coverImage: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
     coverOverlay: {
@@ -3998,49 +4468,210 @@ const buildSellerAdminStyles = (c) =>
       bottom: 0,
       backgroundColor: "rgba(0,0,0,0.25)",
     },
-    profileBlock: {
-      borderRadius: radius.lg,
+    topBar: {
+      position: "absolute",
+      left: 16,
+      right: 16,
+      zIndex: 5,
+      flexDirection: "row",
       alignItems: "center",
-      marginTop: -50,
-      paddingHorizontal: 20,
+      justifyContent: "space-between",
+    },
+    topBarRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    topBarBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: radius.full,
+      backgroundColor: "rgba(0,0,0,0.22)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    coverCameraBtn: {
+      position: "absolute",
+      right: 16,
+      bottom: 34,
+      width: 42,
+      height: 42,
+      borderRadius: radius.full,
+      backgroundColor: "rgba(0,0,0,0.28)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.35)",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 5,
+    },
+
+    // ── Profile sheet (rounded card overlapping the cover) ────────────────
+    profileSheet: {
+      backgroundColor: c.light,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      marginTop: -24,
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 18,
+    },
+    profileRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
     },
     avatarWrap: {
+      width: 92,
+      height: 92,
       borderRadius: radius.full,
-      borderWidth: 4,
-      backgroundColor: c.light,
-      shadowColor: "#000",
-      shadowOpacity: 0.1,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 4,
+      position: "relative",
     },
-    avatar: { width: 100, height: 100, borderRadius: radius.full },
+    avatar: {
+      width: 92,
+      height: 92,
+      borderRadius: radius.full,
+      backgroundColor: c.surface,
+    },
     avatarPlaceholder: {
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: c.primary,
     },
-    name: {
-      fontSize: 20,
-      fontWeight: "800",
-      color: c.dark,
-      marginTop: 12,
-      textAlign: "center",
-    },
-    tabBar: {
-      flexDirection: "row",
-      marginHorizontal: 16,
-      marginTop: 16,
-      backgroundColor: c.surface,
-      borderRadius: radius.lg,
-      padding: 4,
-    },
-    tab: {
-      flex: 1,
+    avatarCameraBadge: {
+      position: "absolute",
+      right: -2,
+      bottom: -2,
+      width: 30,
+      height: 30,
+      borderRadius: radius.full,
+      borderWidth: 2.5,
+      borderColor: c.light,
       alignItems: "center",
       justifyContent: "center",
-      paddingVertical: 10,
-      borderRadius: radius.md,
+    },
+    profileInfoCol: {
+      flex: 1,
+      minWidth: 0,
+    },
+    nameRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    name: {
+      flex: 1,
+      fontSize: 22,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    chevronBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: radius.full,
+      backgroundColor: c.surface,
+      alignItems: "center",
+      justifyContent: "center",
+      position: "relative",
+    },
+    chevronDot: {
+      position: "absolute",
+      top: 2,
+      right: 2,
+      width: 10,
+      height: 10,
+      borderRadius: radius.full,
+      backgroundColor: c.badgeDanger,
+      borderWidth: 1.5,
+      borderColor: c.light,
+    },
+    statLine: {
+      fontSize: 14,
+      color: c.muted,
+      marginTop: 4,
+    },
+    statBold: {
+      fontWeight: "800",
+      color: c.dark,
+    },
+    statDot: {
+      color: c.muted,
+    },
+    infoRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 14,
+    },
+    infoText: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.dark,
+    },
+    infoDot: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.muted,
+      marginHorizontal: 2,
+    },
+    liveDot: {
+      width: 8,
+      height: 8,
+      borderRadius: radius.full,
+      marginHorizontal: 2,
+    },
+
+    // ── Action buttons (Dashboard / Create) ───────────────────────────────
+    actionRow: {
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 16,
+    },
+    actionBtn: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingVertical: 13,
+      borderRadius: radius.xl,
+    },
+    actionBtnPrimary: {
+      backgroundColor: c.primary,
+    },
+    actionBtnPrimaryText: {
+      color: "#FFFFFF",
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    actionBtnSecondary: {
+      backgroundColor: c.surface,
+    },
+    actionBtnSecondaryText: {
+      color: c.dark,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+
+    // ── Tab pills ──────────────────────────────────────────────────────────
+    tabBar: {
+      marginTop: 14,
+      flexGrow: 0,
+    },
+    tabBarContent: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 16,
+    },
+    tabPill: {
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      borderRadius: radius.full,
+    },
+    tabPillText: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.muted,
     },
     tabContent: {
       borderRadius: radius.lg,
@@ -4216,7 +4847,7 @@ const buildSellerAdminStyles = (c) =>
       gap: 8,
       paddingHorizontal: 14,
       paddingVertical: 10,
-      borderRadius: radius.md,
+      borderRadius: radius.xl,
     },
     attachVideoButtonText: {
       color: c.light,
@@ -4236,7 +4867,7 @@ const buildSellerAdminStyles = (c) =>
     attachProductChip: {
       width: 140,
       padding: 10,
-      borderRadius: radius.md,
+      borderRadius: radius.xl,
       borderWidth: 1,
       borderColor: c.border,
       backgroundColor: c.light,
@@ -4258,7 +4889,7 @@ const buildSellerAdminStyles = (c) =>
       gap: 8,
       paddingHorizontal: 14,
       paddingVertical: 10,
-      borderRadius: radius.md,
+      borderRadius: radius.xl,
       borderWidth: 1,
       borderColor: c.primary,
       backgroundColor: c.light,
@@ -4309,7 +4940,7 @@ const buildSellerAdminStyles = (c) =>
       borderRadius: radius.md,
     },
     chipRow: {
-      borderRadius: radius.md,
+      borderRadius: radius.xl,
       marginBottom: 12,
     },
     videoDeleteList: {
@@ -4396,7 +5027,7 @@ const buildSellerAdminStyles = (c) =>
     },
     summaryChip: {
       backgroundColor: c.light,
-      borderRadius: radius.md,
+      borderRadius: radius.xl,
       paddingHorizontal: 14,
       paddingVertical: 8,
       marginRight: 8,
@@ -4473,7 +5104,7 @@ const buildSellerAdminStyles = (c) =>
     filterChip: {
       paddingHorizontal: 14,
       paddingVertical: 8,
-      borderRadius: radius.sm,
+      borderRadius: radius.lg,
       backgroundColor: c.light,
       borderWidth: 1,
       borderColor: c.surface,
@@ -4482,24 +5113,6 @@ const buildSellerAdminStyles = (c) =>
     filterChipActive: { backgroundColor: c.dark, borderColor: c.dark },
     filterChipText: { color: c.muted, fontWeight: "600", fontSize: 12 },
     filterChipTextActive: { color: c.light, fontWeight: "700" },
-    sortRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      marginBottom: 12,
-    },
-    sortLabel: { fontSize: 12, fontWeight: "700", color: c.muted },
-    sortChip: {
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: radius.xs,
-      backgroundColor: c.light,
-      borderWidth: 1,
-      borderColor: c.surface,
-    },
-    sortChipActive: { backgroundColor: c.primary, borderColor: c.primary },
-    sortChipText: { fontSize: 11, fontWeight: "600", color: c.muted },
-    sortChipTextActive: { color: c.light, fontWeight: "700" },
     productGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
     productCard: {
       width: "47%",
@@ -4590,7 +5203,7 @@ const buildSellerAdminStyles = (c) =>
       marginTop: 10,
       paddingHorizontal: 14,
       paddingVertical: 8,
-      borderRadius: radius.sm,
+      borderRadius: radius.lg,
     },
     progressText: { fontWeight: "700", fontSize: 13 },
     successBadge: {
@@ -4733,7 +5346,7 @@ const buildSellerAdminStyles = (c) =>
       backgroundColor: c.background,
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: radius.md,
+      borderRadius: radius.full,
       paddingHorizontal: 12,
       paddingVertical: 11,
       fontSize: 14,
@@ -4894,7 +5507,7 @@ const buildSellerAdminStyles = (c) =>
       minWidth: 110,
       paddingVertical: 14,
       paddingHorizontal: 16,
-      borderRadius: radius.md,
+      borderRadius: radius.xl,
       alignItems: "center",
       justifyContent: "center",
       flexDirection: "row",
@@ -4910,7 +5523,7 @@ const buildSellerAdminStyles = (c) =>
     submitButton: {
       marginTop: 20,
       paddingVertical: 14,
-      borderRadius: radius.md,
+      borderRadius: radius.xl,
       alignItems: "center",
     },
     submitButtonText: { color: c.light, fontWeight: "700", fontSize: 15 },
@@ -4954,17 +5567,6 @@ const buildSellerAdminStyles = (c) =>
       borderRadius: radius.lg,
       padding: 20,
       margin: 24,
-    },
-    menuButton: {
-      position: "absolute",
-      right: 16,
-      zIndex: 5,
-      width: 38,
-      height: 38,
-      borderRadius: radius.full,
-      backgroundColor: "rgba(0,0,0,0.18)",
-      alignItems: "center",
-      justifyContent: "center",
     },
     drawerOverlay: {
       flex: 1,
@@ -5050,30 +5652,6 @@ const buildSellerAdminStyles = (c) =>
       color: c.primary,
       fontWeight: "700",
     },
-    statRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      marginTop: 14,
-      backgroundColor: "rgba(255,255,255,0.92)",
-      borderRadius: radius.lg,
-      paddingVertical: 10,
-      paddingHorizontal: 22,
-    },
-    statItemSeller: {
-      borderRadius: radius.sm,
-      alignItems: "center",
-      paddingHorizontal: 14,
-    },
-    statValueSeller: { fontSize: 18, fontWeight: "900", color: c.dark },
-    statLabelSeller: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: c.muted,
-      marginTop: 2,
-    },
-    statDivider: { width: 1, height: 30, backgroundColor: c.border },
-
     // Go Live toggle
     goLiveRow: {
       flexDirection: "row",
@@ -5179,7 +5757,7 @@ const buildSellerAdminStyles = (c) =>
       justifyContent: "center",
       gap: 8,
       backgroundColor: c.primary,
-      borderRadius: radius.md,
+      borderRadius: radius.xl,
       paddingVertical: 12,
       marginTop: 10,
     },
@@ -5217,7 +5795,7 @@ const buildSellerAdminStyles = (c) =>
       justifyContent: "center",
       gap: 10,
       backgroundColor: "#1877F2",
-      borderRadius: radius.md,
+      borderRadius: radius.xl,
       paddingVertical: 14,
     },
     waFacebookButtonDisabled: {
@@ -5282,6 +5860,262 @@ const buildSellerAdminStyles = (c) =>
       borderColor: c.border,
     },
     addSpecText: { fontSize: 14, fontWeight: "700" },
+    // ── Catalog toolbar / redesigned product cards ───────────────────────────
+    catalogToolbar: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
+    },
+    catalogSortButton: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginRight: 12,
+      backgroundColor: c.dark,
+      borderRadius: radius.full,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+    },
+    catalogSortButtonText: {
+      flexShrink: 1,
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.light,
+    },
+    catalogFilterBadge: {
+      minWidth: 18,
+      height: 18,
+      paddingHorizontal: 4,
+      borderRadius: radius.full,
+      backgroundColor: "#EF4444",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    catalogFilterBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
+    catalogViewToggle: {
+      flexDirection: "row",
+      backgroundColor: c.light,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.full,
+      overflow: "hidden",
+    },
+    catalogViewToggleBtn: {
+      width: 38,
+      height: 34,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    catalogViewToggleBtnActive: { backgroundColor: c.dark },
+    catalogGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+    catalogGridItem: { width: "47%" },
+    catalogList: { gap: 10 },
+    catalogCard: {
+      width: "47%",
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    catalogCardMedia: {
+      width: "100%",
+      height: 130,
+      backgroundColor: c.surface,
+    },
+    catalogCardImage: { width: "100%", height: "100%" },
+    catalogCardImagePlaceholder: {
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary,
+    },
+    catalogStatusPill: {
+      position: "absolute",
+      top: 8,
+      left: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+    },
+    catalogStatusPillInline: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+    },
+    catalogStatusPillText: {
+      color: "#fff",
+      fontSize: 9,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    catalogFlashPill: {
+      position: "absolute",
+      bottom: 8,
+      right: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+      backgroundColor: "#EF4444",
+    },
+    catalogFlashPillInline: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+      backgroundColor: "#EF4444",
+    },
+    catalogFlashPillText: { color: "#fff", fontSize: 9, fontWeight: "800" },
+    catalogCardBody: { padding: 10, gap: 3 },
+    catalogCardCategory: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: c.muted,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    catalogCardTitle: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.dark,
+      lineHeight: 17,
+      minHeight: 34,
+    },
+    catalogCardPriceRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 2,
+      flexWrap: "wrap",
+    },
+    catalogCardPrice: { fontSize: 14, fontWeight: "800" },
+    catalogCardOriginal: {
+      fontSize: 11,
+      color: c.muted,
+      textDecorationLine: "line-through",
+    },
+    catalogCardMetaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: 4,
+    },
+    catalogCardMeta: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      marginTop: 2,
+    },
+    catalogCardMetaText: { fontSize: 10, color: c.muted, fontWeight: "600" },
+    catalogListCard: {
+      flexDirection: "row",
+      alignItems: "stretch",
+      gap: 12,
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.surface,
+      padding: 10,
+      overflow: "hidden",
+    },
+    catalogListThumb: {
+      width: 86,
+      height: 86,
+      borderRadius: radius.sm,
+      backgroundColor: c.surface,
+    },
+    catalogListBody: { flex: 1, minWidth: 0, justifyContent: "center", gap: 3 },
+    catalogListTopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    catalogListChevron: { alignSelf: "center" },
+    catalogListSkeleton: {
+      flexDirection: "row",
+      gap: 12,
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.surface,
+      padding: 10,
+    },
+    catalogListThumbSkeleton: {
+      width: 86,
+      height: 86,
+      borderRadius: radius.sm,
+      backgroundColor: c.surface,
+    },
+    catalogListLine: {
+      height: 12,
+      borderRadius: radius.xxs,
+      backgroundColor: c.surface,
+    },
+    // ── Sort & Filter popup ──────────────────────────────────────────────────
+    catalogSheetClose: { marginLeft: "auto", padding: 2 },
+    catalogSectionLabel: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: c.muted,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+      paddingHorizontal: 18,
+      marginTop: 14,
+    },
+    catalogSectionHead: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingRight: 18,
+    },
+    catalogClearText: { fontSize: 12, fontWeight: "700", color: "#EF4444" },
+    catalogSortOption: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 12,
+      paddingHorizontal: 18,
+      marginTop: 4,
+    },
+    catalogSortOptionLeft: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    catalogSortOptionText: { fontSize: 15, fontWeight: "600", color: c.dark },
+    catalogDivider: { height: 1, backgroundColor: c.surface, marginTop: 8 },
+    catalogCategoryWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      paddingHorizontal: 18,
+      marginTop: 10,
+    },
+    catalogCategoryChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.background || c.light,
+    },
+    catalogCategoryChipActive: {
+      backgroundColor: c.primary,
+      borderColor: c.primary,
+    },
+    catalogCategoryChipText: { fontSize: 12, fontWeight: "600", color: c.muted },
+    catalogCategoryChipTextActive: { color: c.light, fontWeight: "700" },
   });
 
 export default SellerAdminScreen;

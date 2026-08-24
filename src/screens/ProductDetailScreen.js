@@ -35,6 +35,7 @@ import { injectAdsIntoProducts } from "../utils/adPlacement";
 import { shareProduct } from "../utils/shareUtils";
 import { useDeepLinkProductHandler } from "../hooks/useDeepLinkProductHandler";
 import { InstallAppBanner } from "../components/InstallAppBanner";
+import { radius } from "../theme/colors";
 
 const SELLER_BADGE_CONFIG = {
   verified: {
@@ -116,7 +117,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     productId: deepLinkProductId,
     sku: deepLinkSku,
     action: deepLinkAction,
-  } = route.params;
+  } = route.params || {};
   const productId = deepLinkProductId || initialProduct?.id;
   const [loadingDeepLink, setLoadingDeepLink] = useState(false);
   const insets = useSafeAreaInsets();
@@ -155,6 +156,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
   const [canExpandDetails, setCanExpandDetails] = useState(false);
   const previewScrollRef = useRef(null);
+  const heroScrollRef = useRef(null);
 
   // Deep-link cart hand-off (?action=add_to_cart). Resolves SKU links, adds to
   // cart once details are loaded, and navigates to Cart. Dedup-guarded.
@@ -209,7 +211,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
   // Refresh product data from database
   const refreshProductData = async () => {
-    if (!supabase) return;
+    if (!supabase || !product?.id) return;
     try {
       const { data, error } = await supabase
         .from("express_products")
@@ -289,7 +291,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   // Check if product is wishlisted
   useEffect(() => {
     const checkWishlist = async () => {
-      if (!user || !supabase) return;
+      if (!user || !supabase || !product?.id) return;
       const { data } = await supabase
         .from("express_wishlists")
         .select("id")
@@ -299,12 +301,12 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       setIsWishlisted(!!data);
     };
     checkWishlist();
-  }, [user, product.id]);
+  }, [user, product?.id]);
 
   // Fetch reviews
   useEffect(() => {
     const fetchReviews = async () => {
-      if (!supabase) return;
+      if (!supabase || !product?.id) return;
 
       // First, get approved reviews
       const { data: approvedReviews, count } = await supabase
@@ -345,11 +347,15 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       }
     };
     fetchReviews();
-  }, [product.id, user]);
+  }, [product?.id, user]);
 
   // Fetch flash sale data for this product
   useEffect(() => {
     const fetchFlashSale = async () => {
+      if (!product?.id) {
+        setLoadingFlashSale(false);
+        return;
+      }
       setLoadingFlashSale(true);
       const result = await flashSaleService.getProductFlashSale(product.id);
       if (result.success && result.data) {
@@ -358,7 +364,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       setLoadingFlashSale(false);
     };
     fetchFlashSale();
-  }, [product.id]);
+  }, [product?.id]);
 
   useEffect(() => {
     fetchAdsByPlacement("product_detail").then((ads) =>
@@ -593,7 +599,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     } finally {
       setWishlistLoading(false);
     }
-  }, [user, isWishlisted, product.id, navigation, toast]);
+  }, [user, isWishlisted, product?.id, navigation, toast]);
 
   const submitReview = async () => {
     if (!user) {
@@ -944,14 +950,48 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         contentInsetAdjustmentBehavior="automatic"
         overScrollMode="never"
       >
-        <View style={styles.imageContainer}>
+        {/* Header row — back, title, wishlist (per new design) */}
+        <View style={styles.headerRow}>
+          <Pressable
+            style={styles.headerCircle}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="chevron-back" size={22} color={themeColors.dark} />
+          </Pressable>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            Product Details
+          </Text>
+          <Pressable
+            style={styles.headerCircle}
+            onPress={toggleWishlist}
+            disabled={wishlistLoading}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle wishlist"
+          >
+            {wishlistLoading ? (
+              <ActivityIndicator size="small" color={themeColors.primary} />
+            ) : (
+              <Ionicons
+                name={isWishlisted ? "heart" : "heart-outline"}
+                size={20}
+                color={isWishlisted ? themeColors.primary : themeColors.dark}
+              />
+            )}
+          </Pressable>
+        </View>
+
+        {/* Hero image card */}
+        <View style={styles.heroCard}>
           <ScrollView
+            ref={heroScrollRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             onScroll={(e) => {
               const index = Math.round(
-                e.nativeEvent.contentOffset.x / screenWidth,
+                e.nativeEvent.contentOffset.x / (screenWidth - 32),
               );
               setActiveImageIndex(index);
             }}
@@ -970,18 +1010,11 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               >
                 <Image
                   source={{ uri: imageUri }}
-                  style={[styles.image, { width: screenWidth }]}
+                  style={[styles.heroImage, { width: screenWidth - 32 }]}
                 />
               </Pressable>
             ))}
           </ScrollView>
-
-          {/* Soft scrim so the white status-bar icons stay readable */}
-          <LinearGradient
-            colors={["rgba(15,23,42,0.35)", "rgba(15,23,42,0)"]}
-            style={styles.imageTopScrim}
-            pointerEvents="none"
-          />
 
           {product.thumbnails && product.thumbnails.length > 1 && (
             <View style={styles.pagination}>
@@ -998,96 +1031,69 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           )}
         </View>
 
-        {/* Floating glass-style controls over the hero image */}
-        <Pressable
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={22} color={themeColors.dark} />
-        </Pressable>
-        <View style={styles.topActions}>
-          <Pressable
-            style={styles.topActionButton}
-            onPress={() => handleShareProduct()}
-          >
-            <Ionicons name="share-outline" size={20} color={themeColors.dark} />
-          </Pressable>
-          <Pressable
-            style={styles.topActionButton}
-            onPress={toggleWishlist}
-            disabled={wishlistLoading}
-          >
-            {wishlistLoading ? (
-              <ActivityIndicator size="small" color={themeColors.primary} />
-            ) : (
-              <Ionicons
-                name={isWishlisted ? "heart" : "heart-outline"}
-                size={20}
-                color={isWishlisted ? themeColors.primary : themeColors.dark}
-              />
+        {/* Thumbnail strip — tap to jump, +N opens the fullscreen preview */}
+        {product.thumbnails && product.thumbnails.length > 1 && (
+          <View style={styles.thumbStrip}>
+            {product.thumbnails.slice(0, 5).map((imageUri, index) => (
+              <Pressable
+                key={index}
+                onPress={() => {
+                  heroScrollRef.current?.scrollTo({
+                    x: index * (screenWidth - 32),
+                    animated: true,
+                  });
+                  setActiveImageIndex(index);
+                }}
+                style={[
+                  styles.thumb,
+                  activeImageIndex === index && styles.thumbActive,
+                ]}
+              >
+                <Image source={{ uri: imageUri }} style={styles.thumbImage} />
+              </Pressable>
+            ))}
+            {product.thumbnails.length > 5 && (
+              <Pressable
+                style={styles.thumbMore}
+                onPress={() => {
+                  setPreviewImageIndex(4);
+                  setShowImagePreview(true);
+                }}
+              >
+                <Image
+                  source={{ uri: product.thumbnails[4] }}
+                  style={styles.thumbImage}
+                />
+                <View style={styles.thumbMoreOverlay}>
+                  <Text style={styles.thumbMoreText}>
+                    +{product.thumbnails.length - 5}
+                  </Text>
+                </View>
+              </Pressable>
             )}
-          </Pressable>
-        </View>
+          </View>
+        )}
 
         <View style={styles.content}>
-          <View style={styles.vendorRow}>
-            <View style={styles.sellerPill}>
-              <Ionicons
-                name="storefront-outline"
-                size={14}
-                color={themeColors.primary}
-              />
-              <Text style={styles.vendor}>
-                {product.seller?.name || product.vendor}
-              </Text>
-            </View>
-            {!!product.category && (
-              <View style={styles.categoryPill}>
-                <Text style={styles.categoryPillText}>{product.category}</Text>
-              </View>
-            )}
-          </View>
-
-          {product.seller?.badges && product.seller.badges.length > 0 && (
-            <View style={styles.sellerBadgesRow}>
-              {product.seller.badges.slice(0, 3).map((badgeId) => {
-                const badge = SELLER_BADGE_CONFIG[badgeId];
-                if (!badge) return null;
-                return (
-                  <View
-                    key={badgeId}
-                    style={[
-                      styles.sellerBadge,
-                      { backgroundColor: badge.color + "20" },
-                    ]}
-                  >
-                    <Ionicons name={badge.icon} size={14} color={badge.color} />
-                    <Text
-                      style={[styles.sellerBadgeText, { color: badge.color }]}
-                    >
-                      {badge.label}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-
-          <Text style={styles.title}>{product.title}</Text>
-
-          <View style={styles.ratingRow}>
-            <View style={styles.ratingChip}>
+          {/* Category + rating row */}
+          <View style={styles.infoTopRow}>
+            <Text style={styles.categoryLabel} numberOfLines={1}>
+              {product.category || "General"}
+            </Text>
+            <View style={styles.ratingInline}>
               <Ionicons name="star" size={16} color="#F59E0B" />
-              <Text style={styles.ratingText}>
-                {reviewCount > 0
-                  ? product.rating?.toFixed(1) || "0.0"
-                  : "No reviews"}
+              <Text style={styles.ratingInlineText}>
+                {reviewCount > 0 ? product.rating?.toFixed(1) || "0.0" : "New"}
               </Text>
+              {reviewCount > 0 && (
+                <Text style={styles.ratingInlineCount}>({reviewCount})</Text>
+              )}
             </View>
-            {reviewCount > 0 && (
-              <Text style={styles.ratingCount}>{reviewCount} reviews</Text>
-            )}
           </View>
+
+          <Text style={styles.title} numberOfLines={2}>
+            {product.title}
+          </Text>
 
           {hasFlashSale && (
             <View style={styles.flashSaleSection}>
@@ -1153,28 +1159,56 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 )}
               </View>
             </View>
-            {savingsAmount > 0 && (
-              <Text style={styles.savingsText}>
-                You save GH₵{savingsAmount.toLocaleString()}
-              </Text>
-            )}
-          </View>
+            {/* Savings · shipping · badges — one horizontal meta row */}
+            <View style={styles.priceMetaRow}>
+              {savingsAmount > 0 && (
+                <View style={styles.savingsChip}>
+                  <Text style={styles.savingsChipText}>
+                    You save GH₵{savingsAmount.toLocaleString()}
+                  </Text>
+                </View>
+              )}
 
-          {/* Product Badges — fall back to seller badges when product has none */}
-          {(() => {
-            const productBadges = product.badges || [];
-            const sellerBadges = product.seller?.badges || [];
-            const displayBadges =
-              productBadges.length > 0 ? productBadges : sellerBadges;
-            if (displayBadges.length === 0) return null;
-            return (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.badgeRow}
-                contentContainerStyle={styles.badgeRowContent}
+              <View
+                style={[
+                  styles.metaChip,
+                  product.shipping_fee > 0 && styles.metaChipMuted,
+                ]}
               >
-                {displayBadges.map((label) => {
+                <Ionicons
+                  name={
+                    product.shipping_fee > 0
+                      ? "bicycle-outline"
+                      : "rocket-outline"
+                  }
+                  size={13}
+                  color={product.shipping_fee > 0 ? themeColors.muted : "#059669"}
+                />
+                <Text
+                  style={[
+                    styles.metaChipText,
+                    product.shipping_fee > 0 && { color: themeColors.muted },
+                  ]}
+                >
+                  {product.shipping_fee > 0
+                    ? `Delivery GH₵${Number(product.shipping_fee).toLocaleString()}`
+                    : "Free Delivery"}
+                </Text>
+              </View>
+
+              {/* Badges — shipping/delivery badges are filtered out so they
+                  don't duplicate the shipping chip above. */}
+              {(() => {
+                const productBadges = (product.badges || []).filter(
+                  (b) => !/ship|deliver/i.test(String(b)),
+                );
+                const sellerBadges = (product.seller?.badges || []).filter(
+                  (b) => !/ship|deliver/i.test(String(b)),
+                );
+                const displayBadges =
+                  productBadges.length > 0 ? productBadges : sellerBadges;
+                if (displayBadges.length === 0) return null;
+                return displayBadges.map((label) => {
                   const normalizedLabel = label.toLowerCase();
                   const badgeConfig =
                     PRODUCT_BADGE_CONFIG[normalizedLabel] ||
@@ -1208,117 +1242,60 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                       </Text>
                     </View>
                   );
-                })}
-              </ScrollView>
-            );
-          })()}
+                });
+              })()}
+            </View>
+          </View>
 
-          {/* Shipping & Stock Info Row */}
-          <View style={styles.deliveryRow}>
-            {/* Shipping pill */}
-            <View
-              style={[
-                styles.deliveryPill,
-                product.shipping_fee > 0
-                  ? styles.deliveryPillPaid
-                  : styles.deliveryPillFree,
-              ]}
-            >
-              <View
-                style={[
-                  styles.deliveryIconWrap,
-                  {
-                    backgroundColor:
-                      product.shipping_fee > 0
-                        ? themeColors.primary + "22"
-                        : "#D1FAE5",
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={
-                    product.shipping_fee > 0
-                      ? "bicycle-outline"
-                      : "rocket-outline"
-                  }
-                  size={18}
-                  color={
-                    product.shipping_fee > 0 ? themeColors.primary : "#059669"
-                  }
+          {/* Seller card — avatar, name, chat & share actions */}
+          <View style={styles.sellerCard}>
+            <View style={styles.sellerLeft}>
+              {product.seller?.avatar ? (
+                <Image
+                  source={{ uri: product.seller.avatar }}
+                  style={styles.sellerAvatar}
                 />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.deliveryLabel}>
-                  {product.shipping_fee > 0 ? "Delivery" : "Free Delivery"}
-                </Text>
-                {product.shipping_fee > 0 && (
-                  <Text style={styles.deliveryValue}>
-                    GH₵{Number(product.shipping_fee).toLocaleString()}
+              ) : (
+                <View style={styles.sellerAvatarFallback}>
+                  <Text style={styles.sellerAvatarInitial}>
+                    {(product.seller?.name || product.vendor || "S")
+                      .charAt(0)
+                      .toUpperCase()}
                   </Text>
-                )}
+                </View>
+              )}
+              <View style={styles.sellerMeta}>
+                <Text style={styles.sellerName} numberOfLines={1}>
+                  {product.seller?.name || product.vendor || "Seller"}
+                </Text>
+                <Text style={styles.sellerRole}>Seller</Text>
               </View>
             </View>
-
-            {/* Stock pill */}
-            <View
-              style={[
-                styles.deliveryPill,
-                !isOutOfStock
-                  ? styles.deliveryPillInStock
-                  : styles.deliveryPillOutOfStock,
-              ]}
-            >
-              <View
-                style={[
-                  styles.deliveryIconWrap,
-                  {
-                    backgroundColor: isPreorder
-                      ? "#FEF3C7"
-                      : !isOutOfStock
-                        ? "#D1FAE5"
-                        : "#FEE2E2",
-                  },
-                ]}
+            <View style={styles.sellerActions}>
+              <Pressable
+                style={styles.roundAction}
+                onPress={handleChatWithSeller}
+                accessibilityRole="button"
+                accessibilityLabel="Chat with seller"
               >
                 <Ionicons
-                  name={
-                    isPreorder
-                      ? "time-outline"
-                      : !isOutOfStock
-                        ? "checkmark-circle-outline"
-                        : "close-circle-outline"
-                  }
+                  name="chatbubble-ellipses"
                   size={18}
-                  color={
-                    isPreorder
-                      ? "#D97706"
-                      : !isOutOfStock
-                        ? "#059669"
-                        : "#DC2626"
-                  }
+                  color={themeColors.primary}
                 />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.deliveryLabel}>
-                  {isPreorder
-                    ? "Preorder"
-                    : !isOutOfStock
-                      ? "In Stock"
-                      : "Out of Stock"}
-                </Text>
-                {isPreorder ? (
-                  <Text style={[styles.deliveryValue, { color: "#D97706" }]}>
-                    Ships later
-                  </Text>
-                ) : (
-                  !isOutOfStock &&
-                  hasInventoryValue && (
-                    <Text style={[styles.deliveryValue, { color: "#059669" }]}>
-                      {availableStock} available
-                    </Text>
-                  )
-                )}
-              </View>
+              </Pressable>
+              <Pressable
+                style={styles.roundAction}
+                onPress={() => handleShareProduct()}
+                accessibilityRole="button"
+                accessibilityLabel="Share product"
+              >
+                <Ionicons
+                  name="share-outline"
+                  size={18}
+                  color={themeColors.primary}
+                />
+              </Pressable>
             </View>
           </View>
 
@@ -1434,7 +1411,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Description</Text>
+            <Text style={styles.sectionTitle}>Product Details</Text>
             <View>
               <Markdown style={markdownStyles} onLinkPress={(url) => {}}>
                 {!isDetailsExpanded
@@ -2105,7 +2082,7 @@ const buildProductDetailStyles = (c) =>
       left: 16,
       width: 42,
       height: 42,
-      borderRadius: 21,
+      borderRadius: radius.xl,
       backgroundColor: c.whiteAlpha,
       alignItems: "center",
       justifyContent: "center",
@@ -2125,7 +2102,7 @@ const buildProductDetailStyles = (c) =>
     topActionButton: {
       width: 42,
       height: 42,
-      borderRadius: 21,
+      borderRadius: radius.xl,
       backgroundColor: c.whiteAlpha,
       alignItems: "center",
       justifyContent: "center",
@@ -2136,12 +2113,9 @@ const buildProductDetailStyles = (c) =>
       elevation: 4,
     },
     content: {
-      padding: 20,
-      paddingTop: 24,
+      padding: 16,
+      paddingTop: 18,
       backgroundColor: c.background,
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
-      marginTop: -28,
     },
     vendorRow: {
       flexDirection: "row",
@@ -2200,12 +2174,13 @@ const buildProductDetailStyles = (c) =>
       fontWeight: "600",
     },
     title: {
-      fontSize: 25,
+      fontSize: 22,
       fontWeight: "800",
       color: c.dark,
-      lineHeight: 32,
+      lineHeight: 29,
       letterSpacing: -0.3,
-      marginBottom: 10,
+      marginTop: 10,
+      marginBottom: 4,
     },
     similarProductsScroll: {
       width: "100%",
@@ -2218,7 +2193,10 @@ const buildProductDetailStyles = (c) =>
       width: 220,
     },
     badgeRow: {
-      marginTop: 10,
+      marginTop: 12,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
     },
     badgeRowContent: {
       flexDirection: "row",
@@ -2228,12 +2206,13 @@ const buildProductDetailStyles = (c) =>
     productBadge: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 12,
+      gap: 5,
+      paddingHorizontal: 10,
+      height: 28,
+      borderRadius: 999,
       borderWidth: 1,
-      borderColor: "rgba(0, 0, 0, 0.08)",
+      borderColor: c.border,
+      backgroundColor: c.surface,
     },
     productBadgeText: {
       fontSize: 11,
@@ -2251,18 +2230,14 @@ const buildProductDetailStyles = (c) =>
       fontWeight: "600",
     },
     priceSection: {
-      backgroundColor: c.light,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: 14,
+      marginTop: 12,
       marginBottom: 14,
     },
     priceRow: {
       marginBottom: 0,
     },
     price: {
-      fontSize: 30,
+      fontSize: 28,
       fontWeight: "900",
       color: c.primary,
       letterSpacing: -0.5,
@@ -2270,7 +2245,7 @@ const buildProductDetailStyles = (c) =>
     priceContainer: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
+      gap: 10,
       flexWrap: "wrap",
     },
     originalPrice: {
@@ -2293,9 +2268,43 @@ const buildProductDetailStyles = (c) =>
     flashSaleSection: {
       marginBottom: 12,
     },
-    savingsText: {
-      marginTop: 2,
-      fontSize: 13,
+    // Savings · shipping · badges — one horizontal meta row under the price
+    priceMetaRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 12,
+    },
+    savingsChip: {
+      height: 28,
+      borderRadius: radius.full,
+      paddingHorizontal: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#0596691A",
+    },
+    savingsChipText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: "#059669",
+    },
+    metaChip: {
+      height: 28,
+      borderRadius: radius.full,
+      paddingHorizontal: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+    },
+    metaChipMuted: {
+      backgroundColor: "transparent",
+    },
+    metaChipText: {
+      fontSize: 11,
       fontWeight: "700",
       color: "#059669",
     },
@@ -2335,7 +2344,7 @@ const buildProductDetailStyles = (c) =>
       backgroundColor: "#FFF7ED",
       borderColor: "#FDBA74",
       borderWidth: 1,
-      borderRadius: 999,
+      borderRadius: radius.full,
       paddingHorizontal: 10,
       paddingVertical: 6,
     },
@@ -2517,7 +2526,7 @@ const buildProductDetailStyles = (c) =>
     chatButton: {
       width: 54,
       height: 54,
-      borderRadius: 18,
+      borderRadius: radius.full,
       backgroundColor: c.primary + "12",
       alignItems: "center",
       justifyContent: "center",
@@ -2526,7 +2535,7 @@ const buildProductDetailStyles = (c) =>
     },
     ctaButton: {
       flex: 1,
-      borderRadius: 18,
+      borderRadius: radius.xl,
       overflow: "hidden",
       shadowColor: c.primary,
       shadowOpacity: 0.25,
@@ -2562,7 +2571,7 @@ const buildProductDetailStyles = (c) =>
       paddingHorizontal: 12,
       paddingVertical: 6,
       backgroundColor: c.light,
-      borderRadius: 20,
+      borderRadius: radius.full,
     },
     writeReviewText: {
       fontSize: 14,
@@ -2583,7 +2592,7 @@ const buildProductDetailStyles = (c) =>
       paddingHorizontal: 20,
       paddingVertical: 10,
       backgroundColor: c.primary,
-      borderRadius: 8,
+      borderRadius: radius.md,
     },
     writeFirstReviewText: {
       color: c.light,
@@ -2662,7 +2671,7 @@ const buildProductDetailStyles = (c) =>
     commentInput: {
       borderWidth: 1,
       borderColor: c.light,
-      borderRadius: 8,
+      borderRadius: radius.md,
       padding: 12,
       fontSize: 16,
       minHeight: 100,
@@ -2683,7 +2692,7 @@ const buildProductDetailStyles = (c) =>
       paddingVertical: 14,
       alignItems: "center",
       backgroundColor: c.light,
-      borderRadius: 8,
+      borderRadius: radius.md,
     },
     cancelText: {
       fontSize: 16,
@@ -2695,7 +2704,7 @@ const buildProductDetailStyles = (c) =>
       paddingVertical: 14,
       alignItems: "center",
       backgroundColor: c.primary,
-      borderRadius: 8,
+      borderRadius: radius.md,
     },
     submitDisabled: {
       opacity: 0.6,
@@ -2712,7 +2721,7 @@ const buildProductDetailStyles = (c) =>
       paddingHorizontal: 12,
       paddingVertical: 6,
       backgroundColor: c.light,
-      borderRadius: 20,
+      borderRadius: radius.full,
     },
     editReviewText: {
       fontSize: 14,
@@ -2755,7 +2764,7 @@ const buildProductDetailStyles = (c) =>
       flex: 1,
       borderWidth: 1,
       borderColor: c.light,
-      borderRadius: 8,
+      borderRadius: radius.md,
       padding: 8,
       fontSize: 14,
       minHeight: 40,
@@ -2768,7 +2777,7 @@ const buildProductDetailStyles = (c) =>
       paddingHorizontal: 16,
       paddingVertical: 8,
       backgroundColor: c.primary,
-      borderRadius: 8,
+      borderRadius: radius.md,
       justifyContent: "center",
     },
     commentButtonDisabled: {
@@ -2837,7 +2846,7 @@ const buildProductDetailStyles = (c) =>
     },
     tagChip: {
       backgroundColor: c.primary + "15",
-      borderRadius: 16,
+      borderRadius: radius.xl,
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderWidth: 1,
@@ -2930,7 +2939,7 @@ const buildProductDetailStyles = (c) =>
     },
     variantAddButton: {
       marginTop: 16,
-      borderRadius: 8,
+      borderRadius: radius.md,
       overflow: "hidden",
     },
     variantAddGradient: {
@@ -2974,58 +2983,6 @@ const buildProductDetailStyles = (c) =>
       fontSize: 11,
       fontWeight: "700",
       color: c.primary,
-    },
-    // Shipping & stock redesign
-    deliveryRow: {
-      flexDirection: "row",
-      gap: 10,
-      marginBottom: 24,
-    },
-    deliveryPill: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      borderRadius: 16,
-      padding: 12,
-      borderWidth: 1,
-    },
-    deliveryPillFree: {
-      backgroundColor: "#F0FDF4",
-      borderColor: "#BBF7D0",
-    },
-    deliveryPillPaid: {
-      backgroundColor: c.primary + "08",
-      borderColor: c.primary + "28",
-    },
-    deliveryPillInStock: {
-      backgroundColor: "#F0FDF4",
-      borderColor: "#BBF7D0",
-    },
-    deliveryPillOutOfStock: {
-      backgroundColor: "#FEF2F2",
-      borderColor: "#FECACA",
-    },
-    deliveryIconWrap: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    deliveryLabel: {
-      fontSize: 12,
-      fontWeight: "600",
-      color: c.muted,
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-      lineHeight: 16,
-    },
-    deliveryValue: {
-      fontSize: 15,
-      fontWeight: "800",
-      color: c.primary,
-      lineHeight: 20,
     },
     // Fullscreen image preview
     previewOverlay: {
@@ -3085,6 +3042,174 @@ const buildProductDetailStyles = (c) =>
       color: "rgba(255,255,255,0.55)",
       fontSize: 13,
       fontWeight: "600",
+    },
+    // ── Redesigned header / hero / seller card ──────────────────────────────
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      // Android draws the app under the status bar — clear it.
+      paddingTop:
+        Platform.OS === "android" ? (StatusBar.currentHeight || 0) + 10 : 10,
+      paddingBottom: 12,
+    },
+    headerCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+    },
+    headerTitle: {
+      fontSize: 17,
+      fontWeight: "700",
+      color: c.dark,
+      flex: 1,
+      textAlign: "center",
+      marginHorizontal: 8,
+    },
+    heroCard: {
+      marginHorizontal: 16,
+      borderRadius: 20,
+      overflow: "hidden",
+      backgroundColor: c.border,
+    },
+    heroImage: {
+      height: 360,
+      backgroundColor: c.border,
+    },
+    thumbStrip: {
+      flexDirection: "row",
+      gap: 10,
+      paddingHorizontal: 16,
+      marginTop: 14,
+    },
+    thumb: {
+      width: 56,
+      height: 56,
+      borderRadius: 12,
+      overflow: "hidden",
+      borderWidth: 2,
+      borderColor: "transparent",
+    },
+    thumbActive: {
+      borderColor: c.primary,
+    },
+    thumbImage: {
+      width: "100%",
+      height: "100%",
+    },
+    thumbMore: {
+      width: 56,
+      height: 56,
+      borderRadius: 12,
+      overflow: "hidden",
+    },
+    thumbMoreOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(15, 23, 42, 0.6)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    thumbMoreText: {
+      color: "#FFFFFF",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    infoTopRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    categoryLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.muted,
+      flexShrink: 1,
+    },
+    ratingInline: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    ratingInlineText: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    ratingInlineCount: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.muted,
+    },
+    sellerCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: 14,
+      padding: 12,
+      borderRadius: 16,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    sellerLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      flex: 1,
+      marginRight: 8,
+    },
+    sellerAvatar: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor: c.border,
+    },
+    sellerAvatarFallback: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary + "22",
+    },
+    sellerAvatarInitial: {
+      color: c.primary,
+      fontSize: 16,
+      fontWeight: "800",
+    },
+    sellerMeta: {
+      flex: 1,
+      gap: 1,
+    },
+    sellerName: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    sellerRole: {
+      fontSize: 12,
+      color: c.muted,
+    },
+    sellerActions: {
+      flexDirection: "row",
+      gap: 10,
+    },
+    roundAction: {
+      width: 38,
+      height: 38,
+      borderRadius: radius.full,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
     },
   });
 

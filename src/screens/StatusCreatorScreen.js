@@ -17,7 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "../lib/supabase";
-import { getTheme } from "../theme/colors";
+import {getTheme, radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useAuth } from "../context/AuthContext";
@@ -260,16 +260,16 @@ const buildStatusCreatorStyles = (c) =>
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   title: { fontSize: 18, fontWeight: "700", color: c.dark },
   modeRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
-  modeBtn: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: c.light, flexDirection: "row", gap: 8, alignItems: "center" },
+  modeBtn: { padding: 12, borderRadius: radius.lg, borderWidth: 1, borderColor: c.light, flexDirection: "row", gap: 8, alignItems: "center" },
   modeBtnActive: { borderColor: c.primary, backgroundColor: c.primary + "10" },
   modeText: { marginLeft: 6 },
   section: { marginBottom: 16 },
   sectionTitle: { fontWeight: "700", marginBottom: 8 },
   imageBtnRow: { flexDirection: "row", gap: 12, marginBottom: 12 },
-  imagePickBtn: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  imagePickBtn: { flex: 1, padding: 12, borderRadius: radius.lg, borderWidth: 1, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
   imagePickBtnText: { fontWeight: "700" },
-  textInput: { borderWidth: 1, borderColor: c.light, padding: 12, borderRadius: 8, backgroundColor: c.light },
-  postBtn: { padding: 14, borderRadius: 12, alignItems: "center", marginTop: 12 },
+  textInput: { borderWidth: 1, borderColor: c.light, padding: 12, borderRadius: radius.lg, backgroundColor: c.light },
+  postBtn: { padding: 14, borderRadius: radius.xl, alignItems: "center", marginTop: 12 },
   postText: { color: c.light, fontWeight: "800" },
  });
 

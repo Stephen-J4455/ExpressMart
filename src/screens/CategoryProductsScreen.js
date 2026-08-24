@@ -26,6 +26,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
+import { radius } from "../theme/colors";
 
 const SORT_OPTIONS = [
   { key: "newest", label: "Newest", icon: "time-outline" },
@@ -387,7 +388,7 @@ const buildCategoryProductsStyles = (c) =>
     backButtonInner: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: radius.full,
       backgroundColor: "rgba(255,255,255,0.22)",
       alignItems: "center",
       justifyContent: "center",
@@ -502,7 +503,7 @@ const buildCategoryProductsStyles = (c) =>
       marginTop: 8,
       paddingHorizontal: 28,
       paddingVertical: 14,
-      borderRadius: 14,
+      borderRadius: radius.xl,
     },
     browseText: {
       color: c.light,

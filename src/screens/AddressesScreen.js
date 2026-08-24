@@ -21,6 +21,7 @@ import { supabase } from "../lib/supabase";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
+import { radius } from "../theme/colors";
 
 export const AddressesScreen = ({ navigation }) => {
   const { user } = useAuth();
@@ -369,7 +370,7 @@ const buildAddressesStyles = (c) =>
     backgroundColor: c.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: radius.md,
     marginTop: 24,
   },
   addAddressText: {
@@ -449,7 +450,7 @@ const buildAddressesStyles = (c) =>
     paddingHorizontal: 18,
     paddingVertical: 8,
     backgroundColor: c.primary,
-    borderRadius: 10,
+    borderRadius: radius.lg,
   },
   modalSaveText: { color: c.light, fontSize: 14, fontWeight: "700" },
   modalScroll: { flex: 1, padding: 20 },
@@ -463,7 +464,7 @@ const buildAddressesStyles = (c) =>
   fieldInput: {
     borderWidth: 1.5,
     borderColor: c.border,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,

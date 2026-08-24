@@ -28,6 +28,7 @@ import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { radius } from "../theme/colors";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -766,7 +767,7 @@ const buildSearchResultsStyles = (c) =>
     backButton: {
       width: 40,
       height: 40,
-      borderRadius: 12,
+      borderRadius: radius.xl,
       backgroundColor: c.surface,
       alignItems: "center",
       justifyContent: "center",
@@ -776,7 +777,7 @@ const buildSearchResultsStyles = (c) =>
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: c.surface,
-      borderRadius: 12,
+      borderRadius: radius.full,
       paddingHorizontal: 12,
       paddingVertical: 10,
       gap: 8,
@@ -864,7 +865,7 @@ const buildSearchResultsStyles = (c) =>
       backgroundColor: c.light,
       paddingHorizontal: 16,
       paddingVertical: 10,
-      borderRadius: 20,
+      borderRadius: radius.xl,
       borderWidth: 1,
       borderColor: c.border,
       shadowColor: "#000",
@@ -1024,7 +1025,7 @@ const buildSearchResultsStyles = (c) =>
       backgroundColor: c.primary,
       paddingHorizontal: 24,
       paddingVertical: 12,
-      borderRadius: 25,
+      borderRadius: radius.full,
     },
     emptyActionText: {
       color: c.light,

@@ -16,6 +16,7 @@ import { supabase } from "../lib/supabase";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
+import { radius } from "../theme/colors";
 
 const NOTIFICATION_ICONS = {
   order_placed: "cart",
@@ -368,7 +369,7 @@ const buildNotificationsStyles = (c) =>
     paddingHorizontal: 32,
     paddingVertical: 14,
     backgroundColor: c.primary,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     marginTop: 24,
   },
   signInText: {

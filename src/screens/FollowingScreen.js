@@ -16,6 +16,7 @@ import { useShop } from "../context/ShopContext";
 import { useToast } from "../context/ToastContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { radius } from "../theme/colors";
 
 export const FollowingScreen = ({ navigation }) => {
   const { sellers, followedSellers, unfollowSeller, isFollowing } = useShop();
@@ -229,7 +230,7 @@ const buildFollowingStyles = (c) =>
   exploreIconBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     backgroundColor: c.primary + "15",
     alignItems: "center",
     justifyContent: "center",
@@ -312,7 +313,7 @@ const buildFollowingStyles = (c) =>
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: 8,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: c.accent + "50",
     backgroundColor: c.accent + "10",
@@ -332,7 +333,7 @@ const buildFollowingStyles = (c) =>
     gap: 4,
     backgroundColor: c.primary + "12",
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: radius.lg,
   },
   visitBtnText: {
     fontSize: 12,
@@ -369,7 +370,7 @@ const buildFollowingStyles = (c) =>
     lineHeight: 22,
     marginBottom: 32,
   },
-  exploreBtn: { borderRadius: 14, overflow: "hidden" },
+  exploreBtn: { borderRadius: radius.xl, overflow: "hidden" },
   exploreBtnGradient: {
     flexDirection: "row",
     alignItems: "center",

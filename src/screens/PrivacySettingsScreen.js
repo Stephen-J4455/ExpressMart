@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useAuth } from "../context/AuthContext";
+import { radius } from "../theme/colors";
 
 export const PrivacySettingsScreen = ({ navigation }) => {
   const { deleteAccount } = useAuth();
@@ -418,7 +419,7 @@ const buildPrivacySettingsStyles = (c) =>
     paddingVertical: 8,
     paddingHorizontal: 12,
     backgroundColor: c.light,
-    borderRadius: 6,
+    borderRadius: radius.md,
   },
   policyButtonText: {
     fontSize: 14,
@@ -454,7 +455,7 @@ const buildPrivacySettingsStyles = (c) =>
   passwordInput: {
     borderWidth: 1,
     borderColor: c.light,
-    borderRadius: 8,
+    borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: c.dark,
@@ -476,7 +477,7 @@ const buildPrivacySettingsStyles = (c) =>
   },
   modalDeleteBtn: {
     backgroundColor: c.accent,
-    borderRadius: 8,
+    borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 10,
     minWidth: 88,

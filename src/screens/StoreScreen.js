@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useShop } from "../context/ShopContext";
 import { useAuth } from "../context/AuthContext";
-import { getTheme } from "../theme/colors";
+import {getTheme, radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useToast } from "../context/ToastContext";
@@ -1224,7 +1224,7 @@ const buildStoreStyles = (c) =>
       gap: 4,
       paddingHorizontal: 10,
       paddingVertical: 6,
-      borderRadius: 8,
+      borderRadius: radius.md,
       backgroundColor: "rgba(239, 68, 68, 0.1)",
       borderWidth: 1.5,
       borderColor: "#ef4444",
@@ -1479,7 +1479,7 @@ const buildStoreStyles = (c) =>
       backgroundColor: c.primary,
       paddingVertical: 12,
       paddingHorizontal: 20,
-      borderRadius: 8,
+      borderRadius: radius.md,
       gap: 8,
     },
     chatButtonText: {
@@ -1498,7 +1498,7 @@ const buildStoreStyles = (c) =>
       gap: 6,
       paddingVertical: 8,
       paddingHorizontal: 12,
-      borderRadius: 8,
+      borderRadius: radius.md,
       backgroundColor: c.light,
       minWidth: 100,
       justifyContent: "center",
@@ -1625,7 +1625,7 @@ const buildStoreStyles = (c) =>
       justifyContent: "center",
       backgroundColor: "rgba(255,255,255,0.2)",
       paddingVertical: 14,
-      borderRadius: 30,
+      borderRadius: radius.full,
       gap: 10,
       borderWidth: 1,
       borderColor: "rgba(255,255,255,0.3)",

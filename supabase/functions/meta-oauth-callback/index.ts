@@ -4,23 +4,28 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 /**
  * Meta Embedded Signup (OAuth) callback for WhatsApp catalog connection.
  *
- * Meta's dashboard rejects custom URL schemes (expressmart://...) in the
- * "Valid OAuth Redirect URIs" field, so we register THIS https edge-function
- * URL there instead. The flow:
- *   1. App opens Meta's Embedded Signup with redirect_uri = this function's
- *      https URL, and a `state` payload carrying { sellerId, scheme }.
- *   2. Meta redirects the browser here (GET) with ?code=...&state=...
- *   3. This function exchanges the code for a long-lived WABA token, resolves
+ * The whole OAuth round trip runs INSIDE the app's WebView against THIS https
+ * endpoint (registered once in the Meta dashboard). The flow:
+ *   1. App opens its WebView here with ?launch=1&sellerId=...
+ *   2. The function 302s to Meta's Facebook Login for Business dialog using
+ *      the Embedded Signup config_id (App Dashboard → WhatsApp → Embedded
+ *      Signup Builder), requesting Embedded Signup v4 via the `extras`
+ *      payload, with this function's URL as redirect_uri and a
+ *      `state` payload of { sellerId, client: "webview" }.
+ *   3. Meta redirects the WebView back here (GET) with ?code=...&state=...
+ *   4. This function exchanges the code for a long-lived WABA token, resolves
  *      the catalog id, and stores it in seller_meta_connections (service role).
- *   4. It then 302-redirects back into the app via the custom scheme
- *      (expressmart://wa/callback?result=...), which the app's Linking
- *      listener picks up. The merchant never sees a raw token.
+ *   5. It responds with a small result page that hands the outcome to the app
+ *      via postMessage (no custom-scheme deep link involved). When hit in a
+ *      regular browser it falls back to the expressmart:// deep link.
  *
  * A POST handler is also provided for programmatic / non-browser use and
- * returns JSON instead of redirecting.
+ * returns JSON instead of an HTML page.
  *
  * Required secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
- * META_APP_ID, META_APP_SECRET, META_GRAPH_VERSION (optional, default v19.0).
+ * META_APP_ID, META_APP_SECRET, META_CONFIG_ID,
+ * META_GRAPH_VERSION (optional, default v21.0), META_CONFIG_ID (Embedded
+ * Signup configuration id — required for the ?launch=1 flow).
  */
 
 const corsHeaders = {
@@ -39,8 +44,12 @@ const graphGet = async (path: string, params: Record<string, string>) => {
   if (json?.error) {
     const raw = json.error?.message || JSON.stringify(json.error);
     // Common Meta misconfiguration: the redirect_uri domain isn't registered
-    // in the app. Surface an actionable message instead of a raw string.
-    if (/domain.*not (registered|inscrit)|URL.*not (registered|inscrit)/i.test(raw)) {
+    // in the app. Match both EN and FR variants of the message (FR uses
+    // "Le domaine de cette URL n'est pas inscrit dans ceux de l'application").
+    if (
+      /domain(e)?.*(pas inscrit|not registered|not included)/i.test(raw) ||
+      /URL.*(pas inscrit|not registered|not included)/i.test(raw)
+    ) {
       throw new Error(
         "Meta rejected the redirect URI: its domain is not registered in " +
           "the Meta app. In the Meta App Dashboard, add " +
@@ -66,7 +75,10 @@ const graphPost = async (path: string, params: Record<string, string>) => {
   const json: any = await res.json();
   if (json?.error) {
     const raw = json.error?.message || JSON.stringify(json.error);
-    if (/domain.*not (registered|inscrit)|URL.*not (registered|inscrit)/i.test(raw)) {
+    if (
+      /domain(e)?.*(pas inscrit|not registered|not included)/i.test(raw) ||
+      /URL.*(pas inscrit|not registered|not included)/i.test(raw)
+    ) {
       throw new Error(
         "Meta rejected the redirect URI: its domain is not registered in " +
           "the Meta app. In the Meta App Dashboard, add " +
@@ -82,11 +94,7 @@ const graphPost = async (path: string, params: Record<string, string>) => {
 
 // Core OAuth handshake: exchange the code, resolve the catalog, persist.
 // Returns { success, catalogId, catalogName, wabaBusinessId, error? }.
-const runOAuth = async (
-  sellerId: string,
-  code: string,
-  redirectUri: string,
-) => {
+const runOAuth = async (sellerId: string, code: string) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const appId = Deno.env.get("META_APP_ID");
@@ -94,14 +102,20 @@ const runOAuth = async (
   if (!supabaseUrl || !serviceRoleKey || !appId || !appSecret) {
     return { success: false, error: "Supabase / Meta not configured" };
   }
-  const graphVersion = Deno.env.get("META_GRAPH_VERSION") || "v19.0";
+  const graphVersion = Deno.env.get("META_GRAPH_VERSION") || "v21.0";
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    // 1. Exchange the Embedded Signup code for a short-lived access token.
+    // 1. Exchange the Embedded Signup (v4) code for a business token.
+    //    Per Meta's Tech Provider onboarding guide, v4 codes are exchanged
+    //    with client_id/client_secret/code ONLY — no redirect_uri. This is
+    //    what finally removes the "domain not registered" failure mode.
+    console.log(
+      "[oauth] exchanging code:",
+      JSON.stringify({ appId, sellerId }),
+    );
     const tokenRes = await graphGet(`${graphVersion}/oauth/access_token`, {
       client_id: appId,
-      redirect_uri: redirectUri,
       code,
       client_secret: appSecret,
     });
@@ -110,14 +124,25 @@ const runOAuth = async (
       return { success: false, error: "Meta did not return an access token" };
     }
 
-    // 2. Exchange the short-lived token for a long-lived (60-day) token.
-    const longLivedRes = await graphGet(`${graphVersion}/oauth/access_token`, {
-      grant_type: "fb_exchange_token",
-      client_id: appId,
-      client_secret: appSecret,
-      fb_exchange_token: shortLivedToken,
-    });
-    const accessToken = longLivedRes?.access_token || shortLivedToken;
+    // 2. Try to extend to a long-lived (60-day) token. Embedded Signup v4 may
+    //    already return a long-lived business integration system user token,
+    //    in which case Meta rejects fb_exchange_token — tolerate that and
+    //    keep the token we got in step 1.
+    let accessToken = shortLivedToken;
+    try {
+      const longLivedRes = await graphGet(`${graphVersion}/oauth/access_token`, {
+        grant_type: "fb_exchange_token",
+        client_id: appId,
+        client_secret: appSecret,
+        fb_exchange_token: shortLivedToken,
+      });
+      accessToken = longLivedRes?.access_token || shortLivedToken;
+    } catch (e) {
+      console.warn(
+        "[oauth] long-lived exchange skipped:",
+        e instanceof Error ? e.message : e,
+      );
+    }
 
     // 3. Resolve the WABA id, business id, and catalog id from the token.
     const debug = await graphGet(`${graphVersion}/debug_token`, {
@@ -137,6 +162,16 @@ const runOAuth = async (
     let phoneNumberId = null as string | null;
 
     if (grantedWabaId) {
+      // v4 onboarding step: subscribe this app to the customer's WABA so
+      // Meta delivers its webhooks to us (best-effort — not fatal).
+      try {
+        await graphPost(`${grantedWabaId}/subscribed_apps`, {
+          access_token: accessToken,
+        });
+      } catch (e) {
+        console.warn("[oauth] waba subscribed_apps failed:", e);
+      }
+
       try {
         const waba = await graphGet(grantedWabaId, {
           fields: "id,name,business_id,message_template_namespace",
@@ -230,6 +265,46 @@ const buildAppRedirect = (scheme: string, result: Record<string, unknown>) => {
   return `${base}?${params.toString()}`;
 };
 
+const HTML_HEADERS = {
+  ...corsHeaders,
+  "Content-Type": "text/html; charset=utf-8",
+};
+
+// Small result page used by the in-app WebView flow. The OAuth round trip
+// happens entirely inside the WebView (launcher 302 → Meta dialog → back
+// here), so we report the outcome to React Native via postMessage instead of
+// a custom-scheme deep link. In a normal browser we still fall back to the
+// app deep link so merchants landing here directly aren't stranded.
+const buildResultHtml = (result: Record<string, unknown>, deepLink: string) => {
+  const payload = { type: "wa_oauth_result", ...result };
+  const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
+  const ok = payload.success === true;
+  const headline = ok
+    ? "✅ WhatsApp catalog connected."
+    : "❌ " + String(payload.error || "Connection failed").replace(/</g, "&lt;");
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${ok ? "WhatsApp connected" : "Connection failed"}</title>
+</head>
+<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#fafafa">
+<p id="msg" style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;padding:24px;text-align:center;color:#333;font-size:16px;line-height:1.5">${headline}</p>
+<script>
+  var payload = ${payloadJson};
+  if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+    window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+  } else {
+    setTimeout(function () {
+      window.location.replace(${JSON.stringify(deepLink).replace(/</g, "\\u003c")});
+    }, 1200);
+  }
+</script>
+</body>
+</html>`;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -238,11 +313,55 @@ serve(async (req) => {
   const url = new URL(req.url);
   const isGet = req.method === "GET";
 
-  // ── GET: Meta's browser redirect (?code=...&state=...) ──────────────────
-  // Meta only accepts https redirect URIs in its dashboard, so the app sends
-  // this function's https URL as the OAuth redirect_uri. After the exchange we
-  // 302 back into the app via the custom scheme carried in `state`.
+  // ── GET: launcher (?launch=1) and Meta's redirect (?code=...&state=...) ──
+  // The launcher kicks off Embedded Signup; Meta then returns the code here
+  // and we either postMessage the result into the WebView or deep-link back
+  // into the app (legacy browser entry point).
   if (isGet) {
+    // ── Launcher (?launch=1&sellerId=...), opened in the app's WebView ──────
+    // Kicks off Meta Embedded Signup as a full-page redirect to the Facebook
+    // Login for Business dialog (config_id from App Dashboard → WhatsApp →
+    // Embedded Signup Builder). No popup involved, so it behaves identically
+    // on iOS, Android, and web. Meta returns the code HERE, so the app never
+    // touches redirect URIs or deep links.
+    if (url.searchParams.get("launch")) {
+      const launchSellerId = (url.searchParams.get("sellerId") || "").trim();
+      const appIdCfg = Deno.env.get("META_APP_ID");
+      const appSecretCfg = Deno.env.get("META_APP_SECRET");
+      const configId = Deno.env.get("META_CONFIG_ID");
+      const graphVersionCfg =
+        Deno.env.get("META_GRAPH_VERSION") || "v21.0";
+      if (!launchSellerId || !appIdCfg || !appSecretCfg || !configId) {
+        return new Response(
+          `<!DOCTYPE html><meta charset="utf-8"><p style="font-family:sans-serif;padding:24px">WhatsApp connect is not configured. Required: sellerId, META_APP_ID, META_APP_SECRET, META_CONFIG_ID.</p>`,
+          { status: 500, headers: HTML_HEADERS },
+        );
+      }
+      const launchState = encodeURIComponent(
+        JSON.stringify({
+          sellerId: launchSellerId,
+          client: "webview",
+          ts: Date.now(),
+        }),
+      );
+      const dialogUrl =
+        `https://www.facebook.com/${graphVersionCfg}/dialog/oauth` +
+        `?client_id=${encodeURIComponent(appIdCfg)}` +
+        `&config_id=${encodeURIComponent(configId)}` +
+        `&response_type=code` +
+        `&override_default_response_type=code` +
+        // Embedded Signup version selection (v2 is deprecated Oct 2026).
+        `&extras=${encodeURIComponent(JSON.stringify({ version: "v4" }))}` +
+        `&redirect_uri=${encodeURIComponent(url.origin + url.pathname)}` +
+        `&state=${launchState}`;
+      console.log(
+        "[oauth] launching embedded signup:",
+        JSON.stringify({ sellerId: launchSellerId }),
+      );
+      return Response.redirect(dialogUrl, 302);
+    }
+
+    // ── Callback: Meta's redirect (?code=...&state=...) ──────────────────────
     const code = url.searchParams.get("code") || "";
     const stateRaw = url.searchParams.get("state") || "{}";
     const errorParam = url.searchParams.get("error");
@@ -254,28 +373,31 @@ serve(async (req) => {
     }
     const sellerId = String(state?.sellerId ?? "").trim();
     const scheme = String(state?.scheme ?? "expressmart").trim();
+    // WebView flow → report via postMessage page; browser flow → deep link.
+    const fromWebView = state?.client === "webview";
+    const respondResult = (result: Record<string, unknown>) =>
+      fromWebView
+        ? new Response(
+            buildResultHtml(result, buildAppRedirect(scheme, result)),
+            { headers: HTML_HEADERS },
+          )
+        : Response.redirect(buildAppRedirect(scheme, result), 302);
 
     if (errorParam) {
-      return Response.redirect(
-        buildAppRedirect(scheme, {
-          success: false,
-          error: `Meta: ${errorParam}`,
-        }),
-        302,
-      );
+      return respondResult({
+        success: false,
+        error: `Meta: ${errorParam}`,
+      });
     }
     if (!sellerId || !code) {
-      return Response.redirect(
-        buildAppRedirect(scheme, {
-          success: false,
-          error: "Missing seller or authorization code",
-        }),
-        302,
-      );
+      return respondResult({
+        success: false,
+        error: "Missing seller or authorization code",
+      });
     }
 
-    const result = await runOAuth(sellerId, code, url.origin + url.pathname);
-    return Response.redirect(buildAppRedirect(scheme, result), 302);
+    const result = await runOAuth(sellerId, code);
+    return respondResult(result);
   }
 
   // ── POST: programmatic / non-browser use → return JSON ───────────────────
@@ -286,7 +408,7 @@ serve(async (req) => {
     if (!sellerId) throw new Error("sellerId is required");
     if (!code) throw new Error("Missing authorization code from Meta");
 
-    const result = await runOAuth(sellerId, code, body?.redirectUri || "");
+    const result = await runOAuth(sellerId, code);
     return new Response(JSON.stringify(result), {
       status: result.success ? 200 : 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

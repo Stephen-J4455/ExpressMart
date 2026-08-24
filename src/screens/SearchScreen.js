@@ -9,6 +9,7 @@ import { useAds } from "../context/AdsContext";
 
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { radius } from "../theme/colors";
 
 const trending = [
   "smart watch",
@@ -306,7 +307,7 @@ const buildSearchStyles = (c) =>
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: radius.lg,
     backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
@@ -332,7 +333,7 @@ const buildSearchStyles = (c) =>
   clearButton: {
     padding: 6,
     backgroundColor: "#FEE2E2",
-    borderRadius: 8,
+    borderRadius: radius.md,
   },
   sectionTitle: {
     fontSize: 17,

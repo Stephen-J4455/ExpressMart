@@ -18,6 +18,7 @@ import { supabase } from "../lib/supabase";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
+import { radius } from "../theme/colors";
 
 export const WishlistScreen = ({ navigation }) => {
   const { colors: themeColors } = useTheme();
@@ -317,7 +318,7 @@ const buildWishlistStyles = (c) =>
     paddingHorizontal: 32,
     paddingVertical: 14,
     backgroundColor: c.primary,
-    borderRadius: 12,
+    borderRadius: radius.xl,
   },
   browseText: {
     color: c.light,
@@ -325,7 +326,7 @@ const buildWishlistStyles = (c) =>
     fontWeight: "600",
   },
   signInButton: {
-    borderRadius: 12,
+    borderRadius: radius.xl,
     overflow: "hidden",
     marginTop: 16,
   },
@@ -409,7 +410,7 @@ const buildWishlistStyles = (c) =>
   addButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radius.full,
     backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
@@ -417,7 +418,7 @@ const buildWishlistStyles = (c) =>
   removeButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: radius.full,
     backgroundColor: "#FEE2E2",
     alignItems: "center",
     justifyContent: "center",

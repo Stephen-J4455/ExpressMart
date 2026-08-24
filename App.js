@@ -24,8 +24,10 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { subscribeTabBarVisibility } from "./src/utils/tabBarAutoHide";
 import * as Linking from "expo-linking";
 import { useResponsive } from "./src/hooks/useResponsive";
+import { useAppStyles } from "./src/hooks/useAppStyles";
 import { WebSidebar } from "./src/components/WebSidebar";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
@@ -69,7 +71,9 @@ import { PrivacySettingsScreen } from "./src/screens/PrivacySettingsScreen";
 import { PrivacyPolicyScreen } from "./src/screens/PrivacyPolicyScreen";
 import { TermsScreen } from "./src/screens/TermsScreen";
 import { ChatScreen } from "./src/screens/ChatScreen";
-import { ChatsScreen } from "./src/screens/ChatsScreen";
+import { ChatsScreen, prefetchChatsScreenData } from "./src/screens/ChatsScreen";
+import { useShop } from "./src/context/ShopContext";
+import { useAds } from "./src/context/AdsContext";
 import { SellerChatScreen } from "./src/screens/SellerChatScreen";
 import { StatusViewer } from "./src/screens/StatusViewer";
 import StatusCreatorScreen from "./src/screens/StatusCreatorScreen";
@@ -137,12 +141,12 @@ const TabNavigator = () => {
         }}
       />
       <Tab.Screen
-        name="Stores"
-        component={TransitionedStoresScreen}
+        name="Chats"
+        component={TransitionedChatsScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
-              name={focused ? "storefront" : "storefront-outline"}
+              name={focused ? "chatbubbles" : "chatbubbles-outline"}
               size={size}
               color={color}
             />
@@ -256,22 +260,54 @@ const withTabTransition = (Wrapped) => {
 };
 
 const TransitionedHomeScreen = withTabTransition(HomeScreen);
-const TransitionedStoresScreen = withTabTransition(StoresScreen);
 const TransitionedFeedScreen = withTabTransition(FeedScreen);
 const TransitionedCartScreen = withTabTransition(CartScreen);
 const TransitionedAccountScreen = withTabTransition(AccountScreen);
 
-/** Docked, flat, theme-aware mobile bottom tab bar */
+/** Docked, flat, theme-aware mobile bottom tab bar.
+ *  Auto-hides when tab screens report upward scrolling and slides back in on
+ *  downward scrolling (see src/utils/tabBarAutoHide.js). */
 const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = insets.bottom > 0 ? insets.bottom : 0;
   const { colors } = useTheme();
 
+  const [hidden, setHidden] = React.useState(false);
+  // 1 = fully visible, 0 = fully hidden (drives slide + fade together)
+  const visibility = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const unsubscribe = subscribeTabBarVisibility((shouldHide) => {
+      setHidden(shouldHide);
+      Animated.timing(visibility, {
+        toValue: shouldHide ? 0 : 1,
+        duration: 220,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start();
+    });
+    return unsubscribe;
+  }, [visibility]);
+
   return (
-    <View
+    <Animated.View
+      pointerEvents={hidden ? "none" : "auto"}
       style={[
         tabStyles.dockedWrapper,
         { backgroundColor: colors.surface, borderTopColor: colors.border },
+        {
+          transform: [
+            {
+              // Fixed clearance (icon block + paddings + worst-case safe area)
+              // guarantees the bar ends up entirely off-screen — no sliver left.
+              translateY: visibility.interpolate({
+                inputRange: [0, 1],
+                outputRange: [130 + bottomInset, 0],
+              }),
+            },
+          ],
+          opacity: visibility,
+        },
       ]}
     >
       <View
@@ -312,11 +348,11 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
               <View
                 style={[
                   tabStyles.indicator,
-                  isFocused && { backgroundColor: colors.primary },
+                  isFocused && { backgroundColor: colors.primary,borderRadius: 6 },
                 ]}
               />
               <View style={tabStyles.iconWrap}>
-                {options.tabBarIcon({ color, size: 24, focused: isFocused })}
+                {options.tabBarIcon({ color, size: 28, focused: isFocused })}
                 {route.name === "Cart" && cartCount > 0 && (
                   <View
                     style={[
@@ -332,7 +368,7 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
           );
         })}
       </View>
-    </View>
+      </Animated.View>
   );
 };
 
@@ -368,7 +404,7 @@ const tabStyles = StyleSheet.create({
     width: 18,
     height: 3,
     borderRadius: 2,
-    marginBottom: 5,
+    marginBottom: 2,
     backgroundColor: "transparent",
   },
   iconWrap: {
@@ -730,12 +766,13 @@ const linking = {
       Main: {
         screens: {
           Home: "home",
-          Stores: "stores",
+          Chats: "messages",
           Feed: "feed",
           Cart: "cart",
           Account: "account",
         },
       },
+      Stores: "stores",
       Auth: "login",
       ForgotPassword: "forgot-password",
       ResetPassword: "reset-password",
@@ -840,10 +877,34 @@ const withAuthGate = (Component, title, message) => {
   return guardedScreenCache.get(Component);
 };
 
+// Guarded + transitioned Chats for the bottom tab bar. Created ONCE at module
+// level (like the other Transitioned* screens) so the tab never remounts when
+// TabNavigator re-renders.
+const TransitionedChatsScreen = withTabTransition(
+  withAuthGate(
+    ChatsScreen,
+    "Login to view chats",
+    "Please sign in to access your conversations.",
+  ),
+);
+
 const AuthenticatedApp = () => {
   const { isAuthenticated, user } = useAuth();
   const [updateInfo, setUpdateInfo] = React.useState(null);
   const [updateVisible, setUpdateVisible] = React.useState(false);
+
+  // ── Background warm-up for the Chats screen ───────────────────────────────
+  // Kicks off every ChatsScreen fetch (seller conversations, followed-seller
+  // statuses, story ads) as soon as the user is signed in — fire-and-forget.
+  // By the time the user opens Messages, the data is already cached and the
+  // list renders populated instead of empty/loading.
+  const { followedSellers } = useShop();
+  const { fetchAdsByPlacement } = useAds();
+  React.useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    prefetchChatsScreenData({ user, followedSellers, fetchAdsByPlacement });
+  }, [isAuthenticated, user, followedSellers, fetchAdsByPlacement]);
+
 
   React.useEffect(() => {
     let mounted = true;

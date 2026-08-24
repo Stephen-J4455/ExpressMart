@@ -16,6 +16,7 @@ import { useToast } from "../context/ToastContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
+import { radius } from "../theme/colors";
 
 export const SettingsScreen = ({ navigation }) => {
   const { user, profile } = useAuth();
@@ -317,7 +318,7 @@ const buildSettingsStyles = (c) =>
   },
   backButton: {
     padding: 8,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     backgroundColor: c.light,
   },
   headerTitle: {
@@ -402,7 +403,7 @@ const buildSettingsStyles = (c) =>
     alignItems: "center",
     gap: 12,
     padding: 12,
-    borderRadius: 12,
+    borderRadius: radius.xl,
     marginTop: "auto",
   },
   signOutText: {

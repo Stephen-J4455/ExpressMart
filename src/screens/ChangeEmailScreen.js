@@ -15,6 +15,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { radius } from "../theme/colors";
 
 export const ChangeEmailScreen = ({ navigation }) => {
   const { user, updateEmail } = useAuth();
@@ -255,7 +256,7 @@ const buildChangeEmailStyles = (c) =>
   input: {
     borderWidth: 1,
     borderColor: c.light,
-    borderRadius: 8,
+    borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
@@ -268,7 +269,7 @@ const buildChangeEmailStyles = (c) =>
     alignItems: "center",
     borderWidth: 1,
     borderColor: c.light,
-    borderRadius: 8,
+    borderRadius: radius.lg,
     backgroundColor: c.light,
   },
   passwordInput: {
@@ -288,7 +289,7 @@ const buildChangeEmailStyles = (c) =>
     justifyContent: "center",
     backgroundColor: c.primary,
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: radius.md,
     marginTop: 8,
   },
   changeButtonDisabled: {

@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { radius } from "../theme/colors";
 
 const TOAST_DURATION = 3200;
 
@@ -211,7 +212,7 @@ const buildStyles = (c) =>
     iconChip: {
       width: 38,
       height: 38,
-      borderRadius: 12,
+      borderRadius: radius.xl,
       alignItems: "center",
       justifyContent: "center",
       marginLeft: 12,

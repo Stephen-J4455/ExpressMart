@@ -8,24 +8,25 @@ import { useAppStyles } from "../hooks/useAppStyles";
 
 const NAV_ITEMS = [
   { name: "Home", icon: "home-outline", iconFocused: "home" },
-  { name: "Stores", icon: "storefront-outline", iconFocused: "storefront" },
+  {
+    name: "Chats",
+    label: "Messages",
+    icon: "chatbubbles-outline",
+    iconFocused: "chatbubbles",
+  },
   { name: "Feed", icon: "compass-outline", iconFocused: "compass" },
   { name: "Cart", icon: "cart-outline", iconFocused: "cart" },
   { name: "Account", icon: "person-outline", iconFocused: "person" },
 ];
 
 const BOTTOM_ITEMS = [
+  // "Stores" lives outside the tabs now — navigate() bubbles up to the root
+  // stack, which still registers the Stores screen.
   {
     name: "Stores",
     label: "Stores",
     icon: "storefront-outline",
     iconFocused: "storefront",
-  },
-  {
-    name: "Chats",
-    label: "Messages",
-    icon: "chatbubbles-outline",
-    iconFocused: "chatbubbles",
   },
   {
     name: "Terms",

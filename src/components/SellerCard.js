@@ -15,6 +15,7 @@ import { useAppStyles } from "../hooks/useAppStyles";
 import { useShop } from "../context/ShopContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { radius } from "../theme/colors";
 
 export const SellerCard = ({ seller, onPress }) => {
     const { colors: themeColors } = useTheme();
@@ -268,7 +269,7 @@ const buildStyles = (c) =>
         justifyContent: "center",
         backgroundColor: c.surface,
         paddingVertical: 10,
-        borderRadius: 12,
+        borderRadius: radius.xl,
         gap: 6,
     },
     visitButtonText: {
@@ -282,7 +283,7 @@ const buildStyles = (c) =>
         gap: 4,
         paddingHorizontal: 10,
         paddingVertical: 4,
-        borderRadius: 6,
+        borderRadius: radius.md,
         backgroundColor: "transparent",
         borderWidth: 0,
         borderColor: "transparent",

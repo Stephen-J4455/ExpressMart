@@ -1353,7 +1353,7 @@ const buildFeedCardStyles = (c) =>
     },
     variantAddButton: {
       marginTop: 20,
-      borderRadius: 14,
+      borderRadius: radius.xl,
       overflow: "hidden",
     },
     variantAddGradient: {
@@ -1499,7 +1499,7 @@ const buildFeedCardStyles = (c) =>
       maxHeight: 100,
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: 20,
+      borderRadius: radius.full,
       paddingHorizontal: 14,
       paddingVertical: 9,
       fontSize: 14,
@@ -1508,7 +1508,7 @@ const buildFeedCardStyles = (c) =>
     commentSendBtn: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: radius.full,
       backgroundColor: c.primary,
       alignItems: "center",
       justifyContent: "center",

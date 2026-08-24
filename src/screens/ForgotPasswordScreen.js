@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { radius } from "../theme/colors";
 import {
   ActivityIndicator,
   Image,
@@ -261,7 +262,7 @@ const buildForgotPasswordStyles = (c) =>
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: radius.full,
     backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
@@ -310,7 +311,7 @@ const buildForgotPasswordStyles = (c) =>
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: c.light,
-    borderRadius: 16,
+    borderRadius: radius.xl,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: "#E4E8F0",
@@ -331,7 +332,7 @@ const buildForgotPasswordStyles = (c) =>
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },
   submitButton: {
-    borderRadius: 16,
+    borderRadius: radius.full,
     overflow: "hidden",
     shadowColor: c.primary,
     shadowOffset: { width: 0, height: 6 },
@@ -415,7 +416,7 @@ const buildForgotPasswordStyles = (c) =>
     marginBottom: 40,
   },
   backToLoginButton: {
-    borderRadius: 16,
+    borderRadius: radius.lg,
     overflow: "hidden",
     width: "100%",
     shadowColor: c.primary,

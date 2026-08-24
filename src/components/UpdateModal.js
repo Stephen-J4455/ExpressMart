@@ -1,6 +1,7 @@
 import React from "react";
 import { Modal, View, Text, StyleSheet, TouchableOpacity, Linking } from "react-native";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { radius } from "../theme/colors";
 
 const UpdateModal = ({ visible, update, onClose, force }) => {
   const styles = useAppStyles((c) => buildStyles(c));
@@ -69,7 +70,7 @@ const buildStyles = (c) =>
     button: {
       paddingVertical: 10,
       paddingHorizontal: 16,
-      borderRadius: 8,
+      borderRadius: radius.md,
     },
     ghost: {
       backgroundColor: c.surface,

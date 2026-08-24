@@ -13,7 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import { getTheme, THEMES } from "../theme/colors";
+import {getTheme, THEMES, radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase } from "../lib/supabase";
@@ -375,7 +375,7 @@ const buildProfileEditStyles = (c) =>
     paddingHorizontal: 20,
     paddingVertical: 9,
     backgroundColor: c.primary,
-    borderRadius: 10,
+    borderRadius: radius.lg,
   },
   saveButtonDisabled: { opacity: 0.6 },
   saveText: { color: c.light, fontSize: 14, fontWeight: "700" },
@@ -440,7 +440,7 @@ const buildProfileEditStyles = (c) =>
     alignItems: "center",
     borderWidth: 1.5,
     borderColor: c.border,
-    borderRadius: 12,
+    borderRadius: radius.full,
     paddingHorizontal: 12,
     backgroundColor: "#FAFBFC",
   },
@@ -472,7 +472,7 @@ const buildProfileEditStyles = (c) =>
   actionIconWrap: {
     width: 38,
     height: 38,
-    borderRadius: 10,
+    borderRadius: radius.lg,
     alignItems: "center",
     justifyContent: "center",
   },

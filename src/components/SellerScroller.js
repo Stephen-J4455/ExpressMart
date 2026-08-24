@@ -16,6 +16,7 @@ import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { radius } from "../theme/colors";
 
 export const SellerScroller = ({ sellers = [], onSelect }) => {
   const { colors: themeColors } = useTheme();
@@ -254,7 +255,7 @@ const buildStyles = (c) =>
       gap: 4,
       paddingHorizontal: 8,
       paddingVertical: 2,
-      borderRadius: 6,
+      borderRadius: radius.md,
       backgroundColor: "transparent",
       borderWidth: 0,
       borderColor: "transparent",

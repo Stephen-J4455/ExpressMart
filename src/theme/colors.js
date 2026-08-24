@@ -20,7 +20,7 @@ export const colors = {
   muted: "#64748B",
   surface: "#E2E6E9", // Cool Grey canvas
   border: "#d9dddf",
-  background: "#E2E6E9", // Cool Grey canvas
+  background: "#ffffff", // Cool Grey canvas
   splashback: "#B7B8BF",
 };
 
@@ -33,10 +33,10 @@ export const colors = {
 const LIGHT_NEUTRALS = {
   dark: "#0F172A",
   light: "#ffffff",
-  surface: "#E2E6E9",
+  surface: "#ffffff",
   border: "#b8bbbd2f",
-  background: "#E2E6E9",
-  splashback: "#B7B8BF",
+  background: "#ffffff",
+  splashback: "#ffffff",
   muted: "#64748B",
   // Alpha tints derived from the neutral tokens — used for chips, borders,
   // backdrops and hover/press states so they adapt to light/dark mode.

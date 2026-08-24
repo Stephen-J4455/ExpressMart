@@ -14,6 +14,7 @@ import { useOrder } from "../context/OrderContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
+import { radius } from "../theme/colors";
 
 const statusColors = {
   pending_payment: "#F59E0B",
@@ -37,6 +38,10 @@ const statusIcons = {
 
 const OrderCard = ({ order, onPress, cardWidth }) => {
   const { colors: themeColors } = useTheme();
+  // The card is rendered by OrdersScreen's FlatList but styles live in the
+  // shared factory — resolve them here (this component has no access to the
+  // screen-level `styles`).
+  const styles = useAppStyles((c) => buildOrdersStyles(c));
   const statusColor = statusColors[order.status] || themeColors.muted;
   const statusIcon = statusIcons[order.status] || "ellipse";
   const statusLabel = order.status
@@ -276,7 +281,7 @@ const buildOrdersStyles = (c) =>
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: radius.xl,
     backgroundColor: c.light,
     alignItems: "center",
     justifyContent: "center",
@@ -307,7 +312,7 @@ const buildOrdersStyles = (c) =>
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: radius.full,
     backgroundColor: c.surface,
   },
   filterChipActive: {
@@ -445,7 +450,7 @@ const buildOrdersStyles = (c) =>
     paddingHorizontal: 28,
     paddingVertical: 14,
     backgroundColor: c.primary,
-    borderRadius: 25,
+    borderRadius: radius.full,
     shadowColor: c.primary,
     shadowOpacity: 0.3,
     shadowRadius: 8,

@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialIcons } from "@expo/vector-icons";
+import { radius } from "../theme/colors";
 
 export const PromoBanner = ({ deal, onPress }) => {
   return (
@@ -16,7 +17,7 @@ export const PromoBanner = ({ deal, onPress }) => {
         styles.container,
         {
           backgroundColor: deal.background_color || "#FFFFFF",
-          borderRadius: deal.border_radius || 12,
+          borderRadius: deal.border_radius || radius.lg,
         },
       ]}
       onPress={onPress}
@@ -113,7 +114,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: radius.full,
   },
   solidCtaText: {
     color: "#FFFFFF",

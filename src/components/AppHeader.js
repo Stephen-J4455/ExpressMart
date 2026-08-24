@@ -1,19 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { radius } from "../theme/colors";
+import { radius, colors, resolveNeutrals } from "../theme/colors";
 import { useResponsive } from "../hooks/useResponsive";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useTheme } from "../context/ThemeContext";
 
 export const AppHeader = ({
   onSearchPress,
-  onChatPress,
+  onStoresPress,
   onNotificationsPress,
 }) => {
   const { isWide, horizontalPadding } = useResponsive();
   const insets = useSafeAreaInsets();
   const { colors: themeColors } = useTheme();
+  // The tagit logo always keeps its home (light) theme look — brand "tag" in
+  // white, "it" in warm coral — regardless of light/dark mode. Only the
+  // surrounding header adapts to the active theme.
+  const logoNeutrals = resolveNeutrals("light");
   const styles = useAppStyles((c) =>
     StyleSheet.create({ 
       container: {
@@ -36,20 +40,20 @@ export const AppHeader = ({
         justifyContent: "center",
       },
       brandTag: {
-        color: c.light,
+        color: colors.light,
         fontSize: 30,
         fontWeight: "900",
         letterSpacing: 0.5,
-        textShadowColor: c.overlay,
+        textShadowColor: logoNeutrals.overlay,
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 3,
       },
       brandTagAccent: {
-        color: c.warmCoral,
+        color: colors.warmCoral,
         fontSize: 30,
         fontWeight: "900",
         letterSpacing: 0.5,
-        textShadowColor: c.overlay,
+        textShadowColor: logoNeutrals.overlay,
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 3,
       },
@@ -94,8 +98,13 @@ export const AppHeader = ({
         </View>
 
         <View style={styles.iconRow}>
-          <Pressable style={styles.iconButton} onPress={onChatPress}>
-            <Ionicons name="chatbubble-outline" size={20} color={themeColors.light} />
+          <Pressable
+            style={styles.iconButton}
+            onPress={onStoresPress}
+            accessibilityRole="button"
+            accessibilityLabel="Browse stores"
+          >
+            <Ionicons name="storefront-outline" size={20} color={themeColors.light} />
           </Pressable>
           <Pressable style={styles.iconButton} onPress={onNotificationsPress}>
             <Ionicons

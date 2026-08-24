@@ -372,7 +372,7 @@ const buildStatusViewerStyles = (c) =>
     alignSelf: "flex-start",
     marginTop: 14,
     backgroundColor: c.primary,
-    borderRadius: radius.md,
+    borderRadius: radius.xl,
     paddingHorizontal: 14,
     paddingVertical: 10,
     flexDirection: "row",
@@ -407,7 +407,7 @@ const buildStatusViewerStyles = (c) =>
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: radius.sm,
+    borderRadius: radius.lg,
     backgroundColor: c.light,
   },
   closeText: {
