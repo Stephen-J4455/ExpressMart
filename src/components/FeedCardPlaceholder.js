@@ -82,6 +82,11 @@ export const FeedCardPlaceholder = () => {
         <Skeleton style={styles.priceLine} />
         <Skeleton style={styles.actionPill} />
       </View>
+
+      {/* Add to Cart skeleton */}
+      <View style={styles.ctaRow}>
+        <Skeleton style={styles.cta} />
+      </View>
     </View>
   );
 };
@@ -162,5 +167,14 @@ const buildStyles = (c) =>
       width: 110,
       height: 28,
       borderRadius: radius.full,
+    },
+    ctaRow: {
+      paddingHorizontal: 14,
+      paddingBottom: 14,
+    },
+    cta: {
+      height: 40,
+      width: "100%",
+      borderRadius: 14,
     },
   });

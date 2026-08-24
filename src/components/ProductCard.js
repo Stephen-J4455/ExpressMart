@@ -119,7 +119,8 @@ export const ProductCard = ({
       product.vendor ||
       "Store"
     : product.seller?.name || product.store_name || product.vendor;
-  const sellerBadgeIds = product.seller?.badges || product.seller_id?.badges || [];
+  const sellerBadgeIds =
+    product.seller?.badges || product.seller_id?.badges || [];
 
   const handleAdd = (e) => {
     e?.stopPropagation?.();
@@ -216,7 +217,10 @@ export const ProductCard = ({
     gradientEnd: themeColors.primaryLight,
     accent: themeColors.primary,
   };
-  const accent = (themeObj && themeObj.accent) || (themeObj && themeObj.primary) || themeColors.accent;
+  const accent =
+    (themeObj && themeObj.accent) ||
+    (themeObj && themeObj.primary) ||
+    themeColors.accent;
   const accentEnd =
     (themeObj && themeObj.gradientEnd) ||
     (themeObj && themeObj.gradientStart) ||
@@ -409,7 +413,10 @@ export const ProductCard = ({
         >
           <View style={styles.variantOverlay}>
             <View
-              style={[styles.variantModal, { paddingBottom: 28 + insets.bottom }]}
+              style={[
+                styles.variantModal,
+                { paddingBottom: 28 + insets.bottom },
+              ]}
             >
               <View style={styles.variantHeader}>
                 <Text style={styles.variantTitle}>Select Options</Text>
@@ -509,21 +516,19 @@ export const ProductCard = ({
                 </View>
               )}
 
-              {/* Temporarily hide variant add-to-cart button
               <Pressable
                 style={styles.variantAddButton}
                 onPress={handleConfirmAddToCart}
               >
-                <View
-                  style={[
-                    styles.variantAddGradient,
-                    { backgroundColor: themeObj.primary || accent },
-                  ]}
+                <LinearGradient
+                  colors={[themeColors.primary, themeColors.accent]}
+                  style={styles.variantAddGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
                 >
                   <Text style={styles.variantAddText}>Add to Cart</Text>
-                </View>
+                </LinearGradient>
               </Pressable>
-              */}
             </View>
           </View>
         </Modal>
@@ -578,7 +583,11 @@ export const ProductCard = ({
           })()}
           {!images[0] && (
             <View style={styles.cardImagePlaceholder}>
-              <Ionicons name="image-outline" size={20} color={themeColors.muted} />
+              <Ionicons
+                name="image-outline"
+                size={20}
+                color={themeColors.muted}
+              />
             </View>
           )}
           {isOutOfStock && (
@@ -595,9 +604,7 @@ export const ProductCard = ({
             >
               {displayStoreName}
             </Text>
-            {SELLER_BADGE_PRIORITY.filter((id) =>
-              sellerBadgeIds?.includes(id),
-            )
+            {SELLER_BADGE_PRIORITY.filter((id) => sellerBadgeIds?.includes(id))
               .slice(0, 2)
               .map((id) => {
                 const b = SELLER_BADGE_CONFIG[id];
@@ -667,6 +674,38 @@ export const ProductCard = ({
           {footerAction ? (
             <View style={styles.footerActionWrap}>{footerAction}</View>
           ) : null}
+
+          {/* Default Add to Cart CTA — shown unless the caller hides it or
+              supplies its own footerAction. */}
+          {!hideCta && !footerAction && (
+            <Pressable
+              style={[styles.cta, isOutOfStock && styles.ctaDisabled]}
+              onPress={handleAdd}
+              disabled={isOutOfStock}
+              accessibilityRole="button"
+              accessibilityLabel="Add to cart"
+            >
+              <LinearGradient
+                colors={
+                  isOutOfStock
+                    ? [themeColors.muted, themeColors.muted]
+                    : [themeColors.primary, themeColors.accent]
+                }
+                style={styles.ctaGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Ionicons
+                  name={isOutOfStock ? "close-circle-outline" : "cart-outline"}
+                  size={16}
+                  color="#fff"
+                />
+                <Text style={styles.ctaText}>
+                  {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          )}
         </View>
       </Pressable>
 
@@ -765,21 +804,19 @@ export const ProductCard = ({
               </View>
             )}
 
-            {/* Temporarily hide variant add-to-cart button
             <Pressable
               style={styles.variantAddButton}
               onPress={handleConfirmAddToCart}
             >
-              <View
-                style={[
-                  styles.variantAddGradient,
-                  { backgroundColor: themeObj.primary || accent },
-                ]}
+              <LinearGradient
+                colors={[themeColors.primary, themeColors.accent]}
+                style={styles.variantAddGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
               >
                 <Text style={styles.variantAddText}>Add to Cart</Text>
-              </View>
+              </LinearGradient>
             </Pressable>
-            */}
           </View>
         </View>
       </Modal>
@@ -788,7 +825,7 @@ export const ProductCard = ({
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({ 
+  StyleSheet.create({
     card: {
       backgroundColor: c.surface,
       borderRadius: radius.xl,
@@ -1219,4 +1256,4 @@ const buildStyles = (c) =>
       lineHeight: 16,
       maxWidth: 160,
     },
-   });
+  });

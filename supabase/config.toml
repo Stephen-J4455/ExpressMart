@@ -1,0 +1,17 @@
+# Supabase Edge Function configuration.
+# https://supabase.com/docs/guides/functions/config
+
+[functions.meta-oauth-callback]
+# OAuth callback hit by Meta's browser redirect (no auth header). Uses the
+# service-role key internally, so caller JWT verification must be disabled.
+verify_jwt = false
+
+[functions.sync-whatsapp-catalog]
+# Service-role function that pulls the seller's Meta catalog. Caller identity is
+# not used (it reads the WABA token from seller_meta_connections), so JWT
+# verification is disabled to avoid requiring an auth header.
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+# Meta signs webhook payloads with X-Hub-Signature-256; no caller JWT.
+verify_jwt = false

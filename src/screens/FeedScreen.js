@@ -37,6 +37,7 @@ import { useToast } from "../context/ToastContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { supabase } from "../lib/supabase";
+import { playLikeSound } from "../lib/sounds";
 import { R2_FOLDERS, resolveMediaUrl } from "../services/r2Storage";
 import { shareReel, shareProduct } from "../utils/shareUtils";
 
@@ -365,7 +366,10 @@ export const FeedScreen = ({ route, navigation }) => {
         const willLike = !isWishlisted;
         setIsWishlisted(willLike);
         setLikeCount((c) => Math.max(0, c + (willLike ? 1 : -1)));
-        if (willLike) playLikeAnimation();
+        if (willLike) {
+          playLikeAnimation();
+          playLikeSound();
+        }
 
         try {
           if (!willLike) {
@@ -455,49 +459,24 @@ export const FeedScreen = ({ route, navigation }) => {
         if (!productId || !supabase) return;
         setCommentPosting(true);
         try {
-          // Mirror ProductDetail: a feed comment is a product review with a
-          // comment (default 5-star rating). Update if the user already
-          // reviewed, otherwise insert.
-          const { data: existing } = await supabase
+          // A feed comment is a product review with a comment (default 5-star
+          // rating). Users may post MULTIPLE comments, so we always INSERT a
+          // new row rather than upserting an existing one.
+          const { data, error } = await supabase
             .from("express_reviews")
-            .select("id")
-            .eq("product_id", productId)
-            .eq("user_id", user.id)
-            .maybeSingle();
-
-          let saved;
-          if (existing?.id) {
-            const { data, error } = await supabase
-              .from("express_reviews")
-              .update({
-                comment: trimmed,
-                is_approved: true,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", existing.id)
-              .select(
-                "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
-              )
-              .single();
-            if (error) throw error;
-            saved = data;
-          } else {
-            const { data, error } = await supabase
-              .from("express_reviews")
-              .insert({
-                product_id: productId,
-                user_id: user.id,
-                rating: 5,
-                comment: trimmed,
-                is_approved: true,
-              })
-              .select(
-                "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
-              )
-              .single();
-            if (error) throw error;
-            saved = data;
-          }
+            .insert({
+              product_id: productId,
+              user_id: user.id,
+              rating: 5,
+              comment: trimmed,
+              is_approved: true,
+            })
+            .select(
+              "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
+            )
+            .single();
+          if (error) throw error;
+          const saved = data;
 
           const profile = Array.isArray(saved.express_profiles)
             ? saved.express_profiles[0]
@@ -513,14 +492,14 @@ export const FeedScreen = ({ route, navigation }) => {
             author_avatar: profile?.avatar_url || null,
           };
 
-          // Replace if editing own review, else prepend.
-          setComments((prev) => {
-            const without = prev.filter((c) => c.id !== newComment.id);
-            return [newComment, ...without];
-          });
+          // Prepend the new comment to the top of the list.
+          setComments((prev) => [newComment, ...prev]);
           setCommentCount((c) => c + 1);
           setCommentText("");
-          toast.success("Comment posted", "Your comment was added to the product");
+          toast.success(
+            "Comment posted",
+            "Your comment was added to the product",
+          );
         } catch (err) {
           toast.error("Error", err.message);
         } finally {
@@ -578,12 +557,20 @@ export const FeedScreen = ({ route, navigation }) => {
               muted={Platform.OS === "web"}
               paused={!screenIsFocused || !isActive || paused}
               onLoad={(meta) => logReel("onLoad", meta?.duration, source?.uri)}
-              onReadyForDisplay={() => logReel("onReadyForDisplay", source?.uri)}
-              onBuffer={(event) => logReel("onBuffer", event?.isBuffering, source?.uri)}
+              onReadyForDisplay={() =>
+                logReel("onReadyForDisplay", source?.uri)
+              }
+              onBuffer={(event) =>
+                logReel("onBuffer", event?.isBuffering, source?.uri)
+              }
               onError={(error) => logReel("onError", error, source?.uri)}
               onProgress={(progress) => {
                 if (progress?.currentTime != null) {
-                  logReel("onProgress", progress.currentTime, progress.playableDuration);
+                  logReel(
+                    "onProgress",
+                    progress.currentTime,
+                    progress.playableDuration,
+                  );
                 }
               }}
               // ABR: keep a modest forward buffer so rendition switches are
@@ -670,10 +657,17 @@ export const FeedScreen = ({ route, navigation }) => {
                 <Pressable style={styles.storeRow} onPress={openStore}>
                   <View style={styles.storeAvatarWrap}>
                     {storeAvatar ? (
-                      <Image source={{ uri: storeAvatar }} style={styles.storeAvatar} />
+                      <Image
+                        source={{ uri: storeAvatar }}
+                        style={styles.storeAvatar}
+                      />
                     ) : (
                       <View style={styles.storeAvatarFallback}>
-                        <Ionicons name="storefront-outline" size={14} color={themeColors.primary} />
+                        <Ionicons
+                          name="storefront-outline"
+                          size={14}
+                          color={themeColors.primary}
+                        />
                       </View>
                     )}
                   </View>
@@ -699,10 +693,17 @@ export const FeedScreen = ({ route, navigation }) => {
                   }
                 >
                   {item.thumbnail_url ? (
-                    <Image source={{ uri: item.thumbnail_url }} style={styles.tinyProductThumb} />
+                    <Image
+                      source={{ uri: item.thumbnail_url }}
+                      style={styles.tinyProductThumb}
+                    />
                   ) : (
                     <View style={styles.tinyProductThumbFallback}>
-                      <Ionicons name="image-outline" size={16} color={themeColors.muted} />
+                      <Ionicons
+                        name="image-outline"
+                        size={16}
+                        color={themeColors.muted}
+                      />
                     </View>
                   )}
                   <View style={styles.tinyProductMeta}>
@@ -745,13 +746,13 @@ export const FeedScreen = ({ route, navigation }) => {
                         },
                       ]}
                     />
-                    <Animated.View
-                      style={{ transform: [{ scale: likeAnim }] }}
-                    >
+                    <Animated.View style={{ transform: [{ scale: likeAnim }] }}>
                       <Ionicons
                         name={isWishlisted ? "heart" : "heart-outline"}
                         size={24}
-                        color={isWishlisted ? themeColors.accent : themeColors.light}
+                        color={
+                          isWishlisted ? themeColors.accent : themeColors.light
+                        }
                       />
                     </Animated.View>
                   </View>
@@ -767,7 +768,11 @@ export const FeedScreen = ({ route, navigation }) => {
 
                 <Pressable style={styles.actionBtn} onPress={handleTag}>
                   <View style={[styles.actionIconWrap, styles.tagIconWrap]}>
-                    <Ionicons name="pricetag" size={22} color={themeColors.primary} />
+                    <Ionicons
+                      name="pricetag"
+                      size={22}
+                      color={themeColors.primary}
+                    />
                   </View>
                   <Text style={styles.actionLabel}>Tag</Text>
                 </Pressable>
@@ -844,7 +849,9 @@ export const FeedScreen = ({ route, navigation }) => {
                                   {[1, 2, 3, 4, 5].map((s) => (
                                     <Ionicons
                                       key={s}
-                                      name={s <= c.rating ? "star" : "star-outline"}
+                                      name={
+                                        s <= c.rating ? "star" : "star-outline"
+                                      }
                                       size={11}
                                       color={REVIEW_STAR_COLOR}
                                     />
@@ -852,9 +859,7 @@ export const FeedScreen = ({ route, navigation }) => {
                                 </View>
                               ) : null}
                             </View>
-                            <Text style={styles.commentText}>
-                              {c.comment}
-                            </Text>
+                            <Text style={styles.commentText}>{c.comment}</Text>
                           </View>
                         </View>
                       ))
@@ -946,412 +951,412 @@ export const FeedScreen = ({ route, navigation }) => {
 };
 
 const buildFeedStyles = (c) =>
-  StyleSheet.create({ 
+  StyleSheet.create({
     wrapper: {
       flex: 1,
       backgroundColor: "#000",
       paddingTop: TOP_INSET,
     },
-  feedArea: {
-    flex: 1,
-  },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reelContainer: {
-    height: ITEM_HEIGHT,
-    width: SCREEN_WIDTH,
-    backgroundColor: "#000",
-  },
-  videoWrap: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  centerPlayHitTarget: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  centerPlayPulse: {
-    position: "absolute",
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  centerPlayButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.42)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.28)",
-  },
-  centerTapRipple: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "transparent",
-    // A simple expanding ring centred on the video for tap feedback.
-  },
-  centerTapRing: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 3,
-    borderColor: "rgba(255,255,255,0.9)",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  video: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: SCREEN_WIDTH,
-    height: ITEM_HEIGHT,
-  },
-  overlayShell: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 12,
-  },
-  reelBottomRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  leftCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  storeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  storeAvatarWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  storeAvatar: {
-    width: "100%",
-    height: "100%",
-  },
-  storeAvatarFallback: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  storeMeta: {
-    flex: 1,
-    minWidth: 0,
-  },
-  storeName: {
-    color: c.light,
-    fontSize: 14,
-    fontWeight: "800",
-    textShadowColor: "rgba(0,0,0,0.85)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  storeSub: {
-    color: c.light,
-    fontSize: 10,
-    fontWeight: "600",
-    marginTop: 1,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    textShadowColor: "rgba(0,0,0,0.85)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  tinyProductCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 10,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    borderRadius: 14,
-    padding: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.7)",
-    shadowColor: "#000",
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-    maxWidth: 260,
-  },
-  tinyProductThumb: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-  },
-  tinyProductThumbFallback: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    backgroundColor: c.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tinyProductMeta: {
-    flex: 1,
-    minWidth: 0,
-  },
-  tinyProductTitle: {
-    color: c.dark,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  tinyProductPrice: {
-    color: c.primary,
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 2,
-  },
-  actionCol: {
-    alignItems: "center",
-    gap: 18,
-    paddingBottom: 4,
-  },
-  actionBtn: {
-    alignItems: "center",
-    gap: 4,
-  },
-  actionIconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: c.overlay,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tagIconWrap: {
-    backgroundColor: c.light,
-  },
-  actionLabel: {
-    color: c.light,
-    fontSize: 11,
-    fontWeight: "800",
-    textShadowColor: "rgba(0,0,0,0.85)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  likeBurst: {
-    position: "absolute",
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    borderWidth: 2,
-    borderColor: c.accent,
-    backgroundColor: "transparent",
-  },
-  commentModalBackdrop: {
-    flex: 1,
-    backgroundColor: c.overlay,
-    justifyContent: "flex-end",
-  },
-  commentModalSheet: {
-    backgroundColor: c.light,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    maxHeight: "75%",
-    paddingBottom: Platform.OS === "ios" ? 24 : 12,
-  },
-  commentModalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: c.border,
-    alignSelf: "center",
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  commentModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F1F1",
-  },
-  commentModalTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: c.dark,
-  },
-  commentModalLoading: {
-    paddingVertical: 40,
-    alignItems: "center",
-  },
-  commentList: {
-    maxHeight: 320,
-  },
-  commentListContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  commentEmpty: {
-    textAlign: "center",
-    color: c.muted,
-    paddingVertical: 24,
-  },
-  commentItem: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 14,
-  },
-  commentAvatarWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    overflow: "hidden",
-    backgroundColor: "#F1F1F1",
-  },
-  commentAvatar: {
-    width: 32,
-    height: 32,
-  },
-  commentAvatarFallback: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: c.border,
-  },
-  commentBody: {
-    flex: 1,
-  },
-  commentAuthorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 2,
-  },
-  commentStars: {
-    flexDirection: "row",
-    gap: 1,
-  },
-  commentAuthor: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: c.dark,
-    marginBottom: 2,
-  },
-  commentText: {
-    fontSize: 14,
-    color: "#374151",
-    lineHeight: 19,
-  },
-  commentInputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#F1F1F1",
-  },
-  commentInput: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 100,
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    fontSize: 14,
-    color: c.dark,
-  },
-  commentSendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: c.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  commentSendBtnDisabled: {
-    opacity: 0.4,
-  },
-  reelTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingTop: 8,
-    paddingHorizontal: 4,
-  },
-  reelMenuButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: c.overlay,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuBackdrop: {
-    flex: 1,
-    backgroundColor: c.overlay,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  menuCard: {
-    width: "80%",
-    maxWidth: 320,
-    backgroundColor: c.light,
-    borderRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  menuTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: c.dark,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EEF2F6",
-  },
-  menuItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  menuItemText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#EF4444",
-  },
- });
+    feedArea: {
+      flex: 1,
+    },
+    center: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    reelContainer: {
+      height: ITEM_HEIGHT,
+      width: SCREEN_WIDTH,
+      backgroundColor: "#000",
+    },
+    videoWrap: {
+      flex: 1,
+      justifyContent: "flex-end",
+    },
+    centerPlayHitTarget: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    centerPlayPulse: {
+      position: "absolute",
+      width: 96,
+      height: 96,
+      borderRadius: 48,
+      backgroundColor: "rgba(255,255,255,0.12)",
+    },
+    centerPlayButton: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(0,0,0,0.42)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.28)",
+    },
+    centerTapRipple: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "transparent",
+      // A simple expanding ring centred on the video for tap feedback.
+    },
+    centerTapRing: {
+      width: 90,
+      height: 90,
+      borderRadius: 45,
+      borderWidth: 3,
+      borderColor: "rgba(255,255,255,0.9)",
+      backgroundColor: "rgba(255,255,255,0.08)",
+    },
+    video: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      width: SCREEN_WIDTH,
+      height: ITEM_HEIGHT,
+    },
+    overlayShell: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: 12,
+    },
+    reelBottomRow: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    leftCol: {
+      flex: 1,
+      minWidth: 0,
+    },
+    storeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    storeAvatarWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      overflow: "hidden",
+      backgroundColor: "rgba(255,255,255,0.9)",
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    storeAvatar: {
+      width: "100%",
+      height: "100%",
+    },
+    storeAvatarFallback: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    storeMeta: {
+      flex: 1,
+      minWidth: 0,
+    },
+    storeName: {
+      color: c.light,
+      fontSize: 14,
+      fontWeight: "800",
+      textShadowColor: "rgba(0,0,0,0.85)",
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 4,
+    },
+    storeSub: {
+      color: c.light,
+      fontSize: 10,
+      fontWeight: "600",
+      marginTop: 1,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+      textShadowColor: "rgba(0,0,0,0.85)",
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 4,
+    },
+    tinyProductCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 10,
+      backgroundColor: "rgba(255,255,255,0.96)",
+      borderRadius: 14,
+      padding: 6,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.7)",
+      shadowColor: "#000",
+      shadowOpacity: 0.16,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 4,
+      maxWidth: 260,
+    },
+    tinyProductThumb: {
+      width: 42,
+      height: 42,
+      borderRadius: 10,
+    },
+    tinyProductThumbFallback: {
+      width: 42,
+      height: 42,
+      borderRadius: 10,
+      backgroundColor: c.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    tinyProductMeta: {
+      flex: 1,
+      minWidth: 0,
+    },
+    tinyProductTitle: {
+      color: c.dark,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    tinyProductPrice: {
+      color: c.primary,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 2,
+    },
+    actionCol: {
+      alignItems: "center",
+      gap: 18,
+      paddingBottom: 4,
+    },
+    actionBtn: {
+      alignItems: "center",
+      gap: 4,
+    },
+    actionIconWrap: {
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+      backgroundColor: c.overlay,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    tagIconWrap: {
+      backgroundColor: c.light,
+    },
+    actionLabel: {
+      color: c.light,
+      fontSize: 11,
+      fontWeight: "800",
+      textShadowColor: "rgba(0,0,0,0.85)",
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 4,
+    },
+    likeBurst: {
+      position: "absolute",
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+      borderWidth: 2,
+      borderColor: c.accent,
+      backgroundColor: "transparent",
+    },
+    commentModalBackdrop: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "flex-end",
+    },
+    commentModalSheet: {
+      backgroundColor: c.light,
+      borderTopLeftRadius: 18,
+      borderTopRightRadius: 18,
+      maxHeight: "75%",
+      paddingBottom: Platform.OS === "ios" ? 24 : 12,
+    },
+    commentModalHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: c.border,
+      alignSelf: "center",
+      marginTop: 8,
+      marginBottom: 8,
+    },
+    commentModalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: "#F1F1F1",
+    },
+    commentModalTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    commentModalLoading: {
+      paddingVertical: 40,
+      alignItems: "center",
+    },
+    commentList: {
+      maxHeight: 320,
+    },
+    commentListContent: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    commentEmpty: {
+      textAlign: "center",
+      color: c.muted,
+      paddingVertical: 24,
+    },
+    commentItem: {
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 14,
+    },
+    commentAvatarWrap: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      overflow: "hidden",
+      backgroundColor: "#F1F1F1",
+    },
+    commentAvatar: {
+      width: 32,
+      height: 32,
+    },
+    commentAvatarFallback: {
+      width: 32,
+      height: 32,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.border,
+    },
+    commentBody: {
+      flex: 1,
+    },
+    commentAuthorRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 2,
+    },
+    commentStars: {
+      flexDirection: "row",
+      gap: 1,
+    },
+    commentAuthor: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.dark,
+      marginBottom: 2,
+    },
+    commentText: {
+      fontSize: 14,
+      color: "#374151",
+      lineHeight: 19,
+    },
+    commentInputRow: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: "#F1F1F1",
+    },
+    commentInput: {
+      flex: 1,
+      minHeight: 40,
+      maxHeight: 100,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 20,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      fontSize: 14,
+      color: c.dark,
+    },
+    commentSendBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: c.primary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    commentSendBtnDisabled: {
+      opacity: 0.4,
+    },
+    reelTopRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      paddingTop: 8,
+      paddingHorizontal: 4,
+    },
+    reelMenuButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: c.overlay,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    menuBackdrop: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    menuCard: {
+      width: "80%",
+      maxWidth: 320,
+      backgroundColor: c.light,
+      borderRadius: 16,
+      paddingVertical: 8,
+      paddingHorizontal: 8,
+      shadowColor: "#000",
+      shadowOpacity: 0.25,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 8,
+    },
+    menuTitle: {
+      fontSize: 14,
+      fontWeight: "800",
+      color: c.dark,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: "#EEF2F6",
+    },
+    menuItemRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+    },
+    menuItemText: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: "#EF4444",
+    },
+  });
 
 export default FeedScreen;

@@ -6,8 +6,9 @@
 // no hardcoded hex values.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useRef, useState, memo } from "react";
+import { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   Modal,
@@ -15,10 +16,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { FlashSaleBadge } from "./FlashSaleBadge";
 import { LazyImage } from "./LazyImage";
 import { radius } from "../theme/colors";
@@ -30,6 +33,9 @@ import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
 import { formatTimeAgo } from "../utils/timeAgo";
 import { shareProduct } from "../utils/shareUtils";
+import { playLikeSound } from "../lib/sounds";
+
+const REVIEW_STAR_COLOR = "#F97316";
 
 const SELLER_BADGE_CONFIG = {
   verified: { icon: "checkmark-circle", color: "success" },
@@ -49,7 +55,7 @@ export const FeedProductCard = memo(function FeedProductCard({
   const navigation = useNavigation();
   const route = useRoute();
   const toast = useToast();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { addToCart } = useCart();
 
   // --- Derived product data -------------------------------------------------
@@ -68,7 +74,11 @@ export const FeedProductCard = memo(function FeedProductCard({
       : null;
 
   const hasDiscount = Number(product.discount) > 0;
-  const isNew = !product.rating || product.rating <= 0;
+
+  // Average rating (from product.rating) and total review count
+  // (product.total_ratings). Falls back to 0 when not yet rated.
+  const avgRating = Number(product.rating || 0);
+  const reviewCount = Number(product.total_ratings || 0);
 
   const priceText = `GH₵${Number(
     hasDiscount
@@ -85,6 +95,20 @@ export const FeedProductCard = memo(function FeedProductCard({
   const [menuVisible, setMenuVisible] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [galleryVisible, setGalleryVisible] = useState(false);
+  const [variantVisible, setVariantVisible] = useState(false);
+  const [selectedColor, setSelectedColor] = useState(null);
+  const [selectedSize, setSelectedSize] = useState(null);
+
+  // --- Comments (product reviews with a comment) ---
+  const [commentModalVisible, setCommentModalVisible] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [commentCount, setCommentCount] = useState(
+    Number(product.comments_count || 0),
+  );
+  const [commentText, setCommentText] = useState("");
+  const [commentRating, setCommentRating] = useState(5);
+  const [commentPosting, setCommentPosting] = useState(false);
+  const [commentsLoading, setCommentsLoading] = useState(false);
 
   const openProduct = () => {
     if (onPress) return onPress();
@@ -120,12 +144,161 @@ export const FeedProductCard = memo(function FeedProductCard({
       });
       return;
     }
+
+    const hasColors = product.colors && product.colors.length > 0;
+    const hasSizes = product.sizes && product.sizes.length > 0;
+
+    // Show the variant picker when the product has colors or sizes, so the
+    // user can choose before adding to cart.
+    if (hasColors || hasSizes) {
+      setSelectedColor(
+        hasColors && product.colors.length > 1
+          ? null
+          : product.colors?.[0] || null,
+      );
+      setSelectedSize(
+        hasSizes && product.sizes.length > 1
+          ? null
+          : product.sizes?.[0] || null,
+      );
+      setVariantVisible(true);
+      return;
+    }
+
     addToCart(product, 1, null, null);
     toast.success(
       "Added to Cart",
       `${product.title} has been added to your cart`,
     );
   };
+
+  const handleConfirmVariant = () => {
+    // Only require a selection when there are multiple options.
+    if (
+      (product.colors && product.colors.length > 1 && !selectedColor) ||
+      (product.sizes && product.sizes.length > 1 && !selectedSize)
+    ) {
+      toast.error("Selection Required", "Please select all required options");
+      return;
+    }
+    addToCart(product, 1, selectedSize, selectedColor);
+    setVariantVisible(false);
+    toast.success(
+      "Added to Cart",
+      `${product.title} has been added to your cart`,
+    );
+  };
+
+  const loadComments = useCallback(async () => {
+    if (!product.id || !supabase) return;
+    setCommentsLoading(true);
+    try {
+      // Pull approved product reviews that have a comment, newest first.
+      const { data: reviews } = await supabase
+        .from("express_reviews")
+        .select(
+          "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
+        )
+        .eq("product_id", product.id)
+        .eq("is_approved", true)
+        .not("comment", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      const rows = (reviews ?? [])
+        .filter((r) => String(r.comment || "").trim())
+        .map((r) => {
+          const profile = Array.isArray(r.express_profiles)
+            ? r.express_profiles[0]
+            : r.express_profiles;
+          return {
+            id: r.id,
+            review_id: r.id,
+            user_id: r.user_id,
+            rating: r.rating,
+            comment: r.comment,
+            created_at: r.created_at,
+            author_name: profile?.full_name || "Customer",
+            author_avatar: profile?.avatar_url || null,
+          };
+        });
+      setComments(rows);
+      setCommentCount(rows.length);
+    } catch (e) {
+      console.warn("loadComments error:", e);
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [product.id]);
+
+  const openCommentModal = useCallback(() => {
+    setCommentModalVisible(true);
+    loadComments();
+  }, [loadComments]);
+
+  const submitComment = useCallback(async () => {
+    const trimmed = String(commentText).trim();
+    if (!trimmed) return;
+    if (!isAuthenticated) {
+      toast.info("Sign in required", "Please sign in to comment");
+      navigation.navigate("Auth", {
+        redirectTo: route?.name,
+        redirectParams: route?.params,
+      });
+      return;
+    }
+    if (!product.id || !supabase) return;
+    setCommentPosting(true);
+    try {
+      // Users may post MULTIPLE comments, so always INSERT a new review row
+      // with the star rating they selected for this comment.
+      const { data, error } = await supabase
+        .from("express_reviews")
+        .insert({
+          product_id: product.id,
+          user_id: user?.id,
+          rating: commentRating,
+          comment: trimmed,
+          is_approved: true,
+        })
+        .select(
+          "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
+        )
+        .single();
+      if (error) throw error;
+      const saved = data;
+      const profile = Array.isArray(saved.express_profiles)
+        ? saved.express_profiles[0]
+        : saved.express_profiles;
+      const newComment = {
+        id: saved.id,
+        review_id: saved.id,
+        user_id: saved.user_id,
+        rating: saved.rating,
+        comment: saved.comment,
+        created_at: saved.created_at,
+        author_name: profile?.full_name || "You",
+        author_avatar: profile?.avatar_url || null,
+      };
+      setComments((prev) => [newComment, ...prev]);
+      setCommentCount((c) => c + 1);
+      setCommentText("");
+      setCommentRating(5);
+      toast.success("Comment posted", "Your comment was added to the product");
+    } catch (err) {
+      toast.error("Error", err.message);
+    } finally {
+      setCommentPosting(false);
+    }
+  }, [
+    commentText,
+    isAuthenticated,
+    product.id,
+    user,
+    navigation,
+    route,
+    toast,
+  ]);
 
   const description = String(product.description || "").trim();
 
@@ -270,11 +443,20 @@ export const FeedProductCard = memo(function FeedProductCard({
             </View>
           )}
 
-          {/* "New" pill — top-right (same position as ProductCard rating pill) */}
-          {isNew && (
-            <View style={styles.newPill}>
-              <Ionicons name="star" size={10} color={c.accentYellow} />
-              <Text style={styles.newPillText}>New</Text>
+          {/* Rating pill — top-right: average stars + value */}
+          {avgRating > 0 && (
+            <View style={styles.ratingPill}>
+              <View style={styles.ratingPillStars}>
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Ionicons
+                    key={s}
+                    name={s <= Math.round(avgRating) ? "star" : "star-outline"}
+                    size={9}
+                    color={REVIEW_STAR_COLOR}
+                  />
+                ))}
+              </View>
+              <Text style={styles.ratingPillText}>{avgRating.toFixed(1)}</Text>
             </View>
           )}
 
@@ -304,14 +486,18 @@ export const FeedProductCard = memo(function FeedProductCard({
         <FeedWishlistButton productId={product.id} styles={styles} />
         <Pressable
           style={styles.engagementItem}
-          onPress={() => navigation.navigate("ProductDetail", { product })}
+          onPress={openCommentModal}
+          accessibilityRole="button"
+          accessibilityLabel="Comments"
         >
           <Ionicons
             name="chatbubble-ellipses-outline"
             size={20}
             color={c.muted}
           />
-          <Text style={styles.engagementLabel}>Q&A</Text>
+          <Text style={styles.engagementLabel}>
+            {commentCount > 0 ? `${commentCount}` : "Q&A"}
+          </Text>
         </Pressable>
         <Pressable
           style={styles.engagementAddToCart}
@@ -394,6 +580,274 @@ export const FeedProductCard = memo(function FeedProductCard({
             ))}
           </View>
         </Pressable>
+      </Modal>
+
+      {/* ── Variant selection modal (products with colors/sizes) ── */}
+      <Modal
+        visible={variantVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVariantVisible(false)}
+      >
+        <Pressable
+          style={styles.variantOverlay}
+          onPress={() => setVariantVisible(false)}
+        >
+          <View style={styles.variantModal}>
+            <View style={styles.variantHeader}>
+              <Text style={styles.variantTitle}>Select Options</Text>
+              <Pressable
+                onPress={() => setVariantVisible(false)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Ionicons name="close" size={20} color={c.dark} />
+              </Pressable>
+            </View>
+
+            {product.colors && product.colors.length > 0 && (
+              <View style={styles.variantSection}>
+                <Text style={styles.variantLabel}>
+                  {product.colors.length > 1 ? "Color *" : "Color"}
+                </Text>
+                <View style={styles.variantOptionsRow}>
+                  {product.colors.map((colorName, index) => {
+                    const COLOR_MAP = {
+                      Black: "#000000",
+                      White: "#FFFFFF",
+                      Red: "#EF4444",
+                      Blue: "#3B82F6",
+                      Green: "#10B981",
+                      Yellow: "#F59E0B",
+                      Purple: "#8B5CF6",
+                      Pink: "#EC4899",
+                      Orange: "#F97316",
+                      Brown: "#92400E",
+                      Gray: "#6B7280",
+                      Navy: "#1E3A8A",
+                    };
+                    const isSelected = selectedColor === colorName;
+                    return (
+                      <Pressable
+                        key={index}
+                        onPress={() => setSelectedColor(colorName)}
+                        style={[
+                          styles.colorOption,
+                          isSelected && styles.colorOptionSelected,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.smallColorDot,
+                            {
+                              backgroundColor: COLOR_MAP[colorName] || "#CCC",
+                            },
+                            isSelected && {
+                              borderColor: c.primary,
+                              borderWidth: 3,
+                            },
+                          ]}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {product.sizes && product.sizes.length > 0 && (
+              <View style={styles.variantSection}>
+                <Text style={styles.variantLabel}>
+                  {product.sizes.length > 1 ? "Size *" : "Size"}
+                </Text>
+                <View style={styles.variantOptionsRow}>
+                  {product.sizes.map((size, index) => {
+                    const isSelected = selectedSize === size;
+                    return (
+                      <Pressable
+                        key={index}
+                        onPress={() => setSelectedSize(size)}
+                        style={[
+                          styles.sizeOption,
+                          isSelected && {
+                            borderColor: c.primary,
+                            backgroundColor: c.surface,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.sizeOptionText,
+                            isSelected && {
+                              color: c.primary,
+                              fontWeight: "700",
+                            },
+                          ]}
+                        >
+                          {size}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            <Pressable
+              style={styles.variantAddButton}
+              onPress={handleConfirmVariant}
+            >
+              <View
+                style={[
+                  styles.variantAddGradient,
+                  { backgroundColor: c.primary },
+                ]}
+              >
+                <Text style={styles.variantAddText}>Add to Cart</Text>
+              </View>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Comments modal (product reviews with comments) ── */}
+      <Modal
+        visible={commentModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCommentModalVisible(false)}
+      >
+        <View style={styles.commentModalBackdrop}>
+          <Pressable
+            style={styles.commentModalBackdrop}
+            onPress={() => setCommentModalVisible(false)}
+          />
+          <View style={styles.commentModalSheet}>
+            <View style={styles.commentModalHandle} />
+            <View style={styles.commentModalHeader}>
+              <Text style={styles.commentModalTitle}>
+                Comments ({commentCount})
+              </Text>
+              <Pressable
+                onPress={() => setCommentModalVisible(false)}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={22} color={c.dark} />
+              </Pressable>
+            </View>
+
+            {commentsLoading ? (
+              <View style={styles.commentModalLoading}>
+                <ActivityIndicator color={c.primary} />
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.commentList}
+                contentContainerStyle={styles.commentListContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {comments.length === 0 ? (
+                  <Text style={styles.commentEmpty}>
+                    No comments yet. Be the first!
+                  </Text>
+                ) : (
+                  comments.map((cm) => (
+                    <View key={cm.id} style={styles.commentItem}>
+                      <View style={styles.commentAvatarWrap}>
+                        {cm.author_avatar ? (
+                          <Image
+                            source={{ uri: cm.author_avatar }}
+                            style={styles.commentAvatar}
+                          />
+                        ) : (
+                          <View style={styles.commentAvatarFallback}>
+                            <Ionicons
+                              name="person"
+                              size={14}
+                              color={c.primary}
+                            />
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.commentBody}>
+                        <View style={styles.commentAuthorRow}>
+                          <Text style={styles.commentAuthor}>
+                            {cm.author_name}
+                          </Text>
+                          {cm.rating ? (
+                            <View style={styles.commentStars}>
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Ionicons
+                                  key={s}
+                                  name={
+                                    s <= cm.rating ? "star" : "star-outline"
+                                  }
+                                  size={11}
+                                  color={REVIEW_STAR_COLOR}
+                                />
+                              ))}
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text style={styles.commentText}>{cm.comment}</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            )}
+
+            {/* Star rating selector for the new comment */}
+            <View style={styles.commentRatingRow}>
+              <Text style={styles.commentRatingLabel}>Your rating</Text>
+              <View style={styles.commentRatingStars}>
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Pressable
+                    key={s}
+                    onPress={() => setCommentRating(s)}
+                    hitSlop={4}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${s} star${s > 1 ? "s" : ""}`}
+                  >
+                    <Ionicons
+                      name={s <= commentRating ? "star" : "star-outline"}
+                      size={24}
+                      color={REVIEW_STAR_COLOR}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <KeyboardStickyView style={styles.commentInputRow}>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Add a comment…"
+                placeholderTextColor={c.muted}
+                value={commentText}
+                onChangeText={setCommentText}
+                multiline
+                editable={!commentPosting}
+              />
+              <Pressable
+                style={[
+                  styles.commentSendBtn,
+                  (!commentText.trim() || commentPosting) &&
+                    styles.commentSendBtnDisabled,
+                ]}
+                onPress={submitComment}
+                disabled={!commentText.trim() || commentPosting}
+              >
+                {commentPosting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="send" size={18} color="#fff" />
+                )}
+              </Pressable>
+            </KeyboardStickyView>
+          </View>
+        </View>
       </Modal>
 
       {/* ── Swipeable gallery modal (3+ images) ── */}
@@ -493,6 +947,8 @@ const FeedWishlistButton = ({ productId, styles }) => {
     setCount((n) => Math.max(0, (n ?? 0) + (willLike ? 1 : -1)));
     setAnimating(true);
     setTimeout(() => setAnimating(false), 300);
+    if (willLike) playLikeSound();
+    if (willLike) playLikeSound();
     try {
       if (willLike) {
         await supabase
@@ -530,7 +986,7 @@ const buildFeedCardStyles = (c) =>
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
-    
+
       overflow: "hidden",
       shadowColor: "#000",
       shadowOpacity: 0.08,
@@ -673,7 +1129,7 @@ const buildFeedCardStyles = (c) =>
       letterSpacing: 0.4,
       textTransform: "uppercase",
     },
-    newPill: {
+    ratingPill: {
       position: "absolute",
       top: 10,
       right: 10,
@@ -685,7 +1141,11 @@ const buildFeedCardStyles = (c) =>
       paddingHorizontal: 8,
       paddingVertical: 4,
     },
-    newPillText: {
+    ratingPillStars: {
+      flexDirection: "row",
+      gap: 1,
+    },
+    ratingPillText: {
       fontSize: 10,
       fontWeight: "800",
       color: c.dark,
@@ -712,7 +1172,7 @@ const buildFeedCardStyles = (c) =>
       alignItems: "baseline",
       gap: 12,
       paddingHorizontal: 14,
-        paddingTop: 10,
+      paddingTop: 10,
       backgroundColor: c.surfaceAlpha,
     },
     price: {
@@ -735,9 +1195,9 @@ const buildFeedCardStyles = (c) =>
       paddingHorizontal: 10,
       paddingVertical: 8,
       borderTopWidth: 1,
-        borderTopColor: c.borderAlpha,
+      borderTopColor: c.borderAlpha,
       backgroundColor: c.surfaceAlpha,
-      
+
       gap: 4,
     },
     engagementItem: {
@@ -820,5 +1280,240 @@ const buildFeedCardStyles = (c) =>
       color: c.light,
       fontSize: 12,
       fontWeight: "700",
+    },
+
+    /* Variant selection modal */
+    variantOverlay: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "flex-end",
+    },
+    variantModal: {
+      backgroundColor: c.surface,
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 28,
+      maxHeight: "55%",
+    },
+    variantHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 20,
+    },
+    variantTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    variantSection: {
+      marginBottom: 18,
+    },
+    variantLabel: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.dark,
+      marginBottom: 10,
+    },
+    variantOptionsRow: {
+      flexDirection: "row",
+      gap: 10,
+      flexWrap: "wrap",
+    },
+    colorOption: {
+      padding: 3,
+    },
+    colorOptionSelected: {
+      opacity: 1,
+    },
+    smallColorDot: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 2,
+      borderColor: c.border,
+    },
+    sizeOption: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+      minWidth: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    sizeOptionText: {
+      fontSize: 13,
+      color: c.dark,
+      fontWeight: "600",
+    },
+    variantAddButton: {
+      marginTop: 20,
+      borderRadius: 14,
+      overflow: "hidden",
+    },
+    variantAddGradient: {
+      paddingVertical: 16,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    variantAddText: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: "#FFFFFF",
+    },
+
+    /* Comments modal */
+    commentModalBackdrop: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "flex-end",
+    },
+    commentModalSheet: {
+      backgroundColor: c.light,
+      borderTopLeftRadius: 18,
+      borderTopRightRadius: 18,
+      maxHeight: "75%",
+      paddingBottom: 12,
+    },
+    commentModalHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: c.border,
+      alignSelf: "center",
+      marginTop: 8,
+      marginBottom: 8,
+    },
+    commentModalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    commentModalTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    commentModalLoading: {
+      paddingVertical: 40,
+      alignItems: "center",
+    },
+    commentList: {
+      maxHeight: 320,
+    },
+    commentListContent: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    commentEmpty: {
+      textAlign: "center",
+      color: c.muted,
+      paddingVertical: 24,
+    },
+    commentItem: {
+      flexDirection: "row",
+      gap: 10,
+      marginBottom: 14,
+    },
+    commentAvatarWrap: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      overflow: "hidden",
+      backgroundColor: c.border,
+    },
+    commentAvatar: {
+      width: 32,
+      height: 32,
+    },
+    commentAvatarFallback: {
+      width: 32,
+      height: 32,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.border,
+    },
+    commentBody: {
+      flex: 1,
+    },
+    commentAuthorRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 2,
+    },
+    commentStars: {
+      flexDirection: "row",
+      gap: 1,
+    },
+    commentAuthor: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.dark,
+      marginBottom: 2,
+    },
+    commentText: {
+      fontSize: 14,
+      color: c.dark,
+      lineHeight: 19,
+    },
+    commentInputRow: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    commentRatingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    commentRatingLabel: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    commentRatingStars: {
+      flexDirection: "row",
+      gap: 4,
+    },
+    commentInput: {
+      flex: 1,
+      minHeight: 40,
+      maxHeight: 100,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 20,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      fontSize: 14,
+      color: c.dark,
+    },
+    commentSendBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: c.primary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    commentSendBtnDisabled: {
+      opacity: 0.4,
     },
   });

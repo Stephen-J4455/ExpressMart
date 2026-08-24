@@ -95,7 +95,7 @@ export const CartScreen = ({ navigation }) => {
   }, [items.length, fetchAdsByPlacement]);
 
   useEffect(() => {
-    if (items.length > 0 || !user || !supabase) {
+    if (!user || !supabase) {
       setLikedProducts([]);
       return;
     }
@@ -139,7 +139,7 @@ export const CartScreen = ({ navigation }) => {
     return () => {
       mounted = false;
     };
-  }, [items.length, user]);
+  }, [user]);
 
   // Trending fallback: top-rated/discounted products from the shop feed.
   const trendingProducts = useMemo(() => {
@@ -219,7 +219,7 @@ export const CartScreen = ({ navigation }) => {
         <ScrollView
           style={styles.itemList}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={{ paddingBottom: 0 }}
         >
           {/* Empty banner */}
           <View style={styles.emptyBanner}>
@@ -514,7 +514,9 @@ export const CartScreen = ({ navigation }) => {
                       <Ionicons
                         name="remove"
                         size={18}
-                        color={quantity <= 1 ? "#CBD5E1" : themeColors.dark}
+                        color={
+                          quantity <= 1 ? "themeColors.light" : themeColors.dark
+                        }
                       />
                     </Pressable>
                     <View style={styles.qtyValueContainer}>
@@ -540,7 +542,29 @@ export const CartScreen = ({ navigation }) => {
             );
           })}
           <View style={{ height: 20 }} />
+
+          {/* Order summary sits above the discovery feed on mobile so the
+              total/checkout is always visible before scrolling into likes. */}
           {!isWide && <View style={summaryStyle}>{summaryContent}</View>}
+
+          {/* Liked products — shown even when the cart has items, so users
+              can keep discovering without emptying their cart. */}
+          {likedProducts.length > 0 && (
+            <>
+              <SectionHeader title="Liked products" />
+              <View style={styles.discoveryFeedWrap}>
+                {likedProducts.slice(0, 6).map((product) => (
+                  <FeedProductCard
+                    key={product.id}
+                    product={product}
+                    onPress={() =>
+                      navigation.navigate("ProductDetail", { product })
+                    }
+                  />
+                ))}
+              </View>
+            </>
+          )}
         </ScrollView>
 
         {isWide && <View style={summaryStyle}>{summaryContent}</View>}
@@ -632,12 +656,11 @@ const buildCartStyles = (c) =>
     itemList: {
       flex: 1,
       padding: 0,
-      paddingTop: 20,
+      paddingTop: 4,
     },
     itemCard: {
       backgroundColor: c.light,
-      borderRadius: 20,
-      marginBottom: 14,
+      marginBottom: 4,
       shadowColor: "#000",
       shadowOpacity: 0.05,
       shadowRadius: 10,
@@ -766,7 +789,7 @@ const buildCartStyles = (c) =>
       paddingVertical: 10,
       borderTopWidth: 1,
       borderTopColor: c.surface,
-      backgroundColor: "#FAFBFC",
+      backgroundColor: c.surfaceAlpha,
     },
     removeButton: {
       flexDirection: "row",
@@ -798,7 +821,7 @@ const buildCartStyles = (c) =>
       justifyContent: "center",
     },
     qtyButtonDisabled: {
-      backgroundColor: c.light,
+      backgroundColor: c.surfaceAlpha,
     },
     qtyButtonAdd: {
       backgroundColor: c.primary,
@@ -821,7 +844,6 @@ const buildCartStyles = (c) =>
     },
     summaryCard: {
       backgroundColor: c.light,
-      borderRadius: 30,
       padding: 24,
       paddingBottom: 28,
       shadowColor: "#000",
@@ -860,7 +882,7 @@ const buildCartStyles = (c) =>
     summaryDivider: {
       height: 1,
       backgroundColor: c.border,
-      marginVertical: 16,
+      marginVertical: 12,
     },
     summaryRow: {
       flexDirection: "row",

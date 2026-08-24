@@ -73,13 +73,14 @@ export const ProductCardPlaceholder = () => {
         <View style={styles.metaRow}>
           <Skeleton style={styles.price} />
         </View>
+        <Skeleton style={styles.cta} />
       </View>
     </View>
   );
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({ 
+  StyleSheet.create({
     card: {
       backgroundColor: c.light,
       borderRadius: radius.xl,
@@ -149,4 +150,10 @@ const buildStyles = (c) =>
       width: 76,
       borderRadius: 8,
     },
-   });
+    cta: {
+      height: 40,
+      width: "100%",
+      borderRadius: 14,
+      marginTop: 12,
+    },
+  });

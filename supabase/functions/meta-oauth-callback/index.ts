@@ -37,9 +37,19 @@ const graphGet = async (path: string, params: Record<string, string>) => {
   const res = await fetch(url.toString());
   const json: any = await res.json();
   if (json?.error) {
-    throw new Error(
-      `Meta API error: ${json.error?.message || JSON.stringify(json.error)}`,
-    );
+    const raw = json.error?.message || JSON.stringify(json.error);
+    // Common Meta misconfiguration: the redirect_uri domain isn't registered
+    // in the app. Surface an actionable message instead of a raw string.
+    if (/domain.*not (registered|inscrit)|URL.*not (registered|inscrit)/i.test(raw)) {
+      throw new Error(
+        "Meta rejected the redirect URI: its domain is not registered in " +
+          "the Meta app. In the Meta App Dashboard, add " +
+          "`meiljgoztnhnyvtfkzuh.supabase.co` to App Domains (Settings → " +
+          "Basic) and `https://meiljgoztnhnyvtfkzuh.supabase.co/functions/v1/" +
+          "meta-oauth-callback` to Facebook Login → Valid OAuth Redirect URIs.",
+      );
+    }
+    throw new Error(`Meta API error: ${raw}`);
   }
   return json;
 };
@@ -55,9 +65,17 @@ const graphPost = async (path: string, params: Record<string, string>) => {
   });
   const json: any = await res.json();
   if (json?.error) {
-    throw new Error(
-      `Meta API error: ${json.error?.message || JSON.stringify(json.error)}`,
-    );
+    const raw = json.error?.message || JSON.stringify(json.error);
+    if (/domain.*not (registered|inscrit)|URL.*not (registered|inscrit)/i.test(raw)) {
+      throw new Error(
+        "Meta rejected the redirect URI: its domain is not registered in " +
+          "the Meta app. In the Meta App Dashboard, add " +
+          "`meiljgoztnhnyvtfkzuh.supabase.co` to App Domains (Settings → " +
+          "Basic) and `https://meiljgoztnhnyvtfkzuh.supabase.co/functions/v1/" +
+          "meta-oauth-callback` to Facebook Login → Valid OAuth Redirect URIs.",
+      );
+    }
+    throw new Error(`Meta API error: ${raw}`);
   }
   return json;
 };

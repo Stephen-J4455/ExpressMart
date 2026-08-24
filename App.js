@@ -18,7 +18,7 @@ import {
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons ,Octicons} from "@expo/vector-icons";
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
@@ -128,8 +128,8 @@ const TabNavigator = () => {
         component={TransitionedHomeScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "home" : "home-outline"}
+            <Octicons
+              name={focused ? "home" : "home-fill"}
               size={size}
               color={color}
             />

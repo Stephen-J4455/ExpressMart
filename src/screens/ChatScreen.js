@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, Fragment } from "react";
 import {
   View,
   Text,
@@ -25,6 +25,9 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useChat } from "../context/ChatContext";
 import { useToast } from "../context/ToastContext";
+import { useTheme } from "../context/ThemeContext";
+import { useOfflineMessages } from "../hooks/useOfflineMessages";
+import { useAppStyles } from "../hooks/useAppStyles";
 import { radius } from "../theme/colors";
 
 const getDateLabel = (dateStr) => {
@@ -70,11 +73,9 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   const toast = useToast();
   const sellerData = route?.params?.seller || seller;
   const routeProduct = route?.params?.product || null;
-  const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [pendingProduct, setPendingProduct] = useState(routeProduct);
   const [sending, setSending] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [conversation, setConversation] = useState(null);
   const [sellerOnline, setSellerOnline] = useState(false);
   const [sellerLastSeenAt, setSellerLastSeenAt] = useState(
@@ -133,6 +134,26 @@ export const ChatScreen = ({ route, navigation, seller }) => {
 
   // keyboard visibility listeners were removed; not required anymore
 
+  // Offline-first message controller: instant local load + background delta
+  // sync + realtime injection + optimistic send. `loading` is only true until
+  // the local cache is read, so cached chats render with no spinner.
+  const {
+    messages,
+    loading,
+    syncing,
+    sendMessage: sendMessageOffline,
+    retryMessage,
+    addLocalMessage,
+    removeLocalMessage,
+  } = useOfflineMessages({
+    conversationId: conversation?.id,
+    user,
+    senderType: "user",
+    onIncoming: (incoming) => {
+      if (incoming.sender_id !== user?.id) markAsRead();
+    },
+  });
+
   const initializeChat = async () => {
     try {
       // Check if conversation already exists in context
@@ -140,12 +161,13 @@ export const ChatScreen = ({ route, navigation, seller }) => {
 
       if (existingConversation) {
         setConversation(existingConversation);
-        await fetchMessages(existingConversation.id);
+        // Messages load instantly from cache via useOfflineMessages; the
+        // background delta sync fires automatically once conversation is set.
       } else {
         // Create new conversation
         const newConv = await fetchOrCreateConversation();
         if (newConv) {
-          await fetchMessages(newConv.id);
+          setConversation(newConv);
         }
       }
     } catch (error) {
@@ -316,41 +338,15 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     }
   };
 
-  const fetchMessages = async (conversationId) => {
-    if (!conversationId) return;
-
-    try {
-      const { data, error } = await supabase
-        .from("express_chat_messages")
-        .select("*")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true });
-
-      if (error) throw error;
-      setMessages(data || []);
-
-      // Only force-scroll on the very first load; afterwards respect the
-      // user's scroll position so we don't yank them down while reading.
-      setTimeout(() => {
-        if (!didInitialAutoScrollRef.current) {
-          didInitialAutoScrollRef.current = true;
-          scrollToBottom(false, true);
-        } else {
-          scrollToBottom(false);
-        }
-      }, 100);
-    } catch (error) {
-      console.error("Error fetching messages:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // NOTE: realtime message INSERTs are now handled by useOfflineMessages
+  // (which writes to local storage first and updates `messages`). We keep a
+  // lightweight subscription here only to refresh the conversation's last
+  // message preview in the list context.
   const setupRealtimeSubscription = () => {
     if (!conversation) return;
 
     const channel = supabase
-      .channel(`chat-${conversation.id}-${instanceIdRef.current}`)
+      .channel(`chat-meta-${conversation.id}-${instanceIdRef.current}`)
       .on(
         "postgres_changes",
         {
@@ -360,40 +356,14 @@ export const ChatScreen = ({ route, navigation, seller }) => {
           filter: `conversation_id=eq.${conversation.id}`,
         },
         (payload) => {
-          setMessages((prev) => {
-            // Avoid duplicates
-            if (prev.some((m) => m.id === payload.new.id)) return prev;
-            // Check if this message was already added optimistically
-            const existingIndex = prev.findIndex(
-              (msg) =>
-                msg.isTemporary &&
-                msg.sender_id === payload.new.sender_id &&
-                msg.message === payload.new.message &&
-                msg.sender_type === payload.new.sender_type,
-            );
-
-            if (existingIndex >= 0) {
-              // Replace the temporary message with the real one
-              const updated = [...prev];
-              updated[existingIndex] = payload.new;
-              return updated;
-            } else {
-              if (payload.new.sender_id !== user.id) {
-                markAsRead(); // Mark incoming message as read if we are viewing the chat
-              }
-              return [...prev, payload.new];
-            }
-          });
-
-          // Update conversation in context with new last message
+          // Update conversation preview in the list context (the message
+          // content itself is owned by the offline hook).
           const updatedConv = {
             ...conversation,
             last_message: payload.new.message,
             last_message_at: payload.new.created_at,
           };
           updateConversation(updatedConv);
-
-          // Only auto-scroll if the user is already near the bottom.
           setTimeout(() => scrollToBottom(false), 50);
         },
       )
@@ -435,64 +405,67 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     setSending(true);
     const messageText = hasText || "";
 
-    const messagesToInsert = [];
-    if (pendingProduct) {
-      messagesToInsert.push(
-        `PRODUCT_CARD:${JSON.stringify({
-          id: pendingProduct.id,
-          title: pendingProduct.title,
-          price: pendingProduct.price,
-          discount: pendingProduct.discount,
-          image: pendingProduct.image,
-        })}`,
-      );
+    // Text messages go through the offline-first hook: it writes the message
+    // to local storage immediately (sending status), pushes to the backend,
+    // then flips to sent/failed. This gives instant UI + offline resilience.
+    if (messageText) {
+      setNewMessage("");
+      const sent = await sendMessageOffline(messageText);
+      if (!sent) {
+        toast.error("Failed to send message");
+        setNewMessage(messageText);
+      } else {
+        updateConversation({
+          ...conversation,
+          last_message: messageText,
+          last_message_at: new Date().toISOString(),
+        });
+      }
     }
-    if (messageText) messagesToInsert.push(messageText);
 
-    // Optimistically add messages
-    const tempMessages = messagesToInsert.map((msg, idx) => ({
-      id: `temp-${Date.now()}-${idx}`,
-      conversation_id: conversation.id,
-      sender_id: user.id,
-      sender_type: "user",
-      message: msg,
-      created_at: new Date().toISOString(),
-      isTemporary: true,
-    }));
+    // Product-card shares keep the original optimistic flow.
+    if (pendingProduct) {
+      const cardText = `PRODUCT_CARD:${JSON.stringify({
+        id: pendingProduct.id,
+        title: pendingProduct.title,
+        price: pendingProduct.price,
+        discount: pendingProduct.discount,
+        image: pendingProduct.image,
+      })}`;
 
-    setMessages((prev) => [...prev, ...tempMessages]);
-    setNewMessage("");
-    setPendingProduct(null);
-
-    try {
-      const { error } = await supabase.from("express_chat_messages").insert(
-        messagesToInsert.map((msg) => ({
+      const tempCard = {
+        id: `temp-${Date.now()}`,
+        conversation_id: conversation.id,
+        sender_id: user.id,
+        sender_type: "user",
+        message: cardText,
+        created_at: new Date().toISOString(),
+        isTemporary: true,
+      };
+      addLocalMessage(tempCard);
+      setPendingProduct(null);
+      try {
+        const { error } = await supabase.from("express_chat_messages").insert({
           conversation_id: conversation.id,
           sender_id: user.id,
           sender_type: "user",
-          message: msg,
-        })),
-      );
-
-      if (error) throw error;
-
-      updateConversation({
-        ...conversation,
-        last_message: messageText || "Shared a product",
-        last_message_at: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast.error("Failed to send message");
-      setMessages((prev) =>
-        prev.filter((msg) => !tempMessages.some((t) => t.id === msg.id)),
-      );
-      setNewMessage(messageText);
-      if (pendingProduct === null && routeProduct)
-        setPendingProduct(routeProduct);
-    } finally {
-      setSending(false);
+          message: cardText,
+        });
+        if (error) throw error;
+        updateConversation({
+          ...conversation,
+          last_message: "Shared a product",
+          last_message_at: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("Error sending product card:", error);
+        toast.error("Failed to send product");
+        removeLocalMessage(tempCard.id);
+        if (routeProduct) setPendingProduct(routeProduct);
+      }
     }
+
+    setSending(false);
   };
 
   const enrichedMessages = useMemo(() => {
@@ -589,6 +562,9 @@ export const ChatScreen = ({ route, navigation, seller }) => {
       );
     }
 
+    const isFailed = item.sync_status === "failed";
+    const isSending = item.sync_status === "sending";
+
     return (
       <View
         style={[
@@ -606,12 +582,32 @@ export const ChatScreen = ({ route, navigation, seller }) => {
             {item.message}
           </Text>
         </View>
-        <Text style={styles.messageTime}>
-          {new Date(item.created_at).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
+        <View style={styles.messageMetaRow}>
+          {isSending && (
+            <ActivityIndicator
+              size="small"
+              color={themeColors.muted}
+              style={styles.messageStatusIcon}
+            />
+          )}
+          {isFailed && (
+            <Pressable
+              onPress={() =>
+                item.client_temp_id && retryMessage(item.client_temp_id)
+              }
+              style={styles.messageRetry}
+            >
+              <Ionicons name="alert-circle" size={14} color="#EF4444" />
+              <Text style={styles.messageRetryText}>Failed · Retry</Text>
+            </Pressable>
+          )}
+          <Text style={styles.messageTime}>
+            {new Date(item.created_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
       </View>
     );
   };
@@ -655,7 +651,11 @@ export const ChatScreen = ({ route, navigation, seller }) => {
                   style={styles.avatarImage}
                 />
               ) : (
-                <Ionicons name="storefront" size={20} color={themeColors.primary} />
+                <Ionicons
+                  name="storefront"
+                  size={20}
+                  color={themeColors.primary}
+                />
               )}
             </View>
             <View>
@@ -666,7 +666,11 @@ export const ChatScreen = ({ route, navigation, seller }) => {
                 <View
                   style={[
                     styles.statusDot,
-                    { backgroundColor: sellerOnline ? themeColors.success : "#9CA3AF" },
+                    {
+                      backgroundColor: sellerOnline
+                        ? themeColors.success
+                        : "#9CA3AF",
+                    },
                   ]}
                 />
                 <Text style={styles.headerSubtitle}>
@@ -676,7 +680,11 @@ export const ChatScreen = ({ route, navigation, seller }) => {
             </View>
           </View>
           <Pressable style={styles.headerAction}>
-            <Ionicons name="ellipsis-vertical" size={20} color={themeColors.muted} />
+            <Ionicons
+              name="ellipsis-vertical"
+              size={20}
+              color={themeColors.muted}
+            />
           </Pressable>
         </View>
       </View>
@@ -712,7 +720,9 @@ export const ChatScreen = ({ route, navigation, seller }) => {
             </Text>
           </View>
         ) : (
-          enrichedMessages.map((item) => renderMessage({ item }))
+          enrichedMessages.map((item) => (
+            <Fragment key={item.id}>{renderMessage({ item })}</Fragment>
+          ))
         )}
       </KeyboardAwareScrollView>
 
@@ -780,328 +790,348 @@ export const ChatScreen = ({ route, navigation, seller }) => {
 };
 
 const buildChatStyles = (c) =>
-  StyleSheet.create({ 
-  container: {
-    flex: 1,
-    backgroundColor: c.background,
-  },
-  header: {
-    backgroundColor: c.background,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: c.border,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-    zIndex: 2,
-  },
-  headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 8,
-    borderRadius: radius.pill,
-    backgroundColor: c.surface,
-  },
-  headerInfo: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sellerAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
-    backgroundColor: c.surface,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  avatarImage: {
-    width: "100%",
-    height: "100%",
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: c.dark,
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: radius.pill,
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: c.muted,
-  },
-  headerAction: {
-    padding: 8,
-  },
-  chatContainer: {
-    flex: 1,
-    backgroundColor: c.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: c.background,
-    gap: 12,
-  },
-  loadingText: {
-    color: c.muted,
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  messagesList: {
-    padding: 16,
-    paddingBottom: 16,
-    flexGrow: 1,
-    justifyContent: "flex-end",
-  },
-  messageWrapper: {
-    marginBottom: 16,
-    maxWidth: "85%",
-  },
-  userWrapper: {
-    alignSelf: "flex-end",
-    alignItems: "flex-end",
-  },
-  sellerWrapper: {
-    alignSelf: "flex-start",
-  },
-  messageContainer: {
-    padding: 12,
-    borderRadius: radius.lg,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  userMessage: {
-    backgroundColor: c.primary,
-    borderBottomRightRadius: 4,
-  },
-  sellerMessage: {
-    backgroundColor: c.light,
-    borderBottomLeftRadius: 4,
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: c.dark,
-  },
-  userMessageText: {
-    color: c.light,
-  },
-  messageTime: {
-    fontSize: 11,
-    color: c.muted,
-    marginTop: 4,
-    marginHorizontal: 4,
-  },
-  emptyChat: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-  },
-  emptyChatIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: radius.xl,
-    backgroundColor: c.light,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: c.border,
-    shadowColor: c.primary,
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  emptyChatText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: c.dark,
-    marginBottom: 4,
-  },
-  emptyChatSubtext: {
-    fontSize: 14,
-    color: c.muted,
-  },
-  inputSticky: {
-    backgroundColor: c.background,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
-    borderTopWidth: 1,
-    borderTopColor: c.border,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: -3 },
-    elevation: 6,
-  },
-  inputWrapper: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 8,
-  },
-  inputField: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    backgroundColor: c.surface,
-    borderRadius: radius.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 15,
-    maxHeight: 100,
-    paddingTop: 10,
-    paddingBottom: 10,
-    color: c.dark,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
-  },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    backgroundColor: c.primary,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 2,
-  },
-  sendButtonDisabled: {
-    backgroundColor: c.muted,
-    opacity: 0.4,
-  },
-  productAttachment: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: c.light,
-    borderRadius: radius.md,
-    marginBottom: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: c.primary + "30",
-  },
-  productAttachmentImage: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.sm,
-    backgroundColor: c.surface,
-  },
-  productAttachmentImagePlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.sm,
-    backgroundColor: c.light,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: c.primary + "30",
-  },
-  productAttachmentInfo: {
-    flex: 1,
-  },
-  productAttachmentLabel: {
-    fontSize: 11,
-    color: c.primary,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  productAttachmentTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: c.dark,
-  },
-  productAttachmentRemove: {
-    padding: 4,
-  },
-  productCardBubble: {
-    borderRadius: radius.lg,
-    overflow: "hidden",
-    width: CARD_WIDTH,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  productCardBubbleUser: {
-    backgroundColor: c.primary,
-    borderBottomRightRadius: 4,
-  },
-  productCardBubbleSeller: {
-    backgroundColor: c.light,
-    borderBottomLeftRadius: 4,
-  },
-  productCardImage: {
-    width: CARD_WIDTH,
-    height: 160,
-    backgroundColor: c.surface,
-  },
-  productCardBody: {
-    padding: 12,
-  },
-  productCardTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: c.dark,
-    marginBottom: 4,
-    lineHeight: 20,
-  },
-  productCardTitleUser: {
-    color: c.light,
-  },
-  productCardPrice: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: c.primary,
-  },
-  productCardPriceUser: {
-    color: "rgba(255,255,255,0.9)",
-  },
-  dateDivider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 12,
-    paddingHorizontal: 8,
-  },
-  dateDividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: c.border,
-  },
-  dateDividerText: {
-    fontSize: 12,
-    color: c.muted,
-    fontWeight: "600",
-    marginHorizontal: 10,
-    letterSpacing: 0.3,
-  },
-});
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    header: {
+      backgroundColor: c.background,
+      paddingHorizontal: 16,
+      paddingBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+      shadowColor: "#000",
+      shadowOpacity: 0.04,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 3,
+      zIndex: 2,
+    },
+    headerContent: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    backButton: {
+      padding: 8,
+      marginRight: 8,
+      borderRadius: radius.pill,
+      backgroundColor: c.surface,
+    },
+    headerInfo: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    sellerAvatar: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.md,
+      backgroundColor: c.surface,
+      justifyContent: "center",
+      alignItems: "center",
+      marginRight: 12,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    avatarImage: {
+      width: "100%",
+      height: "100%",
+    },
+    headerTitle: {
+      fontSize: 17,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    statusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    statusDot: {
+      width: 6,
+      height: 6,
+      borderRadius: radius.pill,
+    },
+    headerSubtitle: {
+      fontSize: 12,
+      color: c.muted,
+    },
+    headerAction: {
+      padding: 8,
+    },
+    chatContainer: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: c.background,
+      gap: 12,
+    },
+    loadingText: {
+      color: c.muted,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    messagesList: {
+      padding: 16,
+      paddingBottom: 16,
+      flexGrow: 1,
+      justifyContent: "flex-end",
+    },
+    messageWrapper: {
+      marginBottom: 16,
+      maxWidth: "85%",
+    },
+    userWrapper: {
+      alignSelf: "flex-end",
+      alignItems: "flex-end",
+    },
+    sellerWrapper: {
+      alignSelf: "flex-start",
+    },
+    messageContainer: {
+      padding: 12,
+      borderRadius: radius.lg,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 1,
+    },
+    userMessage: {
+      backgroundColor: c.primary,
+      borderBottomRightRadius: 4,
+    },
+    sellerMessage: {
+      backgroundColor: c.light,
+      borderBottomLeftRadius: 4,
+    },
+    messageText: {
+      fontSize: 16,
+      lineHeight: 22,
+      color: c.dark,
+    },
+    userMessageText: {
+      color: c.light,
+    },
+    messageTime: {
+      fontSize: 11,
+      color: c.muted,
+      marginTop: 4,
+      marginHorizontal: 4,
+    },
+    messageMetaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 2,
+    },
+    messageStatusIcon: {
+      marginHorizontal: 4,
+    },
+    messageRetry: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginHorizontal: 4,
+    },
+    messageRetryText: {
+      fontSize: 11,
+      color: "#EF4444",
+      marginLeft: 2,
+    },
+    emptyChat: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 60,
+    },
+    emptyChatIcon: {
+      width: 80,
+      height: 80,
+      borderRadius: radius.xl,
+      backgroundColor: c.light,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: c.border,
+      shadowColor: c.primary,
+      shadowOpacity: 0.1,
+      shadowRadius: 10,
+      elevation: 3,
+    },
+    emptyChatText: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: c.dark,
+      marginBottom: 4,
+    },
+    emptyChatSubtext: {
+      fontSize: 14,
+      color: c.muted,
+    },
+    inputSticky: {
+      backgroundColor: c.background,
+      paddingHorizontal: 12,
+      paddingTop: 10,
+      paddingBottom: 10,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      shadowColor: "#000",
+      shadowOpacity: 0.06,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: -3 },
+      elevation: 6,
+    },
+    inputWrapper: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      gap: 8,
+    },
+    inputField: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "flex-end",
+      backgroundColor: c.surface,
+      borderRadius: radius.pill,
+      paddingHorizontal: 16,
+      paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    textInput: {
+      flex: 1,
+      fontSize: 15,
+      maxHeight: 100,
+      paddingTop: 10,
+      paddingBottom: 10,
+      color: c.dark,
+      ...(Platform.OS === "web"
+        ? { outlineStyle: "none", outlineWidth: 0 }
+        : {}),
+    },
+    sendButton: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.pill,
+      backgroundColor: c.primary,
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 2,
+    },
+    sendButtonDisabled: {
+      backgroundColor: c.muted,
+      opacity: 0.4,
+    },
+    productAttachment: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      marginBottom: 8,
+      padding: 10,
+      borderWidth: 1,
+      borderColor: c.primary + "30",
+    },
+    productAttachmentImage: {
+      width: 48,
+      height: 48,
+      borderRadius: radius.sm,
+      backgroundColor: c.surface,
+    },
+    productAttachmentImagePlaceholder: {
+      width: 48,
+      height: 48,
+      borderRadius: radius.sm,
+      backgroundColor: c.light,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: c.primary + "30",
+    },
+    productAttachmentInfo: {
+      flex: 1,
+    },
+    productAttachmentLabel: {
+      fontSize: 11,
+      color: c.primary,
+      fontWeight: "600",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+      marginBottom: 2,
+    },
+    productAttachmentTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.dark,
+    },
+    productAttachmentRemove: {
+      padding: 4,
+    },
+    productCardBubble: {
+      borderRadius: radius.lg,
+      overflow: "hidden",
+      width: CARD_WIDTH,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.08,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    productCardBubbleUser: {
+      backgroundColor: c.primary,
+      borderBottomRightRadius: 4,
+    },
+    productCardBubbleSeller: {
+      backgroundColor: c.light,
+      borderBottomLeftRadius: 4,
+    },
+    productCardImage: {
+      width: CARD_WIDTH,
+      height: 160,
+      backgroundColor: c.surface,
+    },
+    productCardBody: {
+      padding: 12,
+    },
+    productCardTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.dark,
+      marginBottom: 4,
+      lineHeight: 20,
+    },
+    productCardTitleUser: {
+      color: c.light,
+    },
+    productCardPrice: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: c.primary,
+    },
+    productCardPriceUser: {
+      color: "rgba(255,255,255,0.9)",
+    },
+    dateDivider: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginVertical: 12,
+      paddingHorizontal: 8,
+    },
+    dateDividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: c.border,
+    },
+    dateDividerText: {
+      fontSize: 12,
+      color: c.muted,
+      fontWeight: "600",
+      marginHorizontal: 10,
+      letterSpacing: 0.3,
+    },
+  });
