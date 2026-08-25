@@ -8,8 +8,9 @@ import {
   TextInput,
   ScrollView,
 } from "react-native";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
@@ -40,7 +41,12 @@ export const PaymentsScreen = ({ navigation }) => {
   const [paymentProvider, setPaymentProvider] = useState(null); // payment_provider (bank | mobile_money)
   const [paymentCurrency, setPaymentCurrency] = useState("GHS"); // payment_currency
   const [accountCode, setAccountCode] = useState(""); // account_code (payout number)
-  const [accountVerified, setAccountVerified] = useState(false); // account_verified
+  const [accountVerified, setAccountVerified] = useState(false); // account_verified (DB)
+  // LIVE verification state straight from Paystack (via get_subaccount),
+  // kept deliberately separate from the DB value above so the UI can show
+  // both sides. null = unknown / not yet checked / lookup failed.
+  const [paystackVerified, setPaystackVerified] = useState(null);
+  const [checkingPaystack, setCheckingPaystack] = useState(false);
 
   const [setupVisible, setSetupVisible] = useState(false);
   const [setupType, setSetupType] = useState("bank");
@@ -93,6 +99,95 @@ export const PaymentsScreen = ({ navigation }) => {
       setAccountVerified(Boolean(data.account_verified));
     }
   };
+
+  // Fetch the LIVE verification state from Paystack (independent of our DB).
+  // Mirrors the server rule: `active` alone is NOT enough — Paystack keeps a
+  // subaccount active:true while its dashboard verification is still pending.
+  // We also reject explicit unverified markers (is_verified === false or a
+  // pending/unverified verification_status). Raw signals are logged so any
+  // mismatch with the Paystack dashboard can be diagnosed from the console.
+  const checkPaystackStatus = async () => {
+    const code = subaccountCode;
+    if (!code) {
+      setPaystackVerified(null);
+      return;
+    }
+    try {
+      setCheckingPaystack(true);
+      const resp = await callEdgeFunction("create_subaccount", {
+        action: "get_subaccount",
+        subaccount_code: code,
+      });
+      const sub = resp?.data || {};
+      const status = String(
+        sub.verification_status || sub.account_verification_status || "",
+      )
+        .trim()
+        .toLowerCase();
+
+      console.log("[PaystackStatus] raw signals:", {
+        active: sub.active,
+        is_verified: sub.is_verified,
+        verified: sub.verified,
+        verification_status: status || null,
+      });
+
+      let verified = false;
+      if (
+        sub.active === true &&
+        sub.is_verified !== false &&
+        sub.verified !== false &&
+        !(status && ["pending", "unverified", "processing", "review", "failed"].includes(status))
+      ) {
+        verified = true;
+      }
+      setPaystackVerified(verified);
+    } catch (err) {
+      console.warn("Paystack status check failed:", err);
+      setPaystackVerified(null);
+    } finally {
+      setCheckingPaystack(false);
+    }
+  };
+
+  // Re-check whenever the subaccount code appears or changes.
+  useEffect(() => {
+    if (subaccountCode) checkPaystackStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subaccountCode]);
+
+  // Background auto-sync: the moment we see "Paystack: verified" while our
+  // DB still says pending, quietly pull the verification in — no button tap
+  // needed. Runs once per screen load (ref guard); failures are silent
+  // because the server is the source of truth and statuses stay accurate.
+  const autoSyncedRef = useRef(false);
+  useEffect(() => {
+    if (
+      paystackVerified !== true ||
+      accountVerified ||
+      !subaccountCode ||
+      !sellerId ||
+      autoSyncedRef.current
+    ) {
+      return;
+    }
+    autoSyncedRef.current = true;
+    (async () => {
+      try {
+        setSyncing(true);
+        await callEdgeFunction("create_subaccount", {
+          action: "sync_subaccount_status",
+          seller_id: sellerId,
+          subaccount_code: subaccountCode,
+        });
+        await loadPaymentAccount();
+      } catch (err) {
+        console.warn("Paystack auto-sync failed:", err);
+      } finally {
+        setSyncing(false);
+      }
+    })();
+  }, [paystackVerified, accountVerified, subaccountCode, sellerId]);
 
   useEffect(() => {
     let active = true;
@@ -291,6 +386,15 @@ export const PaymentsScreen = ({ navigation }) => {
   // payout account) — mirrors Express-Store's syncPaystackAndDatabase.
   const handleSync = async () => {
     if (!sellerId || !subaccountCode) return;
+    // Only sync when Paystack itself reports verified — otherwise there is
+    // nothing to pull and the server would just write false again.
+    if (paystackVerified !== true) {
+      toast.error(
+        "Not verified in Paystack",
+        "We couldn't confirm verification with Paystack, so there's nothing to sync yet.",
+      );
+      return;
+    }
     try {
       setSyncing(true);
       await callEdgeFunction("create_subaccount", {
@@ -299,7 +403,12 @@ export const PaymentsScreen = ({ navigation }) => {
         subaccount_code: subaccountCode,
       });
       await loadPaymentAccount();
-      toast.success("Synced with Paystack");
+      await checkPaystackStatus();
+      toast.success(
+        accountVerified
+          ? "Already in sync with Paystack"
+          : "Verified in Paystack — database updated",
+      );
     } catch (err) {
       toast.error(err?.message || "Sync failed");
     } finally {
@@ -416,17 +525,46 @@ export const PaymentsScreen = ({ navigation }) => {
                   •••• {String(accountCode || "").slice(-4) || "—"}
                 </Text>
               </View>
+              {/* Two independent statuses: what PAYSTACK says (live) vs what
+                  our DATABASE has recorded. Sync pulls the former into the
+                  latter when Paystack is ahead. */}
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Status</Text>
+                <Text style={styles.detailLabel}>Paystack Status</Text>
                 <Text
                   style={[
                     styles.detailValue,
                     {
-                      color: accountVerified ? themeColors.success : themeColors.muted,
+                      color:
+                        paystackVerified === true
+                          ? themeColors.success
+                          : paystackVerified === false
+                          ? themeColors.muted
+                          : themeColors.accentYellow,
                     },
                   ]}
                 >
-                  {accountVerified ? "Verified" : "Pending verification"}
+                  {checkingPaystack
+                    ? "Checking…"
+                    : paystackVerified === true
+                    ? "Verified"
+                    : paystackVerified === false
+                    ? "Pending"
+                    : "Unknown"}
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Database Status</Text>
+                <Text
+                  style={[
+                    styles.detailValue,
+                    {
+                      color: accountVerified
+                        ? themeColors.success
+                        : themeColors.muted,
+                    },
+                  ]}
+                >
+                  {accountVerified ? "Verified" : "Pending"}
                 </Text>
               </View>
               <View style={styles.detailActions}>
@@ -441,10 +579,17 @@ export const PaymentsScreen = ({ navigation }) => {
                   />
                   <Text style={styles.editButtonText}>Edit account</Text>
                 </Pressable>
+                {/* Sync is only meaningful when PAYSTACK is verified but the
+                    DB hasn't caught up yet — that's the exact gap it closes. */}
                 <Pressable
-                  style={[styles.detailActionBtn, styles.detailSyncBtn]}
+                  style={[
+                    styles.detailActionBtn,
+                    styles.detailSyncBtn,
+                    !(paystackVerified && !accountVerified) &&
+                      styles.detailSyncBtnDisabled,
+                  ]}
                   onPress={handleSync}
-                  disabled={syncing}
+                  disabled={syncing || paystackVerified !== true}
                 >
                   {syncing ? (
                     <ActivityIndicator size="small" color={themeColors.primary} />
@@ -452,12 +597,39 @@ export const PaymentsScreen = ({ navigation }) => {
                     <Ionicons
                       name="sync-outline"
                       size={16}
-                      color={themeColors.primary}
+                      color={
+                        paystackVerified ? themeColors.primary : themeColors.muted
+                      }
                     />
                   )}
-                  <Text style={styles.editButtonText}>Sync</Text>
+                  <Text
+                    style={[
+                      styles.editButtonText,
+                      !paystackVerified && styles.editButtonTextDisabled,
+                    ]}
+                  >
+                    {paystackVerified && !accountVerified
+                      ? "Sync to database"
+                      : "Sync"}
+                  </Text>
                 </Pressable>
               </View>
+              {subaccountCode && !accountVerified && (
+                <Pressable
+                  style={styles.syncHintWrap}
+                  onPress={checkingPaystack ? undefined : checkPaystackStatus}
+                >
+                  <Text style={styles.syncHint}>
+                    {checkingPaystack
+                      ? "Checking Paystack…"
+                      : paystackVerified === true
+                      ? "Verified in Paystack — tap Sync to update your database."
+                      : paystackVerified === false
+                      ? "Not yet verified in Paystack. Tap to re-check."
+                      : "Couldn't reach Paystack — tap to retry."}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           </View>
         ) : (
@@ -484,6 +656,11 @@ export const PaymentsScreen = ({ navigation }) => {
       {/* Store payment account setup / edit modal */}
       <Modal visible={setupVisible} transparent animationType="slide">
         <View style={styles.setupModalOverlay}>
+          <KeyboardAvoidingView
+            behavior="padding"
+            keyboardVerticalOffset={0}
+            style={styles.setupKeyboardWrap}
+          >
           <View style={styles.setupModal}>
             <View style={styles.setupModalHead}>
               <Text style={styles.setupModalTitle}>
@@ -677,6 +854,7 @@ export const PaymentsScreen = ({ navigation }) => {
               </>
             )}
           </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </SafeAreaView>
@@ -845,6 +1023,22 @@ const buildPaymentsStyles = (c) =>
   },
   detailEditBtn: {},
   detailSyncBtn: {},
+  detailSyncBtnDisabled: {
+    opacity: 0.5,
+  },
+  editButtonTextDisabled: {
+    color: c.muted,
+  },
+  syncHint: {
+    fontSize: 11,
+    color: c.muted,
+    textAlign: "center",
+  },
+  syncHintWrap: {
+    alignItems: "center",
+    marginTop: 8,
+    paddingVertical: 4,
+  },
   editButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -883,6 +1077,9 @@ const buildPaymentsStyles = (c) =>
     flex: 1,
     backgroundColor: c.overlay,
     justifyContent: "flex-end",
+  },
+  setupKeyboardWrap: {
+    width: "100%",
   },
   setupModal: {
     backgroundColor: c.light,

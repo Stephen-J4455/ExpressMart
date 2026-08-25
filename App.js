@@ -25,6 +25,7 @@ import {
 } from "react-native-safe-area-context";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { subscribeTabBarVisibility } from "./src/utils/tabBarAutoHide";
+import { radius } from "./src/theme/colors";
 import * as Linking from "expo-linking";
 import { useResponsive } from "./src/hooks/useResponsive";
 import { useAppStyles } from "./src/hooks/useAppStyles";
@@ -38,6 +39,9 @@ import { ToastProvider } from "./src/context/ToastContext";
 import { ChatProvider } from "./src/context/ChatContext";
 import { AdsProvider } from "./src/context/AdsContext";
 import { NotificationProvider } from "./src/context/NotificationContext";
+import { AIAssistantProvider } from "./src/context/AIAssistantContext";
+import { ScreenPointerOverlay } from "./src/components/ai/ScreenPointerOverlay";
+import { AIAssistantScreen } from "./src/screens/AIAssistantScreen";
 import { FeedScreen } from "./src/screens/FeedScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { CartScreen } from "./src/screens/CartScreen";
@@ -84,6 +88,7 @@ import { StoreRegistrationScreen } from "./src/screens/StoreRegistrationScreen";
 
 import { supabase } from "./src/lib/supabase";
 import React, { useEffect, useMemo, useRef } from "react";
+import { syncPaystackVerification } from "./src/services/payment";
 import UpdateModal from "./src/components/UpdateModal";
 import { checkForUpdate } from "./src/services/updateService";
 
@@ -264,13 +269,19 @@ const TransitionedFeedScreen = withTabTransition(FeedScreen);
 const TransitionedCartScreen = withTabTransition(CartScreen);
 const TransitionedAccountScreen = withTabTransition(AccountScreen);
 
-/** Docked, flat, theme-aware mobile bottom tab bar.
+/** Floating pill bottom tab bar (mobile) — a rounded theme-aware pill with the
+ *  main tabs (icon-only, active tab gets a soft primary-tint highlight like the
+ *  header icon buttons) plus a detached circular AI Assistant button on the
+ *  right.
+ *  The Account tab lives in the Home header now (top-left), so it is filtered
+ *  out of the bar — but its Tab.Screen stays registered so
+ *  navigation.navigate("Main", { screen: "Account" }) deep-links keep working.
  *  Auto-hides when tab screens report upward scrolling and slides back in on
  *  downward scrolling (see src/utils/tabBarAutoHide.js). */
 const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = insets.bottom > 0 ? insets.bottom : 0;
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   const [hidden, setHidden] = React.useState(false);
   // 1 = fully visible, 0 = fully hidden (drives slide + fade together)
@@ -289,12 +300,21 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
     return unsubscribe;
   }, [visibility]);
 
+  // Account is rendered in the Home header — keep the route, drop the tab.
+  const tabs = state.routes.filter((route) => route.name !== "Account");
+  const focusedKey = state.routes[state.index]?.key;
+  // Theme-aware pill surface: near-white in light mode, dark charcoal glass in
+  // dark mode. Shared by the tab pill and the AI button.
+  const pillSurface = isDark ? "rgba(28, 28, 30, 0.96)" : "rgba(255, 255, 255, 0.98)";
+  const pillBorder = isDark ? "rgba(255, 255, 255, 0.08)" : colors.border;
+  const activeColor = colors.primary;
+  const inactiveColor = colors.muted;
+
   return (
     <Animated.View
       pointerEvents={hidden ? "none" : "auto"}
       style={[
         tabStyles.dockedWrapper,
-        { backgroundColor: colors.surface, borderTopColor: colors.border },
         {
           transform: [
             {
@@ -312,105 +332,159 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
     >
       <View
         style={[
-          tabStyles.bar,
+          tabStyles.barRow,
           {
-            borderTopColor: colors.border,
             paddingBottom: Math.max(bottomInset, MOBILE_TAB_BAR_PADDING_BOTTOM),
           },
         ]}
       >
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const isFocused = state.index === index;
-          // Icons use the theme tint directly — no filled backgrounds.
-          const color = isFocused ? colors.primary : colors.muted;
-          const onPress = () => {
-            const event = navigation.emit({
-              type: "tabPress",
-              target: route.key,
-              canPreventDefault: true,
-            });
-            if (!isFocused && !event.defaultPrevented)
-              navigation.navigate(route.name);
-          };
-          return (
-            <Pressable
-              key={route.key}
-              onPress={onPress}
-              style={({ pressed }) => [
-                tabStyles.tab,
-                pressed && tabStyles.tabPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isFocused }}
-            >
-              {/* Active indicator dot above the icon */}
-              <View
-                style={[
-                  tabStyles.indicator,
-                  isFocused && { backgroundColor: colors.primary,borderRadius: 6 },
+        {/* Floating pill with the main tabs */}
+        <View
+          style={[
+            tabStyles.pill,
+            { backgroundColor: pillSurface, borderColor: pillBorder },
+          ]}
+        >
+          {tabs.map((route) => {
+            const { options } = descriptors[route.key];
+            const isFocused = route.key === focusedKey;
+            const color = isFocused ? activeColor : inactiveColor;
+            const onPress = () => {
+              const event = navigation.emit({
+                type: "tabPress",
+                target: route.key,
+                canPreventDefault: true,
+              });
+              if (!isFocused && !event.defaultPrevented)
+                navigation.navigate(route.name);
+            };
+            return (
+              <Pressable
+                key={route.key}
+                onPress={onPress}
+                style={({ pressed }) => [
+                  tabStyles.tab,
+                  // Active tab matches the header icon buttons: soft primary
+                  // tint fill + primary border (same recipe as the FeedProduct
+                  // "Add to Cart" pill).
+                  isFocused && [
+                    tabStyles.tabActive,
+                    {
+                      backgroundColor: colors.primary + "15",
+                      borderColor: colors.primary + "30",
+                    },
+                  ],
+                  pressed && tabStyles.tabPressed,
                 ]}
-              />
-              <View style={tabStyles.iconWrap}>
-                {options.tabBarIcon({ color, size: 28, focused: isFocused })}
-                {route.name === "Cart" && cartCount > 0 && (
-                  <View
-                    style={[
-                      tabStyles.badge,
-                      { backgroundColor: colors.primary },
-                    ]}
-                  >
-                    <Text style={tabStyles.badgeText}>{cartCount}</Text>
-                  </View>
-                )}
-              </View>
-            </Pressable>
-          );
-        })}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isFocused }}
+                accessibilityLabel={route.name}
+              >
+                <View style={tabStyles.iconWrap}>
+                  {options.tabBarIcon({ color, size: 24, focused: isFocused })}
+                  {route.name === "Cart" && cartCount > 0 && (
+                    <View
+                      style={[
+                        tabStyles.badge,
+                        {
+                          backgroundColor: colors.primary,
+                          // Ring matches the pill surface (light/dark aware).
+                          borderColor: isDark ? "#1C1C1E" : "#fff",
+                        },
+                      ]}
+                    >
+                      <Text style={tabStyles.badgeText}>{cartCount}</Text>
+                    </View>
+                  )}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* Detached circular AI Assistant button */}
+        <Pressable
+          onPress={() => navigation.navigate("AIAssistant")}
+          style={({ pressed }) => [
+            tabStyles.aiButton,
+            { backgroundColor: pillSurface, borderColor: pillBorder },
+            pressed && tabStyles.tabPressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="AI Assistant"
+        >
+          <Ionicons name="sparkles" size={24} color={activeColor} />
+        </Pressable>
       </View>
-      </Animated.View>
+    </Animated.View>
   );
 };
 
 const tabStyles = StyleSheet.create({
-  // Full-width docked bar pinned to the bottom edge — no floating margins.
-  // The wrapper carries the surface background so the safe-area zone below
-  // the icons is filled too (no transparent gap under the bar).
+  // Floating wrapper pinned to the bottom edge. Fully transparent — the pill
+  // and AI button carry their own translucent surfaces + shadows.
   dockedWrapper: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
     zIndex: 1000,
-    borderTopWidth: 1,
-    // borderTopColor is applied inline from the theme at the usage site
   },
-  bar: {
+  barRow: {
     flexDirection: "row",
-    alignItems: "stretch",
-    borderTopWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    gap: 10,
+  },
+  pill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: radius.full,
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
   tab: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 6,
-    paddingBottom: 4,
+    paddingVertical: 12,
+    borderRadius: radius.full,
+    // Transparent border reserved on every tab so the active tab's primary
+    // border doesn't shift layout when it appears.
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  tabActive: {
+    // backgroundColor applied inline from the theme (light/dark aware)
   },
   tabPressed: {
     opacity: 0.6,
-  },
-  indicator: {
-    width: 18,
-    height: 3,
-    borderRadius: 2,
-    marginBottom: 2,
-    backgroundColor: "transparent",
   },
   iconWrap: {
     position: "relative",
     alignItems: "center",
     justifyContent: "center",
+  },
+  aiButton: {
+    width: 62,
+    height: 62,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
   badge: {
     position: "absolute",
@@ -423,7 +497,7 @@ const tabStyles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 4,
     borderWidth: 1.5,
-    borderColor: "#fff",
+    // borderColor applied inline from the theme (matches the pill surface)
   },
   badgeText: {
     color: "#fff",
@@ -1086,6 +1160,7 @@ const AuthenticatedApp = () => {
           component={GuardedPrivacySettings}
         />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+        <Stack.Screen name="AIAssistant" component={AIAssistantScreen} />
       </Stack.Navigator>
     </NotificationProvider>
   );
@@ -1189,10 +1264,30 @@ const NavigationWithTheme = () => {
   return (
     <NavigationContainer theme={theme} linking={linking}>
       <StatusBar style={isDark ? "light" : "dark-content"} />
-      <AuthenticatedApp />
+      <AIAssistantProvider>
+        {/* Global AI grounding overlay — renders the pointer/spotlight above
+            every screen when the assistant invokes point_to_element. */}
+        <AuthenticatedApp />
+        <ScreenPointerOverlay />
+      </AIAssistantProvider>
     </NavigationContainer>
   );
 };
+
+// Silently pulls Paystack's verification state into the database when the app
+// loads, so a newly verified subaccount is reflected across the whole app
+// (dashboard badge, go-live gate) without the seller opening Payments and
+// pressing Sync. Fire-and-forget — failures are logged, never surfaced.
+function PaystackVerificationWatcher() {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+    syncPaystackVerification();
+  }, [user?.id]);
+
+  return null;
+}
 
 export default function App() {
   return (
@@ -1200,6 +1295,7 @@ export default function App() {
       <KeyboardProvider>
         <ThemeProvider>
           <AuthProvider>
+            <PaystackVerificationWatcher />
             <ToastProvider>
               <CartProvider>
                 <ShopProvider>

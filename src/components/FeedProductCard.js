@@ -105,6 +105,11 @@ export const FeedProductCard = memo(function FeedProductCard({
   const [commentCount, setCommentCount] = useState(
     Number(product.comments_count || 0),
   );
+  // Keep the counter in sync when the feed refetches and hands us a fresh
+  // product object (useState above only reads the value on first mount).
+  useEffect(() => {
+    setCommentCount(Number(product.comments_count || 0));
+  }, [product.comments_count]);
   const [commentText, setCommentText] = useState("");
   const [commentRating, setCommentRating] = useState(5);
   const [commentPosting, setCommentPosting] = useState(false);
@@ -230,6 +235,86 @@ export const FeedProductCard = memo(function FeedProductCard({
       setCommentsLoading(false);
     }
   }, [product.id]);
+
+  // ── Realtime comment count ────────────────────────────────────────────────
+  // Keeps the header comment counter live as OTHER users post/delete reviews.
+  // The current user's own posts already update state optimistically in
+  // submitComment, so those events are ignored to avoid double-counting.
+  const currentUserId = user?.id ?? null;
+  useEffect(() => {
+    if (!supabase || !product.id) return;
+
+    // UNIQUE channel name per subscription instance. Reusing a static name
+    // collides with an in-flight async removeChannel() when the effect
+    // re-runs (StrictMode double-mount / list recycling), producing
+    // "cannot add postgres_changes callbacks ... after subscribe()".
+    const channelName = `reviews-${product.id}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "express_reviews",
+          filter: `product_id=eq.${product.id}`,
+        },
+        (payload) => {
+          const eventType = payload.eventType || payload.type;
+          const newRow = payload.new || {};
+          const oldRow = payload.old || {};
+          if (
+            (newRow.user_id && newRow.user_id === currentUserId) ||
+            (oldRow.user_id && oldRow.user_id === currentUserId)
+          ) {
+            return;
+          }
+
+          const countsAsComment = (row) =>
+            Boolean(row.is_approved) && String(row.comment || "").trim();
+
+          if (eventType === "INSERT") {
+            if (countsAsComment(newRow)) {
+              setCommentCount((c) => c + 1);
+              setComments((prev) => [
+                {
+                  id: newRow.id,
+                  review_id: newRow.id,
+                  user_id: newRow.user_id,
+                  rating: newRow.rating,
+                  comment: newRow.comment,
+                  created_at: newRow.created_at,
+                  author_name: "Customer",
+                  author_avatar: null,
+                },
+                ...prev.filter((cm) => cm.id !== newRow.id),
+              ]);
+            }
+          } else if (eventType === "DELETE") {
+            setCommentCount((c) => Math.max(0, c - 1));
+            setComments((prev) => prev.filter((cm) => cm.id !== oldRow.id));
+          } else if (eventType === "UPDATE") {
+            // Approval flips / comment edits — adjust by comparing states.
+            if (countsAsComment(newRow) && !countsAsComment(oldRow)) {
+              setCommentCount((c) => c + 1);
+            } else if (!countsAsComment(newRow) && countsAsComment(oldRow)) {
+              setCommentCount((c) => Math.max(0, c - 1));
+            }
+            if (!countsAsComment(newRow)) {
+              setComments((prev) => prev.filter((cm) => cm.id !== newRow.id));
+            }
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [product.id, currentUserId]);
 
   const openCommentModal = useCallback(() => {
     setCommentModalVisible(true);
@@ -443,23 +528,6 @@ export const FeedProductCard = memo(function FeedProductCard({
             </View>
           )}
 
-          {/* Rating pill — top-right: average stars + value */}
-          {avgRating > 0 && (
-            <View style={styles.ratingPill}>
-              <View style={styles.ratingPillStars}>
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <Ionicons
-                    key={s}
-                    name={s <= Math.round(avgRating) ? "star" : "star-outline"}
-                    size={9}
-                    color={REVIEW_STAR_COLOR}
-                  />
-                ))}
-              </View>
-              <Text style={styles.ratingPillText}>{avgRating.toFixed(1)}</Text>
-            </View>
-          )}
-
           {/* Dark label pill — bottom of image (same as ProductCard tagPill) */}
           {(product.tags?.[0] || product.category) && (
             <View style={styles.labelPill}>
@@ -479,11 +547,31 @@ export const FeedProductCard = memo(function FeedProductCard({
             GH₵{Number(product.price || 0).toLocaleString()}
           </Text>
         )}
+        {/* Star rating — right-aligned on the price row */}
+        {avgRating > 0 && (
+          <View style={[styles.ratingPill, styles.ratingPillInline]}>
+            <View style={styles.ratingPillStars}>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <Ionicons
+                  key={s}
+                  name={s <= Math.round(avgRating) ? "star" : "star-outline"}
+                  size={9}
+                  color={REVIEW_STAR_COLOR}
+                />
+              ))}
+            </View>
+            <Text style={styles.ratingPillText}>{avgRating.toFixed(1)}</Text>
+          </View>
+        )}
       </View>
 
       {/* ── Engagement bar ── */}
       <View style={styles.engagementBar}>
-        <FeedWishlistButton productId={product.id} styles={styles} />
+        <FeedWishlistButton
+          productId={product.id}
+          initialCount={product.likes_count ?? null}
+          styles={styles}
+        />
         <Pressable
           style={styles.engagementItem}
           onPress={openCommentModal}
@@ -904,12 +992,18 @@ const galleryPageWidth = () => PAGE_WIDTH;
 
 // Wishlist heart with optimistic count, backed by express_wishlists — same
 // behavior as the reels feed's like button.
-const FeedWishlistButton = ({ productId, styles }) => {
+const FeedWishlistButton = ({ productId, styles, initialCount = null }) => {
   const { colors: c } = useTheme();
   const { user } = useAuth();
   const [wishlisted, setWishlisted] = useState(false);
-  const [count, setCount] = useState(null);
+  const [count, setCount] = useState(initialCount);
   const [animating, setAnimating] = useState(false);
+
+  // Seed from the fresh likes_count the feed attached at fetch time, so the
+  // heart never renders blank before its own query resolves.
+  useEffect(() => {
+    if (initialCount != null) setCount((n) => (n == null ? initialCount : n));
+  }, [initialCount]);
 
   useEffect(() => {
     let mounted = true;
@@ -939,6 +1033,55 @@ const FeedWishlistButton = ({ productId, styles }) => {
       mounted = false;
     };
   }, [productId, user]);
+
+  // ── Realtime like count ───────────────────────────────────────────────────
+  // Keeps the heart counter live as OTHER users wishlist/unwishlist. The
+  // current user's own toggles are applied optimistically in `toggle`, so
+  // their realtime events are ignored to avoid double-counting.
+  const currentUserId = user?.id ?? null;
+  useEffect(() => {
+    if (!supabase || !productId) return;
+
+    // UNIQUE channel name per subscription instance (see comments effect —
+    // static names collide with in-flight removeChannel() calls).
+    const channelName = `wishlists-${productId}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "express_wishlists",
+          filter: `product_id=eq.${productId}`,
+        },
+        (payload) => {
+          const eventType = payload.eventType || payload.type;
+          const newRow = payload.new || {};
+          const oldRow = payload.old || {};
+          if (
+            (newRow.user_id && newRow.user_id === currentUserId) ||
+            (oldRow.user_id && oldRow.user_id === currentUserId)
+          ) {
+            return;
+          }
+
+          if (eventType === "INSERT") {
+            setCount((n) => (n ?? 0) + 1);
+          } else if (eventType === "DELETE") {
+            setCount((n) => Math.max(0, (n ?? 0) - 1));
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [productId, currentUserId]);
 
   const toggle = async () => {
     if (!user) return;
@@ -1149,6 +1292,15 @@ const buildFeedCardStyles = (c) =>
       fontSize: 10,
       fontWeight: "800",
       color: c.dark,
+    },
+    // Inline variant: sits at the right edge of the price row instead of
+    // floating over the product image.
+    ratingPillInline: {
+      position: "static",
+      top: "auto",
+      right: "auto",
+      marginLeft: "auto",
+      alignSelf: "center",
     },
     labelPill: {
       position: "absolute",

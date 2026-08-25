@@ -14,29 +14,37 @@ const getCountryFromCurrency = (currency: string): string => {
   return "ghana";
 };
 
-const isSubaccountVerified = (sub: any): boolean => {
+// Verification rule shared by every decision point.
+//
+// Paystack's `active` flag only means "payouts enabled" — a freshly created
+// subaccount can be active:true while its dashboard verification is still
+// PENDING. So being verified requires:
+//   1. active === true                      (payouts enabled)
+//   2. no explicit unverified marker        (is_verified/verified === false,
+//                                            or a pending/unverified/review
+//                                            verification_status)
+// Fields Paystack doesn't send are simply ignored.
+const UNVERIFIED_STATUSES = [
+  "pending",
+  "unverified",
+  "processing",
+  "review",
+  "failed",
+];
+
+const getEffectiveVerificationState = (sub: any): boolean => {
   if (!sub || typeof sub !== "object") return false;
-  if (
-    sub.active === true ||
-    sub.is_verified === true ||
-    sub.verified === true
-  ) {
-    return true;
-  }
+  if (sub.active !== true) return false;
+  if (sub.is_verified === false || sub.verified === false) return false;
 
   const status = String(
     sub.verification_status || sub.account_verification_status || "",
   )
     .trim()
     .toLowerCase();
+  if (status && UNVERIFIED_STATUSES.includes(status)) return false;
 
-  return ["verified", "active", "approved", "success"].includes(status);
-};
-
-const getEffectiveVerificationState = (sub: any): boolean => {
-  // Paystack's `active` is the canonical toggle we set from admin.
-  if (sub && typeof sub.active === "boolean") return sub.active;
-  return isSubaccountVerified(sub);
+  return true;
 };
 
 const normalizeBanks = (banks: any[]): any[] => {
@@ -486,6 +494,21 @@ serve(async (req) => {
       const accountVerified = getEffectiveVerificationState(sub);
       const nextPlatform = "paystack";
 
+      // Audit trail: what Paystack ACTUALLY reports vs what we will store.
+      // If Paystack says active=false, account_verified is forced to false —
+      // an unverified account can never be synced as verified.
+      console.log(
+        "[create_subaccount] sync_subaccount_status.paystack_verdict",
+        {
+          request_id: requestId,
+          seller_id: sellerId,
+          subaccount_code: normalizedSubaccountCode,
+          paystack_active: paystackActive,
+          verified_in_paystack: accountVerified,
+          db_account_verified_before: Boolean(sellerRow.account_verified),
+        },
+      );
+
       const inSync =
         String(sellerRow.payment_platform || "").toLowerCase() ===
           nextPlatform &&
@@ -550,6 +573,42 @@ serve(async (req) => {
 
     if (!sellerId) throw new Error("seller_id is required");
 
+    // ── Resolve the business_name sent to Paystack ──────────────────────────
+    // Prefer the explicit request name, then fall back to the store's
+    // registered name in express_sellers (the app can lose component state
+    // across the payment round-trip, previously producing "Seller-<id>").
+    // A short seller-id suffix keeps names unique on Paystack:
+    //   "{StoreName}-{sellerId}"
+    let resolvedName = String(name || "").trim();
+    if (!resolvedName && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const nameLookupClient = createClient(
+          SUPABASE_URL,
+          SUPABASE_SERVICE_ROLE_KEY,
+        );
+        const { data: sellerNameRow } = await nameLookupClient
+          .from("express_sellers")
+          .select("name")
+          .eq("id", sellerId)
+          .maybeSingle();
+        resolvedName = String(sellerNameRow?.name || "").trim();
+      } catch (nameLookupErr) {
+        console.warn(
+          "[create_subaccount] store-name lookup failed:",
+          nameLookupErr,
+        );
+      }
+    }
+    if (!resolvedName) {
+      console.warn(
+        "[create_subaccount] no store name resolvable, using Seller-<id> fallback",
+      );
+    }
+    const shortSellerId = String(sellerId).replace(/-/g, "").slice(0, 8);
+    const businessName = resolvedName
+      ? `${resolvedName}-${shortSellerId}`
+      : `Seller-${shortSellerId}`;
+
     let percentageCharge = 0;
     if (body?.percentage_charge != null) {
       percentageCharge = Number(body.percentage_charge);
@@ -561,7 +620,7 @@ serve(async (req) => {
     }
 
     const payload: Record<string, any> = {
-      business_name: name || "Seller-" + String(sellerId).slice(0, 6),
+      business_name: businessName,
       primary_contact_name: name || null,
       primary_contact_email: email || null,
       percentage_charge: percentageCharge,

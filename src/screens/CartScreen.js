@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Pressable,
   StyleSheet,
@@ -20,6 +21,7 @@ import { FeedProductCard } from "../components/FeedProductCard";
 import { SectionHeader } from "../components/SectionHeader";
 import { supabase } from "../lib/supabase";
 import { useResponsive } from "../hooks/useResponsive";
+import { useGrounding } from "../hooks/useGrounding";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { radius } from "../theme/colors";
@@ -85,6 +87,51 @@ export const CartScreen = ({ navigation }) => {
   const { isWide, contentMaxWidth } = useResponsive();
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildCartStyles(c));
+
+  // AI grounding ref — lets the assistant point at the checkout button.
+  const checkoutBtnRef = useGrounding("cart.checkoutButton");
+
+  // ── Per-item pending actions (loading animations) ──────────────────────────
+  // Maps item.id → "remove" | "inc" | "dec" while the async cart operation
+  // (DB sync + cart reload) is in flight, so the exact button the user tapped
+  // shows a spinner instead of the icon.
+  const [pendingItemActions, setPendingItemActions] = useState({});
+
+  const setItemPending = useCallback((itemId, action) => {
+    setPendingItemActions((prev) => {
+      const next = { ...prev };
+      if (action) next[itemId] = action;
+      else delete next[itemId];
+      return next;
+    });
+  }, []);
+
+  const handleRemoveItem = useCallback(
+    async (item) => {
+      if (pendingItemActions[item.id]) return; // one action at a time per item
+      setItemPending(item.id, "remove");
+      try {
+        await removeFromCart(item.product.id, item.size, item.color, item.id);
+      } finally {
+        // Item unmounts on success; the state cleanup is harmless then.
+        setItemPending(item.id, null);
+      }
+    },
+    [pendingItemActions, removeFromCart, setItemPending],
+  );
+
+  const handleChangeQuantity = useCallback(
+    async (item, nextQuantity, action) => {
+      if (pendingItemActions[item.id]) return;
+      setItemPending(item.id, action);
+      try {
+        await updateQuantity(item.product.id, nextQuantity, item.id);
+      } finally {
+        setItemPending(item.id, null);
+      }
+    },
+    [pendingItemActions, updateQuantity, setItemPending],
+  );
 
   // ── Empty-cart discovery content: ads, liked products, trending feed ──
   const [cartAds, setCartAds] = useState([]);
@@ -334,7 +381,7 @@ export const CartScreen = ({ navigation }) => {
         <Text style={styles.totalValue}>GH₵{total.toLocaleString()}</Text>
       </View>
 
-      <Pressable style={styles.checkout} onPress={handleCheckout}>
+      <Pressable ref={checkoutBtnRef} style={styles.checkout} onPress={handleCheckout}>
         <LinearGradient
           colors={
             hasOutOfStockItems
@@ -408,6 +455,7 @@ export const CartScreen = ({ navigation }) => {
                 style={[
                   styles.itemCard,
                   isOutOfStock && styles.itemCardOutOfStock,
+                  pendingItemActions[id] === "remove" && styles.itemCardRemoving,
                 ]}
               >
                 <Pressable
@@ -493,9 +541,16 @@ export const CartScreen = ({ navigation }) => {
                 <View style={styles.itemActions}>
                   <Pressable
                     style={styles.removeButton}
-                    onPress={() => removeFromCart(product.id, size, color, id)}
+                    onPress={() => handleRemoveItem({ id, product, size, color })}
+                    disabled={!!pendingItemActions[id]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove from cart"
                   >
-                    <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                    {pendingItemActions[id] === "remove" ? (
+                      <ActivityIndicator size="small" color="#EF4444" />
+                    ) : (
+                      <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                    )}
                     <Text style={styles.removeText}>Remove</Text>
                   </Pressable>
                   <View style={styles.quantityRow}>
@@ -505,23 +560,31 @@ export const CartScreen = ({ navigation }) => {
                         quantity <= 1 && styles.qtyButtonDisabled,
                       ]}
                       onPress={() =>
-                        updateQuantity(
-                          product.id,
+                        handleChangeQuantity(
+                          { id, product },
                           Math.max(1, quantity - 1),
-                          id,
+                          "dec",
                         )
                       }
+                      disabled={quantity <= 1 || !!pendingItemActions[id]}
                     >
-                      <Ionicons
-                        name="remove"
-                        size={18}
-                        color={
-                          quantity <= 1 ? "themeColors.light" : themeColors.dark
-                        }
-                      />
+                      {pendingItemActions[id] === "dec" ? (
+                        <ActivityIndicator size="small" color={themeColors.dark} />
+                      ) : (
+                        <Ionicons
+                          name="remove"
+                          size={18}
+                          color={quantity <= 1 ? themeColors.light : themeColors.dark}
+                        />
+                      )}
                     </Pressable>
                     <View style={styles.qtyValueContainer}>
-                      <Text style={styles.qtyValue}>{quantity}</Text>
+                      {pendingItemActions[id] === "inc" ||
+                      pendingItemActions[id] === "dec" ? (
+                        <ActivityIndicator size="small" color={themeColors.primary} />
+                      ) : (
+                        <Text style={styles.qtyValue}>{quantity}</Text>
+                      )}
                     </View>
                     <Pressable
                       style={[
@@ -531,11 +594,17 @@ export const CartScreen = ({ navigation }) => {
                           styles.qtyButtonDisabledAdd,
                       ]}
                       onPress={() =>
-                        updateQuantity(product.id, quantity + 1, id)
+                        handleChangeQuantity({ id, product }, quantity + 1, "inc")
                       }
-                      disabled={isOutOfStock || isMaxStockReached}
+                      disabled={
+                        isOutOfStock || isMaxStockReached || !!pendingItemActions[id]
+                      }
                     >
-                      <Ionicons name="add" size={18} color="#fff" />
+                      {pendingItemActions[id] === "inc" ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Ionicons name="add" size={18} color="#fff" />
+                      )}
                     </Pressable>
                   </View>
                 </View>
@@ -579,7 +648,7 @@ const buildCartStyles = (c) =>
     container: {
       flex: 1,
       backgroundColor: c.background,
-      paddingBottom: 50,
+     
     },
     header: {
       paddingHorizontal: 20,
@@ -838,6 +907,11 @@ const buildCartStyles = (c) =>
       fontWeight: "700",
       fontSize: 16,
       color: c.dark,
+    },
+    // Dim the whole card while a removal is in flight so the user sees the
+    // item is being deleted.
+    itemCardRemoving: {
+      opacity: 0.45,
     },
     summary: {
       backgroundColor: "transparent",

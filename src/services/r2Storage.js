@@ -18,6 +18,10 @@
 
 import { Platform } from "react-native";
 import { supabase } from "../lib/supabase";
+// Static import (NOT dynamic): lazily `import()`-ing this module deep inside
+// the upload flow caused odd dev-mode crashes ("Cannot read property 'reload'
+// of undefined") when Metro had to resolve the extra module mid-request.
+import * as FileSystem from "expo-file-system/legacy";
 
 const UPLOAD_URL_FUNCTION = "get-r2-upload-url";
 const DELETE_OBJECT_FUNCTION = "delete-r2-object";
@@ -151,22 +155,29 @@ async function putToR2(uploadUrl, body, contentType) {
  * Blob on web, ArrayBuffer on native (works with plain fetch PUT).
  */
 async function readAssetBody(uri, pickedFile = null) {
-  if (pickedFile instanceof Blob) return pickedFile;
-  if (Platform.OS === "web") {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    if (!blob) throw new Error("Could not read the selected file");
-    return blob;
+  try {
+    if (pickedFile instanceof Blob) return pickedFile;
+    if (Platform.OS === "web") {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      if (!blob) throw new Error("blob was empty");
+      return blob;
+    }
+    // Native: read base64 and decode to bytes for a reliable binary PUT.
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch (err) {
+    throw new Error(
+      `Could not read the selected file (${uri}): ${
+        err?.message || String(err)
+      }`,
+    );
   }
-  // Native: read base64 and decode to bytes for a reliable binary PUT.
-  const ExpoFileSystem = await import("expo-file-system/legacy");
-  const base64 = await ExpoFileSystem.readAsStringAsync(uri, {
-    encoding: ExpoFileSystem.EncodingType.Base64,
-  });
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
 }
 
 /**
@@ -194,16 +205,35 @@ export const uploadToR2Presigned = async ({
     `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const contentType = pickedFile?.type || getImageMimeType(uri);
 
-  const { uploadUrl, publicUrl, key } = await fetchPresignedUploadUrl(
-    safeName,
-    contentType,
-    folder,
-  );
+  try {
+    const { uploadUrl, publicUrl, key } = await fetchPresignedUploadUrl(
+      safeName,
+      contentType,
+      folder,
+    );
 
-  const body = await readAssetBody(uri, pickedFile);
-  await putToR2(uploadUrl, body, contentType);
+    const body = await readAssetBody(uri, pickedFile);
+    await putToR2(uploadUrl, body, contentType);
 
-  return { publicUrl, key };
+    return { publicUrl, key };
+  } catch (err) {
+    // Surface WHICH stage failed so upload issues are diagnosable from the
+    // console alone (presigned-URL request vs local file read vs PUT).
+    const stage = err?.message?.startsWith("Could not read")
+      ? "reading file"
+      : err?.message?.startsWith("Upload failed")
+      ? "uploading to storage"
+      : "requesting upload URL";
+    console.error(
+      `[r2Storage] upload failed during ${stage}:`,
+      err?.stack || err,
+    );
+    throw new Error(
+      `${stage.charAt(0).toUpperCase() + stage.slice(1)} failed: ${
+        err?.message || String(err)
+      }`,
+    );
+  }
 };
 
 /** Delete an object from R2 via the delete-r2-object Edge Function. */

@@ -224,6 +224,17 @@ export const FeedScreen = ({ route, navigation }) => {
         isNetwork: true,
       }));
       const videoRef = useRef(null);
+      // Mirror of the video's current time, kept in a ref (no re-renders) so
+      // the hold-to-rewind stepper always reads a fresh position.
+      const currentTimeRef = useRef(0);
+      // TikTok-style hold gestures: press-and-hold the right half → 2x speed
+      // forward; left half → continuous rewind; both until release. A short
+      // tap still toggles play/pause.
+      const [playbackRate, setPlaybackRate] = useState(1);
+      const [holdAction, setHoldAction] = useState(null); // "forward" | "rewind" | null
+      const holdTimerRef = useRef(null);
+      const rewindIntervalRef = useRef(null);
+      const holdActivatedRef = useRef(false);
       // Looping pulse that only plays when the video is *user-paused* (so it
       // never flashes while scrolling or while the feed is backgrounded).
       const pulseAnim = useRef(new Animated.Value(0)).current;
@@ -249,6 +260,94 @@ export const FeedScreen = ({ route, navigation }) => {
         },
         [itemId],
       );
+
+      // Platform-aware seek used by the hold-to-rewind gesture:
+      // react-native-video v6 exposes ref.seek(); the web backend forwards
+      // the DOM <video> element as the ref (currentTime assignment).
+      const seekTo = useCallback(
+        (seconds) => {
+          const ref = videoRef.current;
+          if (!ref) return;
+          try {
+            if (Platform.OS === "web") {
+              ref.currentTime = seconds;
+            } else if (typeof ref.seek === "function") {
+              ref.seek(seconds);
+            }
+            currentTimeRef.current = seconds;
+          } catch (e) {
+            logReel("seek failed", e);
+          }
+        },
+        [logReel],
+      );
+
+      // ── Hold-to-seek (TikTok-style) ────────────────────────────────────────
+      const clearHoldTimers = useCallback(() => {
+        if (holdTimerRef.current) {
+          clearTimeout(holdTimerRef.current);
+          holdTimerRef.current = null;
+        }
+        if (rewindIntervalRef.current) {
+          clearInterval(rewindIntervalRef.current);
+          rewindIntervalRef.current = null;
+        }
+      }, []);
+
+      // Ends any active hold. Returns true when the gesture was a hold
+      // (already consumed) and false for a quick tap (caller should toggle
+      // play/pause).
+      const endHold = useCallback(() => {
+        clearHoldTimers();
+        if (!holdActivatedRef.current) return false;
+        holdActivatedRef.current = false;
+        setPlaybackRate(1);
+        setHoldAction(null);
+        return true;
+      }, [clearHoldTimers]);
+
+      const handleVideoPressIn = useCallback(
+        (e) => {
+          const locationX = e.nativeEvent?.locationX ?? 0;
+          const side = locationX < SCREEN_WIDTH / 2 ? "left" : "right";
+          // Grace period so a quick tap doesn't trigger seeking.
+          holdTimerRef.current = setTimeout(() => {
+            holdActivatedRef.current = true;
+            if (side === "right") {
+              // Smooth continuous forward: bump the playback rate (TikTok's
+              // 2x hold-to-fast-forward).
+              setHoldAction("forward");
+              setPlaybackRate(2);
+            } else {
+              // Continuous rewind: step backwards from the live position
+              // until release (or the start of the video).
+              setHoldAction("rewind");
+              rewindIntervalRef.current = setInterval(() => {
+                const next = Math.max(0, currentTimeRef.current - 0.4);
+                seekTo(next);
+                if (next <= 0) endHold();
+              }, 80);
+            }
+          }, 280);
+        },
+        [seekTo, endHold],
+      );
+
+      const handleVideoPressOut = useCallback(() => {
+        // Ends any active hold (restores 1x rate, clears the rewind timer).
+        // Tap toggling is handled by onPress, which — unlike onPressOut —
+        // does not fire when the FlatList steals the touch for scrolling.
+        endHold();
+      }, [endHold]);
+
+      const handleVideoTap = useCallback(() => {
+        // Ignore the release of a completed hold — the gesture already ran.
+        if (holdActivatedRef.current) return;
+        fireTapPulse();
+        togglePlay();
+      }, [fireTapPulse, togglePlay]);
+
+      useEffect(() => clearHoldTimers, [clearHoldTimers]);
 
       // Resolve the source (cached local file if present, else stream) once on
       // mount, then upgrade to the local copy when the background download
@@ -538,54 +637,77 @@ export const FeedScreen = ({ route, navigation }) => {
 
       return (
         <View style={styles.reelContainer}>
-          {/* Center tap toggles play/pause. The overlay below uses
-              pointerEvents="box-none" so only its interactive children
-              (store, product, actions) capture touches; taps elsewhere
-              fall through to this layer. */}
-          <Pressable
-            style={styles.videoWrap}
-            onPress={() => {
-              fireTapPulse();
-              togglePlay();
+          <FeedVideo
+            ref={videoRef}
+            source={source}
+            style={styles.video}
+            resizeMode="cover"
+            repeat
+            // CRITICAL (Android/Fabric): react-native-video is a LEGACY
+            // component rendered through the interop layer (no codegenConfig),
+            // and on the new architecture its native view participates in
+            // touch dispatch ABOVE Fabric siblings — swallowing every tap and
+            // press in the video's bounds no matter what zIndex the gesture
+            // layer uses. The video never needs touches (the invisible
+            // gesture layer below owns them), so disable its interactivity
+            // entirely.
+            pointerEvents="none"
+            muted={Platform.OS === "web"}
+            controls={false}
+            rate={playbackRate}
+            paused={!screenIsFocused || !isActive || paused}
+            onLoad={(meta) => logReel("onLoad", meta?.duration, source?.uri)}
+            onReadyForDisplay={() =>
+              logReel("onReadyForDisplay", source?.uri)
+            }
+            onBuffer={(event) =>
+              logReel("onBuffer", event?.isBuffering, source?.uri)
+            }
+            onError={(error) => logReel("onError", error, source?.uri)}
+            onProgress={(progress) => {
+              if (progress?.currentTime != null) {
+                logReel(
+                  "onProgress",
+                  progress.currentTime,
+                  progress.playableDuration,
+                );
+              }
+              // Keep the ref fresh for the hold-to-rewind stepper (no
+              // re-renders — there is no visible progress UI anymore).
+              if (progress?.currentTime != null) {
+                currentTimeRef.current = progress.currentTime;
+              }
             }}
-          >
-            <FeedVideo
-              ref={videoRef}
-              source={source}
-              style={styles.video}
-              resizeMode="cover"
-              repeat
-              muted={Platform.OS === "web"}
-              paused={!screenIsFocused || !isActive || paused}
-              onLoad={(meta) => logReel("onLoad", meta?.duration, source?.uri)}
-              onReadyForDisplay={() =>
-                logReel("onReadyForDisplay", source?.uri)
-              }
-              onBuffer={(event) =>
-                logReel("onBuffer", event?.isBuffering, source?.uri)
-              }
-              onError={(error) => logReel("onError", error, source?.uri)}
-              onProgress={(progress) => {
-                if (progress?.currentTime != null) {
-                  logReel(
-                    "onProgress",
-                    progress.currentTime,
-                    progress.playableDuration,
-                  );
-                }
-              }}
-              // ABR: keep a modest forward buffer so rendition switches are
-              // smooth without over-fetching data on metered connections.
-              bufferConfig={{
-                minBufferMs: 10000,
-                maxBufferMs: 30000,
-                bufferForPlaybackMs: 2500,
-                bufferForPlaybackAfterRebufferMs: 5000,
-              }}
-            />
+            // ABR: keep a modest forward buffer so rendition switches are
+            // smooth without over-fetching data on metered connections.
+            bufferConfig={{
+              minBufferMs: 10000,
+              maxBufferMs: 30000,
+              bufferForPlaybackMs: 2500,
+              bufferForPlaybackAfterRebufferMs: 5000,
+            }}
+          />
 
-            {/* One-shot ripple that fires on every center tap for tactile
-                feedback, regardless of play/pause state. */}
+          {/* Invisible touch layer rendered ABOVE the video. This is the key
+              fix for "taps don't work": the native video surface (ExoPlayer on
+              Android) and the web <video> element can swallow touches aimed at
+              a parent wrapper, so the gesture layer must sit ON TOP of it.
+              • tap → play/pause (onPress — never fires when the FlatList
+                steals the touch for scrolling)
+              • hold left/right → rewind / 2x forward until release */}
+          <Pressable
+            style={styles.videoTouchLayer}
+            // collapsable={false} stops Android from optimizing the layer out
+            // of the native view tree, and zIndex pins it above the video
+            // (matters on the new architecture where legacy-view ordering
+            // can place the player surface above Fabric siblings).
+            collapsable={false}
+            onPressIn={handleVideoPressIn}
+            onPressOut={handleVideoPressOut}
+            onPress={handleVideoTap}
+          >
+            {/* One-shot ripple that fires on every tap for tactile feedback,
+                regardless of play/pause state. */}
             <Animated.View
               pointerEvents="none"
               style={[
@@ -642,6 +764,26 @@ export const FeedScreen = ({ route, navigation }) => {
                   <Ionicons name="play" size={26} color="#fff" />
                 </View>
               </Pressable>
+            ) : null}
+
+            {/* Hold-gesture badge (TikTok-style): shows while the user is
+                holding the right half (2x forward) or left half (rewind).
+                Purely visual — pointerEvents="none". */}
+            {holdAction ? (
+              <View style={styles.holdBadge} pointerEvents="none">
+                <Ionicons
+                  name={
+                    holdAction === "forward"
+                      ? "play-forward-outline"
+                      : "play-back-outline"
+                  }
+                  size={14}
+                  color="#fff"
+                />
+                <Text style={styles.holdBadgeText}>
+                  {holdAction === "forward" ? "2x" : "rewind"}
+                </Text>
+              </View>
             ) : null}
           </Pressable>
 
@@ -971,9 +1113,11 @@ const buildFeedStyles = (c) =>
       width: SCREEN_WIDTH,
       backgroundColor: "#000",
     },
-    videoWrap: {
-      flex: 1,
-      justifyContent: "flex-end",
+    // Invisible full-size touch layer sitting ON TOP of the video surface —
+    // owns tap = play/pause and hold-left/right = rewind / 2x forward.
+    videoTouchLayer: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 2,
     },
     centerPlayHitTarget: {
       position: "absolute",
@@ -1020,6 +1164,26 @@ const buildFeedStyles = (c) =>
       borderColor: "rgba(255,255,255,0.9)",
       backgroundColor: "rgba(255,255,255,0.08)",
     },
+    // Hold-gesture badge (shown while fast-forwarding / rewinding).
+    holdBadge: {
+      position: "absolute",
+      top: 90,
+      alignSelf: "center",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: "rgba(0, 0, 0, 0.55)",
+      borderWidth: 1,
+      borderColor: "rgba(255, 255, 255, 0.18)",
+    },
+    holdBadgeText: {
+      color: "#fff",
+      fontSize: 12,
+      fontWeight: "800",
+    },
     video: {
       position: "absolute",
       top: 0,
@@ -1028,6 +1192,7 @@ const buildFeedStyles = (c) =>
       bottom: 0,
       width: SCREEN_WIDTH,
       height: ITEM_HEIGHT,
+      zIndex: 0,
     },
     overlayShell: {
       position: "absolute",

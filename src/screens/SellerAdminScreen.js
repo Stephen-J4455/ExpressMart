@@ -31,7 +31,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
 import { notifyOrderStatusUpdate } from "../services/notificationService";
 import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
-import { getTheme, radius } from "../theme/colors";
+import { colors as brandColors, getTheme, radius } from "../theme/colors";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { getImageContentType } from "../utils/webUpload";
 import {
@@ -314,6 +314,30 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
+  // Platform charge (%) — admin-configurable via
+  // express_settings.key = "product_charge_percentage". Shown live in the
+  // product form and SNAPSHOTTED onto the product on every save
+  // (express_products.charge_percentage), so existing products keep the
+  // charge they were saved with even after the platform charge changes.
+  const [chargePercentage, setChargePercentage] = useState(5);
+
+  // Load the admin-configured platform charge (falls back to 5%).
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!supabase) return;
+        const { data } = await supabase
+          .from("express_settings")
+          .select("value")
+          .eq("key", "product_charge_percentage")
+          .maybeSingle();
+        const pct = parseFloat(data?.value);
+        if (!isNaN(pct) && pct >= 0 && pct <= 100) setChargePercentage(pct);
+      } catch (e) {
+        console.warn("[SellerAdmin] charge fetch failed, using default:", e);
+      }
+    })();
+  }, []);
   const [shippingFee, setShippingFee] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -572,6 +596,45 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       setTogglingLive(false);
     }
   }, [supabase, sellerId, isLive, canGoLive, seller, toast, navigation]);
+
+  // Paystack payout-account state drives the "not live yet" banner + badge:
+  //   unlinked → no subaccount yet
+  //   pending  → subaccount created, Paystack verification in progress
+  //   verified → payout ready; only the Go Live toggle remains
+  const paystackState = !seller
+    ? "loading"
+    : !(seller.payment_account || "").trim()
+    ? "unlinked"
+    : !seller.account_verified
+    ? "pending"
+    : "verified";
+
+  const notLiveUi =
+    {
+      unlinked: {
+        icon: "link-outline",
+        tint: themeColors.muted,
+        sub: "Link a Paystack account to go live.",
+        badge: "Paystack · Not linked",
+      },
+      pending: {
+        icon: "time-outline",
+        tint: brandColors.accentYellow,
+        sub: "Paystack is verifying your payout account.",
+        badge: "Paystack · Awaiting verification",
+      },
+      verified: {
+        icon: "rocket-outline",
+        tint: brandColors.success,
+        sub: "You're all set — tap to publish your store.",
+        badge: "Paystack · Verified",
+      },
+    }[paystackState] || {
+      icon: "time-outline",
+      tint: themeColors.muted,
+      sub: "",
+      badge: "",
+    };
 
   // Trigger the edge function that pulls this store's Meta catalog into
   // express_products. Only live stores' products appear in the buyer feed.
@@ -1542,6 +1605,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           );
         } catch (imgErr) {
           console.error("[submitProduct] image upload failed:", imgErr);
+          if (imgErr?.stack) {
+            console.error("[submitProduct] image upload stack:", imgErr.stack);
+          }
           throw new Error(
             `Image upload failed: ${imgErr?.message || "Unknown error"}`,
           );
@@ -1573,6 +1639,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       const productData = {
         title,
         price: parseFloat(price),
+        // Snapshot the CURRENT platform charge onto the product. Historical
+        // products keep the charge they were saved with (see
+        // express_products.charge_percentage + platform-settings.sql).
+        charge_percentage: Number(chargePercentage) || 0,
         shipping_fee: shippingFee ? parseFloat(shippingFee) : 0,
         category,
         category_id:
@@ -1706,7 +1776,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     return products.flatMap((p) => {
       const sales = Array.isArray(p.flash_sale) ? p.flash_sale : [];
       return sales
-        .filter((fs) => fs.is_active && fs.end_time > now)
+        .filter(
+          (fs) =>
+            fs.is_active &&
+            (!fs.start_time || fs.start_time <= now) &&
+            fs.end_time > now,
+        )
         .map((fs) => ({ ...fs, product: p }));
     });
   }, [products]);
@@ -1769,12 +1844,16 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
   const formatPrice = (v) => `GH₵${Number(v || 0).toLocaleString()}`;
 
-  // Currently active flash sale for a product, if any.
+  // Currently active flash sale for a product, if any. "Active" means the
+  // flag is on AND we're inside the sale's time window.
   const getCatalogFlashSale = useCallback((p) => {
     const now = new Date().toISOString();
     return (
       (Array.isArray(p?.flash_sale) ? p.flash_sale : []).find(
-        (fs) => fs.is_active && fs.end_time > now,
+        (fs) =>
+          fs.is_active &&
+          (!fs.start_time || fs.start_time <= now) &&
+          fs.end_time > now,
       ) || null
     );
   }, []);
@@ -2367,58 +2446,82 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   );
 
   // ── Flash sales tab ─────────────────────────────────────────────────────
-  const renderFlash = () => (
-    <View>
-      <Text style={styles.sectionTitle}>Flash Sales</Text>
-      {products.length === 0 ? (
-        <Text style={styles.emptyNote}>Add products to run flash sales.</Text>
-      ) : (
-        <View style={styles.productGrid}>
-          {products.map((p) => {
-            const sale = Array.isArray(p.flash_sale)
-              ? p.flash_sale.find((fs) => fs.is_active)
-              : null;
-            return (
-              <Pressable
-                key={p.id}
-                style={styles.productCard}
-                onPress={() => {
-                  setSelectedProduct(p);
-                  setFlashSaleModalVisible(true);
-                  setFlashSalePrice("");
-                  setFlashSaleMaxQty("");
-                }}
-              >
-                {p.thumbnail ? (
-                  <Image
-                    source={{ uri: p.thumbnail }}
-                    style={styles.productImage}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.productImage,
-                      styles.productImagePlaceholder,
-                    ]}
-                  >
-                    <Ionicons name="cube" size={28} color="#fff" />
+  // Only products with a CURRENTLY ACTIVE flash sale are listed here (flag on
+  // AND inside the time window). Create new sales via Catalog → product menu
+  // → "Flash sale"; tap a card below to tweak the running sale.
+  const renderFlash = () => {
+    const activeSales = products
+      .map((p) => ({ p, sale: getCatalogFlashSale(p) }))
+      .filter((entry) => entry.sale);
+
+    return (
+      <View>
+        <Text style={styles.sectionTitle}>Active Flash Sales</Text>
+        {activeSales.length === 0 ? (
+          <Text style={styles.emptyNote}>
+            No active flash sales. Use the Catalog tab → product menu → "Flash
+            sale" to create one.
+          </Text>
+        ) : (
+          <View style={styles.productGrid}>
+            {activeSales.map(({ p, sale }) => {
+              const endsAt = sale.end_time ? new Date(sale.end_time) : null;
+              return (
+                <Pressable
+                  key={`${p.id}-${sale.id}`}
+                  style={styles.productCard}
+                  onPress={() => {
+                    setSelectedProduct(p);
+                    setFlashSalePrice(String(sale.flash_price ?? ""));
+                    setFlashSaleMaxQty(
+                      sale.max_quantity != null
+                        ? String(sale.max_quantity)
+                        : "",
+                    );
+                    setFlashSaleModalVisible(true);
+                  }}
+                >
+                  {p.thumbnail ? (
+                    <Image
+                      source={{ uri: p.thumbnail }}
+                      style={styles.productImage}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.productImage,
+                        styles.productImagePlaceholder,
+                      ]}
+                    >
+                      <Ionicons name="flash" size={28} color="#fff" />
+                    </View>
+                  )}
+                  <View style={styles.productBody}>
+                    <Text style={styles.productTitle} numberOfLines={1}>
+                      {p.title}
+                    </Text>
+                    <Text style={[styles.productStatus, { color: accent }]}>
+                      {formatPrice(sale.flash_price)} ·{" "}
+                      {getFlashDiscountPct(sale)}% off
+                    </Text>
+                    {endsAt && !isNaN(endsAt.getTime()) && (
+                      <Text style={styles.productStatus} numberOfLines={1}>
+                        Ends {endsAt.toLocaleDateString()}{" "}
+                        {endsAt.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    )}
                   </View>
-                )}
-                <View style={styles.productBody}>
-                  <Text style={styles.productTitle} numberOfLines={1}>
-                    {p.title}
-                  </Text>
-                  <Text style={[styles.productStatus, { color: accent }]}>
-                    {sale ? "Flash sale active" : "Tap to create"}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-    </View>
-  );
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    );
+  };
 
   // ── Insights tab ────────────────────────────────────────────────────────
   const renderInsights = () => (
@@ -2580,6 +2683,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   }, [cardMenu, deleteReel, deleteProductVideo, toast]);
 
   // ── Reels tab (seller reels stored on Cloudflare R2) ─────────────────────
+  // Tapping a reel/product video card opens it in a full-screen player.
+  const [playingVideo, setPlayingVideo] = useState(null);
+
   const renderReels = () => (
     <View>
       <Text style={styles.sectionTitle}>Store Reels</Text>
@@ -2597,20 +2703,31 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             const isDeleting = deletingReelId === item.id;
             return (
               <View key={item.id} style={styles.reelCard}>
-                {item.thumbnail_url ? (
-                  <Image
-                    source={{ uri: item.thumbnail_url }}
-                    style={styles.reelThumb}
-                  />
-                ) : (
-                  <FeedVideo
-                    source={{ uri: item.video_url }}
-                    style={styles.reelThumb}
-                    resizeMode="cover"
-                    paused
-                    muted
-                  />
-                )}
+                <Pressable
+                  style={styles.reelThumb}
+                  disabled={!item.video_url}
+                  onPress={() => setPlayingVideo(item)}
+                >
+                  {item.thumbnail_url ? (
+                    <Image
+                      source={{ uri: item.thumbnail_url }}
+                      style={styles.reelThumbInner}
+                    />
+                  ) : (
+                    <FeedVideo
+                      source={{ uri: item.video_url }}
+                      style={styles.reelThumbInner}
+                      resizeMode="cover"
+                      paused
+                      muted
+                    />
+                  )}
+                  {item.video_url && (
+                    <View style={styles.reelPlayBadge} pointerEvents="none">
+                      <Ionicons name="play" size={20} color="#fff" />
+                    </View>
+                  )}
+                </Pressable>
                 <View style={styles.reelOverlay}>
                   <Text style={styles.reelTitle} numberOfLines={1}>
                     {item.title}
@@ -2633,6 +2750,48 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           })}
         </View>
       )}
+
+      {/* Full-screen video player */}
+      <Modal
+        visible={!!playingVideo}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPlayingVideo(null)}
+      >
+        <View style={styles.reelPlayerBackdrop}>
+          <View style={styles.reelPlayerHeader}>
+            <Text style={styles.reelPlayerTitle} numberOfLines={1}>
+              {playingVideo?.title || ""}
+            </Text>
+            <Pressable
+              style={styles.reelPlayerClose}
+              hitSlop={8}
+              onPress={() => setPlayingVideo(null)}
+            >
+              <Ionicons name="close" size={26} color="#fff" />
+            </Pressable>
+          </View>
+          {playingVideo?.video_url ? (
+            <FeedVideo
+              source={{ uri: playingVideo.video_url }}
+              style={styles.reelPlayerSurface}
+              resizeMode="contain"
+              paused={false}
+              controls
+            />
+          ) : (
+            <View
+              style={[styles.reelPlayerSurface, styles.reelPlayerFallback]}
+            >
+              <Ionicons name="alert-circle-outline" size={28} color="#fff" />
+              <Text style={styles.reelPlayerFallbackText}>
+                No video available for this item.
+              </Text>
+            </View>
+          )}
+        </View>
+      </Modal>
+
       {renderCardMenu()}
     </View>
   );
@@ -3178,6 +3337,73 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             </Text>
           </View>
 
+          {/* Dormant-store banner — makes the not-live state obvious at a glance.
+              Reflects the Paystack payout state (unlinked / awaiting
+              verification / verified) via tint, copy and badge. Taps through to
+              the Go Live controls when ready, or Payments when setup is missing. */}
+          {seller && !isLive && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.notLiveBanner,
+                {
+                  backgroundColor: `${notLiveUi.tint}14`,
+                  borderColor: `${notLiveUi.tint}3d`,
+                },
+                pressed && styles.notLiveBannerPressed,
+              ]}
+              onPress={() => {
+                if (paystackState === "verified") {
+                  setControlsExpanded(true);
+                } else {
+                  nav.navigate("Payments");
+                }
+              }}
+            >
+              <View
+                style={[
+                  styles.notLiveIconWrap,
+                  { backgroundColor: notLiveUi.tint },
+                ]}
+              >
+                <Ionicons name={notLiveUi.icon} size={18} color="#fff" />
+              </View>
+              <View style={styles.notLiveCopy}>
+                <Text style={styles.notLiveTitle}>
+                  Your store isn't live yet
+                </Text>
+                <Text style={styles.notLiveSub}>{notLiveUi.sub}</Text>
+                {/* Payment verification badge */}
+                <View
+                  style={[
+                    styles.payBadge,
+                    {
+                      borderColor: `${notLiveUi.tint}55`,
+                      backgroundColor: `${notLiveUi.tint}1a`,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      paystackState === "verified"
+                        ? "shield-checkmark"
+                        : notLiveUi.icon
+                    }
+                    size={11}
+                    color={notLiveUi.tint}
+                  />
+                  <Text style={[styles.payBadgeText, { color: notLiveUi.tint }]}>
+                    {notLiveUi.badge}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={notLiveUi.tint}
+              />
+            </Pressable>
+          )}
+
           {controlsExpanded && (
             <>
           {/* Go Live toggle — only enabled when a verified Paystack account exists */}
@@ -3485,6 +3711,37 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       </Text>
                     </View>
                   ) : null}
+
+                  {/* Platform charge — live preview from the admin-configured
+                      percentage. Editing a product shows ITS locked-in charge
+                      until re-saved, which snapshots the current one. */}
+                  {(() => {
+                    const pct = Number(
+                      editingProduct?.charge_percentage ?? chargePercentage,
+                    );
+                    const value = parseFloat(price) || 0;
+                    const charge = (value * pct) / 100;
+                    return (
+                      <View style={styles.hintRow}>
+                        <Ionicons
+                          name="receipt-outline"
+                          size={14}
+                          color={themeColors.primary}
+                        />
+                        <Text style={styles.hintText}>
+                          {`Platform charge: ${pct}%${
+                            value > 0
+                              ? ` → GH₵${charge.toFixed(2)} on this item`
+                              : ""
+                          }${
+                            editingProduct?.charge_percentage != null
+                              ? " (locked at last save — re-save to update)"
+                              : " (locked in when you save)"
+                          }`}
+                        </Text>
+                      </View>
+                    );
+                  })()}
                 </View>
 
                 <View style={styles.card}>
@@ -4690,6 +4947,57 @@ const buildSellerAdminStyles = (c) =>
       position: "relative",
     },
     reelThumb: { width: "100%", height: "100%" },
+    reelThumbInner: { width: "100%", height: "100%" },
+    reelPlayBadge: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    reelPlayerBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.96)",
+      paddingTop: 44,
+      paddingBottom: 24,
+    },
+    reelPlayerHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+      gap: 12,
+    },
+    reelPlayerTitle: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: "800",
+      color: "#fff",
+    },
+    reelPlayerClose: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: "rgba(255,255,255,0.15)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    reelPlayerSurface: {
+      flex: 1,
+      backgroundColor: "#000",
+    },
+    reelPlayerFallback: {
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+    },
+    reelPlayerFallbackText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: "rgba(255,255,255,0.85)",
+    },
     reelOverlay: {
       position: "absolute",
       left: 0,
@@ -5714,6 +6022,60 @@ const buildSellerAdminStyles = (c) =>
       height: 20,
       borderRadius: 10,
       backgroundColor: c.light,
+    },
+    // "Your store isn't live yet" banner
+    notLiveBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginTop: 14,
+      padding: 12,
+      borderRadius: radius.lg,
+      backgroundColor: `${brandColors.accentYellow}18`,
+      borderWidth: 1,
+      borderColor: `${brandColors.accentYellow}45`,
+    },
+    notLiveBannerPressed: {
+      opacity: 0.75,
+    },
+    notLiveIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: brandColors.accentYellow,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    notLiveCopy: {
+      flex: 1,
+    },
+    notLiveTitle: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    notLiveSub: {
+      fontSize: 11,
+      lineHeight: 15,
+      color: c.muted,
+      marginTop: 2,
+    },
+    // Payment verification badge (inside the not-live banner)
+    payBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      alignSelf: "flex-start",
+      marginTop: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+    },
+    payBadgeText: {
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.2,
     },
     // WhatsApp catalog sync
     waRow: {

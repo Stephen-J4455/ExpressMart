@@ -78,3 +78,54 @@ export async function getPaystackPublicKey() {
     throw error;
   }
 }
+
+/**
+ * Background auto-sync for Paystack verification.
+ *
+ * If the signed-in seller has a Paystack subaccount and Paystack reports it
+ * verified (active === true — the server enforces this strictly), pull that
+ * state into express_sellers so the rest of the app sees it without the
+ * seller having to open the Payments page and press Sync.
+ *
+ * Fire-and-forget: never throws, all failures are logged only. The server
+ * side (sync_subaccount_status) is the source of truth, so this can safely
+ * run repeatedly / on every app load.
+ */
+export async function syncPaystackVerification() {
+  try {
+    if (!supabase) return;
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
+    if (!user) return;
+
+    const { data: seller } = await supabase
+      .from("express_sellers")
+      .select("id, payment_account, account_verified")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    // Nothing to sync: no store, no subaccount, or DB already verified.
+    if (!seller?.payment_account || seller.account_verified) return;
+
+    const resp = await callEdgeFunction("create_subaccount", {
+      action: "sync_subaccount_status",
+      seller_id: seller.id,
+      subaccount_code: seller.payment_account,
+    });
+
+    console.log("🔄 Paystack verification background sync:", {
+      seller_id: seller.id,
+      account_verified: resp?.data?.account_verified,
+      paystack_active: resp?.data?.paystack_active,
+      updated: resp?.data?.updated,
+    });
+  } catch (err) {
+    console.warn(
+      "Paystack verification background sync skipped:",
+      err?.message || err,
+    );
+  }
+}

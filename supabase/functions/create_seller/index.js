@@ -94,7 +94,10 @@ serve(async (req) => {
       phone: phone || null,
       avatar: avatar || null,
       store_description: storeDescription || null,
-      is_active: true,
+      // Stores are created DORMANT. The seller goes live manually from the
+      // Seller Dashboard (Go Live toggle) once their Paystack payout account
+      // is linked and verified — enforced by the seller_go_live_guard trigger.
+      is_active: false,
     });
 
     const attempts = [

@@ -26,20 +26,28 @@ BEGIN
 END $$;
 
 -- Function: block going live without a synced Paystack account.
+-- NOTE: ERRCODE values must be valid SQLSTATEs ('P0001' = raise_exception).
+-- Machine-readable tokens are prefixed in the message text instead, since
+-- PL/pgSQL rejects arbitrary strings like 'store_no_payment_account'.
 CREATE OR REPLACE FUNCTION public.guard_seller_go_live()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  -- Only enforce when someone is trying to flip the store to active.
-  IF NEW.is_active = true AND (TG_OP = 'INSERT' OR OLD.is_active IS DISTINCT FROM true) THEN
+  -- Enforce whenever a store is created active OR an EXISTING store is
+  -- flipped to active via UPDATE. Registration now always inserts dormant
+  -- stores (is_active = false), so a legitimate INSERT never trips this —
+  -- only rogue/API writes that try to create a live store without a synced
+  -- Paystack account are blocked.
+  IF NEW.is_active = true AND (TG_OP = 'INSERT' OR OLD.is_active IS DISTINCT FROM true)
+  THEN
     IF NEW.payment_account IS NULL OR NULLIF(TRIM(NEW.payment_account), '') IS NULL THEN
-      RAISE EXCEPTION 'Store cannot go live: no Paystack payment account linked.'
-        USING ERRCODE = 'store_no_payment_account';
+      RAISE EXCEPTION '[store_no_payment_account] Store cannot go live: no Paystack payment account linked.'
+        USING ERRCODE = 'P0001';
     END IF;
     IF NEW.account_verified IS NOT TRUE THEN
-      RAISE EXCEPTION 'Store cannot go live: Paystack payment account is not verified/synced.'
-        USING ERRCODE = 'store_payment_not_synced';
+      RAISE EXCEPTION '[store_payment_not_synced] Store cannot go live: Paystack payment account is not verified/synced.'
+        USING ERRCODE = 'P0001';
     END IF;
   END IF;
   RETURN NEW;

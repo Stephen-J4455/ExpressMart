@@ -54,6 +54,10 @@ const mapProduct = (product) => ({
   sku: product.sku || null,
   barcode: product.barcode || null,
   seller: product.seller_id || null,
+  // Engagement counters (attached fresh by cached-products on every fetch).
+  // Without these, feed cards show "Q&A"/blank until opened.
+  comments_count: Number(product.comments_count || 0),
+  likes_count: Number(product.likes_count || 0),
 });
 
 export const ShopProvider = ({ children }) => {

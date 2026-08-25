@@ -72,6 +72,39 @@ export const FeedVideo = forwardRef(function FeedVideo(props, forwardedRef) {
     }
   }, [paused, source?.uri]);
 
+  // Mirror `muted`/`volume`/`rate` prop changes onto the DOM element so
+  // gesture-driven changes (mute toggle, hold-to-fast-forward) work after
+  // mount, not just on the initial render.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    try {
+      el.muted = !!muted;
+    } catch (e) {
+      /* noop */
+    }
+  }, [muted]);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || typeof volume !== "number") return;
+    try {
+      el.volume = Math.min(1, Math.max(0, volume));
+    } catch (e) {
+      /* noop */
+    }
+  }, [volume]);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || typeof rate !== "number") return;
+    try {
+      el.playbackRate = Math.max(0, rate);
+    } catch (e) {
+      /* noop */
+    }
+  }, [rate]);
+
   return (
     <View style={[{ overflow: "hidden" }, style]}>
       {createElement("video", {

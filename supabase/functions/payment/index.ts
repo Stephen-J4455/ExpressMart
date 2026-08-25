@@ -211,6 +211,16 @@ serve(async (req) => {
         metadata: { type: "store_registration" },
       };
 
+      // Optional: when PAYSTACK_CALLBACK_URL is configured (e.g. the web app's
+      // /payment-callback page), Paystack redirects there after payment and
+      // appends ?reference=<ref>, which PaymentWebViewScreen matches to
+      // auto-return into the app. Without it, users can still use the
+      // "I've completed my payment" fallback button.
+      const callbackUrl = Deno.env.get("PAYSTACK_CALLBACK_URL");
+      if (callbackUrl) {
+        initPayload.callback_url = callbackUrl;
+      }
+
       const initRes = await fetch(
         "https://api.paystack.co/transaction/initialize",
         {
@@ -605,6 +615,12 @@ serve(async (req) => {
         reference,
         metadata: { breakdown: groups },
       };
+
+      // Optional auto-return: see initialize-store-registration above.
+      const checkoutCallbackUrl = Deno.env.get("PAYSTACK_CALLBACK_URL");
+      if (checkoutCallbackUrl) {
+        initPayload.callback_url = checkoutCallbackUrl;
+      }
 
       // ─── Multi-vendor split via the correct Paystack API ───────────────────
       // POST /transaction/initialize does NOT accept a `subaccounts` array.

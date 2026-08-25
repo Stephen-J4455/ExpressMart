@@ -29,6 +29,7 @@ import {
 } from "../services/payment";
 import { callEdgeFunction } from "../lib/supabase";
 import { useResponsive } from "../hooks/useResponsive";
+import { useGrounding } from "../hooks/useGrounding";
 import { radius } from "../theme/colors";
 
 export const CheckoutScreen = ({ navigation }) => {
@@ -41,6 +42,13 @@ export const CheckoutScreen = ({ navigation }) => {
   const { items, total, clearCart } = useCart();
   const toast = useToast();
   const { fetchAdsByPlacement } = useAds();
+
+  // AI grounding refs — let the AI assistant point at these UI elements
+  // (e.g. "where is my coupon code box?").
+  const promoCodeRef = useGrounding("checkout.promoCode");
+  const orderSummaryRef = useGrounding("checkout.orderSummary");
+  const payButtonRef = useGrounding("checkout.payButton");
+  const [promoCode, setPromoCode] = useState("");
 
   const [addresses, setAddresses] = useState([]);
   const [checkoutAds, setCheckoutAds] = useState([]);
@@ -483,7 +491,7 @@ export const CheckoutScreen = ({ navigation }) => {
         )}
 
         {/* Order Summary */}
-        <View style={styles.section}>
+        <View style={styles.section} ref={orderSummaryRef}>
           <View style={styles.sectionHeader}>
             <Ionicons name="receipt" size={20} color={themeColors.primary} />
             <Text style={styles.sectionTitle}>Order Summary</Text>
@@ -539,6 +547,56 @@ export const CheckoutScreen = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Promo / Coupon Code */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="pricetag" size={20} color={themeColors.primary} />
+            <Text style={styles.sectionTitle}>Promo Code</Text>
+          </View>
+          <View
+            ref={promoCodeRef}
+            style={[
+              styles.promoRow,
+              { borderColor: themeColors.border, backgroundColor: themeColors.surface },
+            ]}
+          >
+            <Ionicons
+              name="ticket"
+              size={18}
+              color={themeColors.muted}
+              style={{ marginRight: 8 }}
+            />
+            <TextInput
+              style={[styles.promoInput, { color: themeColors.dark }]}
+              placeholder="Enter coupon code"
+              placeholderTextColor={themeColors.muted}
+              value={promoCode}
+              onChangeText={setPromoCode}
+              autoCapitalize="characters"
+            />
+            <Pressable
+              style={[
+                styles.promoApply,
+                { backgroundColor: themeColors.surfaceAlpha },
+              ]}
+              onPress={() =>
+                toast.info(
+                  "Promo codes",
+                  promoCode.trim()
+                    ? `“${promoCode.trim()}” isn't a valid code right now.`
+                    : "Type a coupon code to apply it.",
+                )
+              }
+            >
+              <Text
+                style={[styles.promoApplyText, { color: themeColors.primary }]}
+              >
+                Apply
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
         {/* Payment Method */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -573,6 +631,7 @@ export const CheckoutScreen = ({ navigation }) => {
           </Text>
         </View>
         <Pressable
+          ref={payButtonRef}
           style={[
             styles.checkoutButton,
             loading && styles.checkoutButtonDisabled,
@@ -603,6 +662,29 @@ export const CheckoutScreen = ({ navigation }) => {
 
 const buildCheckoutStyles = (c) =>
   StyleSheet.create({ 
+  promoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  promoInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 8,
+  },
+  promoApply: {
+    borderRadius: radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  promoApplyText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
   container: {
     flex: 1,
     backgroundColor: c.background,

@@ -106,8 +106,53 @@ serve(async (req) => {
     const stockCacheSegment = includeOutOfStock ? "all_stock" : "in_stock_only";
     const cacheKey = `expressmart:products:active:v4:${sellerCacheSegment}:${stockCacheSegment}:${offset}:${limit}`;
 
+    // ── Fresh engagement counts ──────────────────────────────────────────────
+    // The Redis snapshot only holds product rows, which is why feed cards
+    // showed "Q&A"/0 until opened. Counts are ALWAYS recomputed live here —
+    // even on cache hits — so cards start with accurate numbers, while the
+    // app's realtime subscriptions keep them current afterwards.
+    const attachEngagementCounts = async (products: any[]) => {
+      const ids = (products || []).map((p) => p.id).filter(Boolean);
+      if (!ids.length) return products;
+
+      const [reviewsRes, wishesRes] = await Promise.all([
+        supabase
+          .from("express_reviews")
+          .select("product_id")
+          .in("product_id", ids)
+          .eq("is_approved", true)
+          .not("comment", "is", null),
+        supabase.from("express_wishlists").select("product_id").in("product_id", ids),
+      ]);
+
+      if (reviewsRes.error) {
+        console.warn("[cached-products] review count query failed:", reviewsRes.error.message);
+      }
+      if (wishesRes.error) {
+        console.warn("[cached-products] wishlist count query failed:", wishesRes.error.message);
+      }
+
+      const countByProduct = (rows: any[] | null) => {
+        const map = new Map<string, number>();
+        (rows || []).forEach((row) => {
+          if (!row?.product_id) return;
+          map.set(row.product_id, (map.get(row.product_id) || 0) + 1);
+        });
+        return map;
+      };
+
+      const reviewMap = countByProduct(reviewsRes.data);
+      const wishMap = countByProduct(wishesRes.data);
+
+      return products.map((p) => ({
+        ...p,
+        comments_count: reviewMap.get(p.id) || 0,
+        likes_count: wishMap.get(p.id) || 0,
+      }));
+    };
+
     if (!redisEnabled || !redisUrl || !redisToken) {
-      const products = await queryProducts();
+      const products = await attachEngagementCounts(await queryProducts());
       console.info(
         `[cached-products] source=database reason=${!redisEnabled ? "cache_disabled" : "redis_not_configured"} seller_id=${sellerId || "all"} include_out_of_stock=${includeOutOfStock} offset=${offset} limit=${limit}`,
       );
@@ -135,9 +180,13 @@ serve(async (req) => {
         console.info(
           `[cached-products] source=redis cache_hit=true seller_id=${sellerId || "all"} include_out_of_stock=${includeOutOfStock} offset=${offset} limit=${limit}`,
         );
+        // Cache hit — but engagement counts are always attached fresh.
+        const products = await attachEngagementCounts(
+          JSON.parse(cachedValue),
+        );
         return new Response(
           JSON.stringify({
-            products: JSON.parse(cachedValue),
+            products,
             cache: {
               enabled: true,
               source: "redis",
@@ -155,7 +204,7 @@ serve(async (req) => {
       );
     }
 
-    const products = await queryProducts();
+    const products = await attachEngagementCounts(await queryProducts());
     console.info(
       `[cached-products] source=database cache_hit=false seller_id=${sellerId || "all"} include_out_of_stock=${includeOutOfStock} offset=${offset} limit=${limit}`,
     );

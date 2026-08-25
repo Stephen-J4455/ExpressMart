@@ -548,6 +548,7 @@ export const HomeScreen = ({ navigation }) => {
         }}
       >
         <AppHeader
+          onAccountPress={() => navigation.navigate("Account")}
           onSearchPress={() => navigation.navigate("Search")}
           onStoresPress={() => navigation.navigate("Stores")}
           onNotificationsPress={() => navigation.navigate("Notifications")}
