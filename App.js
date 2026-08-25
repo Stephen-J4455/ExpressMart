@@ -39,9 +39,9 @@ import { ToastProvider } from "./src/context/ToastContext";
 import { ChatProvider } from "./src/context/ChatContext";
 import { AdsProvider } from "./src/context/AdsContext";
 import { NotificationProvider } from "./src/context/NotificationContext";
-import { AIAssistantProvider } from "./src/context/AIAssistantContext";
-import { ScreenPointerOverlay } from "./src/components/ai/ScreenPointerOverlay";
-import { AIAssistantScreen } from "./src/screens/AIAssistantScreen";
+import { TagAIAssistantProvider } from "./src/context/TagAIAssistantContext";
+import { ScreenPointerOverlay } from "./src/components/tagai/ScreenPointerOverlay";
+import { TagAIAssistantScreen } from "./src/screens/TagAIAssistantScreen";
 import { FeedScreen } from "./src/screens/FeedScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { CartScreen } from "./src/screens/CartScreen";
@@ -53,6 +53,7 @@ import { AuthScreen } from "./src/screens/AuthScreen";
 import { CheckoutScreen } from "./src/screens/CheckoutScreen";
 import { OrdersScreen } from "./src/screens/OrdersScreen";
 import { OrderDetailScreen } from "./src/screens/OrderDetailScreen";
+import { OrderSuccessScreen } from "./src/screens/OrderSuccessScreen";
 import { WishlistScreen } from "./src/screens/WishlistScreen";
 import { NotificationsScreen } from "./src/screens/NotificationsScreen";
 import { AddressesScreen } from "./src/screens/AddressesScreen";
@@ -137,8 +138,8 @@ const TabNavigator = () => {
         component={TransitionedHomeScreen}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
-            <Octicons
-              name={focused ? "home" : "home-fill"}
+            <Ionicons
+              name={focused ? "home" : "home-outline"}
               size={size}
               color={color}
             />
@@ -253,13 +254,23 @@ const AnimatedScreen = ({ children }) => {
  * causing React to unmount + remount the whole tab screen.
  */
 const withTabTransition = (Wrapped) => {
+  // Guard against undefined screens (e.g. a stale/hot-reloaded module or a
+  // broken import resolving to undefined). Previously this line crashed the
+  // whole app with "[TypeError: Cannot read property 'displayName' of
+  // undefined]" before React could even render a helpful message.
+  if (!Wrapped) {
+    console.warn(
+      "[App] withTabTransition received an undefined screen component. " +
+        "Check the import for the screen passed to it.",
+    );
+  }
   const Transitioned = (props) => (
     <AnimatedScreen>
-      <Wrapped {...props} />
+      {Wrapped ? <Wrapped {...props} /> : null}
     </AnimatedScreen>
   );
   Transitioned.displayName = `withTabTransition(${
-    Wrapped.displayName || Wrapped.name || "Screen"
+    (Wrapped && (Wrapped.displayName || Wrapped.name)) || "Screen"
   })`;
   return Transitioned;
 };
@@ -271,7 +282,7 @@ const TransitionedAccountScreen = withTabTransition(AccountScreen);
 
 /** Floating pill bottom tab bar (mobile) — a rounded theme-aware pill with the
  *  main tabs (icon-only, active tab gets a soft primary-tint highlight like the
- *  header icon buttons) plus a detached circular AI Assistant button on the
+ *  header icon buttons) plus a detached circular TagAI button on the
  *  right.
  *  The Account tab lives in the Home header now (top-left), so it is filtered
  *  out of the bar — but its Tab.Screen stays registered so
@@ -303,9 +314,10 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
   // Account is rendered in the Home header — keep the route, drop the tab.
   const tabs = state.routes.filter((route) => route.name !== "Account");
   const focusedKey = state.routes[state.index]?.key;
-  // Theme-aware pill surface: near-white in light mode, dark charcoal glass in
-  // dark mode. Shared by the tab pill and the AI button.
-  const pillSurface = isDark ? "rgba(28, 28, 30, 0.96)" : "rgba(255, 255, 255, 0.98)";
+  // Theme-aware pill surface: near-white glass in light mode; in dark mode the
+  // app theme's DARK BACKGROUND token (colors.background = #070B14) instead of
+  // a hard-coded charcoal. Shared by the tab pill and the AI button.
+  const pillSurface = isDark ? colors.background : "rgba(255, 255, 255, 0.98)";
   const pillBorder = isDark ? "rgba(255, 255, 255, 0.08)" : colors.border;
   const activeColor = colors.primary;
   const inactiveColor = colors.muted;
@@ -402,16 +414,16 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
           })}
         </View>
 
-        {/* Detached circular AI Assistant button */}
+        {/* Detached circular TagAI button */}
         <Pressable
-          onPress={() => navigation.navigate("AIAssistant")}
+          onPress={() => navigation.navigate("TagAI")}
           style={({ pressed }) => [
             tabStyles.aiButton,
             { backgroundColor: pillSurface, borderColor: pillBorder },
             pressed && tabStyles.tabPressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="AI Assistant"
+          accessibilityLabel="TagAI"
         >
           <Ionicons name="sparkles" size={24} color={activeColor} />
         </Pressable>
@@ -1142,6 +1154,7 @@ const AuthenticatedApp = () => {
         />
         <Stack.Screen name="Orders" component={GuardedOrders} />
         <Stack.Screen name="OrderDetail" component={GuardedOrderDetail} />
+        <Stack.Screen name="OrderSuccess" component={OrderSuccessScreen} />
         <Stack.Screen name="Wishlist" component={GuardedWishlist} />
         <Stack.Screen name="Notifications" component={GuardedNotifications} />
         <Stack.Screen name="Addresses" component={GuardedAddresses} />
@@ -1160,7 +1173,7 @@ const AuthenticatedApp = () => {
           component={GuardedPrivacySettings}
         />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
-        <Stack.Screen name="AIAssistant" component={AIAssistantScreen} />
+        <Stack.Screen name="TagAI" component={TagAIAssistantScreen} />
       </Stack.Navigator>
     </NotificationProvider>
   );
@@ -1264,12 +1277,12 @@ const NavigationWithTheme = () => {
   return (
     <NavigationContainer theme={theme} linking={linking}>
       <StatusBar style={isDark ? "light" : "dark-content"} />
-      <AIAssistantProvider>
+      <TagAIAssistantProvider>
         {/* Global AI grounding overlay — renders the pointer/spotlight above
             every screen when the assistant invokes point_to_element. */}
         <AuthenticatedApp />
         <ScreenPointerOverlay />
-      </AIAssistantProvider>
+      </TagAIAssistantProvider>
     </NavigationContainer>
   );
 };

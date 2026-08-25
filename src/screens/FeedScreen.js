@@ -24,6 +24,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { FeedVideo } from "../components/FeedVideo";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -72,6 +73,11 @@ export const FeedScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [activeId, setActiveId] = useState(null);
   const [paused, setPaused] = useState(false);
+  // Feed-wide mute state — lifted HERE (not per-reel) so the speaker setting
+  // stays consistent across every scroll/swipe: muting one reel mutes them
+  // all, and returning to a reel keeps whatever the user last chose.
+  // Web starts muted (autoplay policies); native starts unmuted.
+  const [isMuted, setIsMuted] = useState(Platform.OS === "web");
   const screenIsFocused = useIsFocused();
   const { isWide } = useResponsive();
   const { colors: themeColors } = useTheme();
@@ -192,6 +198,9 @@ export const FeedScreen = ({ route, navigation }) => {
     }
   }, [activeId, paused]);
 
+  // Feed-wide mute toggle — passed down to every reel (stable identity).
+  const toggleMute = useCallback(() => setIsMuted((v) => !v), []);
+
   // Warm the local cache for the neighbouring reels (one ahead, one behind) so
   // the next swipe plays from disk instead of re-streaming. The download runs
   // in the background and never blocks the active video.
@@ -212,8 +221,29 @@ export const FeedScreen = ({ route, navigation }) => {
   // locally-cached file: on mount it checks disk (instant if previously
   // watched), and when it becomes the active item it downloads the MP4 to the
   // local cache so scrolling up and back plays from disk instead of re-streaming.
-  const ReelItem = React.memo(
-    ({ item, isActive, navigation, paused, togglePlay, screenIsFocused }) => {
+  //
+  // IMPORTANT — created ONCE per screen mount via the useState lazy
+  // initializer. Defining this component inline (plain const) gave it a NEW
+  // type identity on every FeedScreen render (e.g. every pause/play toggle),
+  // so React unmounted and remounted every reel subtree — destroying and
+  // recreating the video element, which showed a thumbnail flash and
+  // restarted playback from zero. Values previously closed over from this
+  // scope (styles / themeColors / isWide) are passed as props instead.
+  const [ReelItem] = useState(() =>
+    React.memo(
+      ({
+        item,
+        isActive,
+        navigation,
+        paused,
+        togglePlay,
+        screenIsFocused,
+        styles,
+        themeColors,
+        isWide,
+        isMuted,
+        onToggleMute,
+      }) => {
       const itemId = item.id;
       const streamUrl = item.video_url || item.hls_url;
       // Resolve the best source: prefer a locally-cached copy (downloaded once)
@@ -232,6 +262,8 @@ export const FeedScreen = ({ route, navigation }) => {
       // tap still toggles play/pause.
       const [playbackRate, setPlaybackRate] = useState(1);
       const [holdAction, setHoldAction] = useState(null); // "forward" | "rewind" | null
+      // NOTE: mute is NOT owned here any more — `isMuted` / `onToggleMute`
+      // come from FeedScreen so the setting persists across scrolling.
       const holdTimerRef = useRef(null);
       const rewindIntervalRef = useRef(null);
       const holdActivatedRef = useRef(false);
@@ -343,6 +375,68 @@ export const FeedScreen = ({ route, navigation }) => {
       const handleVideoTap = useCallback(() => {
         // Ignore the release of a completed hold — the gesture already ran.
         if (holdActivatedRef.current) return;
+        fireTapPulse();
+        togglePlay();
+      }, [fireTapPulse, togglePlay]);
+
+      // ── Centered control-strip hold actions ────────────────────────────────
+      // • Hold ⏩ → VISIBLE fast-forward: playback rate goes to 1.5X (with an
+      //   on-screen badge) so you actually watch the video speed up.
+      // • Hold ⏪ → gradual rewind: the position steps backwards continuously
+      //   while held (same cadence as the TikTok-style hold).
+      // A quick tap intentionally does nothing — actions run only while held.
+      const stripHoldIntervalRef = useRef(null);
+      // Anchor for the wall-clock-driven rewind (start position + start time).
+      const stripHoldRef = useRef({ startPos: 0, startedAt: 0 });
+
+      const endStripHold = useCallback(() => {
+        if (stripHoldIntervalRef.current) {
+          clearInterval(stripHoldIntervalRef.current);
+          stripHoldIntervalRef.current = null;
+        }
+      }, []);
+
+      // Released (or reel scrolled away): restore normal 1X playback.
+      const endStripActions = useCallback(() => {
+        endStripHold();
+        setPlaybackRate(1);
+        setHoldAction(null);
+      }, [endStripHold]);
+
+      // Release safety-net on unmount (e.g. reel scrolls away mid-hold).
+      useEffect(() => endStripHold, [endStripHold]);
+
+      const startStripForward = useCallback(() => {
+        fireTapPulse();
+        setHoldAction("forward");
+        setPlaybackRate(1.5);
+      }, [fireTapPulse]);
+
+      const startStripRewind = useCallback(() => {
+        fireTapPulse();
+        // Anchor the rewind to WALL-CLOCK time: every tick seeks to exactly
+        // where the video should be at that instant (start position minus
+        // 1.5 seconds of video per real second elapsed). Because each target
+        // is computed fresh from the clock — never from the previous target —
+        // slow or fast seeks cannot cause drift, and the motion stays at a
+        // true, even 1.5X in reverse.
+        stripHoldRef.current = {
+          startPos: currentTimeRef.current || 0,
+          startedAt: Date.now(),
+        };
+        setHoldAction("rewind");
+        stripHoldIntervalRef.current = setInterval(() => {
+          const { startPos, startedAt } = stripHoldRef.current;
+          const target = Math.max(
+            0,
+            startPos - ((Date.now() - startedAt) / 1000) * 1.5,
+          );
+          seekTo(target);
+          if (target <= 0) endStripActions();
+        }, 120);
+      }, [fireTapPulse, seekTo, endStripActions]);
+
+      const handleControlsTogglePlay = useCallback(() => {
         fireTapPulse();
         togglePlay();
       }, [fireTapPulse, togglePlay]);
@@ -652,10 +746,21 @@ export const FeedScreen = ({ route, navigation }) => {
             // gesture layer below owns them), so disable its interactivity
             // entirely.
             pointerEvents="none"
-            muted={Platform.OS === "web"}
+            muted={isMuted}
             controls={false}
             rate={playbackRate}
-            paused={!screenIsFocused || !isActive || paused}
+            // Freeze REAL playback while reverse-scrubbing: otherwise the
+            // decoder keeps playing forward between our backward seeks, the
+            // picture appears stuck, and the seeks pile up into one big jump.
+            // Pausing lets every 1.5X-rate seek render its own frame, giving
+            // smooth visible reverse playback. On release the hold flag clears
+            // and playback resumes exactly where the rewind stopped.
+            paused={
+              !screenIsFocused ||
+              !isActive ||
+              paused ||
+              holdAction === "rewind"
+            }
             onLoad={(meta) => logReel("onLoad", meta?.duration, source?.uri)}
             onReadyForDisplay={() =>
               logReel("onReadyForDisplay", source?.uri)
@@ -706,8 +811,109 @@ export const FeedScreen = ({ route, navigation }) => {
             onPressOut={handleVideoPressOut}
             onPress={handleVideoTap}
           >
-            {/* One-shot ripple that fires on every tap for tactile feedback,
-                regardless of play/pause state. */}
+            {/* NOTE: the hold indicator badge lives in the controls layer
+                ABOVE this touch layer (single instance). It previously also
+                rendered here and showed doubled-up next to the controls-layer
+                badge once the control strips went transparent. */}
+          </Pressable>
+
+          {/* Centered player controls — the FIX for "controls don't work".
+              Rendered as a sibling ABOVE the touch layer and pinned to the
+              exact center of the reel with a zIndex ABOVE the gesture layer
+              but BELOW all other page buttons (see style comments).
+              Hold-to-seek: ⏪/⏩ scrub gradually while held (no jump on tap).
+              • hold ⏪ = rewind   • tap = play/pause (resumes in place)
+              • hold ⏩ = fast-forward */}
+          <View
+            style={styles.centerControlsLayer}
+            pointerEvents="box-none"
+            collapsable={false}
+          >
+            <View style={styles.centerControlsRow}>
+              <Pressable
+                style={styles.controlSideBtn}
+                onPressIn={startStripRewind}
+                onPressOut={endStripActions}
+                hitSlop={6}
+              >
+                <Ionicons name="play-back" size={18} color="#fff" />
+                <Text style={styles.controlSideLabel}>rew</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.controlMainBtn}
+                onPress={handleControlsTogglePlay}
+                hitSlop={6}
+              >
+                {/* Pulsing halo only while user-paused (same behaviour as the
+                    previous paused-state button). */}
+                {paused ? (
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.centerPlayPulse,
+                      {
+                        opacity: pulseAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.22, 0.62],
+                        }),
+                        transform: [
+                          {
+                            scale: pulseAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [1, 1.5],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+                ) : null}
+                <Ionicons
+                  name={paused ? "play" : "pause"}
+                  size={28}
+                  color="#fff"
+                />
+              </Pressable>
+
+              <Pressable
+                style={styles.controlSideBtn}
+                onPressIn={startStripForward}
+                onPressOut={endStripActions}
+                hitSlop={6}
+              >
+                <Ionicons name="play-forward" size={18} color="#fff" />
+                <Text style={styles.controlSideLabel}>fwd</Text>
+              </Pressable>
+            </View>
+
+            {/* Hold indicator — shown ABOVE the control cards while an action
+                is active: "1.5x" while ⏩ is held, "rewind" while ⏪ is held.
+                Purely visual — pointerEvents="none". */}
+            {holdAction ? (
+              <View style={styles.holdBadge} pointerEvents="none">
+                <View style={styles.holdBadgePill}>
+                  <Ionicons
+                    name={
+                      holdAction === "forward"
+                        ? "play-forward-outline"
+                        : "play-back-outline"
+                    }
+                    size={14}
+                    color="#fff"
+                  />
+                  <Text style={styles.holdBadgeText}>
+                    {holdAction === "forward" ? "▶ 1.5x" : "◀ 1.5x"}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
+            {/* One-shot tap ripple — lives HERE (above the control columns)
+                so the feedback ring is fully visible and dead-centre of the
+                screen on every tap, instead of rendering buried underneath
+                the translucent strips in the touch layer below.
+                Purely visual — pointerEvents="none". */}
             <Animated.View
               pointerEvents="none"
               style={[
@@ -730,62 +936,7 @@ export const FeedScreen = ({ route, navigation }) => {
             >
               <View style={styles.centerTapRing} />
             </Animated.View>
-
-            {/* The play/pulse button only shows when the video is paused
-                (never while scrolling or after navigating away/back). */}
-            {paused ? (
-              <Pressable
-                style={styles.centerPlayHitTarget}
-                onPress={() => {
-                  fireTapPulse();
-                  togglePlay();
-                }}
-              >
-                <Animated.View
-                  style={[
-                    styles.centerPlayPulse,
-                    {
-                      opacity: pulseAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.22, 0.62],
-                      }),
-                      transform: [
-                        {
-                          scale: pulseAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [1, 1.5],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                />
-                <View style={styles.centerPlayButton}>
-                  <Ionicons name="play" size={26} color="#fff" />
-                </View>
-              </Pressable>
-            ) : null}
-
-            {/* Hold-gesture badge (TikTok-style): shows while the user is
-                holding the right half (2x forward) or left half (rewind).
-                Purely visual — pointerEvents="none". */}
-            {holdAction ? (
-              <View style={styles.holdBadge} pointerEvents="none">
-                <Ionicons
-                  name={
-                    holdAction === "forward"
-                      ? "play-forward-outline"
-                      : "play-back-outline"
-                  }
-                  size={14}
-                  color="#fff"
-                />
-                <Text style={styles.holdBadgeText}>
-                  {holdAction === "forward" ? "2x" : "rewind"}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
+          </View>
 
           <View
             style={[
@@ -862,10 +1013,29 @@ export const FeedScreen = ({ route, navigation }) => {
                 </Pressable>
               </View>
 
-              {/* Right: like / comment / tag actions stacked vertically.
-                  These act on the linked PRODUCT (like the ProductDetail
-                  screen), not the video. */}
+              {/* Right: mute / like / comment / tag actions stacked vertically.
+                  Mute is a video control but lives at the top of this rail so
+                  it's thumb-reachable; the rest act on the linked PRODUCT
+                  (like the ProductDetail screen), not the video. */}
               <View style={styles.actionCol}>
+                {/* Mute/unmute — feed-wide setting (persists across scrolls),
+                    drives the FeedVideo `muted` prop. */}
+                <Pressable
+                  style={styles.actionBtn}
+                  onPress={onToggleMute}
+                >
+                  <View style={styles.actionIconWrap}>
+                    <Ionicons
+                      name={isMuted ? "volume-mute" : "volume-high"}
+                      size={22}
+                      color="#fff"
+                    />
+                  </View>
+                  <Text style={styles.actionLabel}>
+                    {isMuted ? "Muted" : "Sound"}
+                  </Text>
+                </Pressable>
+
                 <Pressable style={styles.actionBtn} onPress={toggleLike}>
                   <View style={styles.actionIconWrap}>
                     {/* Burst ring behind the heart on like */}
@@ -1041,7 +1211,8 @@ export const FeedScreen = ({ route, navigation }) => {
           </Modal>
         </View>
       );
-    },
+      },
+    ),
   );
 
   const renderReel = useCallback(
@@ -1053,13 +1224,33 @@ export const FeedScreen = ({ route, navigation }) => {
         paused={paused}
         togglePlay={togglePlay}
         screenIsFocused={screenIsFocused}
+        styles={styles}
+        themeColors={themeColors}
+        isWide={isWide}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
       />
     ),
-    [activeId, navigation, paused, screenIsFocused, togglePlay],
+    [
+      activeId,
+      navigation,
+      paused,
+      screenIsFocused,
+      togglePlay,
+      styles,
+      themeColors,
+      isWide,
+      isMuted,
+      toggleMute,
+    ],
   );
 
   return (
     <View style={styles.wrapper}>
+      {/* The feed is always a dark video canvas — status bar content stays
+          LIGHT regardless of app theme. Unmounting restores the theme-driven
+          bar set by App.js (expo-status-bar / RN StatusBar stack). */}
+      <StatusBar style="light" />
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={themeColors.primary} />
@@ -1119,31 +1310,82 @@ const buildFeedStyles = (c) =>
       ...StyleSheet.absoluteFillObject,
       zIndex: 2,
     },
-    centerPlayHitTarget: {
-      position: "absolute",
-      left: 0,
-      right: 0,
-      top: 0,
-      bottom: 0,
-      alignItems: "center",
-      justifyContent: "center",
-    },
     centerPlayPulse: {
       position: "absolute",
+      // 96×96 halo centred BOTH vertically and horizontally inside the
+      // play/pause card: anchor the top-left corner at the card's exact
+      // centre (50%/50%) then pull back by half the halo size (-48px) so
+      // the halo expands symmetrically around the play/pause icon.
+      left: "50%",
+      top: "50%",
+      marginLeft: -48,
+      marginTop: -48,
       width: 96,
       height: 96,
       borderRadius: 48,
       backgroundColor: "rgba(255,255,255,0.12)",
     },
-    centerPlayButton: {
-      width: 64,
-      height: 64,
-      borderRadius: radius.full,
+    // ── Centered control bar ("controls don't work" fix) ────────────────────
+    // In-flow flex child of reelContainer — flex:1 makes it cover the FULL
+    // feed screen height (the other siblings are absolutely positioned, so
+    // this layer gets all the layout space). zIndex 3 puts it ABOVE the
+    // invisible gesture layer (zIndex 2) so its cards stay tappable, but
+    // BELOW every other button on the page (the overlay shell renders with
+    // a higher zIndex).
+    centerControlsLayer: {
+      flex: 1,
+      zIndex: 3,
+      elevation: 3,
+    },
+    // Flex row stretching its three control cards across that full height.
+    // The cards split the FULL feed screen width evenly (flex: 1 each).
+    centerControlsRow: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "stretch",
+    },
+    // INVISIBLE tap zones: the three playback strips keep their full-height,
+    // third-of-screen hit areas but render nothing at all — transparent
+    // background, no border/shadow, and opacity 0 hides the icons/labels/
+    // pulse halo too. `opacity` does NOT disable touches, so rewind /
+    // play-pause / forward keeps working exactly as before.
+    controlMainBtn: {
+      flex: 1,
+      alignSelf: "stretch",
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "rgba(0,0,0,0.42)",
-      borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.28)",
+      // Clip the pulsing halo to the card while paused.
+      overflow: "hidden",
+      borderRadius: 0,
+      backgroundColor: "transparent",
+      borderWidth: 0,
+      borderColor: "transparent",
+      shadowColor: "transparent",
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      opacity: 0,
+    },
+    controlSideBtn: {
+      flex: 1,
+      alignSelf: "stretch",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 0,
+      backgroundColor: "transparent",
+      borderWidth: 0,
+      borderColor: "transparent",
+      shadowColor: "transparent",
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      opacity: 0,
+    },
+    controlSideLabel: {
+      color: "#fff",
+      fontSize: 9,
+      fontWeight: "800",
+      marginTop: -2,
     },
     centerTapRipple: {
       position: "absolute",
@@ -1164,11 +1406,17 @@ const buildFeedStyles = (c) =>
       borderColor: "rgba(255,255,255,0.9)",
       backgroundColor: "rgba(255,255,255,0.08)",
     },
-    // Hold-gesture badge (shown while fast-forwarding / rewinding).
+    // Hold-gesture indicator (shown while fast-forwarding / rewinding).
+    // Outer container anchors a full-width strip so the pill is ALWAYS
+    // centred horizontally regardless of which parent renders it.
     holdBadge: {
       position: "absolute",
       top: 90,
-      alignSelf: "center",
+      left: 0,
+      right: 0,
+      alignItems: "center",
+    },
+    holdBadgePill: {
       flexDirection: "row",
       alignItems: "center",
       gap: 4,
@@ -1200,6 +1448,11 @@ const buildFeedStyles = (c) =>
       right: 0,
       bottom: 0,
       paddingHorizontal: 12,
+      // Above the full-height control columns (zIndex 3) so the store row,
+      // product card and mute/like/comment/tag rail paint over AND receive
+      // touches before the playback strips underneath.
+      zIndex: 10,
+      elevation: 10,
     },
     reelBottomRow: {
       flexDirection: "row",

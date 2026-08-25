@@ -43,7 +43,7 @@ export const CheckoutScreen = ({ navigation }) => {
   const toast = useToast();
   const { fetchAdsByPlacement } = useAds();
 
-  // AI grounding refs — let the AI assistant point at these UI elements
+  // AI grounding refs — let the TagAI point at these UI elements
   // (e.g. "where is my coupon code box?").
   const promoCodeRef = useGrounding("checkout.promoCode");
   const orderSummaryRef = useGrounding("checkout.orderSummary");
@@ -155,15 +155,19 @@ export const CheckoutScreen = ({ navigation }) => {
         "Your order has been successfully placed.",
       );
       setTimeout(() => {
-        // Reset navigation stack so checkout is fully removed
+        // Reset navigation stack so checkout is fully removed — landing on
+        // the animated order-success celebration page.
         navigation.reset({
           index: 1,
           routes: [
             { name: "Main" },
-            { name: "Orders", params: { refreshOnce: Date.now() } },
+            {
+              name: "OrderSuccess",
+              params: { reference, total: grandTotal },
+            },
           ],
         });
-      }, 1500);
+      }, 1200);
     } catch (error) {
       processedPaymentReferenceRef.current = null;
       console.error("❌ Verification error:", error);

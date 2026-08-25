@@ -1,5 +1,5 @@
 // ── useGrounding ─────────────────────────────────────────────────────────────
-// Registers a view ref under a stable grounding key so the AI assistant's
+// Registers a view ref under a stable grounding key so the TagAI's
 // ScreenPointerOverlay can measure and highlight it on demand.
 //
 // Usage (in any screen/component):
@@ -7,15 +7,15 @@
 //   ...
 //   <View ref={promoRef} style={...}>...</View>
 //
-// The overlay resolves the ref via AIAssistantContext.getGroundingRef(key)
+// The overlay resolves the ref via TagAIAssistantContext.getGroundingRef(key)
 // and calls measureInWindow() to compute screen coordinates.
 
 import { useEffect, useMemo, useRef } from "react";
-import { useAIAssistant } from "../context/AIAssistantContext";
+import { useTagAIAssistant } from "../context/TagAIAssistantContext";
 
 export const useGrounding = (key) => {
   const { registerGroundingElement, unregisterGroundingElement } =
-    useAIAssistant();
+    useTagAIAssistant();
   const ref = useRef(null);
 
   useEffect(() => {

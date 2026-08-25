@@ -34,6 +34,7 @@ import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
 import { colors as brandColors, getTheme, radius } from "../theme/colors";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { getImageContentType } from "../utils/webUpload";
+import { showTabBar, updateTabBarOnScroll } from "../utils/tabBarAutoHide";
 import {
   R2_FOLDERS,
   getKeyFromUrl,
@@ -288,6 +289,19 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const theme = getTheme(seller?.theme_color) || getTheme(themeColors.primary);
   const accent = (theme && theme.accent) || themeColors.accent;
 
+  // ── Bottom tab bar auto-hide (direction-aware) ────────────────────────────
+  // Same convention as Home/Feed/Cart: swipe up hides the bottom bar, swipe
+  // down or being near the top reveals it again. Focus always shows it so
+  // switching into the seller admin view never starts with a hidden bar.
+  const handleDashboardScroll = useCallback((e) => {
+    updateTabBarOnScroll(e.nativeEvent.contentOffset.y);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => showTabBar());
+    return unsubscribe;
+  }, [navigation]);
+
   // ── Catalog UI state ─────────────────────────────────────────────────────
   const [productFilter, setProductFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -314,30 +328,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
-  // Platform charge (%) — admin-configurable via
-  // express_settings.key = "product_charge_percentage". Shown live in the
-  // product form and SNAPSHOTTED onto the product on every save
-  // (express_products.charge_percentage), so existing products keep the
-  // charge they were saved with even after the platform charge changes.
-  const [chargePercentage, setChargePercentage] = useState(5);
-
-  // Load the admin-configured platform charge (falls back to 5%).
-  useEffect(() => {
-    (async () => {
-      try {
-        if (!supabase) return;
-        const { data } = await supabase
-          .from("express_settings")
-          .select("value")
-          .eq("key", "product_charge_percentage")
-          .maybeSingle();
-        const pct = parseFloat(data?.value);
-        if (!isNaN(pct) && pct >= 0 && pct <= 100) setChargePercentage(pct);
-      } catch (e) {
-        console.warn("[SellerAdmin] charge fetch failed, using default:", e);
-      }
-    })();
-  }, []);
   const [shippingFee, setShippingFee] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -1639,10 +1629,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       const productData = {
         title,
         price: parseFloat(price),
-        // Snapshot the CURRENT platform charge onto the product. Historical
-        // products keep the charge they were saved with (see
-        // express_products.charge_percentage + platform-settings.sql).
-        charge_percentage: Number(chargePercentage) || 0,
         shipping_fee: shippingFee ? parseFloat(shippingFee) : 0,
         category,
         category_id:
@@ -3175,6 +3161,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScroll={handleDashboardScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -3712,36 +3700,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     </View>
                   ) : null}
 
-                  {/* Platform charge — live preview from the admin-configured
-                      percentage. Editing a product shows ITS locked-in charge
-                      until re-saved, which snapshots the current one. */}
-                  {(() => {
-                    const pct = Number(
-                      editingProduct?.charge_percentage ?? chargePercentage,
-                    );
-                    const value = parseFloat(price) || 0;
-                    const charge = (value * pct) / 100;
-                    return (
-                      <View style={styles.hintRow}>
-                        <Ionicons
-                          name="receipt-outline"
-                          size={14}
-                          color={themeColors.primary}
-                        />
-                        <Text style={styles.hintText}>
-                          {`Platform charge: ${pct}%${
-                            value > 0
-                              ? ` → GH₵${charge.toFixed(2)} on this item`
-                              : ""
-                          }${
-                            editingProduct?.charge_percentage != null
-                              ? " (locked at last save — re-save to update)"
-                              : " (locked in when you save)"
-                          }`}
-                        </Text>
-                      </View>
-                    );
-                  })()}
                 </View>
 
                 <View style={styles.card}>

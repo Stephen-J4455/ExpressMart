@@ -1,4 +1,4 @@
-// ── AIProductCard — generative UI product card for the AI chat stream ────────
+// ── TagAIProductCard — generative UI product card for the TagAI chat stream ────────
 // Rendered inside assistant messages when the search_products / filter_catalog
 // tools return structured product arrays.
 //
@@ -36,7 +36,7 @@ export const effectivePrice = (product) => {
   return discount > 0 ? price * (1 - discount / 100) : price;
 };
 
-export const AIProductCard = ({ product }) => {
+export const TagAIProductCard = ({ product }) => {
   const navigation = useNavigation();
   const { addToCart } = useCart();
   const { colors } = useTheme();
@@ -71,7 +71,7 @@ export const AIProductCard = ({ product }) => {
         checkScale.setValue(0);
       }, ADDED_FEEDBACK_MS);
     } catch (e) {
-      console.warn("[AIProductCard] add to cart failed:", e);
+      console.warn("[TagAIProductCard] add to cart failed:", e);
       setPhase("idle");
     }
   };
@@ -203,13 +203,13 @@ export const AIProductCard = ({ product }) => {
 };
 
 /** Vertical stack of product cards — used inside assistant messages. */
-export const AIProductCardRow = ({ products }) => {
+export const TagAIProductCardRow = ({ products }) => {
   const styles = useAppStyles(buildStyles);
   if (!products?.length) return null;
   return (
     <View style={styles.rowWrap}>
       {products.map((p) => (
-        <AIProductCard key={`${p.id}-${p.title}`} product={p} />
+        <TagAIProductCard key={`${p.id}-${p.title}`} product={p} />
       ))}
     </View>
   );

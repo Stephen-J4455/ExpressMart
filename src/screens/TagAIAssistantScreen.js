@@ -1,11 +1,11 @@
-// ── AIAssistantScreen — ExpressMart AI chat page ─────────────────────────────
+// ── TagAIAssistantScreen — ExpressMart TagAI chat page ─────────────────────────────
 // The conversational home of the assistant. Renders:
 //   • A soft gradient hero (greeting + capability suggestion cards) when the
 //     chat is empty — inspired by the ExpressMart voice-assistant concept.
 //   • The chat stream with tool-call chips and GENERATIVE UI: product cards
 //     returned by search_products / filter_catalog render inline as rich,
-//     interactive AIProductCards (image, price tags, add-to-cart).
-//   • A grounded input bar (registered as "ai.inputBar") so the assistant can
+//     interactive TagAIProductCards (image, price tags, add-to-cart).
+//   • A grounded input bar (registered as "tagAI.inputBar") so the assistant can
 //     point at its own chat box.
 
 import React, {
@@ -19,28 +19,28 @@ import {
   Animated,
   Easing,
   FlatList,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Markdown from "react-native-markdown-display";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useGrounding } from "../hooks/useGrounding";
-import { useAIAssistant } from "../context/AIAssistantContext";
+import { useTagAIAssistant } from "../context/TagAIAssistantContext";
 import { radius } from "../theme/colors";
 import {
-  AIProductCardRow,
-} from "../components/ai/AIProductCard";
+  TagAIProductCardRow,
+} from "../components/tagai/TagAIProductCard";
 
 const TOOL_META = {
   search_products: { icon: "search", label: "Searching products" },
@@ -169,19 +169,21 @@ const ToolChips = ({ tools }) => {
   );
 };
 
-export const AIAssistantScreen = () => {
+export const TagAIAssistantScreen = () => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const styles = useAppStyles(buildStyles);
+  // Markdown theme for assistant replies (same pattern as ProductDetailScreen)
+  const markdownStyles = useAppStyles(buildTagAIMarkdownStyles);
   const { user, profile } = useAuth();
   const { addToCart } = useCart();
-  const { messages, isThinking, sendMessage, clearChat } = useAIAssistant();
+  const { messages, isThinking, sendMessage, clearChat } = useTagAIAssistant();
 
   const [input, setInput] = useState("");
   const listRef = useRef(null);
   // Register the input bar so the assistant can point at its own chat box.
-  const inputBarRef = useGrounding("ai.inputBar");
+  const inputBarRef = useGrounding("tagAI.inputBar");
 
   const firstName = useMemo(() => {
     const name = profile?.full_name || user?.email?.split("@")[0] || "there";
@@ -199,7 +201,8 @@ export const AIAssistantScreen = () => {
         addProductToCart: async (product, qty) => {
           await addToCart(product, qty);
         },
-        resolveProduct: () => null,
+        // No local cache needed — the service resolves product ids straight
+        // from the catalog via resolveProductById when this is omitted.
       });
     },
     [input, isThinking, navigation, addToCart, sendMessage],
@@ -247,17 +250,19 @@ export const AIAssistantScreen = () => {
             <View
               style={[styles.assistantBubble, { backgroundColor: colors.surface }]}
             >
-              <Text style={[styles.assistantText, { color: colors.dark }]}>
+              {/* Assistant replies arrive as markdown — render rich text
+                  (bold, lists, code, links) instead of raw characters. */}
+              <Markdown style={markdownStyles} onLinkPress={() => {}}>
                 {item.text}
-              </Text>
+              </Markdown>
             </View>
             {/* Generative UI — interactive product cards from tool results */}
-            <AIProductCardRow products={item.products} />
+            <TagAIProductCardRow products={item.products} />
           </View>
         </View>
       );
     },
-    [colors, styles],
+    [colors, styles, markdownStyles],
   );
 
   const keyExtractor = useCallback((item) => item.id, []);
@@ -299,7 +304,7 @@ export const AIAssistantScreen = () => {
           </LinearGradient>
           <View>
             <Text style={[styles.headerTitle, { color: colors.dark }]}>
-              ExpressMart AI
+              TagAI
             </Text>
             <View style={styles.headerStatusRow}>
               <View style={styles.onlineDot} />
@@ -323,11 +328,10 @@ export const AIAssistantScreen = () => {
         </Pressable>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
-      >
+      {/* Keyboard-aware container from react-native-keyboard-controller —
+          tracks the keyboard via the provider at the app root so the input
+          bar rides above the keyboard consistently on iOS and Android. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         {messages.length === 0 && !isThinking ? (
           /* Empty-state hero — greeting + suggestion cards */
           <View style={styles.hero}>
@@ -385,7 +389,7 @@ export const AIAssistantScreen = () => {
           />
         )}
 
-        {/* Input bar (grounded as "ai.inputBar") */}
+        {/* Input bar (grounded as "tagAI.inputBar") */}
         <View
           ref={inputBarRef}
           style={[
@@ -402,7 +406,7 @@ export const AIAssistantScreen = () => {
           </View>
           <TextInput
             style={[styles.input, { color: colors.dark }]}
-            placeholder="Message ExpressMart AI…"
+            placeholder="Message TagAI…"
             placeholderTextColor={colors.muted}
             value={input}
             onChangeText={setInput}
@@ -579,10 +583,6 @@ const buildStyles = (c) =>
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
-    assistantText: {
-      fontSize: 14,
-      lineHeight: 19.5,
-    },
     toolRow: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -655,5 +655,109 @@ const buildStyles = (c) =>
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
+    },
+  });
+
+// Markdown theme for TagAI assistant replies — compact chat-bubble sizing
+// (same react-native-markdown-display pattern as ProductDetailScreen's
+// buildProductDetailMarkdownStyles, but tuned for 14pt chat text).
+const buildTagAIMarkdownStyles = (c) =>
+  StyleSheet.create({
+    body: {
+      fontSize: 14,
+      color: c.dark,
+      lineHeight: 19.5,
+    },
+    text: {
+      fontSize: 14,
+      color: c.dark,
+      lineHeight: 19.5,
+    },
+    // Keep paragraphs tight so single-line replies don't grow the bubble
+    paragraph: {
+      marginTop: 0,
+      marginBottom: 0,
+    },
+    strong: {
+      fontWeight: "700",
+      color: c.dark,
+    },
+    em: {
+      fontStyle: "italic",
+    },
+    heading1: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: c.dark,
+      marginTop: 6,
+      marginBottom: 2,
+    },
+    heading2: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.dark,
+      marginTop: 6,
+      marginBottom: 2,
+    },
+    heading3: {
+      fontSize: 14.5,
+      fontWeight: "700",
+      color: c.dark,
+      marginTop: 4,
+      marginBottom: 2,
+    },
+    bullet_list: {
+      marginTop: 2,
+      marginBottom: 2,
+    },
+    ordered_list: {
+      marginTop: 2,
+      marginBottom: 2,
+    },
+    list_item: {
+      marginVertical: 2,
+    },
+    code_inline: {
+      backgroundColor: c.surfaceAlpha,
+      color: c.primary,
+      paddingHorizontal: 4,
+      borderRadius: 4,
+      fontFamily: "monospace",
+      fontSize: 13,
+    },
+    code_block: {
+      backgroundColor: c.surfaceAlpha,
+      color: c.dark,
+      padding: 8,
+      borderRadius: 8,
+      marginVertical: 4,
+      fontFamily: "monospace",
+      fontSize: 12.5,
+    },
+    fence: {
+      backgroundColor: c.surfaceAlpha,
+      color: c.dark,
+      padding: 8,
+      borderRadius: 8,
+      marginVertical: 4,
+      fontFamily: "monospace",
+      fontSize: 12.5,
+    },
+    blockquote: {
+      backgroundColor: c.surfaceAlpha,
+      borderLeftWidth: 3,
+      borderLeftColor: c.border,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      marginVertical: 4,
+    },
+    link: {
+      color: c.primary,
+      textDecorationLine: "underline",
+    },
+    hr: {
+      backgroundColor: c.border,
+      height: 1,
+      marginVertical: 6,
     },
   });

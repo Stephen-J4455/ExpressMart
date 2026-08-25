@@ -1,5 +1,5 @@
-// ── ExpressMart AI Assistant service ─────────────────────────────────────────
-// Implements the "agent loop" for the in-app AI assistant:
+// ── ExpressMart TagAI service ─────────────────────────────────────────
+// Implements the "agent loop" for the in-app TagAI:
 //
 //   user message → planTurn() → tool calls → executeToolCall() → results
 //
@@ -70,8 +70,8 @@ export const GROUNDING_ELEMENTS = {
     hint: "Tap this to move your cart into checkout.",
     keywords: ["cart checkout", "proceed to checkout", "cart button"],
   },
-  "ai.inputBar": {
-    label: "AI chat input",
+  "tagAI.inputBar": {
+    label: "TagAI chat input",
     screen: null,
     hint: "Type anything here — I can search products, navigate and point at the UI.",
     keywords: ["chat box", "message box", "chat input", "type here"],
@@ -168,14 +168,24 @@ export const ASSISTANT_TOOLS = [
     function: {
       name: "point_to_element",
       description:
-        "Ground a UI element on screen: renders an animated pointer / pulsing highlight over the element. Use for 'where is X' or 'point to X' questions about the interface.",
+        "Point at ANYTHING in the app with an animated pointer / pulsing highlight. Two modes: (1) pass a registered key to spotlight the exact control — registered keys: checkout.promoCode, checkout.payButton, checkout.orderSummary, cart.checkoutButton, tagAI.inputBar; (2) for anything else, pass a free-form short name in 'element' plus 'label' (and optionally 'description') and the app highlights that area of the current screen. If what the user asks about lives on another page, call navigate_to_page first.",
       parameters: {
         type: "object",
         properties: {
           element: {
             type: "string",
-            enum: Object.keys(GROUNDING_ELEMENTS),
-            description: "The registered UI element key.",
+            description:
+              "A registered grounding key (see above) OR any short identifier for the thing being pointed at (e.g. 'search bar', 'profile avatar', 'wishlist heart').",
+          },
+          label: {
+            type: "string",
+            description:
+              "Short human-friendly title shown in the pointer bubble (2-5 words). Use for free-form targets.",
+          },
+          description: {
+            type: "string",
+            description:
+              "One sentence describing what this element does or where to find it.",
           },
         },
         required: ["element"],
@@ -237,10 +247,32 @@ export const queryCatalog = async (args = {}) => {
 
   const { data, error } = await dbQuery.range(0, clampLimit(limit) - 1);
   if (error) {
-    console.warn("[AIAssistant] catalog query failed:", error.message);
+    console.warn("[TagAI] catalog query failed:", error.message);
     return { products: [], note: "I couldn't reach the catalog just now." };
   }
   return { products: data || [], note: null };
+};
+
+/**
+ * resolveProductById — fetch a single active product straight from the
+ * catalog. Used by the add_to_cart tool when the caller has no local cache
+ * of the product (the model references ids returned by earlier searches).
+ */
+export const resolveProductById = async (productId) => {
+  if (!productId || !supabase) return null;
+  const { data, error } = await supabase
+    .from("express_products")
+    .select(PRODUCT_SELECT)
+    .eq("id", productId)
+    .eq("status", "active")
+    .not("seller_id", "is", null)
+    .eq("seller_id.is_active", true)
+    .maybeSingle();
+  if (error) {
+    console.warn("[TagAI] product resolve failed:", error.message);
+    return null;
+  }
+  return data || null;
 };
 
 /**
@@ -256,21 +288,48 @@ export const executeNavigate = (pageKey, navigateTo) => {
     navigateTo(page.route, page.params);
     return { ok: true, message: `Taking you to ${page.label}.`, page };
   } catch (e) {
-    console.warn("[AIAssistant] navigate failed:", e);
+    console.warn("[TagAI] navigate failed:", e);
     return { ok: false, message: "I couldn't open that screen." };
   }
 };
 
 /**
- * point_to_element executor — resolves the element metadata; the actual
- * overlay rendering is driven by AIAssistantContext (groundingTarget).
+ * point_to_element executor. Known keys resolve against GROUNDING_ELEMENTS
+ * and spotlight the registered ref. Anything else succeeds in "generic"
+ * mode — the overlay highlights the middle of the current screen and shows
+ * the caller's label/description, so TagAI can point at ANYTHING on ANY
+ * page even without a registered ref.
  */
-export const executePointTo = (elementKey) => {
-  const element = GROUNDING_ELEMENTS[elementKey];
-  if (!element) {
-    return { ok: false, message: `I can't find a "${elementKey}" element.` };
+export const executePointTo = (args = {}) => {
+  const elementKey = typeof args === "string" ? args : args?.element;
+  const element = elementKey ? GROUNDING_ELEMENTS[elementKey] : null;
+  if (element) {
+    return {
+      ok: true,
+      mode: "registered",
+      message: element.hint,
+      element: elementKey,
+      label: element.label,
+      hint: element.hint,
+    };
   }
-  return { ok: true, message: element.hint, element: elementKey, meta: element };
+  const label =
+    args?.label ||
+    (elementKey && elementKey !== "custom"
+      ? String(elementKey).replace(/[._]/g, " ")
+      : "") ||
+    "this area";
+  const hint = args?.description || "";
+  return {
+    ok: true,
+    mode: "generic",
+    message:
+      hint ||
+      `I highlighted the area on your screen — ${label} should be right around there.`,
+    element: elementKey || "generic",
+    label,
+    hint,
+  };
 };
 
 // ── Local intent planner (LLM fallback) ──────────────────────────────────────
@@ -343,6 +402,29 @@ const matchElementKey = (text) => {
   return best;
 };
 
+// Explicit pointing verbs for the generic-pointing fallback. Deliberately
+// excludes "show me" so navigation phrases ("show me my orders") don't get
+// hijacked as pointing requests.
+const POINT_ONLY_RE =
+  /\b(point\s+(to|at)|where\s+is|where'?s|locate|highlight|which one is|find on (the )?screen)\b/i;
+const POINT_VERB_STRIP_RE =
+  /\b(point\s+(to|at)|where\s+is|where'?s|locate|highlight|which one is|can you|please)\b/gi;
+
+/**
+ * extractPointLabel — turns "point at the search bar" into "search bar".
+ * Returns null when nothing meaningful remains after stripping the verbs.
+ */
+const extractPointLabel = (text) => {
+  let s = String(text || "").replace(POINT_VERB_STRIP_RE, " ");
+  s = s
+    .replace(/^(the|a|an|my)\s+/i, "")
+    .replace(/[?.!,]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (s.length < 2) return null;
+  return s.length > 60 ? `${s.slice(0, 57)}…` : s;
+};
+
 const extractQuery = (text) => {
   let q = stripPricePhrases(text);
   // Remove intent scaffolding words so the DB gets clean search terms.
@@ -381,12 +463,37 @@ const GREETING_RE =
 const HELP_RE =
   /\b(what can you do|help me|how do (you|i) work|capabilities|who are you)\b/i;
 const DEALS_RE = /\b(deals?|discounts?|on sale|sale items?|offers?|cheap things)\b/i;
+const CART_ADD_RE = /\b(add|put|drop)\b[^.?!]*\bcart\b/i;
+// Generic words stripped before matching a mention against product titles
+const CART_STOPWORDS = new Set([
+  "add",
+  "put",
+  "drop",
+  "the",
+  "this",
+  "that",
+  "it",
+  "my",
+  "your",
+  "our",
+  "cart",
+  "please",
+  "into",
+  "item",
+  "product",
+  "one",
+  "and",
+  "for",
+]);
 
 /**
  * Local rule-based planner. Returns the same shape as an LLM tool-call turn:
  * { reply, toolCalls: [{ name, args }] }.
+ *
+ * `ctx.recentProducts` — products shown in recent assistant messages, so
+ * "add this to my cart" can resolve against the latest search results.
  */
-export const planLocalTurn = (text) => {
+export const planLocalTurn = (text, ctx = {}) => {
   const t = (text || "").trim();
   const lower = t.toLowerCase();
 
@@ -408,7 +515,47 @@ export const planLocalTurn = (text) => {
     };
   }
 
-  // 3. Grounding ("where is my coupon code box?")
+  // 3. Add to cart ("add this to my cart", "add the earbuds to cart")
+  if (CART_ADD_RE.test(lower)) {
+    const recents = Array.isArray(ctx.recentProducts)
+      ? ctx.recentProducts.filter((p) => p?.id)
+      : [];
+    // Try to match a mentioned product title against the recent results so
+    // "add the earbuds to my cart" picks the right card.
+    const words = lower
+      .replace(/[^a-z0-9 ]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !CART_STOPWORDS.has(w));
+    let pick = null;
+    if (recents.length) {
+      const scored = recents
+        .map((p) => ({
+          p,
+          score: words.filter((w) =>
+            String(p.title || "").toLowerCase().includes(w),
+          ).length,
+        }))
+        .sort((a, b) => b.score - a.score);
+      if (scored[0]?.score > 0) pick = scored[0].p;
+      else if (recents.length === 1) pick = recents[0];
+    }
+    if (pick) {
+      return {
+        reply: `Adding “${pick.title}” to your cart. 🛒`,
+        toolCalls: [
+          { name: "add_to_cart", args: { product_id: pick.id, quantity: 1 } },
+        ],
+      };
+    }
+    return {
+      reply: recents.length
+        ? "Which one should I add? Tell me the product name, or tap “Add to Cart” on its card. 🛒"
+        : "Search for something first and I can drop it straight into your cart — try “find wireless earbuds”. 🛒",
+      toolCalls: [],
+    };
+  }
+
+  // 4. Grounding ("where is my coupon code box?")
   const elementKey = matchElementKey(lower);
   if (elementKey && (GROUND_VERBS.test(lower) || lower.length < 32)) {
     const meta = GROUNDING_ELEMENTS[elementKey];
@@ -425,7 +572,22 @@ export const planLocalTurn = (text) => {
     };
   }
 
-  // 4. Navigation ("take me to my checkout")
+  // Pointing at something NOT in the registry — still point! The overlay
+  // highlights the middle of the screen with our label, so any "where is /
+  // point at X" request works even for unknown elements.
+  if (POINT_ONLY_RE.test(lower)) {
+    const label = extractPointLabel(t);
+    if (label) {
+      return {
+        reply: `Here's ${label}. ✨`,
+        toolCalls: [
+          { name: "point_to_element", args: { element: "custom", label } },
+        ],
+      };
+    }
+  }
+
+  // 5. Navigation ("take me to my checkout")
   if (NAV_VERBS.test(lower)) {
     const pageKey = matchPageKey(lower);
     if (pageKey) {
@@ -439,7 +601,7 @@ export const planLocalTurn = (text) => {
     // "show me today's deals" is a product intent, not navigation).
   }
 
-  // 5. Deals shortcut → filter catalog by popularity under GH₵50
+  // 6. Deals shortcut → filter catalog by popularity under GH₵50
   if (DEALS_RE.test(lower)) {
     return {
       reply: "Here are some great deals I found for you. 🏷️",
@@ -449,7 +611,7 @@ export const planLocalTurn = (text) => {
     };
   }
 
-  // 6. Product search / filter ("find headphones under 200")
+  // 7. Product search / filter ("find headphones under 200")
   if (PRODUCT_VERBS.test(lower) || PRICE_RE.test(lower)) {
     const filters = parseFilters(t);
     const query = extractQuery(t);
@@ -468,7 +630,7 @@ export const planLocalTurn = (text) => {
     }
   }
 
-  // 7. Fallback
+  // 8. Fallback
   return {
     reply:
       "I can take you to: Home, Feed, Chats, Cart, Account, Checkout, Orders, Wishlist, Notifications, Addresses, Payments, Settings, Categories, Stores or Help — or just tell me what to shop for, like “find wireless earbuds under 200”. 🛍️",
@@ -502,15 +664,31 @@ export const planTurn = async (text, history = []) => {
     });
 
     if (data?.success && typeof data.reply === "string") {
-      return { reply: data.reply, toolCalls: data.toolCalls || [] };
+      return {
+        reply: data.reply,
+        toolCalls: data.toolCalls || [],
+        // Server-executed catalog searches return their results here — the
+        // chat UI renders them as interactive product cards.
+        products: Array.isArray(data.products) ? data.products : [],
+      };
     }
     throw new Error(data?.error || "AI service unavailable");
   } catch (e) {
     console.warn(
-      "[AIAssistant] remote planner unavailable, using local rules:",
+      "[TagAI] remote planner unavailable, using local rules:",
       e?.message || e,
     );
-    return planLocalTurn(text);
+    const local = await planLocalTurn(text, {
+      // Products from the most recent assistant message — lets an
+      // offline "add this to cart" resolve against the last search.
+      recentProducts:
+        [...(Array.isArray(history) ? history : [])]
+          .reverse()
+          .find(
+            (m) => m?.role === "assistant" && Array.isArray(m.products),
+          )?.products || [],
+    });
+    return { ...local, products: [] };
   }
 };
 
@@ -534,7 +712,12 @@ export const executeToolCall = async (call, ctx) => {
         };
       }
       case "add_to_cart": {
-        const product = ctx.resolveProduct?.(args.product_id);
+        // Prefer the caller's local product cache, then fall back to a
+        // catalog lookup by id — the model passes ids it saw in earlier
+        // search results, which the screen usually doesn't hold locally.
+        const product =
+          ctx.resolveProduct?.(args.product_id) ||
+          (await resolveProductById(args.product_id));
         if (!product) {
           return {
             name,
@@ -561,12 +744,17 @@ export const executeToolCall = async (call, ctx) => {
         };
       }
       case "point_to_element": {
-        const result = executePointTo(args.element);
-        if (result.ok) ctx.pointTo(args.element);
+        const result = executePointTo(args);
+        if (result.ok) {
+          ctx.pointTo(result.element, {
+            label: result.label,
+            hint: result.hint,
+          });
+        }
         return {
           name,
           status: result.ok ? "done" : "error",
-          label: `Pointing at ${result.meta?.label || args.element}`,
+          label: `Pointing at ${result.label}`,
           message: result.message,
         };
       }
@@ -574,7 +762,7 @@ export const executeToolCall = async (call, ctx) => {
         return { name, status: "error", label: name, message: "Unknown tool." };
     }
   } catch (e) {
-    console.warn(`[AIAssistant] tool ${name} failed:`, e);
+    console.warn(`[TagAI] tool ${name} failed:`, e);
     return { name, status: "error", label: name, message: "That action failed." };
   }
 };

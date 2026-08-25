@@ -1,28 +1,30 @@
--- ── Platform settings seeds + per-product charge snapshot ────────────────────
+-- ── Platform settings seeds ──────────────────────────────────────────────────
 -- Run once against the Supabase project (SQL editor or migration).
 --
 -- 1. Seeds the platform settings used by:
 --      • the Admin app  → Settings → Fees & Config (edit values)
 --      • the AI edge function (ai_model → OpenRouter model id)
 --      • Store registration flow (store_registration_fee)
---      • Seller product form (product_charge_percentage snapshot)
--- 2. Adds express_products.charge_percentage — the charge (%) snapshotted on
---    the product at save time, so historical products keep the charge they
---    were created with even after the platform charge changes.
+-- 2. Cleans up the deprecated product charge (%):
+--      • removes the `product_charge_percentage` settings row
+--      • drops `express_products.charge_percentage`
+--    The platform fee is computed solely from `service_fee_percentage`,
+--    so the per-product charge snapshot is redundant.
 
 INSERT INTO public.express_settings (key, value, description) VALUES
   ('ai_model', '"openai/gpt-4o-mini"'::jsonb,
     'OpenRouter model id used by the in-app AI assistant (e.g. openai/gpt-4o-mini, anthropic/claude-3.5-haiku).'),
   ('store_registration_fee', '150'::jsonb,
-    'One-time store registration fee in GHS charged via Paystack.'),
-  ('product_charge_percentage', '5'::jsonb,
-    'Platform charge (%) applied to products. Snapshotted onto each product at save time.')
+    'One-time store registration fee in GHS charged via Paystack.')
 ON CONFLICT (key) DO NOTHING;
 
--- Per-product charge snapshot column (nullable → pre-existing products simply
--- have no snapshot until they are re-saved).
+-- ── Deprecated product charge cleanup ───────────────────────────────────────
+-- The service_fee_percentage setting is the single source of truth for the
+-- platform fee; drop the redundant per-product charge snapshot.
+DELETE FROM public.express_settings WHERE key = 'product_charge_percentage';
+
 ALTER TABLE public.express_products
-  ADD COLUMN IF NOT EXISTS charge_percentage numeric;
+  DROP COLUMN IF EXISTS charge_percentage;
 
 -- ── RLS ──────────────────────────────────────────────────────────────────────
 -- Settings are world-readable (the buyer/seller apps need the fee + charge),

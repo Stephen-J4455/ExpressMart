@@ -115,17 +115,24 @@ const TOOLS = [
     function: {
       name: "point_to_element",
       description:
-        "Highlight a UI element on the user's screen with an animated pointer. Use for 'where is X' questions about the interface.",
+        "Point at ANYTHING in the app with an animated pointer. Two modes: (1) pass a known key to spotlight an exact registered control — known keys: checkout.promoCode, checkout.payButton, checkout.orderSummary, cart.checkoutButton, tagAI.inputBar; (2) for ANYTHING else pass a free-form short name in 'element' plus 'label'/'description' and the app highlights that area of the current screen. If what the user asks about lives on another page, call navigate_to_page first, then point.",
       parameters: {
         type: "object",
         properties: {
           element: {
             type: "string",
-            enum: [
-              "checkout.promoCode", "checkout.payButton", "checkout.orderSummary",
-              "cart.checkoutButton", "ai.inputBar",
-            ],
-            description: "Grounding element key.",
+            description:
+              "A known grounding key (see above) OR any short identifier for the thing being pointed at (e.g. 'search bar', 'profile avatar').",
+          },
+          label: {
+            type: "string",
+            description:
+              "Short human-friendly title shown in the pointer bubble (2-5 words). Use for free-form targets.",
+          },
+          description: {
+            type: "string",
+            description:
+              "One sentence describing what this element does or where to find it.",
           },
         },
         required: ["element"],
@@ -137,12 +144,12 @@ const TOOLS = [
 const SYSTEM_PROMPT = `You are the ExpressMart in-app shopping assistant — friendly, concise and action-oriented.
 
 Capabilities:
-• search_products / filter_catalog — search the live catalog; results are rendered as product cards the user can add to their cart.
+• search_products / filter_catalog — search the live catalog. Results are rendered as interactive product cards directly below your message, so DO NOT list the products item-by-item in your reply — just add a short, natural intro (e.g. "Here's what I found for wireless earbuds:").
 • add_to_cart — add a specific product id to the cart (device-side).
 • navigate_to_page — open any app screen (device-side).
-• point_to_element — highlight a UI element on the current screen (device-side).
+• point_to_element — visually point at ANYTHING in the app (device-side). For known keys (checkout.promoCode, checkout.payButton, checkout.orderSummary, cart.checkoutButton, tagAI.inputBar) pass the key to spotlight the exact control. For anything else, pass a free-form 'element' name plus a short 'label' and one-sentence 'description' — the app highlights that area of the current screen. If the thing lives on another page, call navigate_to_page first, then point at it.
 
-Style: keep replies short (1-3 sentences), warm and helpful. Use GH₵ for currency. When you show products, briefly say what you searched for. If a tool result is empty, say so honestly and suggest broader terms. Never invent products or prices.`;
+Style: keep replies short (1-3 sentences), warm and helpful. Use GH₵ for currency. If a tool result is empty, say so honestly and suggest broader terms. Never invent products or prices.`;
 
 const serveCors = (body, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -171,7 +178,7 @@ const runCatalogTool = async (writeClient, args) => {
   let query = writeClient
     .from("express_products")
     .select(
-      "id,title,price,discount,thumbnail,category,rating,total_ratings,sold_count",
+      "id,title,price,discount,thumbnail,thumbnails,category,rating,total_ratings,sold_count,seller_id(id,name,avatar)",
     )
     .eq("status", "active")
     .limit(limit);
@@ -214,9 +221,14 @@ const runCatalogTool = async (writeClient, args) => {
     price: Number(p.price || 0),
     discount: Number(p.discount || 0),
     thumbnail: p.thumbnail || null,
+    thumbnails: p.thumbnails || null,
     category: p.category || null,
     rating: Number(p.rating || 0),
     total_ratings: p.total_ratings ?? 0,
+    sold_count: p.sold_count ?? 0,
+    // Embedded seller (id/name/avatar) — same shape the local planner's
+    // queryCatalog returns, so the product cards render identically.
+    seller_id: p.seller_id || null,
   }));
 
   return {

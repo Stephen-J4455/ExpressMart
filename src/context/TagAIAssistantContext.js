@@ -1,4 +1,4 @@
-// ── AI Assistant global state ────────────────────────────────────────────────
+// ── TagAI global state ────────────────────────────────────────────────
 // Owns:
 //   1. Chat state — messages (with generative-UI payloads), thinking state,
 //      persistence to AsyncStorage.
@@ -17,24 +17,24 @@ import {
   useRef,
   useState,
 } from "react";
-import { executeToolCall, planTurn } from "../services/aiAssistantService";
+import { executeToolCall, planTurn } from "../services/tagAIAssistantService";
 
-const CHAT_STORAGE_KEY = "expressmart.ai.chat";
+const CHAT_STORAGE_KEY = "expressmart.tagai.chat";
 const MAX_PERSISTED_MESSAGES = 60;
 
-const AIAssistantContext = createContext();
+const TagAIAssistantContext = createContext();
 
-export const useAIAssistant = () => {
-  const ctx = useContext(AIAssistantContext);
+export const useTagAIAssistant = () => {
+  const ctx = useContext(TagAIAssistantContext);
   if (!ctx) {
-    throw new Error("useAIAssistant must be used within an AIAssistantProvider");
+    throw new Error("useTagAIAssistant must be used within an TagAIAssistantProvider");
   }
   return ctx;
 };
 
 const makeId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-export const AIAssistantProvider = ({ children }) => {
+export const TagAIAssistantProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
   const [isThinking, setIsThinking] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -56,7 +56,7 @@ export const AIAssistantProvider = ({ children }) => {
           if (Array.isArray(parsed)) setMessages(parsed);
         }
       } catch (e) {
-        console.warn("[AIAssistant] failed to load chat:", e);
+        console.warn("[TagAI] failed to load chat:", e);
       } finally {
         if (!cancelled) setLoaded(true);
       }
@@ -76,7 +76,7 @@ export const AIAssistantProvider = ({ children }) => {
           JSON.stringify(messages.slice(-MAX_PERSISTED_MESSAGES)),
         );
       } catch (e) {
-        console.warn("[AIAssistant] failed to persist chat:", e);
+        console.warn("[TagAI] failed to persist chat:", e);
       }
     })();
   }, [messages, loaded]);
@@ -93,12 +93,21 @@ export const AIAssistantProvider = ({ children }) => {
 
   const getGroundingRef = useCallback((key) => groundingRefs.current.get(key), []);
 
-  /** Trigger the pointer overlay for a registered element key. */
-  const pointTo = useCallback((key) => {
+  /** Trigger the pointer overlay. `extra` may carry { label, hint } for
+   * generic targets that have no registered ref / registry metadata — the
+   * overlay then highlights the middle of the current screen instead. */
+  const pointTo = useCallback((key, extra = {}) => {
     setGroundingTarget((prev) => {
       // Re-trigger even if the same key is targeted twice in a row.
-      if (prev?.key === key) return { ...prev, nonce: (prev.nonce || 0) + 1 };
-      return { key, nonce: 0 };
+      if (prev?.key === key) {
+        return {
+          ...prev,
+          nonce: (prev.nonce || 0) + 1,
+          label: extra.label ?? prev.label,
+          hint: extra.hint ?? prev.hint,
+        };
+      }
+      return { key, nonce: 0, label: extra.label, hint: extra.hint };
     });
   }, []);
 
@@ -130,12 +139,15 @@ export const AIAssistantProvider = ({ children }) => {
         // planner resolves instantly (local rules).
         await new Promise((r) => setTimeout(r, 420));
 
-        const { reply, toolCalls } = await planTurn(trimmed, messages);
+        const { reply, toolCalls, products: remoteProducts = [] } =
+          await planTurn(trimmed, messages);
 
         // Execute tool calls sequentially (order matters: navigate before
         // point_to_element, search before add_to_cart, etc.)
         const toolResults = [];
-        const products = [];
+        // Server-side catalog searches (OpenRouter agent) already produced
+        // their results in the response — seed the card list with them.
+        const products = [...remoteProducts];
         for (const call of toolCalls || []) {
           const result = await executeToolCall(call, {
             navigateTo: nav.navigateTo || (() => {}),
@@ -171,7 +183,7 @@ export const AIAssistantProvider = ({ children }) => {
           ts: Date.now(),
         });
       } catch (e) {
-        console.warn("[AIAssistant] turn failed:", e);
+        console.warn("[TagAI] turn failed:", e);
         appendMessage({
           id: makeId(),
           role: "assistant",
@@ -217,8 +229,8 @@ export const AIAssistantProvider = ({ children }) => {
   );
 
   return (
-    <AIAssistantContext.Provider value={value}>
+    <TagAIAssistantContext.Provider value={value}>
       {children}
-    </AIAssistantContext.Provider>
+    </TagAIAssistantContext.Provider>
   );
 };

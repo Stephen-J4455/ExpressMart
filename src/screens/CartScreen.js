@@ -25,6 +25,7 @@ import { useGrounding } from "../hooks/useGrounding";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { radius } from "../theme/colors";
+import { showTabBar, updateTabBarOnScroll } from "../utils/tabBarAutoHide";
 
 // Map color names to hex values
 const colorMap = {
@@ -90,6 +91,19 @@ export const CartScreen = ({ navigation }) => {
 
   // AI grounding ref — lets the assistant point at the checkout button.
   const checkoutBtnRef = useGrounding("cart.checkoutButton");
+
+  // ── Bottom tab bar auto-hide (direction-aware) ────────────────────────────
+  // Same convention as Home/Feed: swipe up hides the bar, swipe down or
+  // being near the top reveals it again. Arriving on the tab always shows
+  // the bar so it never starts hidden.
+  const handleCartScroll = useCallback((e) => {
+    updateTabBarOnScroll(e.nativeEvent.contentOffset.y);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => showTabBar());
+    return unsubscribe;
+  }, [navigation]);
 
   // ── Per-item pending actions (loading animations) ──────────────────────────
   // Maps item.id → "remove" | "inc" | "dec" while the async cart operation
@@ -268,6 +282,8 @@ export const CartScreen = ({ navigation }) => {
           style={styles.itemList}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 0 }}
+          onScroll={handleCartScroll}
+          scrollEventThrottle={16}
         >
           {/* Empty banner */}
           <View style={styles.emptyBanner}>
@@ -421,6 +437,8 @@ export const CartScreen = ({ navigation }) => {
         <ScrollView
           style={isWide ? styles.itemListWide : styles.itemList}
           showsVerticalScrollIndicator={false}
+          onScroll={handleCartScroll}
+          scrollEventThrottle={16}
         >
           {items.map(({ id, product, quantity, size, color, price }) => {
             const knownInventory = hasInventoryValue(product);

@@ -44,6 +44,13 @@ const NEARBY_RADIUS_KM = 25;
 // Number of categories shown in the horizontal strip on Home — ranked by the
 // most active products. Tapping "See More" opens the full Categories tab.
 const TOP_CATEGORIES_LIMIT = 5;
+// Skeleton cards rendered in place of feed cards during the initial load.
+// Rendered through the same FlatList as the real cards so the loading state
+// keeps the page's full structure and is scrollable like the loaded feed.
+const FEED_PLACEHOLDER_ITEMS = Array.from(
+  { length: 6 },
+  (_, i) => `feed-placeholder-${i}`,
+);
 
 export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
@@ -351,6 +358,17 @@ export const HomeScreen = ({ navigation }) => {
     [navigation, styles],
   );
 
+  // Skeleton rows for the initial load — same wrapper as renderFeedItem so
+  // placeholder cards sit exactly where real cards will appear.
+  const renderPlaceholderItem = useCallback(
+    () => (
+      <View style={[styles.cardWrap, { width: "100%" }]}>
+        <FeedCardPlaceholder />
+      </View>
+    ),
+    [styles],
+  );
+
   const renderEmpty = () => (
     <View style={styles.emptyState}>
       <Ionicons
@@ -561,41 +579,36 @@ export const HomeScreen = ({ navigation }) => {
       {/* Filter pill row lives inside the FlatList header (see listHeader)
           so it scrolls away with the feed and back again. */}
 
-      {loading ? (
-        // Skeleton placeholders shaped like feed cards — no spinner.
-        <View
-          style={[styles.placeholderList, { paddingTop: headerHeight + 8 }]}
-        >
-          {[0, 1, 2].map((i) => (
-            <FeedCardPlaceholder key={i} />
-          ))}
-        </View>
-      ) : (
-        <FlatList
-          data={feedItems}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderFeedItem}
-          ListHeaderComponent={listHeader}
-          ListEmptyComponent={!nearbyLoading ? renderEmpty : null}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingTop: headerHeight + 8 },
-          ]}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              progressViewOffset={headerHeight}
-            />
-          }
-          initialNumToRender={3}
-          maxToRenderPerBatch={4}
-          windowSize={5}
-        ></FlatList>
-      )}
+      {/* FlatList renders in BOTH states: while loading it receives skeleton
+          items so the page keeps its exact structure (filter pills →
+          categories strip → feed-shaped skeletons) and the placeholders are
+          scrollable exactly like the loaded feed. */}
+      <FlatList
+        data={loading ? FEED_PLACEHOLDER_ITEMS : feedItems}
+        keyExtractor={(item) =>
+          loading ? String(item) : String(item?.id ?? item)
+        }
+        renderItem={loading ? renderPlaceholderItem : renderFeedItem}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={!loading && !nearbyLoading ? renderEmpty : null}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingTop: headerHeight + 8 },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            progressViewOffset={headerHeight}
+          />
+        }
+        initialNumToRender={3}
+        maxToRenderPerBatch={4}
+        windowSize={5}
+      />
 
       {(activeFilter === "Nearby" && nearbyLoading) || loadingMore ? (
         <View style={styles.footerLoader}>
@@ -612,10 +625,6 @@ const buildHomeStyles = (c) =>
       flex: 1,
       backgroundColor: c.background,
       
-    },
-    placeholderList: {
-      flex: 1,
-      paddingHorizontal: 12,
     },
     // Header floats above the feed; translateY slides it fully off-screen.
     headerOverlay: {

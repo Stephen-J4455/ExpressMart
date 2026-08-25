@@ -1,6 +1,6 @@
 // ── ScreenPointerOverlay — screen grounding & object pointing ────────────────
 // Mounted once at the app root (inside NavigationWithTheme). When
-// AIAssistantContext.groundingTarget is set, this overlay:
+// TagAIAssistantContext.groundingTarget is set, this overlay:
 //   1. Resolves the registered ref for the target key (useGrounding).
 //   2. Retries measurement briefly — this lets a navigate_to_page tool call
 //      complete and the destination screen mount its element first.
@@ -11,6 +11,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Dimensions,
   Easing,
   Pressable,
   StyleSheet,
@@ -19,8 +20,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAIAssistant } from "../../context/AIAssistantContext";
-import { GROUNDING_ELEMENTS } from "../../services/aiAssistantService";
+import { useTagAIAssistant } from "../../context/TagAIAssistantContext";
+import { GROUNDING_ELEMENTS } from "../../services/tagAIAssistantService";
 import { useTheme } from "../../context/ThemeContext";
 import { useAppStyles } from "../../hooks/useAppStyles";
 import { radius } from "../../theme/colors";
@@ -34,7 +35,7 @@ export const ScreenPointerOverlay = () => {
   const { colors, isDark } = useTheme();
   const styles = useAppStyles(buildStyles);
   const insets = useSafeAreaInsets();
-  const { groundingTarget, clearGrounding, getGroundingRef } = useAIAssistant();
+  const { groundingTarget, clearGrounding, getGroundingRef } = useTagAIAssistant();
 
   const [rect, setRect] = useState(null);
   const [found, setFound] = useState(false);
@@ -51,6 +52,11 @@ export const ScreenPointerOverlay = () => {
   const meta = groundingTarget ? GROUNDING_ELEMENTS[groundingTarget.key] : null;
   const targetKey = groundingTarget?.key;
   const nonce = groundingTarget?.nonce || 0;
+  // Generic target = no registry entry + caller-supplied label. These never
+  // resolve to a ref, so only briefly retry before falling back to pointing
+  // at the middle of the screen.
+  const isGenericTarget =
+    !meta && Boolean(groundingTarget?.label ?? groundingTarget?.hint);
 
   // Measure (with retries) whenever the target changes.
   useEffect(() => {
@@ -69,7 +75,7 @@ export const ScreenPointerOverlay = () => {
     const retry = () => {
       if (cancelled) return;
       attempts += 1;
-      if (attempts > MAX_MEASURE_ATTEMPTS) {
+      if (attempts > (isGenericTarget ? 3 : MAX_MEASURE_ATTEMPTS)) {
         // Element never appeared — show the graceful "not on screen" state.
         setRect(null);
         setFound(false);
@@ -200,11 +206,38 @@ export const ScreenPointerOverlay = () => {
     };
   }, [rect]);
 
+  // Generic pointing mode — no registered ref matched this key. Instead of
+  // dead-ending, highlight the middle of the current screen so TagAI can
+  // point at ANYTHING on ANY page. (Computed unconditionally — Rules of
+  // Hooks require all hooks to run before any early return.)
+  const genericSpotlight = useMemo(() => {
+    const win = Dimensions.get("window");
+    const width = Math.min(win.width * 0.72, 300);
+    const height = 150;
+    return {
+      x: (win.width - width) / 2,
+      y: win.height * 0.3,
+      width,
+      height,
+    };
+  }, [nonce]);
+
   if (!groundingTarget || !visible) return null;
 
-  const label = meta?.label || "UI element";
-  const hint = meta?.hint || "";
+  // Label/hint: caller-supplied overrides (generic pointing) win, then the
+  // static registry metadata, then a prettified key.
+  const rawKey = targetKey ? String(targetKey) : "";
+  const label =
+    groundingTarget?.label ||
+    meta?.label ||
+    (rawKey ? rawKey.replace(/[._]/g, " ") : "") ||
+    "this area";
+  const hint = groundingTarget?.hint ?? meta?.hint ?? "";
   const labelAbove = spotlight ? spotlight.y > 120 : true;
+
+  // Generic pointing applies when there's no registered ref but we have a
+  // meaningful target to show.
+  const hasMeaningfulTarget = Boolean(groundingTarget?.label || meta);
 
   return (
     <Animated.View
@@ -328,8 +361,65 @@ export const ScreenPointerOverlay = () => {
             />
           </Animated.View>
         </>
+      ) : hasMeaningfulTarget ? (
+        /* Generic pointing mode — no registered ref for this target, so
+           highlight the middle of the current screen instead of giving up.
+           TagAI can point at ANYTHING on ANY page this way. */
+        <>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.ring,
+              {
+                left: genericSpotlight.x,
+                top: genericSpotlight.y,
+                width: genericSpotlight.width,
+                height: genericSpotlight.height,
+                borderColor: colors.accent,
+                transform: [{ scale: ringScale }],
+                opacity: ringOpacity,
+              },
+            ]}
+          />
+          <View
+            pointerEvents="none"
+            style={[
+              styles.ringCrisp,
+              {
+                left: genericSpotlight.x,
+                top: genericSpotlight.y,
+                width: genericSpotlight.width,
+                height: genericSpotlight.height,
+                borderColor: colors.accent,
+              },
+            ]}
+          />
+          <View style={styles.notFoundWrap} pointerEvents="none">
+            <View style={[styles.labelBubble, { borderColor: colors.accent }]}>
+              <View style={styles.labelTitleRow}>
+                <Ionicons name="location" size={14} color={colors.accent} />
+                <Text style={[styles.labelTitle, { color: colors.dark }]}>
+                  {label}
+                </Text>
+              </View>
+              {!!hint && (
+                <Text
+                  style={[styles.labelHint, { color: colors.muted }]}
+                  numberOfLines={4}
+                >
+                  {hint}
+                </Text>
+              )}
+              {!hint && (
+                <Text style={[styles.labelHint, { color: colors.muted }]}>
+                  It should be right around this area of the screen.
+                </Text>
+              )}
+            </View>
+          </View>
+        </>
       ) : (
-        /* Element not registered on this screen */
+        /* No ref AND no label info — explain and suggest navigating first */
         <View style={styles.notFoundWrap} pointerEvents="none">
           <View style={[styles.labelBubble, { borderColor: colors.accent }]}>
             <View style={styles.labelTitleRow}>
