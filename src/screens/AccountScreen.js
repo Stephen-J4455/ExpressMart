@@ -86,11 +86,6 @@ const menuSections = [
     title: "Support",
     items: [
       {
-        icon: "chatbubble-ellipses-outline",
-        label: "Chat with Us",
-        screen: "Chat",
-      },
-      {
         icon: "help-circle-outline",
         label: "Help Center",
         screen: "HelpSupport",
@@ -313,7 +308,17 @@ export const AccountScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      {/* Elastic-overscroll backdrop: iOS rubber-banding reveals whatever sits
+          behind the scroll view, which flashed a blank gap above the hero
+          header when flung hard. A hero-colored strip up top blends the
+          bounce into the header; the rest stays the page background. */}
+      <View pointerEvents="none" style={styles.bounceWrap}>
+        <View style={[styles.bounceTop, { backgroundColor: themeColors.primary }]} />
+      </View>
       <ScrollView
+        // See SellerAdminScreen: prevents Android's stuck stretch-overscroll
+        // leaving a blank gap above the hero after hard flings.
+        overScrollMode="never"
         contentContainerStyle={[
           styles.scrollContent,
           isWide && { maxWidth: 700, alignSelf: "center", width: "100%" },
@@ -599,7 +604,19 @@ const buildAccountStyles = (c) =>
     },
     scrollContent: {
       flexGrow: 1,
+      // Opaque so the bounce backdrop behind the scroll view only shows
+      // during overscroll, never between sections while scrolling normally.
+      backgroundColor: c.background,
     },
+    // ── Elastic-overscroll backdrop (see return) ────────────────────────────
+    bounceWrap: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+    bounceTop: { height: 600 },
     centerContainer: {
       flex: 1,
       alignItems: "center",

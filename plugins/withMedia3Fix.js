@@ -14,12 +14,12 @@
 //     in class Landroidx/media3/exoplayer/DefaultLoadControl;
 //
 // This plugin appends a global resolutionStrategy to the PROJECT-level
-// android/build.gradle (via @expo/config-plugins — no manual edits to any
+// android/build.gradle (via expo/config-plugins — no manual edits to any
 // native folder required) forcing every androidx.media3 dependency to the
 // version react-native-video was built against.
 // ---------------------------------------------------------------------------
 
-const { withProjectBuildGradle } = require("@expo/config-plugins");
+const { withProjectBuildGradle } = require("expo/config-plugins");
 
 // Must match RNVideo_media3Version of the installed react-native-video.
 const MEDIA3_VERSION = "1.8.0";

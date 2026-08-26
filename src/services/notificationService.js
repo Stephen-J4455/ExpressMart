@@ -199,6 +199,69 @@ export const sendPromotion = async (title, body, promoData = {}) => {
     }
 };
 
+/**
+ * Queue a rich push notification for future delivery.
+ *
+ * The scheduled-notifications edge function (run every 5 min by pg_cron)
+ * drains this queue and sends each due entry through send-push-notification,
+ * so the app doesn't need to be open at send time.
+ *
+ * @param {Object} options
+ * @param {string} options.title - Notification title
+ * @param {string} options.body - Notification body
+ * @param {Date|string} options.sendAt - When to deliver
+ * @param {string} [options.imageUrl] - Rich image shown in the tray (Android big picture)
+ * @param {'user'|'users'|'topic'|'app_type'} [options.targetType='app_type']
+ * @param {*} [options.targetValue] - user id / ids array / topic name / app type ('all')
+ * @param {string} [options.screen] - In-app screen to open when tapped
+ * @param {Object} [options.params] - Navigation params (JSON-stringified into data)
+ * @param {string} [options.notificationType='promotion']
+ * @param {string} [options.channelId='promotions'] - Android channel id
+ * @param {'none'|'daily'|'weekly'} [options.repeatInterval='none']
+ */
+export const scheduleNotification = async ({
+    title,
+    body,
+    sendAt = new Date(),
+    imageUrl,
+    targetType = 'app_type',
+    targetValue = 'all',
+    screen = 'Home',
+    params,
+    notificationType = 'promotion',
+    channelId = 'promotions',
+    repeatInterval = 'none',
+}) => {
+    try {
+        const data = {
+            ...(params ? { params: JSON.stringify(params) } : {}),
+            screen,
+        };
+        const { error } = await supabase
+            .from('express_scheduled_notifications')
+            .insert({
+                title,
+                body: body || '',
+                image_url: imageUrl || null,
+                notification_type: notificationType,
+                channel_id: channelId,
+                target_type: targetType,
+                // Pass arrays/objects straight through — supabase serializes
+                // them into jsonb correctly (stringifying would store a JSON
+                // string scalar instead of an array).
+                target_value: targetValue,
+                data,
+                send_at: new Date(sendAt).toISOString(),
+                repeat_interval: repeatInterval,
+            });
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        console.error('Failed to schedule notification:', err);
+        return { success: false, error: err.message };
+    }
+};
+
 export default {
     sendNotificationToUser,
     sendNotificationToUsers,
@@ -207,4 +270,5 @@ export default {
     notifySellerNewOrder,
     notifyNewMessage,
     sendPromotion,
+    scheduleNotification,
 };

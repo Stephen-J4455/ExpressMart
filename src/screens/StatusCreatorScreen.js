@@ -245,6 +245,67 @@ export const StatusCreatorScreen = ({ navigation }) => {
             </View>
           )}
 
+          {/* ── Live preview — renders exactly what viewers will see ─────── */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Preview</Text>
+            <View style={styles.previewWrap}>
+              <View style={[styles.previewCard, { backgroundColor: statusMode === "text" ? solidColor : themeColors.light }]}>
+                {statusMode === "image" ? (
+                  image ? (
+                    <>
+                      <Image source={{ uri: image }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                      {/* Bottom scrim so the caption stays readable over
+                          any photo, mirroring the StatusViewer rendering. */}
+                      {imageCaption ? (
+                        <LinearGradient
+                          colors={["transparent", "rgba(0,0,0,0.65)"]}
+                          style={styles.previewCaptionScrim}
+                        >
+                          <Text style={styles.previewCaptionText} numberOfLines={4}>
+                            {imageCaption}
+                          </Text>
+                        </LinearGradient>
+                      ) : null}
+                    </>
+                  ) : (
+                    <View style={styles.previewPlaceholder}>
+                      <Ionicons name="image-outline" size={32} color={themeColors.muted} />
+                      <Text style={styles.previewPlaceholderText}>
+                        Pick an image to see your status
+                      </Text>
+                    </View>
+                  )
+                ) : (
+                  <View style={styles.previewTextWrap}>
+                    {backgroundType === "gradient" ? (
+                      <LinearGradient
+                        colors={previewColors}
+                        style={StyleSheet.absoluteFill}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                      />
+                    ) : null}
+                    <Text
+                      style={[
+                        styles.previewStatusText,
+                        {
+                          color:
+                            backgroundType === "solid" ? "#FFFFFF" : textColor,
+                          fontSize: Math.min(fontSize, 34),
+                        },
+                      ]}
+                    >
+                      {statusText || "Your status text appears here…"}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.previewHint}>
+                This is how your status will appear to customers.
+              </Text>
+            </View>
+          </View>
+
           <Pressable style={[styles.postBtn, { backgroundColor: themeColors.primary }, loading && { opacity: 0.6 }]} onPress={handlePost} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.postText}>Post Status</Text>}
           </Pressable>
@@ -271,6 +332,44 @@ const buildStatusCreatorStyles = (c) =>
   textInput: { borderWidth: 1, borderColor: c.light, padding: 12, borderRadius: radius.lg, backgroundColor: c.light },
   postBtn: { padding: 14, borderRadius: radius.xl, alignItems: "center", marginTop: 12 },
   postText: { color: c.light, fontWeight: "800" },
+  // ── Live preview card (9:16 story format) ──────────────────────────────
+  previewWrap: { alignItems: "center" },
+  previewCard: {
+    // Phone-proportioned story thumbnail, clamped so it never overflows
+    // wide screens inside ResponsiveContainer.
+    width: Math.min(280, SCREEN_WIDTH - 48),
+    height: Math.min(280, SCREEN_WIDTH - 48) * (16 / 9),
+    borderRadius: radius.xl,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  previewCaptionScrim: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 32,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
+  previewCaptionText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  previewPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+  },
+  previewPlaceholderText: { color: c.muted, fontSize: 13, textAlign: "center" },
+  previewTextWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 18,
+  },
+  previewStatusText: { fontWeight: "700", textAlign: "center" },
+  previewHint: { color: c.muted, fontSize: 12, marginTop: 8, textAlign: "center" },
  });
 
 export default StatusCreatorScreen;

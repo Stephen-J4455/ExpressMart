@@ -4,6 +4,7 @@ import {
   DefaultTheme,
   getStateFromPath as defaultGetStateFromPath,
 } from "@react-navigation/native";
+import { navigationRef } from "./src/utils/navigationRef";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
@@ -18,7 +19,7 @@ import {
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons ,Octicons} from "@expo/vector-icons";
+import { Ionicons, Octicons } from "@expo/vector-icons";
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
@@ -50,6 +51,8 @@ import { SearchScreen } from "./src/screens/SearchScreen";
 import { SearchResultsScreen } from "./src/screens/SearchResultsScreen";
 import { ProductDetailScreen } from "./src/screens/ProductDetailScreen";
 import { AuthScreen } from "./src/screens/AuthScreen";
+import { OnboardingScreen } from "./src/screens/OnboardingScreen";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CheckoutScreen } from "./src/screens/CheckoutScreen";
 import { OrdersScreen } from "./src/screens/OrdersScreen";
 import { OrderDetailScreen } from "./src/screens/OrderDetailScreen";
@@ -76,7 +79,10 @@ import { PrivacySettingsScreen } from "./src/screens/PrivacySettingsScreen";
 import { PrivacyPolicyScreen } from "./src/screens/PrivacyPolicyScreen";
 import { TermsScreen } from "./src/screens/TermsScreen";
 import { ChatScreen } from "./src/screens/ChatScreen";
-import { ChatsScreen, prefetchChatsScreenData } from "./src/screens/ChatsScreen";
+import {
+  ChatsScreen,
+  prefetchChatsScreenData,
+} from "./src/screens/ChatsScreen";
 import { useShop } from "./src/context/ShopContext";
 import { useAds } from "./src/context/AdsContext";
 import { SellerChatScreen } from "./src/screens/SellerChatScreen";
@@ -265,9 +271,7 @@ const withTabTransition = (Wrapped) => {
     );
   }
   const Transitioned = (props) => (
-    <AnimatedScreen>
-      {Wrapped ? <Wrapped {...props} /> : null}
-    </AnimatedScreen>
+    <AnimatedScreen>{Wrapped ? <Wrapped {...props} /> : null}</AnimatedScreen>
   );
   Transitioned.displayName = `withTabTransition(${
     (Wrapped && (Wrapped.displayName || Wrapped.name)) || "Screen"
@@ -991,7 +995,6 @@ const AuthenticatedApp = () => {
     prefetchChatsScreenData({ user, followedSellers, fetchAdsByPlacement });
   }, [isAuthenticated, user, followedSellers, fetchAdsByPlacement]);
 
-
   React.useEffect(() => {
     let mounted = true;
     const run = async () => {
@@ -1261,6 +1264,45 @@ const DeepLinkHandler = () => {
   return null;
 };
 
+// ── First-run onboarding gate ───────────────────────────────────────────────
+// Shows the animated onboarding carousel once per device. Completion is
+// persisted in AsyncStorage. Renders EITHER onboarding OR its children —
+// never both — so the main app stays fully hidden until onboarding finishes.
+const ONBOARDING_SEEN_KEY = "expressmart.onboarding.completed";
+
+const OnboardingGate = ({ children }) => {
+  const [status, setStatus] = React.useState("loading"); // loading | show | done
+
+  React.useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(ONBOARDING_SEEN_KEY)
+      .then((seen) => {
+        if (mounted) setStatus(seen === "true" ? "done" : "show");
+      })
+      .catch(() => {
+        // Fail open — never block the app over storage errors.
+        if (mounted) setStatus("done");
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleComplete = React.useCallback(() => {
+    setStatus("done");
+    AsyncStorage.setItem(ONBOARDING_SEEN_KEY, "true").catch(() => {});
+  }, []);
+
+  // While checking storage or during onboarding, the main app is NOT mounted.
+  if (status !== "done") {
+    if (status === "show") {
+      return <OnboardingScreen onComplete={handleComplete} />;
+    }
+    return null;
+  }
+  return children;
+};
+
 // Wraps the navigation container so it receives a FRESH theme object on every
 // mode change. Without this, the module-level navTheme is stable across theme
 // switches, React Navigation never re-renders its screens, and memoized
@@ -1275,13 +1317,15 @@ const NavigationWithTheme = () => {
   // in-screen state are preserved.
   const theme = useMemo(() => createNavTheme(colors, isDark), [colors, isDark]);
   return (
-    <NavigationContainer theme={theme} linking={linking}>
+    <NavigationContainer ref={navigationRef} theme={theme} linking={linking}>
       <StatusBar style={isDark ? "light" : "dark-content"} />
       <TagAIAssistantProvider>
         {/* Global AI grounding overlay — renders the pointer/spotlight above
             every screen when the assistant invokes point_to_element. */}
-        <AuthenticatedApp />
-        <ScreenPointerOverlay />
+        <OnboardingGate>
+          <AuthenticatedApp />
+          <ScreenPointerOverlay />
+        </OnboardingGate>
       </TagAIAssistantProvider>
     </NavigationContainer>
   );

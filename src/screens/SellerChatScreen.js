@@ -351,7 +351,7 @@ export const SellerChatScreen = ({
   const renderMessage = ({ item }) => {
     if (item.type === "date_divider") {
       return (
-        <View style={styles.dateDivider}>
+        <View key={item.id} style={styles.dateDivider}>
           <View style={styles.dateDividerLine} />
           <Text style={styles.dateDividerText}>{getDateLabel(item.date)}</Text>
           <View style={styles.dateDividerLine} />
@@ -372,7 +372,10 @@ export const SellerChatScreen = ({
           : productData?.price || 0;
 
       return (
-        <View style={[styles.messageWrapper, isSeller ? styles.sellerWrapper : styles.userWrapper]}>
+        <View
+          key={item.id}
+          style={[styles.messageWrapper, isSeller ? styles.sellerWrapper : styles.userWrapper]}
+        >
           <View
             style={[
               styles.productCardBubble,
@@ -423,7 +426,10 @@ export const SellerChatScreen = ({
     }
 
     return (
-      <View style={[styles.messageWrapper, isSeller ? styles.sellerWrapper : styles.userWrapper]}>
+      <View
+        key={item.id}
+        style={[styles.messageWrapper, isSeller ? styles.sellerWrapper : styles.userWrapper]}
+      >
         <View
           style={[
             styles.messageContainer,
@@ -482,9 +488,6 @@ export const SellerChatScreen = ({
               </View>
             </View>
           </View>
-          <Pressable style={styles.headerAction}>
-            <Ionicons name="ellipsis-vertical" size={20} color={theme.primary} />
-          </Pressable>
         </View>
       </View>
 
@@ -548,7 +551,6 @@ const buildSellerChatStyles = (c) =>
   statusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   statusDot: { width: 6, height: 6, borderRadius: radius.pill },
   headerSubtitle: { fontSize: 12, color: c.muted },
-  headerAction: { padding: 8 },
   chatContainer: { flex: 1, backgroundColor: c.background },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: c.background, gap: 8 },
   loadingText: { color: c.muted, fontSize: 15 },

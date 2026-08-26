@@ -109,32 +109,53 @@ export const AuthProvider = ({ children }) => {
     [stopPresence],
   );
 
-  const fetchProfile = useCallback(async (userId) => {
-    if (!supabase || !userId) return null;
+  const fetchProfile = useCallback(
+    async (userId, { retried = false } = {}) => {
+      if (!supabase || !userId) return null;
 
-    try {
-      const { data, error } = await supabase
-        .from("express_profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from("express_profiles")
+          .select("*")
+          .eq("id", userId)
+          .single();
 
-      if (error && error.code !== "PGRST116") {
+        if (error && error.code !== "PGRST116") {
+          const msg = error.message || JSON.stringify(error);
+
+          // "JWT issued at future" = device clock drift vs the auth server
+          // (classic on Android emulators after host sleep/resume). Minting a
+          // fresh session token re-stamps it from the server, which usually
+          // self-heals; otherwise the user must sync the device clock.
+          if (!retried && /issued at future|jwt.*future/i.test(msg)) {
+            console.warn(
+              "[AuthContext] Clock-skew detected (JWT issued at future) — refreshing session and retrying profile fetch.",
+            );
+            try {
+              await supabase.auth.refreshSession();
+            } catch (refreshErr) {
+              console.warn(
+                "[AuthContext] Session refresh during clock-skew recovery failed:",
+                refreshErr?.message || refreshErr,
+              );
+            }
+            return fetchProfile(userId, { retried: true });
+          }
+
+          console.error("Error fetching profile:", msg);
+          return null;
+        }
+        return data;
+      } catch (error) {
         console.error(
-          "Error fetching profile:",
-          error.message || JSON.stringify(error),
+          "Profile fetch error:",
+          error?.message || JSON.stringify(error),
         );
         return null;
       }
-      return data;
-    } catch (error) {
-      console.error(
-        "Profile fetch error:",
-        error?.message || JSON.stringify(error),
-      );
-      return null;
-    }
-  }, []);
+    },
+    [],
+  );
 
   const applySessionState = useCallback(
     async (nextSession, { fetchUserProfile = true } = {}) => {

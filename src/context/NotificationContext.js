@@ -11,6 +11,7 @@ import Constants from "expo-constants";
 import { isRunningInExpoGo } from "expo";
 import { Platform, AppState } from "react-native";
 import { supabase } from "../lib/supabase";
+import { navigateToScreen } from "../utils/navigationRef";
 
 // expo-notifications was removed from Expo Go (SDK 53+).
 // Dynamic require with a no-op stub prevents a crash at module load time.
@@ -27,6 +28,7 @@ try {
     setNotificationChannelAsync: async () => {},
     addNotificationReceivedListener: () => ({ remove: () => {} }),
     addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
+    addPushTokenListener: () => ({ remove: () => {} }),
     AndroidImportance: { MAX: 5, HIGH: 4, DEFAULT: 3, LOW: 2, MIN: 1 },
   };
 }
@@ -84,6 +86,7 @@ export const NotificationProvider = ({ children, userId }) => {
   const [notificationPermission, setNotificationPermission] = useState(null);
   const notificationListener = useRef();
   const responseListener = useRef();
+  const deviceTokenListener = useRef();
   const appState = useRef(AppState.currentState);
 
   // Register device token with Supabase
@@ -362,8 +365,44 @@ export const NotificationProvider = ({ children, userId }) => {
 
       responseListener.current =
         Notifications.addNotificationResponseReceivedListener((response) => {
-          // Handle navigation based on notification data
+          // Rich-push tap handling: FCM `data` values arrive as strings, so
+          // `params` is stored JSON-stringified by the sender.
+          const data =
+            response?.notification?.request?.content?.data || {};
+          const screen = data.screen;
+          if (!screen) return;
+
+          let params;
+          if (data.params) {
+            try {
+              params = JSON.parse(data.params);
+            } catch (_) {
+              params = undefined;
+            }
+          }
+
+          // Small delay so the navigator finishes mounting on cold start —
+          // navigationRef isn't ready during the very first ticks.
+          setTimeout(() => {
+            navigateToScreen(screen, params);
+          }, 350);
         });
+
+      // Re-register whenever FCM rotates the device token (Android/iOS do this
+      // periodically). Without this, express_device_tokens keeps the stale token
+      // and every later send fails with FCM "NotRegistered".
+      // NOTE: in expo-notifications v57 the listener is addPushTokenListener
+      // (addDevicePushTokenListener does not exist in this version).
+      deviceTokenListener.current = Notifications.addPushTokenListener(
+        (token) => {
+          const newToken = token?.data;
+          if (!newToken) return;
+          setFcmToken(newToken);
+          if (userId) {
+            registerDeviceToken(userId, newToken, Platform.OS);
+          }
+        },
+      );
     }
 
     const subscription = AppState.addEventListener(
@@ -399,6 +438,14 @@ export const NotificationProvider = ({ children, userId }) => {
           console.warn("Notification response listener cleanup failed:", error);
         }
         responseListener.current = null;
+      }
+      if (deviceTokenListener.current) {
+        try {
+          deviceTokenListener.current.remove();
+        } catch (error) {
+          console.warn("Device push token listener cleanup failed:", error);
+        }
+        deviceTokenListener.current = null;
       }
       try {
         subscription?.remove?.();

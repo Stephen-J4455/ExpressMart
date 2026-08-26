@@ -679,13 +679,6 @@ export const ChatScreen = ({ route, navigation, seller }) => {
               </View>
             </View>
           </View>
-          <Pressable style={styles.headerAction}>
-            <Ionicons
-              name="ellipsis-vertical"
-              size={20}
-              color={themeColors.muted}
-            />
-          </Pressable>
         </View>
       </View>
 
@@ -857,9 +850,6 @@ const buildChatStyles = (c) =>
     headerSubtitle: {
       fontSize: 12,
       color: c.muted,
-    },
-    headerAction: {
-      padding: 8,
     },
     chatContainer: {
       flex: 1,

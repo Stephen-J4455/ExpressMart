@@ -94,7 +94,11 @@ const graphPost = async (path: string, params: Record<string, string>) => {
 
 // Core OAuth handshake: exchange the code, resolve the catalog, persist.
 // Returns { success, catalogId, catalogName, wabaBusinessId, error? }.
-const runOAuth = async (sellerId: string, code: string) => {
+const runOAuth = async (
+  sellerId: string,
+  code: string,
+  redirectUri: string | null = null,
+) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const appId = Deno.env.get("META_APP_ID");
@@ -106,19 +110,23 @@ const runOAuth = async (sellerId: string, code: string) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    // 1. Exchange the Embedded Signup (v4) code for a business token.
-    //    Per Meta's Tech Provider onboarding guide, v4 codes are exchanged
-    //    with client_id/client_secret/code ONLY — no redirect_uri. This is
-    //    what finally removes the "domain not registered" failure mode.
-    console.log(
-      "[oauth] exchanging code:",
-      JSON.stringify({ appId, sellerId }),
-    );
-    const tokenRes = await graphGet(`${graphVersion}/oauth/access_token`, {
+    // 1. Exchange the code for a token. Embedded Signup (v4) codes are
+    //    exchanged with client_id/client_secret/code ONLY — no redirect_uri.
+    //    Standard Login for Business codes REQUIRE the exact redirect_uri.
+    const tokenParams: Record<string, string> = {
       client_id: appId,
       code,
       client_secret: appSecret,
-    });
+    };
+    if (redirectUri) tokenParams.redirect_uri = redirectUri;
+    console.log(
+      "[oauth] exchanging code:",
+      JSON.stringify({ appId, sellerId, hasRedirectUri: !!redirectUri }),
+    );
+    const tokenRes = await graphGet(
+      `${graphVersion}/oauth/access_token`,
+      tokenParams,
+    );
     const shortLivedToken = tokenRes?.access_token;
     if (!shortLivedToken) {
       return { success: false, error: "Meta did not return an access token" };
@@ -178,36 +186,64 @@ const runOAuth = async (sellerId: string, code: string) => {
           access_token: accessToken,
         });
         wabaBusinessId = waba?.business_id || null;
-        phoneNumberId = waba?.id || null;
       } catch (e) {
         console.warn("waba profile lookup failed", e);
       }
 
-      if (wabaBusinessId) {
-        try {
-          const catalogs = await graphGet(
-            `${wabaBusinessId}/owned_product_catalogs`,
-            {
-              fields: "id,name",
-              access_token: accessToken,
-            },
-          );
-          const first = catalogs?.data?.[0];
-          if (first) {
-            catalogId = first.id;
-            catalogName = first.name || null;
-          }
-        } catch (e) {
-          console.warn("catalog lookup failed", e);
-        }
+      // Resolve the WABA's phone number id (needed for messaging later).
+      // NOTE: the WABA object's own id is NOT a phone number id — it has to
+      // come from the /phone_numbers edge, so this is a separate call.
+      try {
+        const phones = await graphGet(`${grantedWabaId}/phone_numbers`, {
+          fields: "id,display_phone_number,verified_name",
+          access_token: accessToken,
+        });
+        phoneNumberId = phones?.data?.[0]?.id || null;
+      } catch (e) {
+        console.warn("phone number lookup failed", e);
       }
     }
 
+    // Resolve the product catalog. Preferred source: the catalog_management
+    // grant's target id — that is the catalog the seller actually picked
+    // during signup. Fall back to enumerating the business's owned catalogs.
     if (!catalogId) {
       const catScope = debug?.data?.granular_scopes?.find(
         (g: any) => g.scope === "catalog_management",
       );
       catalogId = catScope?.target_ids?.[0] || null;
+    }
+
+    if (!catalogId && wabaBusinessId) {
+      try {
+        const catalogs = await graphGet(
+          `${wabaBusinessId}/owned_product_catalogs`,
+          {
+            fields: "id,name",
+            access_token: accessToken,
+          },
+        );
+        const first = catalogs?.data?.[0];
+        if (first) {
+          catalogId = first.id;
+          catalogName = first.name || null;
+        }
+      } catch (e) {
+        console.warn("catalog lookup failed", e);
+      }
+    }
+
+    // When the id came from the scope grant we still need its display name.
+    if (catalogId && !catalogName) {
+      try {
+        const cat = await graphGet(String(catalogId), {
+          fields: "id,name",
+          access_token: accessToken,
+        });
+        catalogName = cat?.name || null;
+      } catch (e) {
+        console.warn("catalog name lookup failed", e);
+      }
     }
 
     if (!catalogId) {
@@ -331,9 +367,21 @@ serve(async (req) => {
       const configId = Deno.env.get("META_CONFIG_ID");
       const graphVersionCfg =
         Deno.env.get("META_GRAPH_VERSION") || "v21.0";
-      if (!launchSellerId || !appIdCfg || !appSecretCfg || !configId) {
+      // mode=login → standard Facebook Login for Business (NO config_id).
+      // Embedded Signup (config_id) is gated behind Meta Business
+      // Verification — until that completes, Meta blocks the dialog even for
+      // app admins with the misleading "isn't using a secure connection"
+      // error. The plain login flow works in dev mode for admins and grants
+      // the same scopes we need (WABA + catalog management).
+      const loginMode = url.searchParams.get("mode") === "login";
+      if (
+        !launchSellerId ||
+        !appIdCfg ||
+        !appSecretCfg ||
+        (!loginMode && !configId)
+      ) {
         return new Response(
-          `<!DOCTYPE html><meta charset="utf-8"><p style="font-family:sans-serif;padding:24px">WhatsApp connect is not configured. Required: sellerId, META_APP_ID, META_APP_SECRET, META_CONFIG_ID.</p>`,
+          `<!DOCTYPE html><meta charset="utf-8"><p style="font-family:sans-serif;padding:24px">WhatsApp connect is not configured. Required: sellerId, META_APP_ID, META_APP_SECRET${loginMode ? "" : ", META_CONFIG_ID"}.</p>`,
           { status: 500, headers: HTML_HEADERS },
         );
       }
@@ -341,22 +389,33 @@ serve(async (req) => {
         JSON.stringify({
           sellerId: launchSellerId,
           client: "webview",
+          // Remember the mode so the code exchange knows whether to send a
+          // redirect_uri (standard login) or not (Embedded Signup v4).
+          mode: loginMode ? "login" : "es",
           ts: Date.now(),
         }),
       );
       const dialogUrl =
         `https://www.facebook.com/${graphVersionCfg}/dialog/oauth` +
         `?client_id=${encodeURIComponent(appIdCfg)}` +
-        `&config_id=${encodeURIComponent(configId)}` +
+        (loginMode
+          ? // Standard login: explicit scopes, no Embedded Signup config.
+            // catalog_management is REQUIRED here — without it the token cannot
+            // read the seller's catalogs (owned_product_catalogs) nor can
+            // sync-whatsapp-catalog pull /{catalog_id}/products afterwards.
+            `&scope=${encodeURIComponent(
+              "business_management,catalog_management,whatsapp_business_management,whatsapp_business_messaging",
+            )}`
+          : `&config_id=${encodeURIComponent(configId)}` +
+            // Embedded Signup version selection (v2 is deprecated Oct 2026).
+            `&extras=${encodeURIComponent(JSON.stringify({ version: "v4" }))}`) +
         `&response_type=code` +
         `&override_default_response_type=code` +
-        // Embedded Signup version selection (v2 is deprecated Oct 2026).
-        `&extras=${encodeURIComponent(JSON.stringify({ version: "v4" }))}` +
         `&redirect_uri=${encodeURIComponent(url.origin + url.pathname)}` +
         `&state=${launchState}`;
       console.log(
         "[oauth] launching embedded signup:",
-        JSON.stringify({ sellerId: launchSellerId }),
+        JSON.stringify({ sellerId: launchSellerId, mode: loginMode ? "login" : "es" }),
       );
       return Response.redirect(dialogUrl, 302);
     }
@@ -366,10 +425,16 @@ serve(async (req) => {
     const stateRaw = url.searchParams.get("state") || "{}";
     const errorParam = url.searchParams.get("error");
     let state: any = {};
+    // searchParams.get() already percent-decodes once; tolerate both raw and
+    // double-encoded payloads instead of silently dropping the seller context.
     try {
-      state = JSON.parse(decodeURIComponent(stateRaw));
+      state = JSON.parse(stateRaw);
     } catch {
-      state = {};
+      try {
+        state = JSON.parse(decodeURIComponent(stateRaw));
+      } catch {
+        state = {};
+      }
     }
     const sellerId = String(state?.sellerId ?? "").trim();
     const scheme = String(state?.scheme ?? "expressmart").trim();
@@ -396,7 +461,13 @@ serve(async (req) => {
       });
     }
 
-    const result = await runOAuth(sellerId, code);
+    const result = await runOAuth(
+      sellerId,
+      code,
+      // Standard Login for Business flow (mode=login) requires the exact
+      // redirect_uri in the code exchange; Embedded Signup v4 must NOT have it.
+      state?.mode === "login" ? url.origin + url.pathname : null,
+    );
     return respondResult(result);
   }
 

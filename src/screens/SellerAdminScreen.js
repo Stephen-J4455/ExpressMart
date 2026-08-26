@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -12,6 +18,8 @@ import {
   TextInput,
   Platform,
   TouchableOpacity,
+  Animated,
+  Easing,
 } from "react-native";
 import { FeedVideo } from "../components/FeedVideo";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -40,6 +48,7 @@ import {
   getKeyFromUrl,
   uploadToR2Presigned,
   deleteMediaByUrl,
+  resolveMediaUrl,
 } from "../services/r2Storage";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
@@ -228,7 +237,6 @@ const MENU_ITEMS = [
   { section: "Store" },
   { label: "Orders", icon: "receipt-outline", screen: "Orders" },
   { label: "Messages", icon: "chatbubbles-outline", screen: "Chats" },
-  { label: "My Statuses", icon: "megaphone-outline", screen: "StatusViewer" },
   { label: "Create Status", icon: "create-outline", screen: "StatusCreator" },
   { section: "Store Settings" },
   // Merge store profile editing into main ProfileEdit flow for sellers
@@ -238,6 +246,7 @@ const MENU_ITEMS = [
     screen: "SellerProfile",
   },
   { label: "Payment Account", icon: "card-outline", screen: "Payments" },
+  { label: "Coupons", icon: "ticket-outline", action: "coupons" },
   {
     label: "Account settings",
     icon: "color-palette-outline",
@@ -255,6 +264,48 @@ const MENU_ITEMS = [
   { theme: true },
   { label: "Sign Out", icon: "log-out-outline", action: "signOut" },
 ];
+
+// ── WhatsApp connect: Meta hard-block detection ────────────────────────────
+// Meta sometimes renders OAuth hard-blocks ("…isn't using a secure connection…
+// you won't be able to use Facebook to log into it") as normal 200 pages inside
+// the WebView — no URL change, no error param, no postMessage — leaving the
+// seller stranded. This script is injected into EVERY page the WebView loads;
+// it scans the page text and, when a known block appears, reports it back so
+// the app can close the flow and show the exact dashboard fix.
+const WA_INJECTED_JS = `
+(function () {
+  if (window.__waBlockWatcher) return;
+  window.__waBlockWatcher = true;
+  var reSecure = /isn['\\u2019]t using a secure connection/i;
+  var reBlocked = /won['\\u2019]t be able to use Facebook to log into it/i;
+  var check = function () {
+    try {
+      var text = document.body ? (document.body.innerText || "") : "";
+      if (reSecure.test(text) || reBlocked.test(text)) {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: "wa_oauth_result",
+            success: false,
+            error: "Meta blocked login: Tagit isn't using a secure connection.",
+          }));
+        }
+        window.clearInterval(window.__waTimer);
+      }
+    } catch (e) {}
+  };
+  window.__waTimer = setInterval(check, 400);
+  // Stop watching after 45s (dialog is either through or genuinely stuck).
+  setTimeout(function () { window.clearInterval(window.__waTimer); }, 45000);
+  check();
+})();
+true;
+`;
+
+// ── Feature flags ────────────────────────────────────────────────────────────
+// WhatsApp Catalog connect/sync bar on the seller dashboard — temporarily
+// disabled ahead of a dedicated release. Flip to true to re-enable the bar,
+// its connect modal and the sync button (all code paths remain wired up).
+const FEATURE_WHATSAPP_CATALOG = false;
 
 export const SellerAdminScreen = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
@@ -328,6 +379,37 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
+  // Platform service-fee percentage — fetched once from express_settings
+  // (service_fee_percentage), the same single source of truth the payment
+  // edge function uses. null = not loaded / unavailable (breakdown hidden).
+  const [serviceFeePercent, setServiceFeePercent] = useState(null);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("express_settings")
+          .select("value")
+          .eq("key", "service_fee_percentage")
+          .maybeSingle();
+        if (!mounted || error || !data) return;
+        const parsed = parseFloat(data.value);
+        if (Number.isFinite(parsed)) setServiceFeePercent(parsed);
+      } catch (e) {
+        console.warn(
+          "Failed to load service_fee_percentage:",
+          e?.message || e,
+        );
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  // Derived numbers for the fee breakdown under the Price input.
+  const priceNum = parseFloat(price) || 0;
+  const platformFee =
+    serviceFeePercent != null ? (priceNum * serviceFeePercent) / 100 : 0;
   const [shippingFee, setShippingFee] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -383,6 +465,35 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   );
   const [flashSaleMaxQty, setFlashSaleMaxQty] = useState("");
   const [menuVisible, setMenuVisible] = useState(false);
+  // Drawer slide-in animation — 0 = fully off-screen LEFT, 1 = fully open.
+  // The modal itself renders instantly (animationType="none") so the drawer
+  // glides in from the left edge instead of fading with the old fade/slide.
+  const drawerAnim = useRef(new Animated.Value(0)).current;
+  const drawerSlide = drawerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["-105%", "0%"],
+  });
+  const openMenu = useCallback(() => setMenuVisible(true), []);
+  useEffect(() => {
+    if (!menuVisible) return;
+    drawerAnim.setValue(0);
+    Animated.timing(drawerAnim, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [menuVisible, drawerAnim]);
+  const closeMenu = useCallback(() => {
+    Animated.timing(drawerAnim, {
+      toValue: 0,
+      duration: 200,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setMenuVisible(false);
+    });
+  }, [drawerAnim]);
   // Chevron on the profile sheet collapses/expands the store controls
   // (Go Live + WhatsApp catalog). Red dot on the chevron when not live.
   const [controlsExpanded, setControlsExpanded] = useState(true);
@@ -403,6 +514,28 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     useState(false);
   // Per-video popup menu (kebab) — holds the reel being acted on.
   const [cardMenu, setCardMenu] = useState(null); // reel object or null
+  const [deleteConfirmProduct, setDeleteConfirmProduct] = useState(null); // product awaiting delete confirmation
+  const [deletingProduct, setDeletingProduct] = useState(false);
+  const [deleteSteps, setDeleteSteps] = useState([]); // media-removal progress checklist
+  const [createSteps, setCreateSteps] = useState([]); // product save progress checklist
+  const [createFailed, setCreateFailed] = useState(false);
+  const [liveSteps, setLiveSteps] = useState([]); // go-live / pause progress checklist
+  const [liveToggleFailed, setLiveToggleFailed] = useState(false);
+  const [couponManagerVisible, setCouponManagerVisible] = useState(false);
+  const [sellerCoupons, setSellerCoupons] = useState([]);
+  const [sellerCouponsLoading, setSellerCouponsLoading] = useState(false);
+  const [couponFormVisible, setCouponFormVisible] = useState(false);
+  const [couponSaving, setCouponSaving] = useState(false);
+  const [couponForm, setCouponForm] = useState({
+    code: "",
+    discountType: "percentage",
+    discountValue: "",
+    minOrder: "",
+    maxProductPrice: "",
+    maxUses: "",
+    userLimit: "1",
+    expiresAt: "",
+  });
 
   // ── Orders UI state ─────────────────────────────────────────────────────
   const [orderFilter, setOrderFilter] = useState("processing");
@@ -556,10 +689,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   }, [seller]);
 
   const toggleGoLive = useCallback(async () => {
-    if (!supabase || !sellerId) return;
+    if (!supabase || !sellerId || togglingLive) return;
+    const goingLive = !isLive;
     // Going live requires a synced Paystack account; going offline is always
     // allowed (so a store can pause payouts without re-verifying).
-    if (!isLive && !canGoLive()) {
+    if (goingLive && !canGoLive()) {
       toast.error(
         "Can't go live yet",
         "Link and verify a Paystack payment account first.",
@@ -567,8 +701,31 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       navigation.navigate("Payments");
       return;
     }
+    // Animated checklist (same pattern as product deletion).
+    setLiveToggleFailed(false);
+    setLiveSteps([
+      {
+        key: "check",
+        label: goingLive
+          ? "Verifying payout account"
+          : "Checking store settings",
+        status: "active",
+      },
+      {
+        key: "update",
+        label: goingLive
+          ? "Switching your store to live"
+          : "Pausing your store",
+        status: "pending",
+      },
+    ]);
+    const setLiveStep = makeStepSetter(setLiveSteps);
     try {
       setTogglingLive(true);
+      // Brief beat so the verification step reads as a real checkpoint.
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      setLiveStep("check", "done");
+      setLiveStep("update", "active");
       const next = !isLive;
       const { error } = await supabase
         .from("express_sellers")
@@ -577,15 +734,21 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       if (error) throw error;
       setIsLive(next);
       setSeller((prev) => (prev ? { ...prev, is_active: next } : prev));
+      setLiveStep("update", "done");
+      // Let the finished checklist register before dismissing.
+      await new Promise((resolve) => setTimeout(resolve, 550));
+      setLiveSteps([]);
       toast.success(next ? "Store is live" : "Store paused", "");
     } catch (err) {
       // Surface the DB-level guard message if the trigger blocked it.
       const msg = err?.message || "Could not update store status";
+      setLiveToggleFailed(true);
+      failActiveSteps(setLiveSteps);
       toast.error("Go live failed", msg);
     } finally {
       setTogglingLive(false);
     }
-  }, [supabase, sellerId, isLive, canGoLive, seller, toast, navigation]);
+  }, [supabase, sellerId, isLive, togglingLive, canGoLive, seller, toast, navigation]);
 
   // Paystack payout-account state drives the "not live yet" banner + badge:
   //   unlinked → no subaccount yet
@@ -664,15 +827,28 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // which exchanges it server-side and returns a small result page reporting
   // the outcome here via postMessage. No redirect-URI handling and no
   // deep-link listener in the app.
-  const connectWhatsAppCatalog = useCallback(() => {
-    if (!sellerId || waConnecting) return;
-    // Open the host modal first — the WebView lives inside it.
-    setWaModalVisible(true);
-    setWaConnecting(true);
-    setWaAuthUrl(
-      `${supabaseUrl}/functions/v1/meta-oauth-callback?launch=1&sellerId=${encodeURIComponent(sellerId)}`,
-    );
-  }, [sellerId, waConnecting]);
+  //
+  // mode="login" → standard Facebook Login for Business (no config_id). Used
+  // as an AUTOMATIC fallback when Meta blocks Embedded Signup with its
+  // "isn't using a secure connection" error — that block is Meta's business-
+  // verification gate, and the plain login flow works for app admins in
+  // development mode without verification.
+  const waFallbackRef = useRef(false);
+  const connectWhatsAppCatalog = useCallback(
+    (mode?: "login") => {
+      if (!sellerId || waConnecting) return;
+      // Fresh user-initiated attempts always start with Embedded Signup;
+      // only the automatic retry passes mode="login" (and keeps the flag).
+      if (mode !== "login") waFallbackRef.current = false;
+      // Open the host modal first — the WebView lives inside it.
+      setWaModalVisible(true);
+      setWaConnecting(true);
+      setWaAuthUrl(
+        `${supabaseUrl}/functions/v1/meta-oauth-callback?launch=1&sellerId=${encodeURIComponent(sellerId)}${mode === "login" ? "&mode=login" : ""}`,
+      );
+    },
+    [sellerId, waConnecting],
+  );
 
   // Receive the outcome posted by the edge function's result page.
   const onWaWebViewMessage = useCallback(
@@ -695,15 +871,42 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         toast.success("WhatsApp connected", "Tap Sync to import your products");
         loadData();
       } else {
-        toast.error(
-          "Connection failed",
+        let errText =
           typeof data.error === "string"
             ? data.error
-            : "Could not finish WhatsApp setup",
-        );
+            : "Could not finish WhatsApp setup";
+        // Meta's "insecure connection" hard-block → give the seller the exact
+        // App Dashboard checklist that resolves it.
+        if (/secure connection/i.test(errText)) {
+          errText =
+            "Meta blocked login. Fix in developers.facebook.com → your app:\n" +
+            "1. Settings → Basic → add an https Site URL + the domain " +
+            "meiljgoztnhnyvtfkzuh.supabase.co under App Domains.\n" +
+            "2. Facebook Login → Settings → add https://" +
+            "meiljgoztnhnyvtfkzuh.supabase.co/functions/v1/meta-oauth-callback " +
+            "to Valid OAuth Redirect URIs.\n" +
+            "3. Turn ON Enforce HTTPS, then retry.";
+        }
+        // Auto-fallback: Embedded Signup is gated behind Meta Business
+        // Verification. When Meta blocks it with the "secure connection"
+        // error, transparently retry ONCE with standard Login for Business
+        // (no config_id) — that flow works for app admins in dev mode.
+        if (
+          !waFallbackRef.current &&
+          /secure connection|blocked login/i.test(errText)
+        ) {
+          waFallbackRef.current = true;
+          toast.info(
+            "Retrying with alternate login",
+            "Meta blocked Embedded Signup — switching to standard login…",
+          );
+          connectWhatsAppCatalog("login");
+          return;
+        }
+        toast.error("Connection failed", errText);
       }
     },
-    [toast, loadData],
+    [toast, loadData, connectWhatsAppCatalog],
   );
 
   useEffect(() => {
@@ -721,9 +924,53 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         .single();
       if (error) throw error;
       setProducts((prev) => [created, ...prev]);
+
+      // Rich-push notify this store's followers about the new product.
+      // Queued for immediate delivery — the scheduled-notifications cron
+      // drains it within ~5 minutes. Best-effort: never blocks creation.
+      try {
+        const { data: follows, error: followsErr } = await supabase
+          .from("express_follows")
+          .select("user_id")
+          .eq("seller_id", sellerId);
+        if (!followsErr && follows?.length > 0) {
+          const discountNote =
+            Number(created.discount) > 0
+              ? ` (${Number(created.discount)}% off!)`
+              : "";
+          await supabase.from("express_scheduled_notifications").insert({
+            title: `New in ${seller?.name || "a store you follow"} ✨`,
+            body: `${created.title} — GH₵${Number(created.price).toFixed(
+              2,
+            )}${discountNote}`,
+            // FCM requires an absolute https URL for the big picture —
+            // resolve bare R2 keys first.
+            image_url: created.thumbnail
+              ? resolveMediaUrl(created.thumbnail, R2_FOLDERS.PRODUCTS)
+              : null,
+            notification_type: "promotion",
+            channel_id: "promotions",
+            target_type: "users",
+            target_value: follows.map((f) => f.user_id),
+            data: {
+              screen: "ProductDetail",
+              params: JSON.stringify({ productId: created.id }),
+              sellerId,
+            },
+            send_at: new Date().toISOString(),
+            repeat_interval: "none",
+          });
+        }
+      } catch (notifyErr) {
+        console.warn(
+          "[createProduct] follower notification failed:",
+          notifyErr?.message || notifyErr,
+        );
+      }
+
       return created;
     },
-    [sellerId],
+    [sellerId, seller],
   );
 
   const updateProduct = useCallback(async (id, updates) => {
@@ -749,14 +996,123 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     );
   }, []);
 
-  const deleteProduct = useCallback(async (id) => {
-    const { error } = await supabase
-      .from("express_products")
-      .delete()
-      .eq("id", id);
-    if (error) throw error;
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-  }, []);
+  const deleteProduct = useCallback(
+    // onStep(key, "active" | "done") lets the UI show live media-removal
+    // progress while the deletion runs.
+    async (id, onStep) => {
+      // 1 ── Load the product (state first, then DB) so we know which media
+      //      files belong to it before the row disappears.
+      let product = products.find((p) => p.id === id) || null;
+      if (!product) {
+        const { data, error: fetchError } = await supabase
+          .from("express_products")
+          .select("id, thumbnail, thumbnails, video_url, r2_video_key")
+          .eq("id", id)
+          .maybeSingle();
+        if (fetchError) throw fetchError;
+        product = data;
+      }
+
+      // 2 ── Detach/clear rows that reference the product so its FK
+      //      constraints can't block deletion (the shipped schema defines
+      //      these FKs without ON DELETE actions). Cleanup steps are
+      //      best-effort: a failed step is logged but never blocks the rest.
+      const detachSteps = [
+        ["cart items", () => supabase.from("express_cart_items").delete().eq("product_id", id)],
+        ["wishlist entries", () => supabase.from("express_wishlists").delete().eq("product_id", id)],
+        ["reviews", () => supabase.from("express_reviews").delete().eq("product_id", id)],
+        ["flash sale", () => supabase.from("express_flash_sales").delete().eq("product_id", id)],
+        // Order history and reels must survive the product — they only lose
+        // the (now-dead) product link.
+        [
+          "order item links",
+          () =>
+            supabase
+              .from("express_order_items")
+              .update({ product_id: null })
+              .eq("product_id", id),
+        ],
+        [
+          "reel links",
+          () => supabase.from("reels").update({ product_id: null }).eq("product_id", id),
+        ],
+      ];
+      onStep?.("refs", "active");
+      await Promise.all(
+        detachSteps.map(async ([label, run]) => {
+          try {
+            const { error } = await run();
+            if (error) console.warn(`[deleteProduct] clearing ${label} failed:`, error.message);
+          } catch (e) {
+            console.warn(`[deleteProduct] clearing ${label} failed:`, e);
+          }
+        }),
+      );
+      onStep?.("refs", "done");
+
+      // 3 ── Delete the product images from wherever they live: legacy files
+      //      sit in the Supabase Storage bucket, new uploads in R2 —
+      //      deleteMediaByUrl routes each URL to the right backend.
+      const imageUrls = Array.from(
+        new Set(
+          [
+            ...(Array.isArray(product?.thumbnails) ? product.thumbnails : []),
+            ...(product?.thumbnail ? [product.thumbnail] : []),
+          ].filter(Boolean),
+        ),
+      );
+      onStep?.("images", "active");
+      await Promise.all(
+        imageUrls.map(async (url) => {
+          try {
+            await deleteMediaByUrl(url);
+          } catch (e) {
+            console.warn(`[deleteProduct] image delete failed for ${url}:`, e);
+          }
+        }),
+      );
+      onStep?.("images", "done");
+
+      // 4 ── Delete the attached product video from R2 using the stored key,
+      //      falling back to the key derived from its public URL.
+      if (product?.video_url || product?.r2_video_key) {
+        onStep?.("video", "active");
+        const videoKey =
+          product.r2_video_key || getStoragePathFromUrl(product.video_url);
+        if (videoKey) {
+          try {
+            await supabase.functions.invoke("delete-r2-object", {
+              body: { key: videoKey },
+            });
+          } catch (e) {
+            console.warn("[deleteProduct] R2 video delete failed (continuing)", e);
+          }
+        }
+        onStep?.("video", "done");
+      }
+
+      // 5 ── Finally remove the product row itself. Appending .select() makes
+      //      Supabase return the deleted rows so we can distinguish a real
+      //      delete from an RLS-silent no-op (a blocked delete still resolves
+      //      successfully but with zero rows).
+      onStep?.("product", "active");
+      const { data: deletedRows, error } = await supabase
+        .from("express_products")
+        .delete()
+        .eq("id", id)
+        .select();
+      if (error) throw error;
+      if (!deletedRows || deletedRows.length === 0) {
+        throw new Error(
+          "The database refused to delete this product (missing DELETE permission). " +
+            "Run supabase/schema/product-delete-rls.sql and product-delete-cascade.sql in the Supabase SQL editor.",
+        );
+      }
+      onStep?.("product", "done");
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+    },
+    [products],
+  );
 
   // Remove a seller reel: delete the R2 object (best-effort) then the DB row.
   const deleteReel = useCallback(
@@ -1394,9 +1750,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         setFlashSaleModalVisible(true);
         break;
       case "delete":
-        deleteProduct(selectedProduct.id)
-          .then(() => toast.success("Deleted", "Product removed"))
-          .catch((e) => toast.error("Delete failed", e.message));
+        // Ask before destroying: opens the confirmation dialog; the actual
+        // delete runs from confirmDeleteProduct().
+        setDeleteSteps([]);
+        setDeleteConfirmProduct(selectedProduct);
         break;
     }
   };
@@ -1578,12 +1935,34 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     }
     setSubmitting(true);
     setSubmitStage(null);
+    // Animated checklist (same pattern as product deletion).
+    setCreateFailed(false);
+    setCreateSteps([
+      ...(imageUris.length
+        ? [
+            {
+              key: "images",
+              label: `Uploading ${imageUris.length} image${
+                imageUris.length > 1 ? "s" : ""
+              }`,
+              status: "pending",
+            },
+          ]
+        : []),
+      {
+        key: "save",
+        label: editingProduct ? "Saving changes" : "Publishing product",
+        status: "pending",
+      },
+    ]);
+    const setCreateStep = makeStepSetter(setCreateSteps);
     try {
       let imageUrls = [];
       if (imageUris.length > 0) {
         setSubmitStage(
           `Uploading ${imageUris.length} image${imageUris.length > 1 ? "s" : ""}…`,
         );
+        setCreateStep("images", "active");
         console.log(
           `[submitProduct] uploading ${imageUris.length} image(s) to R2`,
         );
@@ -1593,6 +1972,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             `[submitProduct] image upload done: ${imageUrls.length} url(s)`,
             imageUrls,
           );
+          setCreateStep("images", "done");
         } catch (imgErr) {
           console.error("[submitProduct] image upload failed:", imgErr);
           if (imgErr?.stack) {
@@ -1677,6 +2057,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       setSubmitStage(
         editingProduct ? "Updating product…" : "Creating product…",
       );
+      setCreateStep("save", "active");
       console.log(
         `[submitProduct] ${editingProduct ? "updating" : "creating"} product:`,
         JSON.stringify({
@@ -1697,6 +2078,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         toast.success("Created", "Product created and is now live");
       }
 
+      setCreateStep("save", "done");
       if (videoUri && savedProductId) {
         void startBackgroundVideoUpload({
           productId: savedProductId,
@@ -1704,12 +2086,26 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           uri: videoUri,
           pickedFile: videoFile?.file || null,
         });
+        setCreateSteps((prev) => [
+          ...prev,
+          {
+            key: "video",
+            label: "Video uploading in background",
+            status: "done",
+          },
+        ]);
       }
 
+      // Give the finished checklist a beat before the form closes.
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      setCreateSteps([]);
+      setCreateFailed(false);
       resetProductFormState();
       setModalVisible(false);
     } catch (e) {
       console.error("[submitProduct] failed:", e);
+      setCreateFailed(true);
+      failActiveSteps(setCreateSteps);
       toast.error("Save failed", e?.message || "Could not save the product");
     } finally {
       setSubmitting(false);
@@ -2905,6 +3301,559 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     </Modal>
   );
 
+  // ── Animated task-progress checklists (delete / create / go-live) ─────────
+  const makeStepSetter = (setter) => (key, status) =>
+    setter((prev) => prev.map((s) => (s.key === key ? { ...s, status } : s)));
+
+  const failActiveSteps = (setter) =>
+    setter((prev) =>
+      prev.map((s) => (s.status === "active" ? { ...s, status: "error" } : s)),
+    );
+
+  const renderStepChecklist = (steps) => (
+    <View style={styles.progressList}>
+      {steps.map((step) => (
+        <View key={step.key} style={styles.progressRow}>
+          {step.status === "done" ? (
+            <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+          ) : step.status === "error" ? (
+            <Ionicons name="close-circle" size={20} color="#EF4444" />
+          ) : step.status === "active" ? (
+            <ActivityIndicator size="small" color="#EF4444" />
+          ) : (
+            <Ionicons
+              name="ellipse-outline"
+              size={20}
+              color={themeColors.muted}
+            />
+          )}
+          <Text
+            style={[
+              styles.progressLabel,
+              step.status === "pending" && { color: themeColors.muted },
+            ]}
+          >
+            {step.label}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderProgressModal = ({
+    icon,
+    runningTitle,
+    failedTitle,
+    steps,
+    failed,
+    onClose,
+  }) => (
+    <Modal
+      visible={steps.length > 0}
+      transparent
+      animationType="fade"
+      onRequestClose={failed ? onClose : undefined}
+    >
+      <View style={styles.menuBackdrop}>
+        <View style={styles.confirmCard}>
+          <View style={styles.confirmIconWrap}>
+            <Ionicons
+              name={failed ? "alert-circle-outline" : icon}
+              size={26}
+              color={failed ? "#EF4444" : accent}
+            />
+          </View>
+          <Text style={styles.confirmTitle}>
+            {failed ? failedTitle : runningTitle}
+          </Text>
+          {renderStepChecklist(steps)}
+          {failed && (
+            <View style={styles.confirmButtonRow}>
+              <Pressable
+                style={[styles.confirmButton, styles.confirmCancelButton]}
+                onPress={onClose}
+              >
+                <Text style={styles.confirmCancelText}>Close</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // ── Seller coupons: store-scoped promo management ──────────────────────────
+  const loadSellerCoupons = useCallback(async () => {
+    if (!supabase || !sellerId) return;
+    setSellerCouponsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("express_coupons")
+        .select("*")
+        .or(`seller_id.eq.${sellerId},seller_ids.cs.{${sellerId}}`)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setSellerCoupons(data || []);
+    } catch (e) {
+      toast.error("Coupons", e?.message || "Could not load your coupons");
+    } finally {
+      setSellerCouponsLoading(false);
+    }
+  }, [supabase, sellerId, toast]);
+
+  const openCouponManager = useCallback(() => {
+    setCouponManagerVisible(true);
+    loadSellerCoupons();
+  }, [loadSellerCoupons]);
+
+  const createSellerCoupon = async () => {
+    const f = couponForm;
+    if (!f.code.trim() || !f.discountValue.trim()) {
+      toast.warning("Missing info", "Code and discount value are required.");
+      return;
+    }
+    if (!sellerId) {
+      toast.error("No store", "Your store profile is still loading.");
+      return;
+    }
+    setCouponSaving(true);
+    try {
+      const expiry = f.expiresAt ? new Date(f.expiresAt).toISOString() : null;
+      const { error } = await supabase.from("express_coupons").insert({
+        code: f.code.trim().toUpperCase(),
+        discount_type: f.discountType,
+        discount_value: parseFloat(f.discountValue),
+        min_order_amount: f.minOrder ? parseFloat(f.minOrder) : null,
+        max_product_price: f.maxProductPrice
+          ? parseFloat(f.maxProductPrice)
+          : null,
+        max_uses: f.maxUses ? parseInt(f.maxUses) : null,
+        usage_limit: f.maxUses ? parseInt(f.maxUses) : null,
+        user_limit: f.userLimit ? Math.max(parseInt(f.userLimit) || 1, 1) : 1,
+        valid_until: expiry,
+        expires_at: expiry,
+        seller_id: sellerId,
+        seller_ids: [sellerId],
+        is_active: true,
+        current_uses: 0,
+      });
+      if (error) throw error;
+      toast.success(
+        "Coupon created",
+        `${f.code.trim().toUpperCase()} is now live for your store.`,
+      );
+      setCouponForm({
+        code: "",
+        discountType: "percentage",
+        discountValue: "",
+        minOrder: "",
+        maxProductPrice: "",
+        maxUses: "",
+        userLimit: "1",
+        expiresAt: "",
+      });
+      setCouponFormVisible(false);
+      loadSellerCoupons();
+    } catch (e) {
+      toast.error("Create failed", e?.message || "Could not create coupon");
+    } finally {
+      setCouponSaving(false);
+    }
+  };
+
+  const toggleSellerCouponActive = async (coupon) => {
+    try {
+      const next = !coupon.is_active;
+      const { error } = await supabase
+        .from("express_coupons")
+        .update({ is_active: next })
+        .eq("id", coupon.id);
+      if (error) throw error;
+      setSellerCoupons((prev) =>
+        prev.map((c) => (c.id === coupon.id ? { ...c, is_active: next } : c)),
+      );
+    } catch (e) {
+      toast.error("Update failed", e?.message || "Could not update coupon");
+    }
+  };
+
+  const deleteSellerCoupon = async (coupon) => {
+    try {
+      const { error } = await supabase
+        .from("express_coupons")
+        .delete()
+        .eq("id", coupon.id);
+      if (error) throw error;
+      setSellerCoupons((prev) => prev.filter((c) => c.id !== coupon.id));
+      toast.success("Deleted", `${coupon.code} removed`);
+    } catch (e) {
+      toast.error("Delete failed", e?.message || "Could not delete coupon");
+    }
+  };
+
+  const renderCouponManager = () => (
+    <Modal
+      visible={couponManagerVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setCouponManagerVisible(false)}
+    >
+      <View style={styles.menuBackdrop}>
+        {/* Keyboard-aware so the coupon form fields stay visible above the
+            keyboard (react-native-keyboard-controller). */}
+        <KeyboardAvoidingView
+          style={styles.couponSheet}
+          behavior="padding"
+          keyboardVerticalOffset={0}
+        >
+          <View style={styles.couponSheetTitleRow}>
+            <Ionicons
+              name="ticket-outline"
+              size={20}
+              color={themeColors.primary}
+            />
+            <Text style={styles.couponSheetTitle}>Store Coupons</Text>
+            <Pressable onPress={() => setCouponManagerVisible(false)} hitSlop={8}>
+              <Ionicons name="close" size={22} color={themeColors.muted} />
+            </Pressable>
+          </View>
+
+          {!couponFormVisible ? (
+            <>
+              <Pressable
+                style={styles.couponPrimaryBtn}
+                onPress={() => setCouponFormVisible(true)}
+              >
+                <Text style={styles.couponPrimaryBtnText}>+ New Coupon</Text>
+              </Pressable>
+              <ScrollView
+                style={{ marginTop: 10 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {sellerCouponsLoading ? (
+                  <ActivityIndicator style={{ paddingVertical: 24 }} />
+                ) : sellerCoupons.length === 0 ? (
+                  <Text
+                    style={[
+                      styles.couponItemMeta,
+                      { textAlign: "center", paddingVertical: 24 },
+                    ]}
+                  >
+                    No coupons yet — create your first store promo above.
+                  </Text>
+                ) : (
+                  sellerCoupons.map((cpn) => (
+                    <View key={cpn.id} style={styles.couponItem}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.couponItemCode}>
+                          {cpn.code}
+                          {!cpn.is_active && " (paused)"}
+                        </Text>
+                        <Text style={styles.couponItemMeta}>
+                          {cpn.discount_type === "fixed"
+                            ? `GH₵${Number(cpn.discount_value).toFixed(2)} off`
+                            : `${Number(cpn.discount_value)}% off`}
+                          {` · ${cpn.current_uses || cpn.usage_count || 0} uses`}
+                          {cpn.max_product_price != null
+                            ? ` · items ≤ GH₵${Number(cpn.max_product_price)}`
+                            : ""}
+                          {cpn.user_limit != null && cpn.user_limit > 0
+                            ? ` · ${cpn.user_limit}/account`
+                            : ""}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => toggleSellerCouponActive(cpn)}
+                        hitSlop={6}
+                        style={{ padding: 6 }}
+                      >
+                        <Ionicons
+                          name={
+                            cpn.is_active
+                              ? "pause-circle-outline"
+                              : "play-circle-outline"
+                          }
+                          size={22}
+                          color={themeColors.muted}
+                        />
+                      </Pressable>
+                      <Pressable
+                        onPress={() => deleteSellerCoupon(cpn)}
+                        hitSlop={6}
+                        style={{ padding: 6 }}
+                      >
+                        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                      </Pressable>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            </>
+          ) : (
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Coupon creation form */}
+              <Text style={styles.couponLabel}>Coupon Code *</Text>
+              <TextInput
+                style={styles.couponInput}
+                value={couponForm.code}
+                onChangeText={(t) =>
+                  setCouponForm((f) => ({ ...f, code: t.toUpperCase() }))
+                }
+                placeholder="e.g. STORE10"
+                autoCapitalize="characters"
+                placeholderTextColor={themeColors.muted}
+              />
+              <Text style={styles.couponLabel}>Discount Type</Text>
+              <View style={styles.couponChipRow}>
+                {[
+                  ["percentage", "% Off"],
+                  ["fixed", "GH₵ Off"],
+                ].map(([id, label]) => (
+                  <Pressable
+                    key={id}
+                    style={[
+                      styles.couponChip,
+                      couponForm.discountType === id && styles.couponChipActive,
+                    ]}
+                    onPress={() =>
+                      setCouponForm((f) => ({ ...f, discountType: id }))
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.couponChipText,
+                        couponForm.discountType === id &&
+                          styles.couponChipTextActive,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.couponLabel}>Discount Value *</Text>
+              <TextInput
+                style={styles.couponInput}
+                value={couponForm.discountValue}
+                onChangeText={(t) =>
+                  setCouponForm((f) => ({ ...f, discountValue: t }))
+                }
+                placeholder={
+                  couponForm.discountType === "percentage" ? "e.g. 15" : "e.g. 20.00"
+                }
+                keyboardType="decimal-pad"
+                placeholderTextColor={themeColors.muted}
+              />
+              <Text style={styles.couponLabel}>Minimum Order (GH₵)</Text>
+              <TextInput
+                style={styles.couponInput}
+                value={couponForm.minOrder}
+                onChangeText={(t) => setCouponForm((f) => ({ ...f, minOrder: t }))}
+                placeholder="Blank = no minimum"
+                keyboardType="decimal-pad"
+                placeholderTextColor={themeColors.muted}
+              />
+              <Text style={styles.couponLabel}>Max Product Price (GH₵)</Text>
+              <TextInput
+                style={styles.couponInput}
+                value={couponForm.maxProductPrice}
+                onChangeText={(t) =>
+                  setCouponForm((f) => ({ ...f, maxProductPrice: t }))
+                }
+                placeholder="Skip pricier items — blank = no cap"
+                keyboardType="decimal-pad"
+                placeholderTextColor={themeColors.muted}
+              />
+              <Text style={styles.couponLabel}>Max Total Uses</Text>
+              <TextInput
+                style={styles.couponInput}
+                value={couponForm.maxUses}
+                onChangeText={(t) => setCouponForm((f) => ({ ...f, maxUses: t }))}
+                placeholder="Blank = unlimited"
+                keyboardType="number-pad"
+                placeholderTextColor={themeColors.muted}
+              />
+              <Text style={styles.couponLabel}>Uses Per Account</Text>
+              <TextInput
+                style={styles.couponInput}
+                value={couponForm.userLimit}
+                onChangeText={(t) =>
+                  setCouponForm((f) => ({ ...f, userLimit: t }))
+                }
+                placeholder="1"
+                keyboardType="number-pad"
+                placeholderTextColor={themeColors.muted}
+              />
+              <Text style={styles.couponLabel}>Expiry (YYYY-MM-DD)</Text>
+              <TextInput
+                style={styles.couponInput}
+                value={couponForm.expiresAt}
+                onChangeText={(t) =>
+                  setCouponForm((f) => ({ ...f, expiresAt: t }))
+                }
+                placeholder="e.g. 2026-12-31 — blank = no expiry"
+                autoCapitalize="none"
+                placeholderTextColor={themeColors.muted}
+              />
+              <Pressable
+                style={[
+                  styles.couponPrimaryBtn,
+                  couponSaving && { opacity: 0.6 },
+                ]}
+                onPress={createSellerCoupon}
+                disabled={couponSaving}
+              >
+                {couponSaving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.couponPrimaryBtnText}>Create Coupon</Text>
+                )}
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.couponPrimaryBtn,
+                  { backgroundColor: themeColors.border, marginTop: 8 },
+                ]}
+                onPress={() => setCouponFormVisible(false)}
+              >
+                <Text
+                  style={[
+                    styles.couponPrimaryBtnText,
+                    { color: themeColors.dark },
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+            </ScrollView>
+          )}
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+
+  // ── Product delete confirmation dialog ────────────────────────────────────
+  const confirmDeleteProduct = async () => {
+    const product = deleteConfirmProduct;
+    if (!product || deletingProduct) return;
+    const hasImages =
+      (Array.isArray(product.thumbnails) &&
+        product.thumbnails.filter(Boolean).length > 0) ||
+      !!product.thumbnail;
+    const hasVideo = !!product.video_url || !!product.r2_video_key;
+    // Checklist shown in the dialog while deletion runs; deleteProduct()
+    // flips each step to "active"/"done" via setStep.
+    setDeleteSteps([
+      { key: "refs", label: "Clearing linked records", status: "pending" },
+      ...(hasImages
+        ? [{ key: "images", label: "Removing images from storage", status: "pending" }]
+        : []),
+      ...(hasVideo
+        ? [{ key: "video", label: "Removing video from R2", status: "pending" }]
+        : []),
+      { key: "product", label: "Deleting product", status: "pending" },
+    ]);
+    setDeletingProduct(true);
+    const setStep = (key, status) =>
+      setDeleteSteps((prev) =>
+        prev.map((s) => (s.key === key ? { ...s, status } : s)),
+      );
+    try {
+      await deleteProduct(product.id, setStep);
+      toast.success("Deleted", "Product removed");
+      setDeleteConfirmProduct(null);
+      setDeleteSteps([]);
+    } catch (e) {
+      toast.error("Delete failed", e.message || "Could not delete product");
+      // Keep the dialog open on failure so the user sees where it stopped,
+      // but re-enable Cancel so they can back out.
+      setDeleteSteps((prev) =>
+        prev.map((s) => (s.status === "active" ? { ...s, status: "pending" } : s)),
+      );
+    } finally {
+      setDeletingProduct(false);
+    }
+  };
+
+  const renderDeleteConfirmModal = () => (
+    <Modal
+      visible={Boolean(deleteConfirmProduct)}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        if (!deletingProduct) setDeleteConfirmProduct(null);
+      }}
+    >
+      <Pressable
+        style={styles.menuBackdrop}
+        onPress={() => {
+          if (!deletingProduct) setDeleteConfirmProduct(null);
+        }}
+      >
+        <Pressable style={styles.confirmCard} onPress={() => {}}>
+          <View style={styles.confirmIconWrap}>
+            <Ionicons name="trash-outline" size={26} color="#EF4444" />
+          </View>
+          <Text style={styles.confirmTitle}>
+            {deletingProduct ? "Deleting…" : "Delete product?"}
+          </Text>
+          {deletingProduct ? (
+            <View style={styles.progressList}>
+              {deleteSteps.map((step) => (
+                <View key={step.key} style={styles.progressRow}>
+                  {step.status === "done" ? (
+                    <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                  ) : step.status === "active" ? (
+                    <ActivityIndicator size="small" color="#EF4444" />
+                  ) : (
+                    <Ionicons
+                      name="ellipse-outline"
+                      size={20}
+                      color={themeColors.muted}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.progressLabel,
+                      step.status === "pending" && { color: themeColors.muted },
+                    ]}
+                  >
+                    {step.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <>
+              <Text style={styles.confirmMessage} numberOfLines={3}>
+                "{deleteConfirmProduct?.title || "This product"}" will be
+                permanently removed, along with its images and video from
+                storage. This action cannot be undone.
+              </Text>
+              <View style={styles.confirmButtonRow}>
+                <Pressable
+                  style={[styles.confirmButton, styles.confirmCancelButton]}
+                  onPress={() => setDeleteConfirmProduct(null)}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.confirmButton, styles.confirmDeleteButton]}
+                  onPress={confirmDeleteProduct}
+                >
+                  <Text style={styles.confirmDeleteText}>Delete</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+
   const renderCardMenu = () => (
     <Modal
       visible={Boolean(cardMenu)}
@@ -3040,17 +3989,21 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     <Modal
       visible={menuVisible}
       transparent
-      animationType="fade"
-      onRequestClose={() => setMenuVisible(false)}
+      animationType="none"
+      onRequestClose={closeMenu}
     >
-      <Pressable
-        style={styles.drawerOverlay}
-        onPress={() => setMenuVisible(false)}
-      >
-        <View style={styles.drawer} onStartShouldSetResponder={() => true}>
+      <Animated.View style={[styles.drawerOverlay, { opacity: drawerAnim }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={closeMenu} />
+        <Animated.View
+          style={[
+            styles.drawer,
+            { transform: [{ translateX: drawerSlide }] },
+          ]}
+          onStartShouldSetResponder={() => true}
+        >
           <View style={styles.drawerHeader}>
             <Text style={styles.drawerTitle}>Store Menu</Text>
-            <Pressable onPress={() => setMenuVisible(false)} hitSlop={8}>
+            <Pressable onPress={closeMenu} hitSlop={8}>
               <Ionicons name="close" size={24} color={themeColors.dark} />
             </Pressable>
           </View>
@@ -3108,13 +4061,17 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   key={item.screen || item.label}
                   style={styles.menuItem}
                   onPress={() => {
-                    setMenuVisible(false);
+                    closeMenu();
                     if (item.action === "signOut") {
                       try {
                         signOut?.();
                       } catch (e) {
                         console.warn("Sign out failed", e);
                       }
+                      return;
+                    }
+                    if (item.action === "coupons") {
+                      openCouponManager();
                       return;
                     }
                     if (item.screen)
@@ -3151,18 +4108,33 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               ),
             )}
           </ScrollView>
-        </View>
-      </Pressable>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 
   return (
     <View style={styles.container}>
+      {/* Elastic-overscroll backdrop: iOS rubber-banding reveals whatever sits
+          behind the scroll view, which flashed a blank gap above the cover
+          when flung hard. A cover-colored strip up top blends the bounce into
+          the cover; the rest stays the page background. */}
+      <View pointerEvents="none" style={styles.bounceWrap}>
+        <View
+          style={[styles.bounceTop, { backgroundColor: themeColors.gradientStart }]}
+        />
+      </View>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         onScroll={handleDashboardScroll}
         scrollEventThrottle={16}
+        // Android's native stretch-overscroll can get stuck mid-animation
+        // after a very hard fling, leaving a permanent blank gap above the
+        // cover until the next touch. Disabling the native effect removes
+        // the artifact; pull-to-refresh still works (RefreshControl drives
+        // its own gesture) and iOS keeps its rubber-band bounce.
+        overScrollMode="never"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -3193,11 +4165,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           )}
           <View style={styles.coverOverlay} />
 
-          {/* Floating top action row — menu / edit / search / more */}
+          {/* Floating top action row — menu / edit / search / refresh */}
           <View style={[styles.topBar, { top: insets.top + 8 }]}>
             <Pressable
               style={styles.topBarBtn}
-              onPress={() => setMenuVisible(true)}
+              onPress={openMenu}
               hitSlop={10}
             >
               <Ionicons name="menu-outline" size={24} color="#fff" />
@@ -3210,19 +4182,18 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               >
                 <Ionicons name="create-outline" size={20} color="#fff" />
               </Pressable>
+              {/* Three-dots → quick dashboard refresh (pulls products, reels,
+                  orders and stats without leaving the screen). Previously this
+                  duplicated the hamburger menu. */}
               <Pressable
                 style={styles.topBarBtn}
-                onPress={() => setActiveTab("catalog")}
+                onPress={() => {
+                  setRefreshing(true);
+                  loadData();
+                }}
                 hitSlop={10}
               >
-                <Ionicons name="search-outline" size={20} color="#fff" />
-              </Pressable>
-              <Pressable
-                style={styles.topBarBtn}
-                onPress={() => setMenuVisible(true)}
-                hitSlop={10}
-              >
-                <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
+                <Ionicons name="refresh" size={20} color="#fff" />
               </Pressable>
             </View>
           </View>
@@ -3444,7 +4415,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             )}
           </Pressable>
 
-          {/* WhatsApp catalog sync — import products from a Meta catalog */}
+          {/* WhatsApp catalog sync — import products from a Meta catalog.
+              Hidden behind FEATURE_WHATSAPP_CATALOG for now; ships in a
+              later update. */}
+          {FEATURE_WHATSAPP_CATALOG && (
+          <>
           <Pressable
             style={[styles.waRow, waConnected && styles.waRowActive]}
             onPress={() =>
@@ -3501,6 +4476,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     : "Sync catalog"}
               </Text>
             </Pressable>
+          )}
+          </>
           )}
             </>
           )}
@@ -3687,6 +4664,34 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       />
                     </View>
                   </View>
+                  {/* Platform fee transparency — shows the exact cut the
+                      platform takes (from express_settings →
+                      service_fee_percentage, the same source the payment
+                      edge function uses) and what the seller receives. */}
+                  {serviceFeePercent != null && priceNum > 0 ? (
+                    <View style={styles.feeBreakdown}>
+                      <View style={styles.feeRow}>
+                        <Text style={styles.feeLabel}>
+                          Platform fee ({serviceFeePercent}%)
+                        </Text>
+                        <Text style={styles.feeValue}>
+                          GH₵{platformFee.toFixed(2)}
+                        </Text>
+                      </View>
+                      <View style={styles.feeRow}>
+                        <Text
+                          style={[styles.feeLabel, styles.feeLabelStrong]}
+                        >
+                          You receive
+                        </Text>
+                        <Text
+                          style={[styles.feeValue, styles.feeValueStrong]}
+                        >
+                          GH₵{(priceNum - platformFee).toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
                   {!shippingFee || parseFloat(shippingFee) === 0 ? (
                     <View style={styles.hintRow}>
                       <Ionicons
@@ -3743,7 +4748,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 <View style={styles.card}>
                   <Text style={styles.cardTitle}>Description</Text>
                   <TextInput
-                    style={[styles.input, styles.textArea]}
+                    style={[styles.textArea]}
                     value={description}
                     onChangeText={setDescription}
                     placeholder="Describe materials, fit, care instructions…"
@@ -4410,6 +5415,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               sharedCookiesEnabled
               originWhitelist={["*"]}
               setSupportMultipleWindows={false}
+              injectedJavaScript={WA_INJECTED_JS}
+              injectedJavaScriptBeforeContentLoaded={WA_INJECTED_JS}
               onMessage={onWaWebViewMessage}
               onError={() => {
                 setWaConnecting(false);
@@ -4545,6 +5552,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         </Pressable>
       </Modal>
 
+      {/* Product delete confirmation + media-removal progress */}
+      {renderDeleteConfirmModal()}
+
       {/* Detail modal */}
       <Modal visible={detailModalVisible} animationType="slide">
         <View style={styles.modalContainer}>
@@ -4658,6 +5668,32 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       {renderMenuDrawer()}
       {renderProductSelectModal()}
       {renderCatalogSortModal()}
+
+      {/* Task progress checklists — product save + store live/pause toggle */}
+      {renderProgressModal({
+        icon: "cube-outline",
+        runningTitle: editingProduct
+          ? "Updating product…"
+          : "Creating product…",
+        failedTitle: "Couldn't save product",
+        steps: createSteps,
+        failed: createFailed,
+        onClose: () => {
+          setCreateSteps([]);
+          setCreateFailed(false);
+        },
+      })}
+      {renderProgressModal({
+        icon: "radio-outline",
+        runningTitle: liveSteps[0]?.label?.includes("Pausing")
+          ? "Pausing store…"
+          : "Going live…",
+        failedTitle: "Couldn't update store",
+        steps: liveSteps,
+        failed: liveToggleFailed,
+        onClose: () => setLiveSteps([]),
+      })}
+      {renderCouponManager()}
     </View>
   );
 };
@@ -4666,7 +5702,22 @@ const buildSellerAdminStyles = (c) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
     center: { alignItems: "center", justifyContent: "center" },
-    scrollContent: { flexGrow: 1, paddingBottom: 20 },
+    scrollContent: {
+      flexGrow: 1,
+      paddingBottom: 20,
+      // Opaque so the bounce backdrop behind the scroll view only shows
+      // during overscroll, never between cards while scrolling normally.
+      backgroundColor: c.background,
+    },
+    // ── Elastic-overscroll backdrop (see return) ────────────────────────────
+    bounceWrap: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+    bounceTop: { height: 600 },
     // ── Cover (full-bleed store banner) ────────────────────────────────────
     cover: {
       height: 220,
@@ -5022,6 +6073,137 @@ const buildSellerAdminStyles = (c) =>
       borderRadius: radius.sm,
     },
     menuItemText: { fontSize: 15, fontWeight: "600", color: c.dark },
+    confirmCard: {
+      width: "85%",
+      maxWidth: 340,
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      padding: 20,
+      alignItems: "center",
+      shadowColor: "#000",
+      shadowOpacity: 0.18,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
+    },
+    confirmIconWrap: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: "rgba(239,68,68,0.12)",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 12,
+    },
+    confirmTitle: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: c.dark,
+      marginBottom: 6,
+    },
+    confirmMessage: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: c.muted,
+      textAlign: "center",
+      marginBottom: 18,
+    },
+    confirmButtonRow: {
+      flexDirection: "row",
+      width: "100%",
+      gap: 10,
+    },
+    confirmButton: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: radius.sm,
+      alignItems: "center",
+    },
+    confirmCancelButton: { backgroundColor: c.border },
+    confirmCancelText: { fontSize: 15, fontWeight: "700", color: c.dark },
+    confirmDeleteButton: { backgroundColor: "#EF4444" },
+    confirmDeleteText: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
+    progressList: {
+      width: "100%",
+      alignSelf: "stretch",
+      gap: 12,
+      paddingVertical: 6,
+      marginBottom: 6,
+    },
+    progressRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    progressLabel: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: "600",
+      color: c.dark,
+    },
+    couponSheet: {
+      width: "92%",
+      maxWidth: 420,
+      maxHeight: "85%",
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      padding: 16,
+    },
+    couponSheetTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 12,
+    },
+    couponSheetTitle: { fontSize: 16, fontWeight: "800", color: c.dark, flex: 1 },
+    couponItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    couponItemCode: { fontSize: 14, fontWeight: "800", color: c.dark },
+    couponItemMeta: { fontSize: 12, color: c.muted, marginTop: 2 },
+    couponLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: c.muted,
+      textTransform: "uppercase",
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    couponInput: {
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.sm,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 14,
+      color: c.dark,
+      backgroundColor: c.light,
+      marginBottom: 10,
+    },
+    couponChipRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
+    couponChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: radius.full,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    couponChipActive: { backgroundColor: c.primary, borderColor: c.primary },
+    couponChipText: { fontSize: 13, fontWeight: "600", color: c.dark },
+    couponChipTextActive: { color: "#fff" },
+    couponPrimaryBtn: {
+      backgroundColor: c.primary,
+      borderRadius: radius.sm,
+      alignItems: "center",
+      paddingVertical: 12,
+      marginTop: 6,
+    },
+    couponPrimaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
     uploadQueueSection: {
       marginBottom: 14,
       gap: 10,
@@ -5600,6 +6782,24 @@ const buildSellerAdminStyles = (c) =>
       gap: 5,
       marginTop: 8,
     },
+    // ── Platform fee breakdown (product form, under Price) ────────────────
+    feeBreakdown: {
+      marginTop: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: radius.md,
+      backgroundColor: c.surfaceAlpha,
+      gap: 4,
+    },
+    feeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    feeLabel: { fontSize: 12.5, color: c.muted },
+    feeLabelStrong: { color: c.dark, fontWeight: "700" },
+    feeValue: { fontSize: 12.5, color: c.muted, fontVariant: ["tabular-nums"] },
+    feeValueStrong: { color: c.dark, fontWeight: "800" },
     hintText: { fontSize: 11.5, color: c.muted, marginTop: 8, lineHeight: 16 },
     label: {
       fontSize: 12.5,
@@ -5618,7 +6818,14 @@ const buildSellerAdminStyles = (c) =>
       fontSize: 14,
       color: c.dark,
     },
-    textArea: { height: 100 },
+    textArea: { height: 100, backgroundColor: c.background,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.xl,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+      fontSize: 14,
+      color: c.dark, },
     tagInputWrap: {
       flexDirection: "row",
       alignItems: "center",

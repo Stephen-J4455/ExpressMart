@@ -330,7 +330,30 @@ export const ShopProvider = ({ children }) => {
         saveCache(CACHE_KEYS.sellers, updatedSellers);
         saveCache(CACHE_KEYS.settings, settingsMap);
       } catch (err) {
+        console.error(
+          "Error fetching products:",
+          err?.message || JSON.stringify(err),
+        );
+
+        // OFFLINE FALLBACK — when the whole network sync fails before anything
+        // is on screen, hydrate the feed from the last snapshot persisted in
+        // AsyncStorage instead of leaving the home page blank until
+        // connectivity returns.
         if (products.length === 0) {
+          const cachedProducts = await readCacheProducts();
+          if (cachedProducts && cachedProducts.length > 0) {
+            console.warn(
+              `[ShopContext] Network sync failed — serving ${cachedProducts.length} cached product(s) from local storage.`,
+            );
+            setProducts(cachedProducts);
+            // The disk snapshot is a single finite page — disable further
+            // infinite-scroll paging so we don't hammer the network offline.
+            setHasMore(false);
+            // Rehydrate categories/sellers/settings so the rest of the home
+            // page (category strip, top sellers) matches the cached feed.
+            await loadCache();
+            return;
+          }
           setError(err?.message || JSON.stringify(err));
         } else {
           console.warn(
@@ -338,15 +361,11 @@ export const ShopProvider = ({ children }) => {
             err?.message || JSON.stringify(err),
           );
         }
-        console.error(
-          "Error fetching products:",
-          err?.message || JSON.stringify(err),
-        );
       } finally {
         if (!silent) setLoading(false);
       }
     },
-    [products.length, saveCache, fetchFromUpstash, readCacheProducts],
+    [products.length, saveCache, fetchFromUpstash, readCacheProducts, loadCache],
   );
 
   const loadMore = useCallback(async () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -49,6 +49,8 @@ export const CheckoutScreen = ({ navigation }) => {
   const orderSummaryRef = useGrounding("checkout.orderSummary");
   const payButtonRef = useGrounding("checkout.payButton");
   const [promoCode, setPromoCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null); // coupon row + resolved scope
+  const [promoChecking, setPromoChecking] = useState(false);
 
   const [addresses, setAddresses] = useState([]);
   const [checkoutAds, setCheckoutAds] = useState([]);
@@ -63,6 +65,10 @@ export const CheckoutScreen = ({ navigation }) => {
     state: "",
   });
   const processedPaymentReferenceRef = useRef(null);
+  // Guards against a second initialize-payment hitting Paystack while one is
+  // already in flight (double-tap / slow response retries) — duplicate
+  // references each create their own Paystack transaction.
+  const checkoutInitRef = useRef(false);
 
   const checkoutDisplayAds = checkoutAds.filter(
     (ad) => String(ad?.style || "").toLowerCase() !== "carousel",
@@ -76,8 +82,221 @@ export const CheckoutScreen = ({ navigation }) => {
     return sum + productShippingFee * item.quantity;
   }, 0);
 
-  // Customer-facing total: subtotal + shipping fees only
-  const grandTotal = total + totalShippingFee;
+  // Does a coupon cover a given cart line? Handles legacy single-store scope,
+  // the newer multi-store array, category scope and the max-product-price cap.
+  const couponCoversLine = (coupon, item, unitPrice) => {
+    const ps = item.product?.seller_id;
+    const productSellerId = typeof ps === "string" ? ps : ps?.id;
+    if (
+      Array.isArray(coupon.seller_ids) &&
+      coupon.seller_ids.length > 0 &&
+      !coupon.seller_ids.includes(productSellerId)
+    )
+      return false;
+    if (
+      !Array.isArray(coupon.seller_ids) &&
+      coupon.seller_id &&
+      productSellerId !== coupon.seller_id
+    )
+      return false;
+    if (
+      coupon.category_name &&
+      String(item.product?.category || "").toLowerCase() !==
+        String(coupon.category_name).toLowerCase()
+    )
+      return false;
+    // Max-price cap: items above this unit price are never discounted.
+    if (
+      coupon.max_product_price != null &&
+      unitPrice > Number(coupon.max_product_price)
+    )
+      return false;
+    return true;
+  };
+
+  // Promo discount for the applied coupon, computed against only the cart
+  // lines the coupon covers (scoped coupons ignore everything else).
+  const promoDiscount = useMemo(() => {
+    if (!appliedCoupon) return 0;
+    let eligible = 0;
+    items.forEach((item) => {
+      const unitPrice =
+        typeof item.price === "number"
+          ? item.price
+          : item.product?.discount > 0
+            ? item.product.price * (1 - item.product.discount / 100)
+            : item.product?.price || 0;
+      if (!couponCoversLine(appliedCoupon, item, unitPrice)) return;
+      eligible += unitPrice * item.quantity;
+    });
+    let amount =
+      (appliedCoupon.discount_type || "percentage") === "percentage"
+        ? (eligible * Number(appliedCoupon.discount_value || 0)) / 100
+        : Math.min(Number(appliedCoupon.discount_value || 0), eligible);
+    const cap = Number(appliedCoupon.max_discount_amount || 0);
+    if (cap > 0) amount = Math.min(amount, cap);
+    // A promo can never push the payable total below zero.
+    amount = Math.min(amount, total + totalShippingFee);
+    return Math.max(Math.round(amount * 100) / 100, 0);
+  }, [appliedCoupon, items, total, totalShippingFee]);
+
+  // Customer-facing total: subtotal + shipping − promo discount.
+  // Payment initialization and both summary displays derive from this.
+  const grandTotal = Math.max(total + totalShippingFee - promoDiscount, 0);
+
+  const applyPromoCode = async () => {
+    const code = promoCode.trim().toUpperCase();
+    if (!code) {
+      toast.warning("Promo code", "Type a coupon code to apply it.");
+      return;
+    }
+    setPromoChecking(true);
+    try {
+      const { data: coupon, error } = await supabase
+        .from("express_coupons")
+        .select("*")
+        .ilike("code", code)
+        .maybeSingle();
+      if (error) throw error;
+
+      const now = new Date();
+      if (!coupon || !coupon.is_active)
+        throw new Error(`"${code}" is not a valid promo code.`);
+      if (coupon.valid_from && new Date(coupon.valid_from) > now)
+        throw new Error("This code isn't active yet.");
+      const expiry = coupon.valid_until || coupon.expires_at;
+      if (expiry && new Date(expiry) < now)
+        throw new Error("This code has expired.");
+      const uses = Number(coupon.current_uses ?? coupon.usage_count ?? 0);
+      const usageCap = coupon.max_uses ?? coupon.usage_limit ?? null;
+      if (usageCap != null && uses >= Number(usageCap))
+        throw new Error("This code has reached its usage limit.");
+      const minOrder = Number(coupon.min_order_amount || 0);
+      if (minOrder > 0 && total < minOrder)
+        throw new Error(
+          `This code requires a minimum order of GH₵${minOrder.toFixed(2)}.`,
+        );
+
+      // Per-account limit — how many times THIS user may redeem the code.
+      const perAccountLimit = Number(coupon.user_limit ?? 1);
+      if (perAccountLimit > 0 && user?.id) {
+        const { count: myUses, error: usesErr } = await supabase
+          .from("express_coupon_redemptions")
+          .select("id", { count: "exact", head: true })
+          .eq("coupon_id", coupon.id)
+          .eq("user_id", user.id);
+        if (usesErr) throw usesErr;
+        if ((myUses || 0) >= perAccountLimit)
+          throw new Error(
+            "You've already used this code the maximum number of times.",
+          );
+      }
+
+      // Resolve a category-scoped coupon to its name so cart lines can match.
+      let categoryName = null;
+      if (coupon.category_id) {
+        const { data: cat } = await supabase
+          .from("express_categories")
+          .select("name")
+          .eq("id", coupon.category_id)
+          .maybeSingle();
+        categoryName = cat?.name || "__unmatched__";
+      }
+
+      // At least one cart line must be covered by the coupon. Diagnose WHY a
+      // code fails so the message matches the real reason (wrong store,
+      // wrong category, or items above the coupon's max product price).
+      const lineUnitPrice = (item) =>
+        typeof item.price === "number"
+          ? item.price
+          : item.product?.discount > 0
+            ? item.product.price * (1 - item.product.discount / 100)
+            : item.product?.price || 0;
+
+      const inStoreScope = (item) => {
+        const ps = item.product?.seller_id;
+        const productSellerId = typeof ps === "string" ? ps : ps?.id;
+        if (
+          Array.isArray(coupon.seller_ids) &&
+          coupon.seller_ids.length > 0 &&
+          !coupon.seller_ids.includes(productSellerId)
+        )
+          return false;
+        if (
+          !Array.isArray(coupon.seller_ids) &&
+          coupon.seller_id &&
+          productSellerId !== coupon.seller_id
+        )
+          return false;
+        return true;
+      };
+      const inCategoryScope = (item) =>
+        !categoryName ||
+        String(item.product?.category || "").toLowerCase() ===
+          String(categoryName).toLowerCase();
+      const withinPriceCap = (item) =>
+        coupon.max_product_price == null ||
+        lineUnitPrice(item) <= Number(coupon.max_product_price);
+
+      const scopedItems = items.filter(
+        (item) => inStoreScope(item) && inCategoryScope(item),
+      );
+
+      if (scopedItems.length === 0) {
+        let scopeMessage = "None of the items in your cart are covered.";
+        if (categoryName) {
+          scopeMessage = `This code only applies to ${categoryName} items.`;
+        } else if (
+          Array.isArray(coupon.seller_ids) &&
+          coupon.seller_ids.length > 0
+        ) {
+          // Name the actual stores so the message is actionable.
+          try {
+            const { data: stores } = await supabase
+              .from("express_sellers")
+              .select("name")
+              .in("id", coupon.seller_ids);
+            const names = (stores || []).map((s) => s.name).join(", ");
+            scopeMessage = names
+              ? `This code only applies to products from ${names}.`
+              : "This code only applies to selected stores' products.";
+          } catch (_) {
+            scopeMessage =
+              "This code only applies to selected stores' products.";
+          }
+        } else if (coupon.seller_id) {
+          scopeMessage =
+            "This code only applies to a specific seller's products.";
+        }
+        throw new Error(scopeMessage);
+      }
+
+      // Scope matched, but the price cap can still exclude every line.
+      if (!scopedItems.some(withinPriceCap)) {
+        throw new Error(
+          `This code only applies to items priced up to GH₵${Number(
+            coupon.max_product_price,
+          ).toFixed(2)}.`,
+        );
+      }
+
+      setAppliedCoupon({ ...coupon, category_name: categoryName });
+      setPromoCode("");
+      toast.success(
+        "Promo applied",
+        `${code} will be discounted from your order.`,
+      );
+    } catch (e) {
+      toast.error("Promo code", e?.message || "Could not apply this code.");
+    } finally {
+      setPromoChecking(false);
+    }
+  };
+
+  const removePromoCode = () => {
+    setAppliedCoupon(null);
+    toast.info("Promo removed", "The discount is no longer part of your total.");
+  };
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -149,6 +368,27 @@ export const CheckoutScreen = ({ navigation }) => {
 
       const result = await verifyPaymentAndCreateOrder(reference, orderData);
 
+      // Record promo usage once the order has actually been created. The
+      // coupon MUST come from orderData (route params), not component state —
+      // this screen unmounts while PaymentWebView is open, so state is gone
+      // by the time verification runs. That was why usage counters never
+      // incremented. Also logs a per-account redemption for user_limit checks.
+      if (orderData?.couponId && user?.id) {
+        supabase
+          .rpc("record_coupon_use", {
+            p_coupon_id: orderData.couponId,
+            p_user_id: user.id,
+            p_reference: reference,
+          })
+          .then(({ error: promoErr }) => {
+            if (promoErr)
+              console.warn(
+                "[Checkout] coupon usage update failed:",
+                promoErr.message,
+              );
+          });
+      }
+
       clearCart();
       toast.success(
         "Order Placed!",
@@ -217,6 +457,9 @@ export const CheckoutScreen = ({ navigation }) => {
   };
 
   const handleCheckout = async () => {
+    // One initialization at a time — a second would create a second
+    // Paystack transaction even though the reference differs per attempt.
+    if (checkoutInitRef.current) return;
     if (!selectedAddress) {
       toast.error("Error", "Please add a delivery address");
       return;
@@ -234,17 +477,22 @@ export const CheckoutScreen = ({ navigation }) => {
     }
 
     const reference = generatePaymentReference(user.id);
+    checkoutInitRef.current = true;
 
     try {
       setLoading(true);
 
       // Order data — split & service fee computation handled entirely server-side.
       // The edge function fetches service_fee_percentage from express_settings and
-      // deducts the fee from each seller's subaccount share. Customer pays subtotal + shipping only.
+      // deducts the fee from each seller's subaccount share. Customer pays
+      // subtotal + shipping − promo discount (discount clamped server-side).
       const orderData = {
         shippingAddress: selectedAddress,
         paymentMethod: "paystack",
         shippingFee: totalShippingFee,
+        discountAmount: promoDiscount,
+        couponCode: appliedCoupon?.code || null,
+        couponId: appliedCoupon?.id || null,
       };
 
       // Initialize payment via edge function (handles multi-vendor split)
@@ -254,6 +502,8 @@ export const CheckoutScreen = ({ navigation }) => {
           action: "initialize-payment",
           amount: grandTotal,
           reference,
+          discount_amount: promoDiscount,
+          coupon_code: appliedCoupon?.code || null,
           orderData,
         });
       } catch (primaryErr) {
@@ -276,6 +526,8 @@ export const CheckoutScreen = ({ navigation }) => {
               action: "initialize-payment",
               amount: grandTotal,
               reference,
+              discount_amount: promoDiscount,
+              coupon_code: appliedCoupon?.code || null,
               orderData,
             }),
           });
@@ -316,6 +568,7 @@ export const CheckoutScreen = ({ navigation }) => {
         err.message || "Could not initialize payment. Please try again.",
       );
     } finally {
+      checkoutInitRef.current = false;
       setLoading(false);
     }
   };
@@ -540,6 +793,20 @@ export const CheckoutScreen = ({ navigation }) => {
                 : "Free"}
             </Text>
           </View>
+          {/* Promo discount line (only when a coupon is applied) */}
+          {promoDiscount > 0 && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.summaryRow}>
+                <Text style={[styles.totalLabel, { color: "#10B981" }]}>
+                  Discount ({appliedCoupon?.code})
+                </Text>
+                <Text style={[styles.totalValue, { color: "#10B981" }]}>
+                  -GH₵{promoDiscount.toFixed(2)}
+                </Text>
+              </View>
+            </>
+          )}
           {/* Service fee is deducted internally from seller subaccount shares.
               It is NOT added to the customer total. */}
           <View style={styles.divider} />
@@ -551,55 +818,93 @@ export const CheckoutScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Promo / Coupon Code */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="pricetag" size={20} color={themeColors.primary} />
-            <Text style={styles.sectionTitle}>Promo Code</Text>
-          </View>
-          <View
-            ref={promoCodeRef}
-            style={[
-              styles.promoRow,
-              { borderColor: themeColors.border, backgroundColor: themeColors.surface },
-            ]}
-          >
-            <Ionicons
-              name="ticket"
-              size={18}
-              color={themeColors.muted}
-              style={{ marginRight: 8 }}
-            />
-            <TextInput
-              style={[styles.promoInput, { color: themeColors.dark }]}
-              placeholder="Enter coupon code"
-              placeholderTextColor={themeColors.muted}
-              value={promoCode}
-              onChangeText={setPromoCode}
-              autoCapitalize="characters"
-            />
-            <Pressable
-              style={[
-                styles.promoApply,
-                { backgroundColor: themeColors.surfaceAlpha },
-              ]}
-              onPress={() =>
-                toast.info(
-                  "Promo codes",
-                  promoCode.trim()
-                    ? `“${promoCode.trim()}” isn't a valid code right now.`
-                    : "Type a coupon code to apply it.",
-                )
-              }
-            >
-              <Text
-                style={[styles.promoApplyText, { color: themeColors.primary }]}
+          {/* Promo / Coupon Code */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="pricetag" size={20} color={themeColors.primary} />
+              <Text style={styles.sectionTitle}>Promo Code</Text>
+            </View>
+            {appliedCoupon ? (
+              <View
+                ref={promoCodeRef}
+                style={[
+                  styles.promoRow,
+                  { borderColor: "#10B98166", backgroundColor: "#10B98114" },
+                ]}
               >
-                Apply
-              </Text>
-            </Pressable>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={18}
+                  color="#10B981"
+                  style={{ marginRight: 8 }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[styles.promoInput, { color: themeColors.dark }]}
+                    numberOfLines={1}
+                  >
+                    {appliedCoupon.code}
+                  </Text>
+                  {promoDiscount > 0 && (
+                    <Text style={{ fontSize: 12, color: "#10B981" }}>
+                      You save GH₵{promoDiscount.toFixed(2)}
+                    </Text>
+                  )}
+                </View>
+                <Pressable onPress={removePromoCode} hitSlop={10}>
+                  <Ionicons
+                    name="close-circle-outline"
+                    size={20}
+                    color={themeColors.muted}
+                  />
+                </Pressable>
+              </View>
+            ) : (
+              <View
+                ref={promoCodeRef}
+                style={[
+                  styles.promoRow,
+                  {
+                    borderColor: themeColors.border,
+                    backgroundColor: themeColors.surface,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="ticket"
+                  size={18}
+                  color={themeColors.muted}
+                  style={{ marginRight: 8 }}
+                />
+                <TextInput
+                  style={[styles.promoInput, { color: themeColors.dark }]}
+                  placeholder="Enter coupon code"
+                  placeholderTextColor={themeColors.muted}
+                  value={promoCode}
+                  onChangeText={setPromoCode}
+                  autoCapitalize="characters"
+                />
+                <Pressable
+                  style={[
+                    styles.promoApply,
+                    { backgroundColor: themeColors.surfaceAlpha },
+                  ]}
+                  onPress={applyPromoCode}
+                  disabled={promoChecking}
+                >
+                  {promoChecking ? (
+                    <ActivityIndicator size="small" color={themeColors.primary} />
+                  ) : (
+                    <Text
+                      style={[styles.promoApplyText, { color: themeColors.primary }]}
+                    >
+                      Apply
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            )}
           </View>
-        </View>
 
         {/* Payment Method */}
         <View style={styles.section}>

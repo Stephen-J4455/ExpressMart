@@ -377,6 +377,12 @@ serve(async (req) => {
       if (!amount || !reference)
         throw new Error("amount and reference are required");
 
+      // Promo discount supplied by the app. Always re-clamped server-side
+      // against the authoritative cart total so a tampered client can never
+      // zero out or invert the charge.
+      const clientDiscountAmount = Number(body?.discount_amount ?? 0);
+      const couponCode = body?.coupon_code ?? null;
+
       // Build a supabase client to inspect cart & sellers
       const supabaseClient = createClient(
         Deno.env.get("SUPABASE_URL") ?? "",
@@ -470,14 +476,23 @@ serve(async (req) => {
         totalServiceFee += g.serviceFee;
       });
 
-      // Customer pays: product subtotal + shipping ONLY (service fee is internal)
-      const customerTotal = subtotal + totalShippingFee;
+      // Customer pays: product subtotal + shipping − promo discount (service
+      // fee is internal). The discount reduces both the charge and, pro-rata,
+      // every seller's subaccount share below.
+      const grossTotal = subtotal + totalShippingFee;
+      const discountAmount = Math.max(
+        0,
+        Math.min(clientDiscountAmount, grossTotal),
+      );
+      const customerTotal = grossTotal - discountAmount;
 
       console.log("💰 Fee breakdown:", {
         subtotal,
         totalShippingFee,
         totalServiceFee,
         serviceFeePercentage,
+        discountAmount,
+        couponCode,
         customerPays: customerTotal,
         note: "Service fee deducted from seller shares, not added to customer total",
       });
@@ -592,6 +607,20 @@ serve(async (req) => {
           const share = Math.max(0, sellerNetPesewas);
           return { subaccount: s.account, share };
         });
+        // Distribute any promo discount proportionally across seller shares
+        // so the split still sums exactly to the discounted charge.
+        const discountRatio = grossTotal > 0 ? customerTotal / grossTotal : 1;
+        if (discountRatio < 1) {
+          paystackSubaccounts = paystackSubaccounts.map((s) => ({
+            ...s,
+            share: Math.round(s.share * discountRatio),
+          }));
+          console.log("🏷️ Promo discount applied to split shares:", {
+            discountAmount,
+            discountRatio,
+            paystackSubaccounts,
+          });
+        }
         const totalSellerShares = paystackSubaccounts.reduce(
           (sum: number, s: any) => sum + s.share,
           0,
@@ -613,7 +642,11 @@ serve(async (req) => {
         amount: totalAmount,
         currency: "GHS",
         reference,
-        metadata: { breakdown: groups },
+        metadata: {
+          breakdown: groups,
+          discount_amount: discountAmount,
+          coupon_code: couponCode,
+        },
       };
 
       // Optional auto-return: see initialize-store-registration above.
@@ -1021,9 +1054,19 @@ serve(async (req) => {
     const overallShippingFee =
       Math.max(clientShippingFee, totalShippingFee) || 0;
 
-    // Customer-facing total: subtotal + shipping ONLY
-    // Service fee is deducted from seller subaccount shares — it does NOT appear in the customer total
-    const total = subtotal + overallShippingFee;
+    // Customer-facing total: subtotal + shipping − promo discount.
+    // Service fee is deducted from seller subaccount shares — it does NOT appear
+    // in the customer total. The coupon context travels in orderData from the
+    // app (captured at initialize time) and is re-clamped server-side.
+    const grossTotal = subtotal + overallShippingFee;
+    const orderDiscountAmount = Math.max(
+      0,
+      Math.min(Number(orderData?.discountAmount ?? 0), grossTotal),
+    );
+    const total = grossTotal - orderDiscountAmount;
+    // Pro-rata factor used to scale each seller's order totals so the per-seller
+    // orders sum to the discounted amount actually paid.
+    const discountRatio = grossTotal > 0 ? total / grossTotal : 1;
 
     // Get seller_id from first item (try joined product, then cart item fallback)
     let sellerId =
@@ -1080,8 +1123,10 @@ serve(async (req) => {
 
       // Total for this seller's order (what customer paid for their items) = subtotal + shipping
       // Service fee is internal — tracked in the record but NOT part of the customer-facing total
+      // Scaled pro-rata when a promo discount reduced the charge.
       const groupTotal =
-        Math.round((group.subtotal + groupShippingFee) * 100) / 100;
+        Math.round((group.subtotal + groupShippingFee) * discountRatio * 100) /
+        100;
 
       // Try to use seller name as vendor when available
       let vendorName = "ExpressMart";
@@ -1103,14 +1148,20 @@ serve(async (req) => {
       //   (service fee is deducted from seller's share by Paystack; platform keeps it)
       const sellerAmount =
         Math.round(
-          (group.subtotal - groupServiceFee + groupShippingFee) * 100,
+          (group.subtotal - groupServiceFee + groupShippingFee) *
+            discountRatio *
+            100,
         ) / 100;
-      // platform_commission / platform_amount: the service fee the platform retains
-      // Paystack processing fees are absorbed from this amount (bearer: account)
-      const platformCommission = groupServiceFee;
-      const platformAmount = groupServiceFee;
+      // platform_commission / platform_amount: what the platform retains from
+      // this seller's order after the pro-rata promo discount (service fee +
+      // share of discount). Paystack processing fees are absorbed from this.
+      const platformCommission = Math.max(
+        Math.round((groupTotal - sellerAmount) * 100) / 100,
+        0,
+      );
+      const platformAmount = platformCommission;
       // Proportionally allocate the Paystack processing fee to this seller's order
-      const customerTotalGHS = subtotal + overallShippingFee; // what customer actually paid
+      const customerTotalGHS = total; // what the customer actually paid (post-promo)
       const paystackFeePesewas = paystackData.data.fees ?? 0;
       const allocationRatio =
         customerTotalGHS > 0
