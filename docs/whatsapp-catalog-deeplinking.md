@@ -16,7 +16,7 @@ cart, and keep inventory in sync with Meta's catalog.
 
 ## App configuration (`app.json`)
 
-- `scheme`: `["tagit", "expressmart"]`
+- `scheme`: `"expressmart"`
 - iOS `associatedDomains`: `applinks:www.expressmart.me`, `applinks:expressmart.me`
 - Android `intentFilters`: `autoVerify: true`, hosts `expressmart.me` /
   `www.expressmart.me`, path prefixes `/product` and `/p`
