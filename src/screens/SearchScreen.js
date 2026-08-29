@@ -6,6 +6,7 @@ import { SearchBar } from "../components/SearchBar";
 import { AdRenderer } from "../components/AdBanner";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
+import { trackEvent } from "../services/feedPersonalizationService";
 
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -138,6 +139,11 @@ export const SearchScreen = ({ navigation, route }) => {
       ].slice(0, 10);
       setRecentSearches(updated);
       await AsyncStorage.setItem("recentSearches", JSON.stringify(updated));
+      // Personalization signal: log the search query. The scorer uses
+      // the query for ad-hoc lexical matching; combined with category /
+      // tag context, it lets the next feed refresh surface products
+      // whose title/tags contain words from the query.
+      trackEvent("search", { query: searchQuery, tag: tag || undefined });
     } catch (error) {
       console.warn("Failed to save search", error);
     }

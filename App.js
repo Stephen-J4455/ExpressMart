@@ -36,6 +36,7 @@ import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { CartProvider, useCart } from "./src/context/CartContext";
 import { ShopProvider } from "./src/context/ShopContext";
 import { OrderProvider } from "./src/context/OrderContext";
+import { FeedPersonalizationBoot } from "./src/components/FeedPersonalizationBoot";
 import { ToastProvider } from "./src/context/ToastContext";
 import { ChatProvider } from "./src/context/ChatContext";
 import { AdsProvider } from "./src/context/AdsContext";
@@ -1015,10 +1016,10 @@ const AuthenticatedApp = () => {
     };
   }, []);
 
-  React.useEffect(() => {
-    if (Platform.OS === "web") return;
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
+  // NOTE: Native splash hiding was moved to OnboardingGate. It used to live
+  // here, but AuthenticatedApp only mounts once onboarding is finished, so on
+  // a first launch preventAutoHideAsync() kept the splash up forever and the
+  // onboarding screen stayed hidden behind it.
 
   const GuardedCheckout = withAuthGate(
     CheckoutScreen,
@@ -1288,6 +1289,17 @@ const OnboardingGate = ({ children }) => {
     };
   }, []);
 
+  // Hide the native splash as soon as we know what to reveal (the onboarding
+  // screen or the main app). preventAutoHideAsync() keeps it up until this
+  // runs, so if we waited for AuthenticatedApp to mount (it only mounts after
+  // onboarding completes) the splash would stay stuck on a first launch.
+  React.useEffect(() => {
+    if (Platform.OS === "web") return;
+    if (status !== "loading") {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [status]);
+
   const handleComplete = React.useCallback(() => {
     setStatus("done");
     AsyncStorage.setItem(ONBOARDING_SEEN_KEY, "true").catch(() => {});
@@ -1356,6 +1368,7 @@ export default function App() {
             <ToastProvider>
               <CartProvider>
                 <ShopProvider>
+                  <FeedPersonalizationBoot />
                   <OrderProvider>
                     <ChatProvider>
                       <AdsProvider>

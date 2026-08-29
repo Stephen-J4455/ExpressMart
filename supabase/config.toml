@@ -1,6 +1,29 @@
 # Supabase Edge Function configuration.
 # https://supabase.com/docs/guides/functions/config
 
+[functions.scheduled-notifications]
+# Machine-to-machine worker triggered by pg_cron. The caller is not a user
+# — it's a job running inside our own database with a service-context JWT
+# (which the Supabase auth server now rejects as "missing sub claim" on
+# the legacy HS256 keys). The function does only public-safe work (drain
+# a queue, call send-push-notification) and never trusts caller input as
+# user identity, so we disable gateway JWT verification entirely.
+verify_jwt = false
+
+[functions.send-push-notification]
+# Triggered by:
+#   - The customer / seller / admin apps (via supabase.functions.invoke,
+#     which forwards the user's JWT)
+#   - The scheduled-notifications cron worker (machine-to-machine, no JWT)
+#   - The meta/scheduled edge functions that forward customer notifications
+#
+# The function does only public-safe work: it looks up FCM tokens in the
+# database (filtered by `appType` / `userId` in the payload) and sends the
+# push via FCM. It never reads or writes on behalf of the caller. The
+# `appType` filter is the only authorization. Disabling gateway JWT
+# verification lets the cron worker call it without a user JWT.
+verify_jwt = false
+
 [functions.meta-oauth-callback]
 # OAuth callback hit by Meta's browser redirect (no auth header). Uses the
 # service-role key internally, so caller JWT verification must be disabled.

@@ -27,6 +27,7 @@ import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 import { radius } from "../theme/colors";
+import { trackEvent } from "../services/feedPersonalizationService";
 
 const SORT_OPTIONS = [
   { key: "newest", label: "Newest", icon: "time-outline" },
@@ -67,6 +68,18 @@ export const CategoryProductsScreen = ({ navigation, route }) => {
   const gap = isMobile ? 10 : 12;
   const itemWidth = getItemWidth(gridColumns, hPad, gap, contentWidth);
   const useCompact = gridColumns >= 4;
+
+  // Personalization signal: log a `category_view` event once per screen
+  // mount so the scorer can boost products in this category on the
+  // home feed. The signal is a strong category-level interest indicator
+  // (weight 2) that doesn't need a specific product context.
+  useEffect(() => {
+    if (!category) return;
+    trackEvent("category_view", {
+      categoryId: category.id || undefined,
+      category: category.name || undefined,
+    });
+  }, [category?.id, category?.name]);
 
   const fetchCategoryProducts = useCallback(
     async (reset = true) => {

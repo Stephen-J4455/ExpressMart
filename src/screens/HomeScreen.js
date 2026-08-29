@@ -112,6 +112,13 @@ export const HomeScreen = ({ navigation }) => {
   const showHeader = useCallback(() => animateHeader(false), [animateHeader]);
 
   // ── Top categories: the 5 categories with the most active products ────────
+  // Personalization note: when the signed-in user has enough event signal
+  // (express_user_events), the "Picked for you" row at the top of the
+  // feed could replace this with the user's top categories. For the
+  // first cut we keep the existing recency-sorted strip and let the
+  // personalized product order do the work; a follow-up can add a
+  // separate `feed-top-categories` edge function that reads the same
+  // signal map and returns {id, name}[].
   const loadTopCategories = useCallback(async () => {
     if (!supabase) {
       setTopCategories([]);

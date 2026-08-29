@@ -365,8 +365,33 @@ serve(async (req) => {
       tokens = [payload.token];
     } else if (payload.tokens) {
       tokens = payload.tokens;
+    } else if (payload.appType && payload.appType !== "all") {
+      // App-type-only broadcast (e.g. "all customers" / "all sellers").
+      // Fetch every active device for that app type — the marketing page
+      // uses this path, and the previous code had no branch for
+      // appType without userId, so the function returned "No valid
+      // tokens found" and the toast said "Delivered to 0 devices".
+      const { data: appTypeTokens, error: appTypeErr } = await supabase
+        .from("express_device_tokens")
+        .select("user_id, fcm_token")
+        .eq("app_type", payload.appType)
+        .eq("is_active", true);
+
+      if (appTypeErr) {
+        throw new Error(`Failed to fetch tokens: ${appTypeErr.message}`);
+      }
+
+      if (appTypeTokens && appTypeTokens.length > 0) {
+        tokens = appTypeTokens.map((d) => d.fcm_token);
+        appTypeTokens.forEach((d) => {
+          if (!d.user_id) return;
+          const existing = userIdToTokenMap.get(d.user_id) || [];
+          existing.push(d.fcm_token);
+          userIdToTokenMap.set(d.user_id, existing);
+        });
+      }
     } else if (payload.userId || payload.userIds) {
-      // Fetch tokens from database
+      // Fetch tokens for specific user(s), optionally scoped to an app type.
       const userIds = payload.userId ? [payload.userId] : payload.userIds!;
 
       let query = supabase

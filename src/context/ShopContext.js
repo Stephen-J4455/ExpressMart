@@ -9,6 +9,7 @@ import {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../lib/supabase";
+import { trackEvent } from "../services/feedPersonalizationService";
 
 const ShopContext = createContext();
 
@@ -136,14 +137,23 @@ export const ShopProvider = ({ children }) => {
 
   // Fetch products from the Upstash-backed edge function with a hard timeout
   // so a slow network fails fast and we can fall back to the local cache.
+  //
+  // `userId` is forwarded to the edge function so the "For You" feed can
+  // re-order the cached set per user on page 0. The server takes the
+  // user id from the body's `userId` field only when the JWT also matches
+  // (enforced inside the edge function), so passing a stale id is safe —
+  // the server just falls back to the recency-sorted feed.
   const fetchFromUpstash = useCallback(
-    async (offset, limit) => {
+    async (offset, limit, { userId = null } = {}) => {
       if (!supabase) throw new Error("Supabase not initialized");
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Upstash request timed out")), 4000),
       );
+      const page = Math.floor(offset / Math.max(1, limit));
+      const body = { offset, limit, page };
+      if (userId) body.userId = userId;
       const call = supabase.functions.invoke("cached-products", {
-        body: { offset, limit },
+        body,
       });
       const { data, error } = await Promise.race([call, timeoutPromise]);
       if (error) throw error;
@@ -226,10 +236,13 @@ export const ShopProvider = ({ children }) => {
         if (redisProductsCacheEnabled) {
           // Upstash Redis first; fall back to local cache, then database on failure or slow network
           try {
-            const cachedData = await fetchFromUpstash(0, PAGE_SIZE);
+            const cachedData = await fetchFromUpstash(0, PAGE_SIZE, {
+              userId: user?.id || null,
+            });
             const cacheSource = cachedData?.cache?.source || "database";
+            const personalized = !!cachedData?.cache?.personalized;
             console.info(
-              `[ShopContext] Network sync fetched products from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}`,
+              `[ShopContext] Network sync fetched products from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}${personalized ? " (personalized)" : ""}`,
             );
             productsData = cachedData?.products || [];
           } catch (upstashErr) {
@@ -375,11 +388,32 @@ export const ShopProvider = ({ children }) => {
       const start = products.length;
       const end = start + PAGE_SIZE - 1;
 
+      // Resolve the current user id for the personalization layer. The
+      // server only re-ranks on page 0 (offset < PAGE_SIZE), so the id
+      // is technically optional here, but we forward it for symmetry
+      // with the page-0 path. Same auth.getUser() pattern as fetchProducts.
+      let loadMoreUserId = null;
+      if (supabase) {
+        try {
+          const {
+            data: { user: currentUser },
+          } = await supabase.auth.getUser();
+          loadMoreUserId = currentUser?.id || null;
+        } catch {
+          // Non-fatal: anonymous / unauthenticated loadMore is fine.
+        }
+      }
+
       let rows = [];
       if (isTruthySetting(settings.redis_products_cache_enabled)) {
         // Upstash Redis first; fall back to database on failure or slow network
         try {
-          const cachedData = await fetchFromUpstash(start, PAGE_SIZE);
+          // `userId` is forwarded but the server only re-ranks on page 0
+          // (offset < PAGE_SIZE), so loadMore requests always hit the
+          // recency-sorted path even for signed-in users.
+          const cachedData = await fetchFromUpstash(start, PAGE_SIZE, {
+            userId: loadMoreUserId,
+          });
           const cacheSource = cachedData?.cache?.source || "database";
           console.info(
             `[ShopContext] loadMore products fetched from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"} (offset=${start})`,
@@ -456,6 +490,9 @@ export const ShopProvider = ({ children }) => {
       if (error) throw error;
 
       setFollowedSellers((prev) => [...prev, sellerId]);
+      // Personalization signal: user has expressed sustained interest in
+      // this seller, so boost it in the For-You feed.
+      trackEvent("follow", { sellerId });
     } catch (err) {
       console.error("Error following seller:", err);
       throw err;
@@ -479,6 +516,9 @@ export const ShopProvider = ({ children }) => {
       if (error) throw error;
 
       setFollowedSellers((prev) => prev.filter((id) => id !== sellerId));
+      // Personalization signal: decay this seller's contribution to the
+      // For-You ranking.
+      trackEvent("unfollow", { sellerId });
     } catch (err) {
       console.error("Error unfollowing seller:", err);
       throw err;

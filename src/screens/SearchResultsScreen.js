@@ -22,6 +22,7 @@ import { InlineAdProductCard } from "../components/InlineAdProductCard";
 import { AdRenderer } from "../components/AdBanner";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
+import { trackEvent } from "../services/feedPersonalizationService";
 import { supabase } from "../lib/supabase";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -306,6 +307,32 @@ export const SearchResultsScreen = ({ navigation, route }) => {
   }, []);
 
   // Debounced search - waits 400ms after user stops typing before making DB calls
+  // Track the tag_click and search signals for the personalization scorer.
+  // tag_click fires when the screen is opened with a { tag } param; search
+  // fires whenever the user submits a query. We debounce by 400ms via the
+  // existing search timer, so rapid keystrokes don't spam the event log.
+  const searchSignalTimerRef = useRef(null);
+  useEffect(() => {
+    if (searchSignalTimerRef.current) clearTimeout(searchSignalTimerRef.current);
+    if (!query && !tag) return;
+    searchSignalTimerRef.current = setTimeout(() => {
+      if (tag) {
+        // tag_click — the user is browsing by this tag. The scorer
+        // uses it to boost products carrying the tag in the next feed
+        // refresh.
+        trackEvent("tag_click", { tag });
+      }
+      if (query) {
+        // search — query is normalized server-side.
+        trackEvent("search", { query, tag: tag || undefined });
+      }
+    }, 400);
+    return () => {
+      if (searchSignalTimerRef.current)
+        clearTimeout(searchSignalTimerRef.current);
+    };
+  }, [query, tag]);
+
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     if (query || tag) {

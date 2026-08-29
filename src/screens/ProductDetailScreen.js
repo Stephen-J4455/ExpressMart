@@ -33,6 +33,7 @@ import { useAds } from "../context/AdsContext";
 import { flashSaleService } from "../services/flashSaleService";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 import { shareProduct } from "../utils/shareUtils";
+import { trackEvent } from "../services/feedPersonalizationService";
 import { useDeepLinkProductHandler } from "../hooks/useDeepLinkProductHandler";
 import { InstallAppBanner } from "../components/InstallAppBanner";
 import { radius } from "../theme/colors";
@@ -302,6 +303,27 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     };
     checkWishlist();
   }, [user, product?.id]);
+
+  // Personalization: log a `view` event once per product detail open.
+  // tagClick-style signals for product views are the most common signal
+  // in the user's interest vector, so we attach the same metadata we'd
+  // attach for a like (product + category + seller + tags).
+  useEffect(() => {
+    if (!user || !product?.id) return;
+    const tags = Array.isArray(product.tags) ? product.tags : [];
+    trackEvent("view", {
+      productId: product.id,
+      categoryId: product.category_id || undefined,
+      category: product.category || undefined,
+      sellerId:
+        product.seller?.id ||
+        (typeof product.seller_id === "string" ? product.seller_id : undefined),
+      // One view event can't carry multiple tags, so we let the scorer
+      // pick up the per-product signal via the product row's `tags` array
+      // at re-rank time. The first tag is sent as `metadata` for debugging.
+      metadata: { tags: tags.slice(0, 4) },
+    });
+  }, [user, product?.id, product?.category_id, product?.category, product?.seller?.id, product?.seller_id]);
 
   // Fetch reviews
   useEffect(() => {
@@ -587,19 +609,42 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           .eq("user_id", user.id)
           .eq("product_id", product.id);
         setIsWishlisted(false);
+        // Personalization signal: unlike a product.
+        trackEvent("unlike", {
+          productId: product.id,
+          categoryId: product.category_id || undefined,
+          category: product.category || undefined,
+          sellerId:
+            product.seller?.id ||
+            (typeof product.seller_id === "string"
+              ? product.seller_id
+              : undefined),
+        });
       } else {
         await supabase.from("express_wishlists").insert({
           user_id: user.id,
           product_id: product.id,
         });
         setIsWishlisted(true);
+        // Personalization signal: like a product. This is the strongest
+        // product-level signal in the interest vector (weight 5).
+        trackEvent("like", {
+          productId: product.id,
+          categoryId: product.category_id || undefined,
+          category: product.category || undefined,
+          sellerId:
+            product.seller?.id ||
+            (typeof product.seller_id === "string"
+              ? product.seller_id
+              : undefined),
+        });
       }
     } catch (err) {
       toast.error("Error", err.message);
     } finally {
       setWishlistLoading(false);
     }
-  }, [user, isWishlisted, product?.id, navigation, toast]);
+  }, [user, isWishlisted, product?.id, product?.category_id, product?.category, product?.seller?.id, product?.seller_id, navigation, toast]);
 
   const submitReview = async () => {
     if (!user) {

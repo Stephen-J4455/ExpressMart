@@ -34,6 +34,7 @@ import { supabase } from "../lib/supabase";
 import { formatTimeAgo } from "../utils/timeAgo";
 import { shareProduct } from "../utils/shareUtils";
 import { playLikeSound } from "../lib/sounds";
+import { trackEvent } from "../services/feedPersonalizationService";
 
 const REVIEW_STAR_COLOR = "#F97316";
 
@@ -571,6 +572,11 @@ export const FeedProductCard = memo(function FeedProductCard({
           productId={product.id}
           initialCount={product.likes_count ?? null}
           styles={styles}
+          productMeta={{
+            categoryId: product.category_id,
+            category: product.category,
+            seller: product.seller || product.seller_id,
+          }}
         />
         <Pressable
           style={styles.engagementItem}
@@ -992,7 +998,12 @@ const galleryPageWidth = () => PAGE_WIDTH;
 
 // Wishlist heart with optimistic count, backed by express_wishlists — same
 // behavior as the reels feed's like button.
-const FeedWishlistButton = ({ productId, styles, initialCount = null }) => {
+const FeedWishlistButton = ({
+  productId,
+  styles,
+  initialCount = null,
+  productMeta = null,
+}) => {
   const { colors: c } = useTheme();
   const { user } = useAuth();
   const [wishlisted, setWishlisted] = useState(false);
@@ -1104,6 +1115,20 @@ const FeedWishlistButton = ({ productId, styles, initialCount = null }) => {
           .eq("user_id", user.id)
           .eq("product_id", productId);
       }
+      // Personalization signal: like/unlike. We forward whatever product
+      // metadata the card has on hand so the scorer can attribute the
+      // signal to the right category/seller without an extra round-trip.
+      const meta = productMeta || {};
+      const sellerId =
+        meta.sellerId ||
+        (meta.seller && (meta.seller.id || meta.seller)) ||
+        undefined;
+      trackEvent(willLike ? "like" : "unlike", {
+        productId,
+        categoryId: meta.categoryId,
+        category: meta.category,
+        sellerId,
+      });
     } catch {
       setWishlisted(!willLike);
       setCount((n) => Math.max(0, (n ?? 0) + (willLike ? -1 : 1)));

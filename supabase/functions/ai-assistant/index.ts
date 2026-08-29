@@ -36,7 +36,7 @@ const TOOLS = [
     function: {
       name: "search_products",
       description:
-        "Search the ExpressMart product catalog by free-text query. Returns product cards the app renders for the user.",
+        "Search the tagit product catalog by free-text query. Returns product cards the app renders for the user.",
       parameters: {
         type: "object",
         properties: {
@@ -141,7 +141,7 @@ const TOOLS = [
   },
 ];
 
-const SYSTEM_PROMPT = `You are the ExpressMart in-app shopping assistant — friendly, concise and action-oriented.
+const SYSTEM_PROMPT = `You are the tagit in-app shopping assistant — friendly, concise and action-oriented.
 
 Capabilities:
 • search_products / filter_catalog — search the live catalog. Results are rendered as interactive product cards directly below your message, so DO NOT list the products item-by-item in your reply — just add a short, natural intro (e.g. "Here's what I found for wireless earbuds:").
@@ -252,7 +252,7 @@ const callOpenRouter = (apiKey, model, chatMessages, extra = {}) =>
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
       "HTTP-Referer": "https://expressmart.app",
-      "X-Title": "ExpressMart Assistant",
+      "X-Title": "tagit Assistant",
     },
     body: JSON.stringify({
       model,

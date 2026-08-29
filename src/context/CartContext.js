@@ -9,6 +9,7 @@ import {
 } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
+import { trackEvent } from "../services/feedPersonalizationService";
 
 const STORAGE_KEY = "expressmart.cart";
 const CartContext = createContext();
@@ -285,6 +286,23 @@ export const CartProvider = ({ children }) => {
 
           if (insertError) {
             console.warn("Error inserting cart item:", insertError);
+          } else {
+            // Personalization signal: cart_add is one of the strongest
+            // product-level signals (weight 8). We track the add itself
+            // (not subsequent quantity updates) so the scorer isn't
+            // flooded with duplicate signals on the same product.
+            const sellerField = product.seller_id;
+            const sellerId =
+              typeof sellerField === "string"
+                ? sellerField
+                : sellerField && sellerField.id;
+            trackEvent("cart_add", {
+              productId: product.id,
+              categoryId: product.category_id || undefined,
+              category: product.category || undefined,
+              sellerId,
+              metadata: { quantity, size, color },
+            });
           }
         }
         // Sync DB state back (silently, no loading state)

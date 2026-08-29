@@ -32,6 +32,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { fetchProductReels } from "../services/uploadReel";
 import { getReelSource, preloadReel } from "../services/reelVideoCache";
+import { trackEvent } from "../services/feedPersonalizationService";
 import { useResponsive } from "../hooks/useResponsive";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -578,13 +579,35 @@ export const FeedScreen = ({ route, navigation }) => {
               product_id: productId,
             });
           }
+          // Personalization signal: like/unlike from the reels feed.
+          // Forward whatever product metadata is on the reel record so
+          // the scorer doesn't need an extra round-trip.
+          const productFromItem = item && item.product;
+          const sellerField =
+            productFromItem && productFromItem.seller_id;
+          const sellerId =
+            typeof sellerField === "string"
+              ? sellerField
+              : sellerField && sellerField.id;
+          trackEvent(willLike ? "like" : "unlike", {
+            productId,
+            categoryId:
+              productFromItem && productFromItem.category_id
+                ? productFromItem.category_id
+                : undefined,
+            category:
+              productFromItem && productFromItem.category
+                ? productFromItem.category
+                : undefined,
+            sellerId,
+          });
         } catch (err) {
           // Roll back on failure.
           setIsWishlisted(!willLike);
           setLikeCount((c) => Math.max(0, c + (willLike ? -1 : 1)));
           toast.error("Error", err.message);
         }
-      }, [user, isWishlisted, productId, toast, playLikeAnimation]);
+      }, [user, isWishlisted, productId, toast, playLikeAnimation, item]);
 
       // --- Comment: own modal in the feed, backed by PRODUCT comments
       // (express_reviews + express_review_comments), mirroring the
