@@ -1481,13 +1481,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             </View>
           </View>
 
-          {product.tags && product.tags.length > 0 && (
+          {productTagList.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Tags</Text>
               <View style={styles.tagsContainer}>
-                {product.tags.map((tag, index) => (
+                {productTagList.map((tag, index) => (
                   <Pressable
-                    key={index}
+                    key={`${tag}-${index}`}
                     style={styles.tagChip}
                     onPress={() =>
                       navigation.navigate("SearchResults", { tag, query: "" })

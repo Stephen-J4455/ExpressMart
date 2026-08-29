@@ -571,6 +571,11 @@ export const ProductCard = ({
           {(() => {
             const tag =
               (Array.isArray(product.tags) && product.tags[0]) ||
+              (typeof product.tags === "string" &&
+                product.tags
+                  .split(",")
+                  .map((t) => t.trim())
+                  .filter(Boolean)[0]) ||
               product.category;
             if (!tag) return null;
             return (

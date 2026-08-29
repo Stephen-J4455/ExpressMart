@@ -495,8 +495,18 @@ export const FeedScreen = ({ route, navigation }) => {
 
       const storeName = item.seller?.name || "Store";
       const storeAvatar = resolveAvatarUri(item.seller?.avatar);
+      // Tags can come from the DB as an array OR (rarely) as a comma-separated
+      // string — normalize so the first non-empty tag is always picked.
+      const itemTags = Array.isArray(item.tags)
+        ? item.tags
+        : typeof item.tags === "string"
+        ? item.tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+        : [];
       const primaryTag =
-        item.tags?.find((tag) => String(tag || "").trim()) ||
+        itemTags.find((tag) => String(tag || "").trim()) ||
         item.category ||
         "Featured";
       const baseLikeCount = Number(item.likes_count || 0);

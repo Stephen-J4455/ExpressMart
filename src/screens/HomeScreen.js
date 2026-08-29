@@ -27,9 +27,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { AppHeader } from "../components/AppHeader";
 import { FeedProductCard } from "../components/FeedProductCard";
 import { FeedCardPlaceholder } from "../components/FeedCardPlaceholder";
+import { ProductCard } from "../components/ProductCard";
 import { useShop } from "../context/ShopContext";
 import { useAuth } from "../context/AuthContext";
 import { lazyScroll } from "../context/LazyScrollContext";
@@ -37,6 +39,10 @@ import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { radius } from "../theme/colors";
 import { supabase } from "../lib/supabase";
+import { flashSaleService } from "../services/flashSaleService";
+import {
+  loadHiddenSellers,
+} from "../utils/hiddenSellers";
 import { updateTabBarOnScroll, showTabBar } from "../utils/tabBarAutoHide";
 
 const FILTERS = ["For You", "Following", "Trending", "Nearby"];
@@ -73,6 +79,17 @@ export const HomeScreen = ({ navigation }) => {
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [topCategories, setTopCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
+  // Active flash sales surfaced as a horizontally-scrolling row on the home
+  // feed. `null` means we haven't fetched yet (renders nothing); an empty
+  // array means "fetched and there are no live flash sales" (also renders
+  // nothing); a non-empty array renders the row.
+  const [flashSales, setFlashSales] = useState(null);
+
+  // Local mirror of the device-wide hidden-sellers list. Hydrated from
+  // AsyncStorage on mount / focus so we don't show previously-hidden sellers
+  // again on app launch (e.g. sellers the user hid from the feed in a prior
+  // session before the menu action was removed).
+  const [hiddenSellers, setHiddenSellers] = useState([]);
 
   // ── Auto-hiding header (direction-aware) ─────────────────────────────────
   // Same convention as the tab bar auto-hide util: finger swipe UP (reading
@@ -211,6 +228,53 @@ export const HomeScreen = ({ navigation }) => {
     loadTopCategories();
   }, [loadTopCategories]);
 
+  // ── Active flash sales: load once on mount and again whenever the screen
+  // comes back into focus (so a flash sale that started mid-session shows up).
+  // The service returns `{ success, data }` where `data` is an array of flash
+  // sale rows joined with their product. We flatten it into the shape the
+  // ProductCard + FlashSaleCountdown components expect.
+  const loadFlashSales = useCallback(async () => {
+    if (!supabase) {
+      setFlashSales([]);
+      return;
+    }
+    try {
+      const { success, data } = await flashSaleService.getActiveFlashSales();
+      if (!success || !Array.isArray(data)) {
+        setFlashSales([]);
+        return;
+      }
+      // Filter out entries whose product isn't loaded — those would render as
+      // empty cards. Keep the rest ordered by soonest-to-end.
+      const now = Date.now();
+      const live = data.filter(
+        (fs) =>
+          fs?.product &&
+          fs?.product?.status === "active" &&
+          new Date(fs.end_time).getTime() > now,
+      );
+      setFlashSales(live);
+    } catch (e) {
+      console.warn("[HomeScreen] flash sales load failed:", e?.message);
+      setFlashSales([]);
+    }
+  }, []);
+
+  // Re-fetch on focus (and on first mount) so a flash sale that started
+  // mid-session appears without needing a full reload.
+  useFocusEffect(
+    useCallback(() => {
+      loadFlashSales();
+      // Hydrate the hidden-sellers list from disk every time we re-enter the
+      // screen — covers the case where the user unhides a seller from a
+      // future Settings screen, or where a sibling device syncs a different
+      // set.
+      loadHiddenSellers()
+        .then((list) => setHiddenSellers(Array.isArray(list) ? list : []))
+        .catch(() => {});
+    }, [loadFlashSales]),
+  );
+
   // ── Nearby: request geolocation and fetch sellers within radius ──────────
   const loadNearby = useCallback(async () => {
     if (!supabase) return;
@@ -288,26 +352,89 @@ export const HomeScreen = ({ navigation }) => {
   }, [activeFilter, nearbyProducts, nearbyLoading, loadNearby]);
 
   // ── Feed items per filter ────────────────────────────────────────────────
+  // `feedItems` is the product list filtered for the current tab. If we have
+  // live flash sales and the list has enough room (≥10 items), the flash-sale
+  // strip is injected at the 10th index so it surfaces only after the user
+  // has scrolled past 10 real products. The injected row uses the special
+  // `__type === "flash_sale_row"` discriminator that `renderFeedItem` checks
+  // for before falling back to a regular `FeedProductCard`.
+  const FLASH_SALE_INSERT_AFTER = 10; // show flash sale strip after this many products
+
+  const injectFlashSaleRow = useCallback(
+    (items) => {
+      if (!Array.isArray(items) || items.length < FLASH_SALE_INSERT_AFTER) {
+        return items;
+      }
+      if (!Array.isArray(flashSales) || flashSales.length === 0) {
+        return items;
+      }
+      // Insert the flash-sale row right after the 10th product (index 10).
+      const insertIndex = FLASH_SALE_INSERT_AFTER;
+      const before = items.slice(0, insertIndex);
+      const after = items.slice(insertIndex);
+      return [
+        ...before,
+        { __type: "flash_sale_row", id: "flash-sale-row", sales: flashSales },
+        ...after,
+      ];
+    },
+    [flashSales],
+  );
+
+  // Drop products whose seller is in the user's hidden list. Done before the
+  // flash-sale splice so the 10-count gate still corresponds to real products.
+  const filterHiddenSellers = useCallback(
+    (items) => {
+      if (!Array.isArray(hiddenSellers) || hiddenSellers.length === 0) {
+        return items;
+      }
+      const hiddenSet = new Set(hiddenSellers);
+      return items.filter((p) => {
+        const sellerId =
+          (p?.seller && (p.seller.id || p.seller)) ||
+          p?.seller_id?.id ||
+          p?.seller_id;
+        return !sellerId || !hiddenSet.has(String(sellerId));
+      });
+    },
+    [hiddenSellers],
+  );
+
   const feedItems = useMemo(() => {
+    let base;
     switch (activeFilter) {
       case "Following": {
-        if (!followedSellers.length) return [];
-        return products.filter((p) => followedSellers.includes(p.seller?.id));
+        base = followedSellers.length
+          ? products.filter((p) =>
+              followedSellers.includes(p.seller?.id),
+            )
+          : [];
+        break;
       }
       case "Trending":
-        return [...products]
+        base = [...products]
           .sort((a, b) => {
             const scoreA = Number(a.rating || 0) * 10 + Number(a.discount || 0);
             const scoreB = Number(b.rating || 0) * 10 + Number(b.discount || 0);
             return scoreB - scoreA;
           })
           .slice(0, 30);
+        break;
       case "Nearby":
-        return nearbyProducts || [];
+        base = nearbyProducts || [];
+        break;
       default:
-        return products;
+        base = products;
     }
-  }, [activeFilter, products, followedSellers, nearbyProducts]);
+    return injectFlashSaleRow(filterHiddenSellers(base));
+  }, [
+    activeFilter,
+    products,
+    followedSellers,
+    nearbyProducts,
+    injectFlashSaleRow,
+    filterHiddenSellers,
+  ]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -351,17 +478,73 @@ export const HomeScreen = ({ navigation }) => {
     [hasMore, loadingMore, loadMore, animateHeader],
   );
 
+  // Renders one row in the FlatList. Regular products go through the standard
+  // FeedProductCard. The injected flash-sale row (synthesized by
+  // `injectFlashSaleRow`) is matched by its `__type` discriminator and
+  // rendered as a horizontal scroller of compact ProductCards — each card
+  // already shows its own countdown via the `flashSale` prop, so we don't
+  // stack another timer on top of it.
   const renderFeedItem = useCallback(
-    ({ item }) => (
-      <View style={[styles.cardWrap, { width: "100%" }]}>
-        <FeedProductCard
-          product={item}
-          onPress={() =>
-            navigation.navigate("ProductDetail", { product: item })
-          }
-        />
-      </View>
-    ),
+    ({ item }) => {
+      if (item?.__type === "flash_sale_row") {
+        return (
+          <View style={styles.flashSaleSection}>
+            <View style={styles.flashSaleHeaderRow}>
+              <View style={styles.flashSaleTitleGroup}>
+                <LinearGradient
+                  colors={["#EF4444", "#DC2626"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.flashSaleIconBadge}
+                >
+                  <Ionicons name="flash" size={14} color="#fff" />
+                </LinearGradient>
+                <Text style={styles.flashSaleTitle}>Flash Sale</Text>
+                <View style={styles.flashSaleLiveDot} />
+              </View>
+              <Text style={styles.flashSaleCount}>
+                {item.sales.length}{" "}
+                {item.sales.length === 1 ? "deal" : "deals"} live
+              </Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.flashSaleRow}
+            >
+              {item.sales.map((fs) => (
+                <View
+                  key={fs.id || `${fs.product_id}-${fs.start_time}`}
+                  style={styles.flashSaleCardWrap}
+                >
+                  <ProductCard
+                    product={fs.product}
+                    compact
+                    hideCta
+                    flashSale={fs}
+                    onPress={() =>
+                      navigation.navigate("ProductDetail", {
+                        product: fs.product,
+                      })
+                    }
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        );
+      }
+      return (
+        <View style={[styles.cardWrap, { width: "100%" }]}>
+          <FeedProductCard
+            product={item}
+            onPress={() =>
+              navigation.navigate("ProductDetail", { product: item })
+            }
+          />
+        </View>
+      );
+    },
     [navigation, styles],
   );
 
@@ -444,6 +627,11 @@ export const HomeScreen = ({ navigation }) => {
           })}
         </ScrollView>
       </View>
+
+      {/* ── Flash Sale strip (inline-injected into the FlatList data, NOT here).
+          Kept out of `listHeader` so it appears only after the user has
+          scrolled past 10 feed products, matching the "show after 10" rule.
+          See `injectFlashSaleRow` in `feedItems` memo below. */}
 
       <View style={styles.catHeaderRow}>
         <Text style={styles.catSectionTitle}>Categories</Text>
@@ -706,6 +894,58 @@ const buildHomeStyles = (c) =>
       position: "absolute",
       bottom: 130,
       alignSelf: "center",
+    },
+    // ── Flash Sale strip (horizontal ProductCards, only when live deals) ───
+    flashSaleSection: {
+      paddingTop: 14,
+      paddingBottom: 4,
+    },
+    flashSaleHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 14,
+      paddingBottom: 10,
+    },
+    flashSaleTitleGroup: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    flashSaleIconBadge: {
+      width: 26,
+      height: 26,
+      borderRadius: radius.sm,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    flashSaleTitle: {
+      fontSize: 16,
+      fontWeight: "900",
+      color: c.dark,
+      letterSpacing: 0.2,
+    },
+    // Pulsing-style "live" dot — flat single color (animations live in the
+    // component if needed). Subtle but obvious that this is a real-time row.
+    flashSaleLiveDot: {
+      width: 8,
+      height: 8,
+      borderRadius: radius.full,
+      backgroundColor: "#EF4444",
+    },
+    flashSaleCount: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: "#EF4444",
+    },
+    flashSaleRow: {
+      flexDirection: "row",
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingBottom: 6,
+    },
+    flashSaleCardWrap: {
+      width: 175,
     },
     // ── Top categories strip (ProductCard-style cards) ──────────────────────
     catSection: {

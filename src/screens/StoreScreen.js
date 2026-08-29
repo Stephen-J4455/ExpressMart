@@ -22,6 +22,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { useShop } from "../context/ShopContext";
 import { useAuth } from "../context/AuthContext";
@@ -32,6 +33,10 @@ import { useToast } from "../context/ToastContext";
 import { useResponsive } from "../hooks/useResponsive";
 import { ProductCard } from "../components/ProductCard";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
+import {
+  loadHiddenSellers,
+  unhideSeller,
+} from "../utils/hiddenSellers";
 
 const TABS = ["products", "profile", "reviews"];
 
@@ -185,6 +190,12 @@ export const StoreScreen = ({ route, navigation }) => {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
+  // `true` when this seller is currently in the device's hidden-sellers list
+  // (set via the FeedProductCard "Hide seller" overflow action). When true we
+  // render a banner above the tabs letting the user undo the action — the
+  // inverse of the menu action in the feed.
+  const [isHidden, setIsHidden] = useState(false);
+  const [unhiding, setUnhiding] = useState(false);
 
   const openExternalLink = useCallback(
     async (rawUrl, label = "link") => {
@@ -298,6 +309,50 @@ export const StoreScreen = ({ route, navigation }) => {
       toast.error("Failed to update follow status");
     } finally {
       setFollowLoading(false);
+    }
+  };
+
+  // ── Hidden-seller awareness ─────────────────────────────────────────────
+  // Mirror the device-wide hidden-sellers list and check whether THIS seller
+  // is in it. We refresh on every focus so opening this page right after
+  // hiding from the feed reflects immediately.
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
+      if (!sellerId) {
+        setIsHidden(false);
+        return () => {
+          mounted = false;
+        };
+      }
+      loadHiddenSellers()
+        .then((list) => {
+          if (mounted) {
+            setIsHidden(Array.isArray(list) && list.includes(sellerId));
+          }
+        })
+        .catch(() => {});
+      return () => {
+        mounted = false;
+      };
+    }, [sellerId]),
+  );
+
+  const handleUnhide = async () => {
+    if (!sellerId || unhiding) return;
+    setUnhiding(true);
+    try {
+      await unhideSeller(sellerId);
+      setIsHidden(false);
+      toast.success(
+        "Seller unhidden",
+        "You'll start seeing their products in the feed again.",
+      );
+    } catch (e) {
+      console.warn("[StoreScreen] unhide failed:", e?.message);
+      toast.error("Could not unhide", "Please try again in a moment.");
+    } finally {
+      setUnhiding(false);
     }
   };
 
@@ -717,6 +772,62 @@ export const StoreScreen = ({ route, navigation }) => {
                 </View>
               </LinearGradient>
             </View>
+
+            {/* ── Hidden-seller banner ─────────────────────────────────────────
+                Shown only when the user previously hid this seller from the
+                feed. Lets them undo that action without leaving the page. The
+                banner is full-width, sits between the hero and the tab nav,
+                and uses a subtle muted style so it doesn't compete with the
+                primary "Follow" CTA above. */}
+            {isHidden && (
+              <View style={styles.hiddenBanner}>
+                <View style={styles.hiddenBannerIconWrap}>
+                  <Ionicons
+                    name="eye-off-outline"
+                    size={18}
+                    color={themeColors.muted}
+                  />
+                </View>
+                <View style={styles.hiddenBannerText}>
+                  <Text style={styles.hiddenBannerTitle}>
+                    You've hidden this seller
+                  </Text>
+                  <Text style={styles.hiddenBannerSubtitle}>
+                    Their products won't show up in your home feed.
+                  </Text>
+                </View>
+                <Pressable
+                  style={[
+                    styles.hiddenBannerBtn,
+                    unhiding && styles.hiddenBannerBtnDisabled,
+                  ]}
+                  onPress={handleUnhide}
+                  disabled={unhiding}
+                  accessibilityRole="button"
+                  accessibilityLabel="Unhide this seller"
+                >
+                  {unhiding ? (
+                    <ActivityIndicator size="small" color={accent} />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="eye-outline"
+                        size={14}
+                        color={accent}
+                      />
+                      <Text
+                        style={[
+                          styles.hiddenBannerBtnText,
+                          { color: accent },
+                        ]}
+                      >
+                        Unhide
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            )}
 
             {/* Tab Navigation */}
             <View style={styles.tabContainer}>
@@ -1240,6 +1351,65 @@ const buildStoreStyles = (c) =>
     },
     followButtonActiveText: {
       color: "white",
+    },
+    // ── "You've hidden this seller" banner ─────────────────────────────────
+    // Sits between the hero and the tab navigation. Muted style so it
+    // doesn't compete with the primary Follow CTA. Uses the seller accent
+    // color for the Unhide button so it stays consistent with the rest of
+    // the page's accent system.
+    hiddenBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginHorizontal: 16,
+      marginTop: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: radius.md,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    hiddenBannerIconWrap: {
+      width: 34,
+      height: 34,
+      borderRadius: radius.sm,
+      backgroundColor: c.background,
+      borderWidth: 1,
+      borderColor: c.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    hiddenBannerText: {
+      flex: 1,
+    },
+    hiddenBannerTitle: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    hiddenBannerSubtitle: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: 2,
+    },
+    hiddenBannerBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: radius.md,
+      backgroundColor: c.background,
+      borderWidth: 1.5,
+      borderColor: c.border,
+    },
+    hiddenBannerBtnDisabled: {
+      opacity: 0.6,
+    },
+    hiddenBannerBtnText: {
+      fontSize: 13,
+      fontWeight: "700",
     },
     badgesRow: {
       flexDirection: "row",

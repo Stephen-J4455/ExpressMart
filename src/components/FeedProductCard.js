@@ -24,6 +24,8 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { FlashSaleBadge } from "./FlashSaleBadge";
 import { LazyImage } from "./LazyImage";
+import { ReportListingModal } from "./ReportListingModal";
+import { CollectionsPickerModal } from "./CollectionsPickerModal";
 import { radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -89,6 +91,12 @@ export const FeedProductCard = memo(function FeedProductCard({
 
   const tags = Array.isArray(product.tags)
     ? product.tags.filter(Boolean).slice(0, 4)
+    : typeof product.tags === "string"
+    ? product.tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .slice(0, 4)
     : [];
 
   // --- Local state ----------------------------------------------------------
@@ -99,6 +107,11 @@ export const FeedProductCard = memo(function FeedProductCard({
   const [variantVisible, setVariantVisible] = useState(false);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
+
+  // Sub-modals opened from the overflow menu. Kept outside the main menu
+  // modal so the user can return to the same menu state if they back out.
+  const [reportVisible, setReportVisible] = useState(false);
+  const [collectionsVisible, setCollectionsVisible] = useState(false);
 
   // --- Comments (product reviews with a comment) ---
   const [commentModalVisible, setCommentModalVisible] = useState(false);
@@ -530,10 +543,10 @@ export const FeedProductCard = memo(function FeedProductCard({
           )}
 
           {/* Dark label pill — bottom of image (same as ProductCard tagPill) */}
-          {(product.tags?.[0] || product.category) && (
+          {(tags[0] || product.category) && (
             <View style={styles.labelPill}>
               <Text style={styles.labelPillText} numberOfLines={1}>
-                {product.tags?.[0] || product.category}
+                {tags[0] || product.category}
               </Text>
             </View>
           )}
@@ -631,12 +644,22 @@ export const FeedProductCard = memo(function FeedProductCard({
               {
                 icon: "flag-outline",
                 label: "Report listing",
+                // Open the report modal so the user picks a reason instead of
+                // sending a vague, untracked toast.
                 action: () => {
                   setMenuVisible(false);
-                  toast.info(
-                    "Report received",
-                    "Thanks — our team will review this listing.",
-                  );
+                  if (!isAuthenticated) {
+                    toast.info(
+                      "Sign in required",
+                      "Please sign in to report a listing.",
+                    );
+                    navigation.navigate("Auth", {
+                      redirectTo: route?.name,
+                      redirectParams: route?.params,
+                    });
+                    return;
+                  }
+                  setReportVisible(true);
                 },
               },
               {
@@ -645,25 +668,24 @@ export const FeedProductCard = memo(function FeedProductCard({
                 action: handleShare,
               },
               {
-                icon: "eye-off-outline",
-                label: "Hide seller",
-                action: () => {
-                  setMenuVisible(false);
-                  toast.info(
-                    "Seller hidden",
-                    "You'll see fewer listings from this seller.",
-                  );
-                },
-              },
-              {
                 icon: "folder-open-outline",
+                // Real collections flow — opens the picker (and auth gate if
+                // the user is anonymous) instead of a "coming soon" toast.
                 label: "Add to collection",
                 action: () => {
                   setMenuVisible(false);
-                  toast.info(
-                    "Coming soon",
-                    "Collections are coming to Tagit soon.",
-                  );
+                  if (!isAuthenticated) {
+                    toast.info(
+                      "Sign in required",
+                      "Please sign in to use collections.",
+                    );
+                    navigation.navigate("Auth", {
+                      redirectTo: route?.name,
+                      redirectParams: route?.params,
+                    });
+                    return;
+                  }
+                  setCollectionsVisible(true);
                 },
               },
             ].map(({ icon, label, action }) => (
@@ -675,6 +697,20 @@ export const FeedProductCard = memo(function FeedProductCard({
           </View>
         </Pressable>
       </Modal>
+
+      {/* Sub-modals opened from the menu. Rendered outside the menu so each
+          one is dismissable independently and the menu modal doesn't have to
+          hold nested state. */}
+      <ReportListingModal
+        visible={reportVisible}
+        product={product}
+        onClose={() => setReportVisible(false)}
+      />
+      <CollectionsPickerModal
+        visible={collectionsVisible}
+        product={product}
+        onClose={() => setCollectionsVisible(false)}
+      />
 
       {/* ── Variant selection modal (products with colors/sizes) ── */}
       <Modal
