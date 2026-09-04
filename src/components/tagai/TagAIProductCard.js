@@ -202,14 +202,44 @@ export const TagAIProductCard = ({ product }) => {
   );
 };
 
-/** Vertical stack of product cards — used inside assistant messages. */
+/** Vertical stack of product cards — used inside assistant messages.
+ *
+ * Deduplicates the `products` array by `id` before rendering. The upstream
+ * agent loop accumulates products from multiple sources (remote agent
+ * response, local `search_products`, local `filter_catalog`, etc.) so the
+ * same product id can legitimately appear more than once in a single
+ * assistant message. Without deduping React throws
+ *   "Encountered two children with the same key"
+ * because the original key was `${id}-${title}` and titles can also vary by
+ * trailing whitespace between sources. Catalog ids are stable and unique, so
+ * they are the right thing to key on. */
 export const TagAIProductCardRow = ({ products }) => {
   const styles = useAppStyles(buildStyles);
   if (!products?.length) return null;
+
+  // Keep first occurrence of each id; preserve original order so the chat
+  // stream doesn't visually reshuffle between renders.
+  const seen = new Set();
+  const deduped = [];
+  for (const p of products) {
+    const id = p?.id != null ? String(p.id) : null;
+    if (id) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    deduped.push(p);
+  }
+
   return (
     <View style={styles.rowWrap}>
-      {products.map((p) => (
-        <TagAIProductCard key={`${p.id}-${p.title}`} product={p} />
+      {deduped.map((p, idx) => (
+        <TagAIProductCard
+          // `p.id` is unique within the deduped list, so it alone is a safe
+          // and stable key. The `idx` suffix is a safety net for any item
+          // without an id (rare — queryCatalog always returns one).
+          key={p?.id != null ? String(p.id) : `tagai-product-${idx}`}
+          product={p}
+        />
       ))}
     </View>
   );

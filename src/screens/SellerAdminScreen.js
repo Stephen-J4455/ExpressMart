@@ -52,6 +52,7 @@ import {
 } from "../services/r2Storage";
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
+import { quickActions } from "../data/quickActions";
 
 const DEFAULT_CATEGORIES = [
   { id: "default-fashion", name: "Fashion", icon: "shirt-outline" },
@@ -435,19 +436,86 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [tags, setTags] = useState([]);
   const [tagInput, setTagInput] = useState("");
 
-  // Commit whatever is currently typed in the tag field into `tags`.
-  // Uses the functional updater so back-to-back calls (onSubmitEditing +
-  // onBlur firing for the same text) can never duplicate or drop a tag.
+  // Tags are typed as a comma-separated list (e.g. "red, summer, linen") so they
+  // can be pasted all at once and the form splits them automatically.
+  //   • Splits on commas.
+  //   • Trims each piece.
+  //   • Drops empty fragments.
+  //   • Caps the total at MAX_TAGS.
+  //   • Deduplicates case-insensitively.
+  const MAX_TAGS = 10;
+
+  // Compute the committed tag list from the current `tagInput` text.
+  //
+  //   `commitTrailing` controls what happens with the LAST non-empty token
+  //   when there's no trailing comma:
+  //     • false (default, used while the user is mid-typing) — the last
+  //       non-empty fragment stays in the input buffer; only the tokens
+  //       *before* it are committed.
+  //     • true (Enter, blur, save) — every non-empty token is committed,
+  //       including the trailing fragment.
+  const tagsFromInput = useCallback((raw, currentTags, commitTrailing) => {
+    if (!raw) return currentTags;
+
+    const pieces = raw.split(",");
+    // Find the index of the last non-empty piece — that's the fragment the
+    // user is currently typing, if any.
+    let lastNonEmpty = pieces.length - 1;
+    while (lastNonEmpty >= 0 && pieces[lastNonEmpty].trim() === "") {
+      lastNonEmpty--;
+    }
+
+    const endsWithComma = raw.trimEnd().endsWith(",");
+    const trailingIsLive =
+      !commitTrailing && !endsWithComma && lastNonEmpty >= 0;
+
+    const committedPieces = trailingIsLive
+      ? pieces.slice(0, lastNonEmpty)
+      : pieces;
+    const tokens = committedPieces.map((t) => t.trim()).filter(Boolean);
+
+    const seen = new Set(currentTags.map((x) => String(x).toLowerCase()));
+    const additions = [];
+    for (const t of tokens) {
+      if (additions.length + currentTags.length >= MAX_TAGS) break;
+      const lower = t.toLowerCase();
+      if (seen.has(lower)) continue;
+      seen.add(lower);
+      additions.push(t);
+    }
+    return [...currentTags, ...additions];
+  }, []);
+
+  // Commit whatever is currently typed in the tag field into `tags`. Used by
+  // the Enter-key (`onSubmitEditing`) and blur (`onBlur`) handlers, which
+  // finalise *every* pending token — including the trailing fragment the
+  // user is in the middle of typing.
   const commitPendingTag = useCallback(() => {
-    const t = tagInput.trim();
-    if (!t) return;
-    setTags((prev) =>
-      prev.length < 10 && !prev.some((x) => x.toLowerCase() === t.toLowerCase())
-        ? [...prev, t]
-        : prev,
-    );
+    const raw = tagInput;
+    if (!raw) return;
+    setTags((prev) => tagsFromInput(raw, prev, true));
     setTagInput("");
-  }, [tagInput]);
+  }, [tagInput, tagsFromInput]);
+
+  // Live commit handler — runs on every keystroke. Tags are derived from the
+  // current input text on every change:
+  //   • The text stays in the input untouched so subsequent keystrokes
+  //     continue editing it (no premature trimming, which would also fight
+  //     React Native's controlled input contract).
+  //   • The committed tag list is recomputed: every non-empty token before
+  //     the trailing fragment becomes a pill; the trailing fragment stays
+  //     in the input.
+  //   • A trailing comma signals "I'm done with the previous tag" and so
+  //     every token (including the would-be-trailing one, which is empty
+  //     anyway) is committed — the input then effectively has no live
+  //     fragment.
+  const handleTagChange = useCallback(
+    (text) => {
+      setTagInput(text);
+      setTags((prev) => tagsFromInput(text, prev, false));
+    },
+    [tagsFromInput],
+  );
   const [specifications, setSpecifications] = useState([]);
   const [productFormStep, setProductFormStep] = useState(1);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
@@ -1992,17 +2060,24 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         if (s.key && s.value) specsObj[s.key] = s.value;
       });
 
-      // A tag typed right before tapping Save is committed via onBlur, but
+      // A tag typed right before tapping Save is normally committed via onBlur, but
       // this handler closed over the previous render's `tags` — so merge any
-      // still-pending tagInput here or the last tag would never be uploaded.
-      const pendingTag = tagInput.trim();
-      const tagsToSave = [
-        ...tags,
-        ...(pendingTag &&
-        !tags.some((x) => x.toLowerCase() === pendingTag.toLowerCase())
-          ? [pendingTag]
-          : []),
-      ]
+      // still-pending tagInput here or the last tag(s) would never be uploaded.
+      // The pending input may itself contain commas (e.g. "red, summer, "),
+      // so split it the same way the live input handler does.
+      const pendingTokens = tagInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const seen = new Set(tags.map((x) => String(x).toLowerCase()));
+      const pendingAdditions = [];
+      for (const t of pendingTokens) {
+        const lower = t.toLowerCase();
+        if (seen.has(lower)) continue;
+        seen.add(lower);
+        pendingAdditions.push(t);
+      }
+      const tagsToSave = [...tags, ...pendingAdditions]
         .map((t) => String(t).trim())
         .filter(Boolean);
 
@@ -4011,6 +4086,44 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             style={styles.drawerScroll}
             showsVerticalScrollIndicator={false}
           >
+            {/* Quick Actions — icon-only horizontal scrollable row at the
+                top of the drawer. Mirrors the Account page's Quick Actions
+                (sellers are also customers, so they get the same shortcuts)
+                but rendered compact (no labels) to keep the drawer short. */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.drawerQuickActionsScroll}
+              contentContainerStyle={styles.drawerQuickActionsContent}
+            >
+              {quickActions.map((action) => (
+                <Pressable
+                  key={action.label}
+                  style={styles.drawerQuickAction}
+                  onPress={() => {
+                    closeMenu();
+                    nav.navigate(action.screen);
+                  }}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={action.label}
+                >
+                  <View
+                    style={[
+                      styles.drawerQuickActionIcon,
+                      { backgroundColor: action.bg },
+                    ]}
+                  >
+                    <Ionicons
+                      name={action.icon}
+                      size={20}
+                      color={action.color}
+                    />
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+
             {MENU_ITEMS.map((item, i) =>
               item.section ? (
                 <Text key={`sec-${i}`} style={styles.menuSection}>
@@ -5155,15 +5268,22 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     <TextInput
                       style={styles.tagInput}
                       value={tagInput}
-                      onChangeText={setTagInput}
-                      placeholder="Type a tag and press enter"
+                      onChangeText={handleTagChange}
+                      placeholder="Separate tags with commas (e.g. red, summer, linen)"
                       placeholderTextColor={themeColors.muted}
                       returnKeyType="done"
                       blurOnSubmit={false}
                       onSubmitEditing={commitPendingTag}
                       onBlur={commitPendingTag}
+                      autoCapitalize="none"
                     />
                   </View>
+                  {tags.length === 0 && (
+                    <Text style={styles.tagHint}>
+                      Separate tags with commas (e.g. red, summer, linen).
+                      Each tag becomes its own pill below.
+                    </Text>
+                  )}
                   {tags.length > 0 && (
                     <View style={styles.categoryRow}>
                       {tags.map((t) => (
@@ -6839,6 +6959,12 @@ const buildSellerAdminStyles = (c) =>
       color: c.dark,
       paddingVertical: 11,
     },
+    tagHint: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: 6,
+      lineHeight: 16,
+    },
     row: {
       borderRadius: radius.md,
       flexDirection: "row",
@@ -7074,14 +7200,40 @@ const buildSellerAdminStyles = (c) =>
       borderRadius: radius.md,
       flex: 1,
       paddingHorizontal: 8,
-      paddingTop: 8,
+      paddingTop: 0,
+    },
+    drawerQuickActionsScroll: {
+      flexGrow: 0,
+      flexShrink: 0,
+      marginBottom: 0,
+    },
+    drawerQuickActionsContent: {
+      paddingHorizontal: 4,
+      paddingTop: 0,
+      paddingBottom: 4,
+      gap: 4,
+    },
+    drawerQuickAction: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 4,
+      paddingHorizontal: 4,
+      minWidth: 56,
+      borderRadius: radius.sm,
+    },
+    drawerQuickActionIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.md,
+      alignItems: "center",
+      justifyContent: "center",
     },
     menuSection: {
       fontSize: 11,
       fontWeight: "800",
       textTransform: "uppercase",
       color: c.muted,
-      marginTop: 16,
+      marginTop: 6,
       marginBottom: 4,
       marginLeft: 12,
     },

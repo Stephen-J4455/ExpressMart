@@ -175,7 +175,15 @@ export const StoreScreen = ({ route, navigation }) => {
     useShop();
   const { user } = useAuth();
   const toast = useToast();
-  const styles = useAppStyles((c) => buildStoreStyles(c));
+  // buildStoreStyles depends on the resolved `accent` (per-seller theme)
+  // in addition to the active palette, so we memoise the factory itself
+  // by `accent`. Without this the inner closure would change every render
+  // and the styles would be rebuilt on every state update.
+  const buildStyles = useCallback(
+    (c) => buildStoreStyles(c, accent),
+    [accent],
+  );
+  const styles = useAppStyles(buildStyles);
   const tabScrollRef = useRef(null);
 
   const [statuses, setStatuses] = useState([]);
@@ -365,7 +373,7 @@ export const StoreScreen = ({ route, navigation }) => {
         const { data, error } = await supabase
           .from("express_sellers")
           .select(
-            "id,name,avatar,badges,rating,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
+            "id,name,avatar,cover_image,badges,rating,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
           )
           .eq("id", sellerId)
           .single();
@@ -617,160 +625,247 @@ export const StoreScreen = ({ route, navigation }) => {
         }
         ListHeaderComponent={
           <View>
-            {/* Store Hero Section - extends into status bar */}
-            <View style={[styles.hero, { marginTop: -insets.top }]}>
-              {sellerDetail?.avatar ? (
-                <Image
-                  source={{ uri: sellerDetail.avatar }}
-                  style={styles.heroBackground}
-                  blurRadius={5}
-                />
-              ) : null}
-              <LinearGradient
-                colors={["rgba(0,0,0,0.4)", "rgba(0,0,0,0.6)"]}
-                style={styles.heroOverlay}
-              >
-                <View style={styles.storeHeader}>
-                  <Pressable
-                    style={[
-                      styles.storeAvatarContainer,
-                      statuses.length > 0 && styles.statusActive,
-                    ]}
-                    onPress={() => {
-                      if (statuses.length > 0) {
-                        navigation.navigate("StatusViewer", {
-                          status: statuses[0],
-                        });
-                      }
+            {/* Cover image area. Renders the seller's `cover_image` when
+                uploaded; falls back to the seller's `avatar` (the profile
+                image used by the seller admin) so the header always has a
+                real photo; otherwise falls back to the seller-themed
+                gradient so the header never collapses to a blank strip.
+                The hovering card below is positioned with a positive
+                marginTop (sized so it sits just inside the bottom of the
+                image), so ~90% of the card sits BELOW the image and only a
+                small slice peeks ABOVE the image's bottom edge. */}
+            <View style={styles.headerBackdrop}>
+              {(() => {
+                // Prefer an explicit `cover_image`; otherwise use the
+                // `avatar` (which is what the seller admin currently sets —
+                // there's no separate cover-image upload flow today).
+                const coverUri =
+                  sellerDetail?.cover_image || sellerDetail?.avatar;
+                if (!coverUri) return null;
+                return (
+                  <Image
+                    source={{ uri: coverUri }}
+                    style={styles.headerBackdropImage}
+                    resizeMode="cover"
+                    onError={(e) => {
+                      // Surface broken URLs to the JS console so the cover
+                      // can be debugged without staring at a blank strip.
+                      console.warn(
+                        "[StoreScreen] cover image failed to load:",
+                        coverUri,
+                        e?.nativeEvent,
+                      );
                     }}
+                  />
+                );
+              })()}
+              {/* Gradient is always rendered as a backdrop, so if the image
+                  URL is missing or fails to load the strip still has colour
+                  instead of a transparent hole. Sits at opacity 0.18 so the
+                  image still shows through. */}
+              <LinearGradient
+                colors={[
+                  (theme && theme.gradientStart) || themeColors.primary,
+                  (theme && theme.gradientEnd) || themeColors.primary,
+                ]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.headerBackdropGradient}
+              />
+            </View>
+
+            <View style={styles.headerCard}>
+              <View style={styles.headerNameRow}>
+                <Text
+                  style={styles.headerStoreName}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {(sellerDetail?.name || "Store").toString().toUpperCase()}
+                </Text>
+                {sellerDetail?.is_verified ? (
+                  <View style={styles.headerVerifiedBadge}>
+                    <Ionicons
+                      name="checkmark"
+                      size={14}
+                      color={themeColors.onPrimary || "#fff"}
+                    />
+                  </View>
+                ) : null}
+              </View>
+
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                {sellerDetail?.location
+                  ? String(sellerDetail.location)
+                  : sellerDetail?.store_description
+                    ? String(sellerDetail.store_description).slice(0, 60)
+                    : "Verified seller on ExpressMart"}
+              </Text>
+
+              <View style={styles.headerStatsRow}>
+                {Number(averageRating) >= 4.0 ? (
+                  <View style={styles.headerStatChip}>
+                    <Ionicons name="star" size={14} color="#F59E0B" />
+                    <Text style={styles.headerStatTextHighRated}>
+                      High Rated
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.headerStatChip}>
+                  <Ionicons
+                    name="cube-outline"
+                    size={14}
+                    color={themeColors.muted}
+                  />
+                  <Text style={styles.headerStatText}>
+                    {storeProducts.length}{" "}
+                    {storeProducts.length === 1 ? "product" : "products"}
+                  </Text>
+                </View>
+
+                <View style={styles.headerStatChip}>
+                  <Ionicons
+                    name="people-outline"
+                    size={14}
+                    color={themeColors.muted}
+                  />
+                  <Text
+                    style={[
+                      styles.headerStatText,
+                      { color: accent, fontWeight: "700" },
+                    ]}
                   >
-                    {sellerDetail?.avatar ? (
-                      <Image
-                        source={{ uri: sellerDetail.avatar }}
-                        style={styles.storeAvatar}
-                      />
-                    ) : (
-                      <View
-                        style={[styles.storeAvatar, styles.avatarPlaceholder]}
-                      >
-                        <Ionicons name="storefront" size={48} color="#fff" />
-                      </View>
-                    )}
-                    {statuses.length > 0 && (
-                      <View style={styles.statusBadge}>
-                        <Text style={styles.statusBadgeText}>
-                          {statuses.length}
-                        </Text>
-                      </View>
-                    )}
-                  </Pressable>
-                  <View style={styles.storeInfo}>
-                    <Text style={styles.storeName}>{sellerDetail?.name}</Text>
-                    <View style={styles.ratingRow}>
-                      <Ionicons name="star" size={16} color="#FCD34D" />
-                      <Text style={styles.rating}>
-                        {averageRating} ({storeReviews.length})
-                      </Text>
-                      <Pressable
-                        style={[
-                          styles.followButton,
-                          isFollowing(sellerId) && {
-                            backgroundColor: accent,
-                            borderColor: accent,
-                          },
-                        ]}
-                        onPress={handleFollowToggle}
-                        disabled={followLoading}
-                      >
-                        {followLoading ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={isFollowing(sellerId) ? "white" : accent}
-                          />
-                        ) : (
-                          <>
-                            {!isFollowing(sellerId) && (
-                              <Ionicons
-                                name="add"
-                                size={16}
-                                color={isFollowing(sellerId) ? "white" : accent}
-                              />
-                            )}
-                            <Text
-                              style={[
-                                styles.followButtonText,
-                                isFollowing(sellerId) && {
-                                  color: themeColors.light,
-                                },
-                              ]}
-                            >
-                              {isFollowing(sellerId) ? "Following" : "Follow"}
-                            </Text>
-                          </>
-                        )}
-                      </Pressable>
-                    </View>
-                    <Text style={styles.storeSubtitle}>
-                      {storeProducts.length} Products
+                    {followerCount} followers
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.headerActionsRow}>
+                <Pressable
+                  style={[
+                    styles.headerFollowBtn,
+                    isFollowing(sellerId) && styles.headerFollowBtnActive,
+                  ]}
+                  onPress={handleFollowToggle}
+                  disabled={followLoading}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isFollowing(sellerId) ? "Unfollow store" : "Follow store"
+                  }
+                >
+                  {followLoading ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={themeColors.dark}
+                    />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.headerFollowBtnText,
+                        isFollowing(sellerId) &&
+                          styles.headerFollowBtnTextActive,
+                      ]}
+                    >
+                      {isFollowing(sellerId) ? "Following" : "Follow"}
+                    </Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  style={styles.headerMessageBtn}
+                  onPress={() => {
+                    if (!sellerDetail) return;
+                    navigation.navigate("Chat", { seller: sellerDetail });
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Message seller"
+                >
+                  <Ionicons
+                    name="chatbubble-outline"
+                    size={18}
+                    color={themeColors.onPrimary || "#fff"}
+                  />
+                  <Text style={styles.headerMessageBtnText}>Message</Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.headerDivider} />
+
+              <View style={styles.headerTrustGrid}>
+                <View style={styles.headerTrustItem}>
+                  <View style={styles.headerTrustIconWrap}>
+                    <Ionicons name="car-outline" size={18} color={accent} />
+                  </View>
+                  <View style={styles.headerTrustTextWrap}>
+                    <Text style={styles.headerTrustTitle}>
+                      {sellerDetail?.default_shipping_fee === 0 ||
+                      sellerDetail?.default_shipping_fee == null
+                        ? "Free shipping"
+                        : "Standard shipping"}
+                    </Text>
+                    <Text style={styles.headerTrustSubtitle}>
+                      {sellerDetail?.default_shipping_fee > 0
+                        ? `Fee GH₵${Number(
+                            sellerDetail.default_shipping_fee,
+                          ).toFixed(2)}`
+                        : "On all orders from this store"}
                     </Text>
                   </View>
                 </View>
 
-                {/* Badges Section */}
-                {sellerBadgeIds.length > 0 && (
-                  <View style={styles.badgesRow}>
-                    {sellerBadgeIds.map((badgeId, index) => {
-                      const badgeConfig = BADGE_CONFIG[badgeId] || {
-                        ...FALLBACK_BADGE_STYLE,
-                        label: toBadgeLabel(badgeId),
-                      };
-                      return (
-                        <View
-                          key={`${badgeId}-${index}`}
-                          style={[
-                            styles.badge,
-                            {
-                              backgroundColor: badgeConfig.color + "20",
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            name={badgeConfig.icon}
-                            size={14}
-                            color={badgeConfig.color}
-                          />
-                          <Text
-                            style={[
-                              styles.badgeText,
-                              { color: badgeConfig.color },
-                            ]}
-                          >
-                            {badgeConfig.label}
-                          </Text>
-                        </View>
-                      );
-                    })}
+                <View style={styles.headerTrustItem}>
+                  <View style={styles.headerTrustIconWrap}>
+                    <Ionicons
+                      name="refresh-outline"
+                      size={18}
+                      color={accent}
+                    />
                   </View>
-                )}
-
-                {/* Store Stats */}
-                <View style={styles.statsContainer}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>{storeProducts.length}</Text>
-                    <Text style={styles.statLabel}>Products</Text>
-                  </View>
-                  <View style={styles.divider} />
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>{storeReviews.length}</Text>
-                    <Text style={styles.statLabel}>Reviews</Text>
-                  </View>
-                  <View style={styles.divider} />
-                  <View style={styles.statItem}>
-                    <Text style={styles.statValue}>{followerCount}</Text>
-                    <Text style={styles.statLabel}>Followers</Text>
+                  <View style={styles.headerTrustTextWrap}>
+                    <Text style={styles.headerTrustTitle}>Easy returns</Text>
+                    <Text style={styles.headerTrustSubtitle}>
+                      Store return policy
+                    </Text>
                   </View>
                 </View>
-              </LinearGradient>
+
+                <View style={styles.headerTrustItem}>
+                  <View style={styles.headerTrustIconWrap}>
+                    <Ionicons
+                      name="shield-checkmark-outline"
+                      size={18}
+                      color={accent}
+                    />
+                  </View>
+                  <View style={styles.headerTrustTextWrap}>
+                    <Text style={styles.headerTrustTitle}>
+                      Buyer protection
+                    </Text>
+                    <Text style={styles.headerTrustSubtitle}>
+                      Secured by ExpressMart
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.headerTrustItem}>
+                  <View style={styles.headerTrustIconWrap}>
+                    <Ionicons name="time-outline" size={18} color={accent} />
+                  </View>
+                  <View style={styles.headerTrustTextWrap}>
+                    <Text style={styles.headerTrustTitle}>
+                      Fast response
+                    </Text>
+                    <Text style={styles.headerTrustSubtitle}>
+                      {sellerDetail?.fulfillment_speed
+                        ? `Replies in ${String(
+                            sellerDetail.fulfillment_speed,
+                          ).toLowerCase()}`
+                        : "Replies within a few hours"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
             </View>
 
             {/* ── Hidden-seller banner ─────────────────────────────────────────
@@ -1246,7 +1341,7 @@ export const StoreScreen = ({ route, navigation }) => {
   );
 };
 
-const buildStoreStyles = (c) =>
+const buildStoreStyles = (c, accent) =>
   StyleSheet.create({
     header: {
       flexDirection: "row",
@@ -1267,90 +1362,200 @@ const buildStoreStyles = (c) =>
     listContainer: {
       flexGrow: 1,
     },
-    hero: {
-      minHeight: 400,
+    // ── Compact store header card (replaces the old dark hero) ─────────────
+    // Mirrors the reference design: cover image (or seller-themed gradient
+    // fallback) at the top, with a floating white card that holds name +
+    // verified badge, subtitle, inline stats, two CTAs, and a 2×2
+    // trust-badges grid. The card overlaps the bottom of the image with
+    // marginTop = -(coverHeight - peekHeight) so ~90% of the card sits on
+    // top of the image and only a small slice peeks above. All colors come
+    // from the theme palette so light/dark mode just works.
+    headerBackdrop: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 240,
     },
-    heroBackground: {
+    headerBackdropImage: {
       position: "absolute",
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
-      resizeMode: "cover",
+      width: "100%",
+      height: "100%",
     },
-    heroOverlay: {
+    headerBackdropGradient: {
+      // Absolute so the gradient always sits edge-to-edge over the 240px
+      // cover area, regardless of the image's render status. Combined with
+      // its low opacity, the image still shows through on top of it.
       position: "absolute",
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
-      paddingTop: 80,
-      paddingHorizontal: 20,
-      justifyContent: "flex-start",
+      opacity: 0.18,
     },
-    storeHeader: {
+    headerCard: {
+      marginHorizontal: 16,
+      // Positive marginTop pushes the card down so its top edge sits inside
+      // the bottom of the cover image: with the cover area at 240px and a
+      // card of ~280-340px, this leaves only a thin slice of the card peeking
+      // ABOVE the image's bottom edge while ~90% of the card sits BELOW it
+      // — the classic "floating card on a cover" hero pattern.
+      marginTop: 210,
+      marginBottom: 12,
+      padding: 18,
+      borderRadius: 20,
+      backgroundColor: c.surface,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.08,
+      shadowRadius: 14,
+      elevation: 4,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+    },
+    headerNameRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 16,
+      gap: 10,
     },
-    storeAvatar: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
-      borderWidth: 3,
-      borderColor: c.light,
+    headerStoreName: {
+      flexShrink: 1,
+      fontSize: 22,
+      fontWeight: "800",
+      letterSpacing: 0.2,
+      color: c.dark,
     },
-    avatarPlaceholder: {
-      backgroundColor: "rgba(255,255,255,0.3)",
+    headerVerifiedBadge: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: c.primary,
       alignItems: "center",
       justifyContent: "center",
     },
-    storeInfo: {
-      flex: 1,
-      gap: 6,
-    },
-    storeName: {
-      fontSize: 24,
-      fontWeight: "800",
-      color: c.light,
-    },
-    ratingRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-    },
-    rating: {
-      color: c.light,
+    headerSubtitle: {
+      marginTop: 6,
       fontSize: 14,
-      fontWeight: "600",
-    },
-    storeSubtitle: {
-      color: "rgba(255,255,255,0.9)",
-      fontSize: 13,
+      color: c.muted,
       fontWeight: "500",
     },
-    followButton: {
+    headerStatsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: 14,
+      marginTop: 14,
+    },
+    headerStatChip: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: radius.md,
-      backgroundColor: "rgba(239, 68, 68, 0.1)",
+      gap: 6,
+    },
+    headerStatText: {
+      fontSize: 14,
+      color: c.muted,
+      fontWeight: "600",
+    },
+    headerStatTextHighRated: {
+      fontSize: 14,
+      color: c.dark,
+      fontWeight: "700",
+    },
+    headerActionsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginTop: 18,
+    },
+    headerFollowBtn: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: radius.full,
       borderWidth: 1.5,
-      borderColor: "#ef4444",
+      borderColor: c.border,
+      backgroundColor: c.background,
+      alignItems: "center",
+      justifyContent: "center",
     },
-    followButtonActive: {
-      backgroundColor: "#ef4444",
-      borderColor: "#ef4444",
+    headerFollowBtnActive: {
+      // `accent` is the per-seller theme accent (falls back to brand primary
+      // inside the component). We receive it as a builder arg because
+      // buildStoreStyles runs at module scope where the component's
+      // `themeColors` / `accent` are not in scope.
+      backgroundColor: (accent || c.primary) + "20",
+      borderColor: accent || c.primary,
     },
-    followButtonText: {
+    headerFollowBtnText: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    headerFollowBtnTextActive: {
+      color: c.light,
+    },
+    headerMessageBtn: {
+      flex: 1.4,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: radius.full,
+      backgroundColor: c.primary,
+      shadowColor: c.primary,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.25,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    headerMessageBtnText: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: c.onPrimary,
+    },
+    headerDivider: {
+      height: 1,
+      backgroundColor: c.border,
+      marginVertical: 18,
+    },
+    headerTrustGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+    },
+    headerTrustItem: {
+      width: "50%",
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 10,
+      paddingVertical: 6,
+      paddingRight: 8,
+    },
+    headerTrustIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: (accent || c.primary) + "14",
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 2,
+    },
+    headerTrustTextWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    headerTrustTitle: {
       fontSize: 13,
       fontWeight: "700",
-      color: "#ef4444",
+      color: c.dark,
     },
-    followButtonActiveText: {
-      color: "white",
+    headerTrustSubtitle: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: 2,
     },
     // ── "You've hidden this seller" banner ─────────────────────────────────
     // Sits between the hero and the tab navigation. Muted style so it
@@ -1410,56 +1615,6 @@ const buildStoreStyles = (c) =>
     hiddenBannerBtnText: {
       fontSize: 13,
       fontWeight: "700",
-    },
-    badgesRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginTop: 32,
-      marginBottom: 24,
-    },
-    badge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.3)",
-    },
-    badgeText: {
-      fontSize: 13,
-      fontWeight: "700",
-    },
-    statsContainer: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-around",
-      paddingVertical: 16,
-      backgroundColor: "rgba(255,255,255,0.1)",
-      borderRadius: 12,
-    },
-    statItem: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 4,
-    },
-    statValue: {
-      fontSize: 18,
-      fontWeight: "800",
-      color: c.light,
-    },
-    statLabel: {
-      fontSize: 12,
-      color: "rgba(255,255,255,0.8)",
-      fontWeight: "500",
-    },
-    divider: {
-      width: 1,
-      height: 40,
-      backgroundColor: "rgba(255,255,255,0.2)",
     },
     productItem: {
       paddingHorizontal: 8,

@@ -141,10 +141,111 @@ export const collectionsContainingProduct = async (user, productId) => {
   return new Set((data || []).map((row) => row.collection_id));
 };
 
+/**
+ * Fetch every product inside a single collection, newest first.
+ * Returns an array of `{ id, addedAt, product }` rows ready to render in the
+ * CollectionDetailScreen grid.
+ */
+export const getCollectionItems = async (user, collectionId) => {
+  const userId = requireUser(user);
+  if (!collectionId) return [];
+  const { data, error } = await supabase
+    .from(ITEMS_TABLE)
+    .select("id, added_at, product_id, express_products(*)")
+    .eq("collection_id", collectionId)
+    // Restrict to items that belong to a collection owned by this user
+    // (the express_products(*) embed doesn't enforce ownership, so we still
+    // need the parent filter below).
+    .order("added_at", { ascending: false });
+
+  if (error) {
+    console.warn("[collectionsService] items fetch failed:", error.message);
+    return [];
+  }
+
+  // Defence-in-depth: the RLS policy already filters by ownership, but we
+  // also double-check by re-loading the collection's owner to be safe.
+  const { data: ownerCheck, error: ownerErr } = await supabase
+    .from(COLLECTIONS_TABLE)
+    .select("user_id")
+    .eq("id", collectionId)
+    .single();
+  if (ownerErr || !ownerCheck || ownerCheck.user_id !== userId) {
+    return [];
+  }
+
+  return (data || [])
+    .filter((row) => row.express_products)
+    .map((row) => ({
+      id: row.id,
+      addedAt: row.added_at,
+      productId: row.product_id,
+      product: row.express_products,
+    }));
+};
+
+/**
+ * Make sure the user has at least one collection. Creates a default "Saved"
+ * collection on first use and returns it. Safe to call repeatedly — it
+ * returns the existing default if one is already there.
+ */
+export const getOrCreateDefaultCollection = async (user) => {
+  const userId = requireUser(user);
+  const { data: existing, error: listErr } = await supabase
+    .from(COLLECTIONS_TABLE)
+    .select(
+      "id, name, description, cover_image, is_private, created_at, updated_at, express_collection_items(count)",
+    )
+    .eq("user_id", userId)
+    .ilike("name", "Saved")
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  if (listErr) {
+    console.warn(
+      "[collectionsService] default-lookup failed:",
+      listErr.message,
+    );
+    return null;
+  }
+
+  if (existing && existing.length > 0) {
+    const row = existing[0];
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      coverImage: row.cover_image,
+      isPrivate: row.is_private,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      itemCount: Array.isArray(row.express_collection_items)
+        ? row.express_collection_items[0]?.count || 0
+        : 0,
+    };
+  }
+
+  const created = await createCollection(user, { name: "Saved" });
+  if (!created.success) return null;
+  const row = created.data;
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    coverImage: row.cover_image,
+    isPrivate: row.is_private,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    itemCount: 0,
+  };
+};
+
 export const collectionsService = {
   listUserCollections,
   createCollection,
   addProductToCollection,
   removeProductFromCollection,
   collectionsContainingProduct,
+  getCollectionItems,
+  getOrCreateDefaultCollection,
 };

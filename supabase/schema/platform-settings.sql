@@ -15,7 +15,9 @@ INSERT INTO public.express_settings (key, value, description) VALUES
   ('ai_model', '"openai/gpt-4o-mini"'::jsonb,
     'OpenRouter model id used by the in-app AI assistant (e.g. openai/gpt-4o-mini, anthropic/claude-3.5-haiku).'),
   ('store_registration_fee', '150'::jsonb,
-    'One-time store registration fee in GHS charged via Paystack.')
+    'One-time store registration fee in GHS charged via Paystack.'),
+  ('store_registration_free_enabled', 'false'::jsonb,
+    'When true, the customer/seller app bypasses the Paystack payment session during store registration and creates the store directly (admin-driven promotion).')
 ON CONFLICT (key) DO NOTHING;
 
 -- ── Deprecated product charge cleanup ───────────────────────────────────────

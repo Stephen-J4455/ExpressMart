@@ -21,3 +21,23 @@ export function navigateToScreen(screen, params) {
   }
   return false;
 }
+
+/**
+ * Pop the current screen off the navigation stack. Returns true when the
+ * navigator actually went back; false when the stack is at the root (no-op).
+ */
+export function goBack() {
+  if (navigationRef.isReady()) {
+    try {
+      if (typeof navigationRef.canGoBack === "function" && !navigationRef.canGoBack()) {
+        return false;
+      }
+      navigationRef.goBack();
+      return true;
+    } catch (e) {
+      console.warn("[navigationRef] goBack failed:", e?.message);
+      return false;
+    }
+  }
+  return false;
+}

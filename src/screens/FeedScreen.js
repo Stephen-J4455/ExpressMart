@@ -1524,8 +1524,13 @@ const buildFeedStyles = (c) =>
       flex: 1,
       minWidth: 0,
     },
+    // storeName / storeSub sit on top of the always-dark video canvas, so the
+    // text colour must stay readable on dark media regardless of the app
+    // theme. We hardcode white (with a dark text shadow for legibility on
+    // bright video frames) instead of going through c.light — in dark mode
+    // c.light resolves to near-black, which would be invisible on the video.
     storeName: {
-      color: c.light,
+      color: "#fff",
       fontSize: 14,
       fontWeight: "800",
       textShadowColor: "rgba(0,0,0,0.85)",
@@ -1533,7 +1538,7 @@ const buildFeedStyles = (c) =>
       textShadowRadius: 4,
     },
     storeSub: {
-      color: c.light,
+      color: "#fff",
       fontSize: 10,
       fontWeight: "600",
       marginTop: 1,
@@ -1565,11 +1570,16 @@ const buildFeedStyles = (c) =>
       height: 42,
       borderRadius: 10,
     },
+    // tinyProductCard is a near-white floating pill anchored on the dark video
+    // canvas. The thumb fallback and the title text must read on a LIGHT card
+    // surface regardless of app theme, so we use a fixed light-grey background
+    // and a fixed dark title colour (c.dark becomes light in dark mode, which
+    // would be invisible on the white card).
     tinyProductThumbFallback: {
       width: 42,
       height: 42,
       borderRadius: 10,
-      backgroundColor: c.surface,
+      backgroundColor: "#F1F1F1",
       alignItems: "center",
       justifyContent: "center",
     },
@@ -1578,7 +1588,7 @@ const buildFeedStyles = (c) =>
       minWidth: 0,
     },
     tinyProductTitle: {
-      color: c.dark,
+      color: "#0F172A",
       fontSize: 12,
       fontWeight: "800",
     },
@@ -1608,8 +1618,11 @@ const buildFeedStyles = (c) =>
     tagIconWrap: {
       backgroundColor: c.light,
     },
+    // actionLabel sits on the dark video canvas under the right-rail icons —
+    // always white, with a dark text shadow, so the label stays legible no
+    // matter which theme the rest of the app is in.
     actionLabel: {
-      color: c.light,
+      color: "#fff",
       fontSize: 11,
       fontWeight: "800",
       textShadowColor: "rgba(0,0,0,0.85)",
@@ -1653,7 +1666,7 @@ const buildFeedStyles = (c) =>
       paddingHorizontal: 16,
       paddingBottom: 10,
       borderBottomWidth: 1,
-      borderBottomColor: "#F1F1F1",
+      borderBottomColor: c.border,
     },
     commentModalTitle: {
       fontSize: 16,
@@ -1686,7 +1699,7 @@ const buildFeedStyles = (c) =>
       height: 32,
       borderRadius: 16,
       overflow: "hidden",
-      backgroundColor: "#F1F1F1",
+      backgroundColor: c.surface,
     },
     commentAvatar: {
       width: 32,
@@ -1720,7 +1733,7 @@ const buildFeedStyles = (c) =>
     },
     commentText: {
       fontSize: 14,
-      color: "#374151",
+      color: c.dark,
       lineHeight: 19,
     },
     commentInputRow: {
@@ -1730,7 +1743,7 @@ const buildFeedStyles = (c) =>
       paddingHorizontal: 16,
       paddingTop: 10,
       borderTopWidth: 1,
-      borderTopColor: "#F1F1F1",
+      borderTopColor: c.border,
     },
     commentInput: {
       flex: 1,
@@ -1795,7 +1808,7 @@ const buildFeedStyles = (c) =>
       paddingHorizontal: 12,
       paddingVertical: 10,
       borderBottomWidth: 1,
-      borderBottomColor: "#EEF2F6",
+      borderBottomColor: c.border,
     },
     menuItemRow: {
       flexDirection: "row",
@@ -1807,7 +1820,7 @@ const buildFeedStyles = (c) =>
     menuItemText: {
       fontSize: 15,
       fontWeight: "700",
-      color: "#EF4444",
+      color: c.badgeDanger,
     },
   });
 

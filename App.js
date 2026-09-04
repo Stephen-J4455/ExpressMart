@@ -58,7 +58,8 @@ import { CheckoutScreen } from "./src/screens/CheckoutScreen";
 import { OrdersScreen } from "./src/screens/OrdersScreen";
 import { OrderDetailScreen } from "./src/screens/OrderDetailScreen";
 import { OrderSuccessScreen } from "./src/screens/OrderSuccessScreen";
-import { WishlistScreen } from "./src/screens/WishlistScreen";
+import { CollectionsScreen } from "./src/screens/CollectionsScreen";
+import { CollectionDetailScreen } from "./src/screens/CollectionDetailScreen";
 import { NotificationsScreen } from "./src/screens/NotificationsScreen";
 import { AddressesScreen } from "./src/screens/AddressesScreen";
 import { PaymentsScreen } from "./src/screens/PaymentsScreen";
@@ -923,7 +924,13 @@ const linking = {
         },
       },
       Notifications: "notifications",
-      Wishlist: "wishlist",
+      Collections: "collections",
+      CollectionDetail: {
+        path: "collections/:collectionId",
+        parse: {
+          collectionId: (collectionId) => collectionId,
+        },
+      },
       Addresses: "addresses",
       Payments: "payments",
       Following: "following",
@@ -1036,9 +1043,14 @@ const AuthenticatedApp = () => {
     "Login to view order details",
     "Please sign in to access this order information.",
   );
-  const GuardedWishlist = withAuthGate(
-    WishlistScreen,
-    "Login to view wishlist",
+  const GuardedCollections = withAuthGate(
+    CollectionsScreen,
+    "Login to view your collections",
+    "Please sign in to access your saved items.",
+  );
+  const GuardedCollectionDetail = withAuthGate(
+    CollectionDetailScreen,
+    "Login to view this collection",
     "Please sign in to access your saved items.",
   );
   const GuardedNotifications = withAuthGate(
@@ -1159,7 +1171,8 @@ const AuthenticatedApp = () => {
         <Stack.Screen name="Orders" component={GuardedOrders} />
         <Stack.Screen name="OrderDetail" component={GuardedOrderDetail} />
         <Stack.Screen name="OrderSuccess" component={OrderSuccessScreen} />
-        <Stack.Screen name="Wishlist" component={GuardedWishlist} />
+        <Stack.Screen name="Collections" component={GuardedCollections} />
+        <Stack.Screen name="CollectionDetail" component={GuardedCollectionDetail} />
         <Stack.Screen name="Notifications" component={GuardedNotifications} />
         <Stack.Screen name="Addresses" component={GuardedAddresses} />
         <Stack.Screen name="Payments" component={GuardedPayments} />

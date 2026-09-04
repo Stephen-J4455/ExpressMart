@@ -41,6 +41,10 @@ import { radius } from "../theme/colors";
 import {
   TagAIProductCardRow,
 } from "../components/tagai/TagAIProductCard";
+import { ThinkingTrace } from "../components/tagai/ThinkingTrace";
+import { ThinkingOrb } from '@mhaadi/thinking-orbs-native';
+
+
 
 const TOOL_META = {
   search_products: { icon: "search", label: "Searching products" },
@@ -77,55 +81,17 @@ const SUGGESTIONS = [
   },
 ];
 
-/** Animated three-dot thinking indicator. */
+/** Animated thinking indicator. */
 const TypingDots = () => {
   const { colors } = useTheme();
   const styles = useAppStyles(buildStyles);
   return (
     <View style={styles.typingWrap}>
-      {[0, 1, 2].map((i) => (
-        <BouncingDot key={i} delay={i * 180} color={colors.primary} />
-      ))}
+      <ThinkingOrb state="connecting" size={64} color={colors.primary} />
     </View>
   );
 };
 
-const BouncingDot = ({ delay, color }) => {
-  const opacity = useRef(new Animated.Value(0.3)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 420,
-          delay,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0.3,
-          duration: 420,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [opacity, delay]);
-  return (
-    <Animated.View style={[dotStyle.dot, { opacity, backgroundColor: color }]} />
-  );
-};
-
-const dotStyle = StyleSheet.create({
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    marginHorizontal: 2.5,
-  },
-});
 
 /** Tool-call chip row rendered above an assistant reply. */
 const ToolChips = ({ tools }) => {
@@ -258,6 +224,8 @@ export const TagAIAssistantScreen = () => {
             </View>
             {/* Generative UI — interactive product cards from tool results */}
             <TagAIProductCardRow products={item.products} />
+            {/* Why-I-did-this panel — shows the agent's reasoning steps. */}
+            <ThinkingTrace steps={item.thinking} />
           </View>
         </View>
       );
@@ -328,9 +296,6 @@ export const TagAIAssistantScreen = () => {
         </Pressable>
       </View>
 
-      {/* Keyboard-aware container from react-native-keyboard-controller —
-          tracks the keyboard via the provider at the app root so the input
-          bar rides above the keyboard consistently on iOS and Android. */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         {messages.length === 0 && !isThinking ? (
           /* Empty-state hero — greeting + suggestion cards */
@@ -363,7 +328,9 @@ export const TagAIAssistantScreen = () => {
                   >
                     <Ionicons name={s.icon} size={18} color={colors.primary} />
                   </View>
-                  <Text style={[styles.suggestionTitle, { color: colors.dark }]}>
+                  <Text
+                    style={[styles.suggestionTitle, { color: colors.dark }]}
+                  >
                     {s.title}
                   </Text>
                   <Text
@@ -383,7 +350,10 @@ export const TagAIAssistantScreen = () => {
             inverted
             keyExtractor={keyExtractor}
             renderItem={renderItem}
-            contentContainerStyle={[styles.listContent, { paddingHorizontal: 14 }]}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingHorizontal: 14 },
+            ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           />
@@ -609,16 +579,12 @@ const buildStyles = (c) =>
       flexDirection: "row",
       alignItems: "center",
       alignSelf: "flex-start",
-      backgroundColor: c.surface,
       borderRadius: radius.lg,
       borderBottomLeftRadius: radius.xs,
       paddingHorizontal: 14,
       paddingVertical: 12,
       marginBottom: 14,
-      marginLeft: 34,
-      borderWidth: 1,
-      borderStyle: "solid",
-      borderColor: c.border,
+      marginLeft: 0,
     },
     inputBar: {
       flexDirection: "row",

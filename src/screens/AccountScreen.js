@@ -34,36 +34,7 @@ import { supabase } from "../lib/supabase";
 import { SellerAdminScreen } from "./SellerAdminScreen";
 import { radius } from "../theme/colors";
 
-const quickActions = [
-  {
-    icon: "cube",
-    label: "Orders",
-    screen: "Orders",
-    color: "#3B82F6",
-    bg: "#EFF6FF",
-  },
-  {
-    icon: "heart",
-    label: "Wishlist",
-    screen: "Wishlist",
-    color: "#EF4444",
-    bg: "#FEF2F2",
-  },
-  {
-    icon: "location",
-    label: "Addresses",
-    screen: "Addresses",
-    color: "#22C55E",
-    bg: "#F0FDF4",
-  },
-  {
-    icon: "people",
-    label: "Following",
-    screen: "Following",
-    color: "#A855F7",
-    bg: "#FAF5FF",
-  },
-];
+import { quickActions } from "../data/quickActions";
 
 const menuSections = [
   {

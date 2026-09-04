@@ -6,6 +6,9 @@
 //      complete and the destination screen mount its element first.
 //   3. Renders a dimmed backdrop with a "spotlight" hole over the element, a
 //      pulsing highlight ring, a bouncing pointer arrow and a label bubble.
+//   4. Supports richer pointer shapes (rect / circle / arrow / bracket),
+//      sizes (sm / md / lg), directions (up / down / left / right / auto),
+//      and absolute `coords {x, y, w, h}` for free-form targets.
 // Auto-dismisses after a few seconds or on tap.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -31,6 +34,29 @@ const MAX_MEASURE_ATTEMPTS = 25; // ~4.5s of retries (covers navigation mount)
 const AUTO_DISMISS_MS = 6000;
 const SPOTLIGHT_PAD = 10;
 
+const SIZE_PADS = { sm: 6, md: SPOTLIGHT_PAD, lg: 18 };
+
+const inferDirection = (rect, win) => {
+  if (!rect || !win) return "down";
+  const midY = rect.y + rect.height / 2;
+  return midY < win.height / 2 ? "down" : "up";
+};
+
+const arrowTransform = (direction) => {
+  switch (direction) {
+    case "up":
+      return [{ rotate: "180deg" }];
+    case "left":
+      return [{ rotate: "-90deg" }];
+    case "right":
+      return [{ rotate: "90deg" }];
+    case "down":
+    case "auto":
+    default:
+      return [{ rotate: "0deg" }];
+  }
+};
+
 export const ScreenPointerOverlay = () => {
   const { colors, isDark } = useTheme();
   const styles = useAppStyles(buildStyles);
@@ -41,11 +67,15 @@ export const ScreenPointerOverlay = () => {
   const [found, setFound] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [visible, setVisible] = useState(false);
+  // Previous rect — used to draw a brief animated trail when the pointer
+  // jumps between positions (e.g. scroll then point).
+  const prevRectRef = useRef(null);
 
   // Animations
   const fade = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
   const pointerBob = useRef(new Animated.Value(0)).current;
+  const trail = useRef(new Animated.Value(0)).current;
   const pulseLoop = useRef(null);
   const bobLoop = useRef(null);
 
@@ -57,6 +87,13 @@ export const ScreenPointerOverlay = () => {
   // at the middle of the screen.
   const isGenericTarget =
     !meta && Boolean(groundingTarget?.label ?? groundingTarget?.hint);
+
+  // Pull the new optional fields off the target.
+  const targetShape = groundingTarget?.shape || "rect";
+  const targetSize = groundingTarget?.size || "md";
+  const targetCoords = groundingTarget?.coords || null;
+  const targetDirectionRaw = groundingTarget?.direction || "auto";
+  const spotlightPad = SIZE_PADS[targetSize] || SPOTLIGHT_PAD;
 
   // Measure (with retries) whenever the target changes.
   useEffect(() => {
@@ -114,6 +151,38 @@ export const ScreenPointerOverlay = () => {
       if (timer) clearTimeout(timer);
     };
   }, [targetKey, nonce, getGroundingRef]);
+
+  // Free-form target via absolute coords — bypass measurement entirely.
+  // The LLM passes {x, y, w, h} in window coordinates.
+  useEffect(() => {
+    if (!targetCoords) return;
+    const c = targetCoords;
+    if (
+      Number.isFinite(c.x) &&
+      Number.isFinite(c.y) &&
+      Number.isFinite(c.w) &&
+      Number.isFinite(c.h) &&
+      c.w > 0 &&
+      c.h > 0
+    ) {
+      // Stash previous rect for the animated trail.
+      prevRectRef.current = rect;
+      setRect({ x: c.x, y: c.y, width: c.w, height: c.h });
+      setFound(true);
+      setNotFound(false);
+      // Run the trail animation once.
+      trail.setValue(0);
+      Animated.timing(trail, {
+        toValue: 1,
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }
+    // We intentionally do NOT depend on `rect` here so this runs only when
+    // targetCoords change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetCoords, nonce]);
 
   const dismiss = () => {
     Animated.timing(fade, {
@@ -194,17 +263,53 @@ export const ScreenPointerOverlay = () => {
     inputRange: [0, 1],
     outputRange: [0, -7],
   });
+  // Direction-aware translate for the caret — when the pointer is at the
+  // bottom half of the screen we flip so it still points "outward".
+  const directionTranslate =
+    resolvedDirection === "up"
+      ? pointerBob.interpolate({ inputRange: [0, 1], outputRange: [0, 7] })
+      : resolvedDirection === "left"
+      ? pointerBob.interpolate({ inputRange: [0, 1], outputRange: [0, 7] })
+      : resolvedDirection === "right"
+      ? pointerBob.interpolate({ inputRange: [0, 1], outputRange: [0, 7] })
+      : pointerTranslateY;
 
   // Spotlight geometry: a padded hole around the measured target.
   const spotlight = useMemo(() => {
     if (!rect) return null;
     return {
-      x: Math.max(rect.x - SPOTLIGHT_PAD, 0),
-      y: Math.max(rect.y - SPOTLIGHT_PAD, 0),
-      width: rect.width + SPOTLIGHT_PAD * 2,
-      height: rect.height + SPOTLIGHT_PAD * 2,
+      x: Math.max(rect.x - spotlightPad, 0),
+      y: Math.max(rect.y - spotlightPad, 0),
+      width: rect.width + spotlightPad * 2,
+      height: rect.height + spotlightPad * 2,
     };
-  }, [rect]);
+  }, [rect, spotlightPad]);
+
+  // Direction (final, after "auto" inference) — drives the pointer/arrow
+  // orientation and the bobbing vector.
+  const resolvedDirection = useMemo(() => {
+    if (targetDirectionRaw && targetDirectionRaw !== "auto") return targetDirectionRaw;
+    return inferDirection(rect, Dimensions.get("window"));
+  }, [targetDirectionRaw, rect, nonce]);
+
+  // Animated trail — a short line from the previous rect to the current one.
+  // We render it as a thin View positioned between the two rects and fade it
+  // out via the `trail` animated value.
+  const trailView = useMemo(() => {
+    const prev = prevRectRef.current;
+    if (!prev || !rect) return null;
+    const px = prev.x + prev.width / 2;
+    const py = prev.y + prev.height / 2;
+    const cx = rect.x + rect.width / 2;
+    const cy = rect.y + rect.height / 2;
+    const dx = cx - px;
+    const dy = cy - py;
+    const length = Math.hypot(dx, dy);
+    if (length < 4) return null;
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+    return { x: px, y: py, length, angle };
+  }, [rect, nonce]);
+  const trailOpacity = trail.interpolate({ inputRange: [0, 1], outputRange: [0.7, 0] });
 
   // Generic pointing mode — no registered ref matched this key. Instead of
   // dead-ending, highlight the middle of the current screen so TagAI can
@@ -319,9 +424,111 @@ export const ScreenPointerOverlay = () => {
                 width: spotlight.width,
                 height: spotlight.height,
                 borderColor: colors.accent,
+                borderRadius:
+                  targetShape === "circle"
+                    ? Math.max(spotlight.width, spotlight.height) / 2
+                    : targetShape === "bracket"
+                    ? 0
+                    : radius.md,
               },
             ]}
           />
+
+          {/* Animated trail — a thin glowing line from the previous rect to
+              the current one. Fades out automatically. */}
+          {trailView ? (
+            <Animated.View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                left: trailView.x,
+                top: trailView.y,
+                width: trailView.length,
+                height: 2,
+                backgroundColor: colors.accent,
+                opacity: trailOpacity,
+                transform: [
+                  { translateY: -1 },
+                  { rotate: `${trailView.angle}deg` },
+                ],
+                shadowColor: colors.accent,
+                shadowOpacity: 0.6,
+                shadowRadius: 4,
+              }}
+            />
+          ) : null}
+
+          {/* Arrow shape — a big directional arrow drawn over the target. */}
+          {targetShape === "arrow" ? (
+            <Animated.View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                left: rect.x + rect.width / 2 - 14,
+                top: rect.y + rect.height / 2 - 14,
+                width: 28,
+                height: 28,
+                alignItems: "center",
+                justifyContent: "center",
+                transform: [
+                  ...arrowTransform(resolvedDirection),
+                  {
+                    translateY: pointerBob.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, -6],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Ionicons name="caret-up-circle" size={28} color={colors.accent} />
+            </Animated.View>
+          ) : null}
+
+          {/* Bracket shape — four corner brackets framing the target. */}
+          {targetShape === "bracket" ? (
+            <>
+              {[
+                { left: spotlight.x, top: spotlight.y, corner: "tl" },
+                {
+                  left: spotlight.x + spotlight.width - 14,
+                  top: spotlight.y,
+                  corner: "tr",
+                },
+                {
+                  left: spotlight.x,
+                  top: spotlight.y + spotlight.height - 14,
+                  corner: "bl",
+                },
+                {
+                  left: spotlight.x + spotlight.width - 14,
+                  top: spotlight.y + spotlight.height - 14,
+                  corner: "br",
+                },
+              ].map((b, i) => (
+                <View
+                  key={`bracket-${i}`}
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    left: b.left,
+                    top: b.top,
+                    width: 14,
+                    height: 14,
+                    borderColor: colors.accent,
+                    borderTopWidth: b.corner === "tl" || b.corner === "tr" ? 3 : 0,
+                    borderLeftWidth: b.corner === "tl" || b.corner === "bl" ? 3 : 0,
+                    borderRightWidth: b.corner === "tr" || b.corner === "br" ? 3 : 0,
+                    borderBottomWidth: b.corner === "bl" || b.corner === "br" ? 3 : 0,
+                    borderTopLeftRadius: b.corner === "tl" ? 6 : 0,
+                    borderTopRightRadius: b.corner === "tr" ? 6 : 0,
+                    borderBottomLeftRadius: b.corner === "bl" ? 6 : 0,
+                    borderBottomRightRadius: b.corner === "br" ? 6 : 0,
+                  }}
+                />
+              ))}
+            </>
+          ) : null}
 
           {/* Bouncing pointer + label bubble */}
           <Animated.View
@@ -333,7 +540,7 @@ export const ScreenPointerOverlay = () => {
                 top: labelAbove
                   ? Math.max(spotlight.y - 96, insets.top + 8)
                   : Math.min(spotlight.y + spotlight.height + 10, 99999),
-                transform: [{ translateY: pointerTranslateY }],
+                transform: [{ translateY: directionTranslate }],
               },
             ]}
           >

@@ -17,6 +17,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import { useOrder } from "../context/OrderContext";
 import { useToast } from "../context/ToastContext";
 import { useAds } from "../context/AdsContext";
 import { supabase, supabaseUrl } from "../lib/supabase";
@@ -42,6 +43,14 @@ export const CheckoutScreen = ({ navigation }) => {
   const { items, total, clearCart } = useCart();
   const toast = useToast();
   const { fetchAdsByPlacement } = useAds();
+  // Addresses are preloaded in the background by OrderContext (mounted at
+  // app level), so we get an instant list here without a network hop.
+  const {
+    addresses: contextAddresses,
+    fetchAddresses: refreshContextAddresses,
+    updateAddress: contextUpdateAddress,
+    deleteAddress: contextDeleteAddress,
+  } = useOrder();
 
   // AI grounding refs — let the TagAI point at these UI elements
   // (e.g. "where is my coupon code box?").
@@ -53,10 +62,16 @@ export const CheckoutScreen = ({ navigation }) => {
   const [promoChecking, setPromoChecking] = useState(false);
 
   const [addresses, setAddresses] = useState([]);
+  const [addressesLoading, setAddressesLoading] = useState(false);
   const [checkoutAds, setCheckoutAds] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showAddAddress, setShowAddAddress] = useState(false);
+  // When non-null we're editing that existing address; null means "add new".
+  const [editingAddress, setEditingAddress] = useState(null);
+  // id of the address currently being deleted (so we can show a per-row
+  // spinner instead of freezing the whole section).
+  const [deletingAddressId, setDeletingAddressId] = useState(null);
   const [newAddress, setNewAddress] = useState({
     full_name: "",
     phone: "",
@@ -116,6 +131,10 @@ export const CheckoutScreen = ({ navigation }) => {
 
   // Promo discount for the applied coupon, computed against only the cart
   // lines the coupon covers (scoped coupons ignore everything else).
+  // IMPORTANT: `eligible` only includes product prices (unitPrice × quantity)
+  // — shipping fees are NEVER part of the discount base. Coupons only ever
+  // reduce the subtotal, never the shipping fee, regardless of which store
+  // issued the coupon.
   const promoDiscount = useMemo(() => {
     if (!appliedCoupon) return 0;
     let eligible = 0;
@@ -135,7 +154,9 @@ export const CheckoutScreen = ({ navigation }) => {
         : Math.min(Number(appliedCoupon.discount_value || 0), eligible);
     const cap = Number(appliedCoupon.max_discount_amount || 0);
     if (cap > 0) amount = Math.min(amount, cap);
-    // A promo can never push the payable total below zero.
+    // A promo can never push the payable total below zero. Note: this cap
+    // exists only as a safety net; shipping is added back separately below
+    // and is NEVER discounted by the coupon.
     amount = Math.min(amount, total + totalShippingFee);
     return Math.max(Math.round(amount * 100) / 100, 0);
   }, [appliedCoupon, items, total, totalShippingFee]);
@@ -304,36 +325,46 @@ export const CheckoutScreen = ({ navigation }) => {
     }
   }, [isAuthenticated, navigation]);
 
-  // Fetch addresses
+  // Hydrate the local addresses list from the OrderContext cache. The context
+  // preloads addresses the moment the user authenticates (at app boot), so on
+  // most visits this is synchronous and the section renders immediately. If
+  // the cache is empty (e.g. user just signed in) we still kick off a
+  // background refresh — no blocking spinner, no duplicate fetch.
   useEffect(() => {
-    if (user) {
-      fetchAddresses();
+    if (!user) return;
+    setAddresses(contextAddresses || []);
+
+    if (
+      (!contextAddresses || contextAddresses.length === 0) &&
+      !addressesLoading
+    ) {
+      setAddressesLoading(true);
+      Promise.resolve(refreshContextAddresses()).finally(() =>
+        setAddressesLoading(false),
+      );
     }
-  }, [user]);
+  }, [user, contextAddresses, refreshContextAddresses, addressesLoading]);
+
+  // Re-sync the local list whenever the context list changes (e.g. add/delete
+  // from another screen returns here with an updated cache).
+  useEffect(() => {
+    setAddresses(contextAddresses || []);
+  }, [contextAddresses]);
+
+  // Auto-pick the default address (or the first one) the moment we have a
+  // list but no selection. Done as a separate effect so it doesn't fight
+  // with the hydration effect above and so it re-runs if the user clears
+  // their selection.
+  useEffect(() => {
+    if (!user) return;
+    if (selectedAddress) return;
+    if (addresses.length === 0) return;
+    setSelectedAddress(addresses[0]);
+  }, [user, addresses, selectedAddress]);
 
   useEffect(() => {
     fetchAdsByPlacement("checkout").then((ads) => setCheckoutAds(ads || []));
   }, [fetchAdsByPlacement]);
-
-  const fetchAddresses = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("express_addresses")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("is_default", { ascending: false });
-
-      if (error) throw error;
-      setAddresses(data || []);
-
-      // Auto-select first address (default or first available) if no address is selected
-      if (data && data.length > 0 && !selectedAddress) {
-        setSelectedAddress(data[0]);
-      }
-    } catch (err) {
-      console.error("Error fetching addresses:", err);
-    }
-  };
 
   useEffect(() => {
     if (profile) {
@@ -417,7 +448,39 @@ export const CheckoutScreen = ({ navigation }) => {
     }
   };
 
-  const handleAddAddress = async () => {
+  // Reset the add/edit form to a blank state and open it. Used for both the
+  // "+" header button and the "edit" action on a row.
+  const openAddressForm = (address = null) => {
+    if (address) {
+      setEditingAddress(address);
+      setNewAddress({
+        full_name: address.full_name || "",
+        phone: address.phone || "",
+        street_address: address.street_address || "",
+        city: address.city || "",
+        state: address.state || "",
+      });
+    } else {
+      setEditingAddress(null);
+      setNewAddress({
+        full_name: profile?.full_name || "",
+        phone: profile?.phone || "",
+        street_address: "",
+        city: "",
+        state: "",
+      });
+    }
+    setShowAddAddress(true);
+  };
+
+  const closeAddressForm = () => {
+    setShowAddAddress(false);
+    setEditingAddress(null);
+  };
+
+  // Save the form — inserts a new address when `editingAddress` is null,
+  // otherwise patches the existing row in place.
+  const handleSaveAddress = async () => {
     if (
       !newAddress.full_name ||
       !newAddress.phone ||
@@ -431,29 +494,101 @@ export const CheckoutScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("express_addresses")
-        .insert({ ...newAddress, user_id: user.id })
-        .select()
-        .single();
+      if (editingAddress) {
+        const { data, error } = await supabase
+          .from("express_addresses")
+          .update({
+            full_name: newAddress.full_name,
+            phone: newAddress.phone,
+            street_address: newAddress.street_address,
+            city: newAddress.city,
+            state: newAddress.state,
+          })
+          .eq("id", editingAddress.id)
+          .eq("user_id", user.id)
+          .select()
+          .single();
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setAddresses((prev) => [...prev, data]);
-      setSelectedAddress(data);
-      setShowAddAddress(false);
-      setNewAddress({
-        full_name: profile?.full_name || "",
-        phone: profile?.phone || "",
-        street_address: "",
-        city: "",
-        state: "",
-      });
+        // Update the local cache immediately for snappy UI.
+        setAddresses((prev) =>
+          prev.map((a) => (a.id === data.id ? data : a)),
+        );
+        // If the edited address is the one selected, refresh the selection
+        // so downstream code (order submission) sees the new values.
+        if (selectedAddress?.id === data.id) setSelectedAddress(data);
+        // Refresh the shared context cache for other screens.
+        refreshContextAddresses?.();
+        // Also patch the context in-place via the exposed action — OrderContext
+        // already does this internally, but call it for a single source of
+        // truth.
+        contextUpdateAddress?.(data.id, data);
+        toast.success("Address updated", "");
+      } else {
+        const { data, error } = await supabase
+          .from("express_addresses")
+          .insert({ ...newAddress, user_id: user.id })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        setAddresses((prev) => [...prev, data]);
+        setSelectedAddress(data);
+        // Keep the shared OrderContext cache in sync so the next screen
+        // (e.g. AddressesScreen) sees this address without a re-fetch.
+        refreshContextAddresses?.();
+        toast.success("Address added", "");
+      }
+      closeAddressForm();
     } catch (err) {
       toast.error("Error", err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Delete an address. If it was the currently selected one, auto-pick the
+  // next available address so the checkout flow never gets stuck.
+  const handleDeleteAddress = (addr) => {
+    if (!addr?.id) return;
+    Alert.alert(
+      "Delete address",
+      `Remove "${addr.full_name}" from your saved addresses?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingAddressId(addr.id);
+            try {
+              // Drop from local state immediately for snappy UI.
+              setAddresses((prev) => prev.filter((a) => a.id !== addr.id));
+              // If the deleted address was the active selection, clear it
+              // (the auto-select effect below will pick a new one).
+              if (selectedAddress?.id === addr.id) setSelectedAddress(null);
+              // Use the context's delete so the shared cache stays in sync
+              // for other screens.
+              const { error } =
+                (await contextDeleteAddress?.(addr.id)) || {};
+              if (error) throw error;
+              // Best-effort refresh as a safety net.
+              refreshContextAddresses?.();
+              toast.success("Address deleted", "");
+            } catch (err) {
+              toast.error("Could not delete", err.message);
+              // Re-sync the local list if the network op failed so the row
+              // doesn't disappear from the UI while still existing in DB.
+              refreshContextAddresses?.();
+            } finally {
+              setDeletingAddressId(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleCheckout = async () => {
@@ -610,73 +745,164 @@ export const CheckoutScreen = ({ navigation }) => {
           <View style={styles.sectionHeader}>
             <Ionicons name="location" size={20} color={themeColors.primary} />
             <Text style={styles.sectionTitle}>Delivery Address</Text>
+            <View style={{ flex: 1 }} />
+            {/* Compact "+" button to add a new address — sits in the
+                top-right of the card so the address list stays focused
+                on the saved rows. */}
+            <Pressable
+              onPress={() => openAddressForm(null)}
+              style={({ pressed }) => [
+                styles.headerActionButton,
+                pressed && { opacity: 0.6 },
+              ]}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Add new address"
+            >
+              <Ionicons
+                name="add-circle"
+                size={22}
+                color={themeColors.primary}
+              />
+              <Text style={styles.headerActionButtonText}>Add</Text>
+            </Pressable>
           </View>
 
-          {selectedAddress ? (
-            <Pressable
-              style={styles.addressCard}
-              onPress={() => setShowAddAddress(true)}
-            >
-              <View style={styles.addressContent}>
-                <Text style={styles.addressName}>
-                  {selectedAddress.full_name}
-                </Text>
-                <Text style={styles.addressPhone}>{selectedAddress.phone}</Text>
-                <Text style={styles.addressText}>
-                  {selectedAddress.street_address}
-                </Text>
-                <Text style={styles.addressText}>
-                  {selectedAddress.city}, {selectedAddress.state}
+          {addresses.length === 0 ? (
+            addressesLoading ? (
+              <View
+                style={[
+                  styles.addressOption,
+                  { justifyContent: "center", opacity: 0.7 },
+                ]}
+              >
+                <ActivityIndicator
+                  size="small"
+                  color={themeColors.primary}
+                />
+                <Text
+                  style={[
+                    styles.addressOptionName,
+                    { marginLeft: 8, color: themeColors.muted },
+                  ]}
+                >
+                  Loading your addresses…
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={themeColors.muted} />
-            </Pressable>
+            ) : (
+              <Pressable
+                style={styles.addButton}
+                onPress={() => openAddressForm(null)}
+              >
+                <Ionicons
+                  name="add-circle"
+                  size={24}
+                  color={themeColors.primary}
+                />
+                <Text style={styles.addButtonText}>Add Delivery Address</Text>
+              </Pressable>
+            )
           ) : (
-            <Pressable
-              style={styles.addButton}
-              onPress={() => setShowAddAddress(true)}
-            >
-              <Ionicons name="add-circle" size={24} color={themeColors.primary} />
-              <Text style={styles.addButtonText}>Add Delivery Address</Text>
-            </Pressable>
-          )}
-
-          {/* Address list */}
-          {addresses.length > 0 && !showAddAddress && (
+            /* Single unified list — the selected address is highlighted and
+               shows its full details inline. This replaces the previous
+               duplicate "selected card + list item" render where the same
+               address appeared twice on screen. */
             <View style={styles.addressList}>
-              {addresses.map((addr) => (
-                <Pressable
-                  key={addr.id}
-                  style={[
-                    styles.addressOption,
-                    selectedAddress?.id === addr.id &&
-                      styles.addressOptionSelected,
-                  ]}
-                  onPress={() => setSelectedAddress(addr)}
-                >
-                  <View style={styles.radioOuter}>
-                    {selectedAddress?.id === addr.id && (
-                      <View style={styles.radioInner} />
+              {addresses.map((addr) => {
+                const isSelected = selectedAddress?.id === addr.id;
+                const isDeleting = deletingAddressId === addr.id;
+                return (
+                  <Pressable
+                    key={addr.id}
+                    style={[
+                      styles.addressOption,
+                      isSelected && styles.addressOptionSelected,
+                    ]}
+                    onPress={() => setSelectedAddress(addr)}
+                  >
+                    <View style={styles.radioOuter}>
+                      {isSelected && <View style={styles.radioInner} />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.addressOptionName}>
+                        {addr.full_name}
+                      </Text>
+                      {isSelected ? (
+                        <>
+                          <Text style={styles.addressOptionText}>
+                            {addr.phone}
+                          </Text>
+                          <Text style={styles.addressOptionText}>
+                            {addr.street_address}
+                          </Text>
+                          <Text style={styles.addressOptionText}>
+                            {addr.city}, {addr.state}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text style={styles.addressOptionText}>
+                          {addr.street_address}, {addr.city}
+                        </Text>
+                      )}
+                    </View>
+
+                    {/* Per-row edit + delete actions. The inner Pressables
+                        take responder ownership on tap, so the row's
+                        onPress (select address) won't fire here. */}
+                    {isDeleting ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={themeColors.danger || "#EF4444"}
+                      />
+                    ) : (
+                      <View style={styles.addressRowActions}>
+                        <Pressable
+                          onPress={() => openAddressForm(addr)}
+                          hitSlop={10}
+                          style={({ pressed }) => [
+                            styles.addressIconButton,
+                            pressed && { opacity: 0.5 },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Edit address for ${addr.full_name}`}
+                        >
+                          <Ionicons
+                            name="create-outline"
+                            size={18}
+                            color={themeColors.primary}
+                          />
+                        </Pressable>
+                        <Pressable
+                          onPress={() => handleDeleteAddress(addr)}
+                          hitSlop={10}
+                          style={({ pressed }) => [
+                            styles.addressIconButton,
+                            pressed && { opacity: 0.5 },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete address for ${addr.full_name}`}
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={18}
+                            color={themeColors.danger || "#EF4444"}
+                          />
+                        </Pressable>
+                      </View>
                     )}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.addressOptionName}>
-                      {addr.full_name}
-                    </Text>
-                    <Text style={styles.addressOptionText}>
-                      {addr.street_address}, {addr.city}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
+                  </Pressable>
+                );
+              })}
             </View>
           )}
         </View>
 
-        {/* Add Address Form */}
+        {/* Add / Edit Address Form */}
         {showAddAddress && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>New Address</Text>
+            <Text style={styles.sectionTitle}>
+              {editingAddress ? "Edit Address" : "New Address"}
+            </Text>
             <TextInput
               style={styles.input}
               placeholder="Full Name"
@@ -728,19 +954,21 @@ export const CheckoutScreen = ({ navigation }) => {
             <View style={styles.formButtons}>
               <Pressable
                 style={styles.cancelButton}
-                onPress={() => setShowAddAddress(false)}
+                onPress={closeAddressForm}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </Pressable>
               <Pressable
                 style={styles.saveButton}
-                onPress={handleAddAddress}
+                onPress={handleSaveAddress}
                 disabled={loading}
               >
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.saveButtonText}>Save Address</Text>
+                  <Text style={styles.saveButtonText}>
+                    {editingAddress ? "Update Address" : "Save Address"}
+                  </Text>
                 )}
               </Pressable>
             </View>
@@ -761,15 +989,76 @@ export const CheckoutScreen = ({ navigation }) => {
               (product.discount > 0
                 ? product.price * (1 - product.discount / 100)
                 : product.price);
+            // When a coupon is applied, flag whether this line is eligible
+            // and compute its share of the discount. couponCoversLine already
+            // enforces store / category / max-product-price scope, so the
+            // indicator only appears on items from the issuing store.
+            const isCoveredByCoupon = appliedCoupon
+              ? couponCoversLine(appliedCoupon, item, effectivePrice)
+              : false;
+            // Per-line share of the total promo discount, proportional to this
+            // line's contribution to the eligible subtotal. Shipping is never
+            // included in the eligible pool (see promoDiscount above), so the
+            // coupon can never reduce the shipping fee.
+            let lineDiscount = 0;
+            if (isCoveredByCoupon && promoDiscount > 0) {
+              const eligibleSubtotal = items.reduce((sum, it) => {
+                const up =
+                  typeof it.price === "number"
+                    ? it.price
+                    : it.product?.discount > 0
+                      ? it.product.price * (1 - it.product.discount / 100)
+                      : it.product?.price || 0;
+                return couponCoversLine(appliedCoupon, it, up)
+                  ? sum + up * it.quantity
+                  : sum;
+              }, 0);
+              if (eligibleSubtotal > 0) {
+                lineDiscount =
+                  (effectivePrice * quantity * promoDiscount) /
+                  eligibleSubtotal;
+                // Round to 2dp and never exceed the line subtotal.
+                lineDiscount =
+                  Math.min(
+                    Math.round(lineDiscount * 100) / 100,
+                    effectivePrice * quantity,
+                  );
+              }
+            }
             return (
               <View key={product.id} style={styles.orderItem}>
-                <Text style={styles.orderItemTitle} numberOfLines={1}>
-                  {product.title}
-                </Text>
+                <View style={styles.orderItemLeft}>
+                  <Text style={styles.orderItemTitle} numberOfLines={1}>
+                    {product.title}
+                  </Text>
+                  {isCoveredByCoupon && (
+                    <View style={styles.couponBadge}>
+                      <Ionicons
+                        name="pricetag"
+                        size={11}
+                        color="#10B981"
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text
+                        style={styles.couponBadgeText}
+                        numberOfLines={1}
+                      >
+                        {appliedCoupon.code} applied
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.orderItemQty}>x{quantity}</Text>
-                <Text style={styles.orderItemPrice}>
-                  GH₵{(effectivePrice * quantity).toLocaleString()}
-                </Text>
+                <View style={styles.orderItemRight}>
+                  <Text style={styles.orderItemPrice}>
+                    GH₵{(effectivePrice * quantity).toLocaleString()}
+                  </Text>
+                  {lineDiscount > 0 && (
+                    <Text style={styles.orderItemDiscount}>
+                      −GH₵{lineDiscount.toFixed(2)}
+                    </Text>
+                  )}
+                </View>
               </View>
             );
           })}
@@ -781,7 +1070,14 @@ export const CheckoutScreen = ({ navigation }) => {
             <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Shipping Fee</Text>
+            <View style={styles.summaryLabelCluster}>
+              <Text style={styles.summaryLabel}>Shipping Fee</Text>
+              {appliedCoupon && totalShippingFee > 0 && (
+                <Text style={styles.summaryNote}>
+                  {"\u00B7"} not affected by coupon
+                </Text>
+              )}
+            </View>
             <Text
               style={[
                 styles.summaryValue,
@@ -1046,40 +1342,28 @@ const buildCheckoutStyles = (c) =>
     alignItems: "center",
     marginBottom: 16,
   },
+  // Small "+" action that lives in the top-right of a section card.
+  headerActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  headerActionButtonText: {
+    marginLeft: 4,
+    color: c.primary,
+    fontSize: 13,
+    fontWeight: "600",
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: c.dark,
     marginLeft: 8,
   },
-  addressCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: c.light,
-    borderRadius: 12,
-  },
-  addressContent: {
-    flex: 1,
-  },
   adSection: {
     paddingTop: 8,
     paddingBottom: 2,
-  },
-  addressName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: c.dark,
-  },
-  addressPhone: {
-    fontSize: 14,
-    color: c.muted,
-    marginTop: 2,
-  },
-  addressText: {
-    fontSize: 14,
-    color: c.dark,
-    marginTop: 4,
   },
   addButton: {
     flexDirection: "row",
@@ -1111,6 +1395,20 @@ const buildCheckoutStyles = (c) =>
     backgroundColor: `${c.primary}10`,
     borderWidth: 1,
     borderColor: c.primary,
+  },
+  // Right-aligned cluster of icon-only buttons inside an address row.
+  addressRowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 8,
+  },
+  addressIconButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 2,
   },
   radioOuter: {
     width: 20,
@@ -1183,10 +1481,40 @@ const buildCheckoutStyles = (c) =>
     alignItems: "center",
     marginBottom: 12,
   },
-  orderItemTitle: {
+  // Left cluster: title + optional coupon badge stacked vertically.
+  orderItemLeft: {
     flex: 1,
+    flexDirection: "column",
+    justifyContent: "center",
+  },
+  orderItemTitle: {
     fontSize: 14,
     color: c.dark,
+  },
+  // Right cluster: price + optional per-line discount stacked vertically.
+  orderItemRight: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+  },
+  // Small green pill that appears under a cart line when the applied coupon
+  // covers it. Re-uses the success-green color used elsewhere in the file
+  // (free-shipping text, discount totals) for visual consistency.
+  couponBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    marginTop: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "#10B98114",
+    borderWidth: 1,
+    borderColor: "#10B98133",
+  },
+  couponBadgeText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#10B981",
   },
   orderItemQty: {
     fontSize: 14,
@@ -1197,6 +1525,14 @@ const buildCheckoutStyles = (c) =>
     fontSize: 14,
     fontWeight: "600",
     color: c.dark,
+  },
+  // Per-line share of the coupon discount, shown directly under the price so
+  // the customer can see how the overall "Discount (CODE)" line is split.
+  orderItemDiscount: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#10B981",
+    marginTop: 2,
   },
   divider: {
     height: 1,
@@ -1210,6 +1546,21 @@ const buildCheckoutStyles = (c) =>
   },
   summaryLabel: {
     color: c.muted,
+  },
+  // Used to show a small inline annotation next to a summary label (e.g.
+  // "not affected by coupon" beside the shipping fee when a promo is in
+  // effect, so the customer can see at a glance that shipping is intact).
+  summaryLabelCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+    flexWrap: "wrap",
+  },
+  summaryNote: {
+    color: c.muted,
+    fontSize: 11,
+    marginLeft: 6,
+    fontStyle: "italic",
   },
   summaryValue: {
     fontWeight: "600",
