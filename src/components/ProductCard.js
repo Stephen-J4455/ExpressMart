@@ -1,0 +1,1264 @@
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  Modal,
+} from "react-native";
+import { useState, useContext, useEffect, useRef, useCallback } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useCart } from "../context/CartContext";
+import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import { radius } from "../theme/colors";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
+import { FlashSaleBadge } from "./FlashSaleBadge";
+import { FlashSaleCountdown } from "./FlashSaleCountdown";
+import { LazyImage } from "./LazyImage";
+
+const SELLER_BADGE_CONFIG = {
+  verified: {
+    label: "Verified Seller",
+    icon: "checkmark-circle",
+    color: "#10B981",
+  },
+  top_seller: { label: "Top Seller", icon: "trophy", color: "#F59E0B" },
+  fast_shipping: { label: "Fast Shipping", icon: "flash", color: "#3B82F6" },
+  eco_friendly: { label: "Eco Friendly", icon: "leaf", color: "#22C55E" },
+  local: { label: "Local Business", icon: "location", color: "#8B5CF6" },
+  trending: { label: "Trending", icon: "trending-up", color: "#EC4899" },
+  premium: { label: "Premium", icon: "star", color: "#EAB308" },
+};
+
+// Display order of seller badges — verified always first
+const SELLER_BADGE_PRIORITY = [
+  "verified",
+  "top_seller",
+  "premium",
+  "fast_shipping",
+  "trending",
+  "eco_friendly",
+  "local",
+];
+
+const toBoolean = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+  return false;
+};
+
+export const ProductCard = ({
+  product,
+  style,
+  variant = "grid",
+  onPress,
+  hideCta,
+  footerAction,
+  compact,
+  flashSale,
+  theme,
+  hidePrice,
+  priceLabelOverride,
+  priceLabelLines = 2,
+}) => {
+  const { colors: themeColors } = useTheme();
+  const styles = useAppStyles((c) => buildStyles(c));
+  const navigation = useNavigation();
+  const route = useRoute();
+  const insets = useSafeAreaInsets();
+  const { isAuthenticated } = useAuth();
+  const { addToCart } = useCart();
+  const toast = useToast();
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [showVariantModal, setShowVariantModal] = useState(false);
+  const [selectedColor, setSelectedColor] = useState(null);
+  const [selectedSize, setSelectedSize] = useState(null);
+  const hasInventoryValue =
+    product?.quantity != null ||
+    product?.stock != null ||
+    product?.stock_quantity != null;
+  const availableStock = Number(
+    product?.quantity ?? product?.stock ?? product?.stock_quantity ?? 0,
+  );
+  const allowsBackorder = toBoolean(product?.allow_backorder);
+  const isPreorder = toBoolean(product?.is_preorder);
+  const isOutOfStock =
+    !isPreorder && hasInventoryValue && availableStock <= 0 && !allowsBackorder;
+
+  // Determine actual price (flash sale price takes priority)
+  const actualPrice = flashSale?.flash_price || product.price;
+  const hasFlashSale = !!flashSale && new Date(flashSale.end_time) > new Date();
+  const displayDiscount = hasFlashSale
+    ? flashSale.discount_percentage
+    : product.discount;
+
+  const formatPrice = (price, discount = 0) => {
+    // If there's a flash sale, use flash sale price directly
+    if (hasFlashSale) {
+      return `GH₵${Number(flashSale.flash_price || 0).toLocaleString()}`;
+    }
+    const discountedPrice = discount > 0 ? price * (1 - discount / 100) : price;
+    return `GH₵${Number(discountedPrice || 0).toLocaleString()}`;
+  };
+
+  const displayStoreName = hasFlashSale
+    ? product.seller?.name ||
+      product.seller_id?.name ||
+      product.store?.name ||
+      product.store_name ||
+      product.vendor ||
+      "Store"
+    : product.seller?.name || product.store_name || product.vendor;
+  const sellerBadgeIds =
+    product.seller?.badges || product.seller_id?.badges || [];
+
+  const handleAdd = (e) => {
+    e?.stopPropagation?.();
+
+    if (!isAuthenticated) {
+      toast.info("Login required", "Please sign in to add items to your cart");
+      navigation.navigate("Auth", {
+        redirectTo: route?.name,
+        redirectParams: route?.params,
+      });
+      return;
+    }
+
+    if (isOutOfStock) {
+      toast.error("Out of Stock", "This product is currently unavailable");
+      return;
+    }
+
+    const hasColors = product.colors && product.colors.length > 0;
+    const hasSizes = product.sizes && product.sizes.length > 0;
+
+    // Show modal if product has colors OR sizes (even single option)
+    if (hasColors || hasSizes) {
+      setSelectedColor(
+        hasColors && product.colors.length > 1
+          ? null
+          : product.colors?.[0] || null,
+      );
+      setSelectedSize(
+        hasSizes && product.sizes.length > 1
+          ? null
+          : product.sizes?.[0] || null,
+      );
+      setShowVariantModal(true);
+    } else {
+      // No variants, add directly
+      addToCart(
+        product,
+        1,
+        null,
+        null,
+        hasFlashSale ? flashSale.flash_price : null,
+      );
+      toast.success(
+        "Added to Cart",
+        `${product.title} has been added to your cart`,
+      );
+    }
+  };
+
+  const handleConfirmAddToCart = () => {
+    if (!isAuthenticated) {
+      setShowVariantModal(false);
+      toast.info("Login required", "Please sign in to add items to your cart");
+      navigation.navigate("Auth", {
+        redirectTo: route?.name,
+        redirectParams: route?.params,
+      });
+      return;
+    }
+
+    // Only require selection if there are multiple options
+    if (
+      (product.colors && product.colors.length > 1 && !selectedColor) ||
+      (product.sizes && product.sizes.length > 1 && !selectedSize)
+    ) {
+      toast.error("Selection Required", "Please select all required options");
+      return;
+    }
+
+    addToCart(
+      product,
+      1,
+      selectedSize,
+      selectedColor,
+      hasFlashSale ? flashSale.flash_price : null,
+    );
+    setShowVariantModal(false);
+    toast.success(
+      "Added to Cart",
+      `${product.title} has been added to your cart`,
+    );
+  };
+
+  const images =
+    product.thumbnails && product.thumbnails.length > 0
+      ? product.thumbnails
+      : [product.thumbnail];
+
+  // theme is an object from themeColors.getTheme() or undefined
+  const themeObj = theme || {
+    primary: themeColors.primary,
+    gradientStart: themeColors.primary,
+    gradientEnd: themeColors.primaryLight,
+    accent: themeColors.primary,
+  };
+  const accent =
+    (themeObj && themeObj.accent) ||
+    (themeObj && themeObj.primary) ||
+    themeColors.accent;
+  const accentEnd =
+    (themeObj && themeObj.gradientEnd) ||
+    (themeObj && themeObj.gradientStart) ||
+    themeColors.primary;
+  const accentColor = accent;
+
+  if (variant === "list") {
+    return (
+      <>
+        <Pressable
+          style={[
+            styles.card,
+            styles.listCard,
+            isOutOfStock && styles.outOfStockCard,
+            style,
+          ]}
+          onPress={onPress}
+        >
+          <View style={styles.listImageContainer}>
+            {hasFlashSale && (
+              <FlashSaleBadge
+                discountPercentage={flashSale.discount_percentage}
+                position="top-left"
+              />
+            )}
+            {images.length > 1 ? (
+              <>
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={(e) => {
+                    const index = Math.round(
+                      e.nativeEvent.contentOffset.x / 130,
+                    );
+                    setActiveImageIndex(index);
+                  }}
+                  scrollEventThrottle={16}
+                >
+                  {images.map((imageUri, index) => (
+                    <Image
+                      key={index}
+                      source={{ uri: imageUri }}
+                      style={styles.listImage}
+                    />
+                  ))}
+                </ScrollView>
+                <View style={styles.listImageIndicators}>
+                  {images.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.imageIndicator,
+                        activeImageIndex === index &&
+                          styles.imageIndicatorActive,
+                      ]}
+                    />
+                  ))}
+                </View>
+              </>
+            ) : (
+              <LazyImage source={{ uri: images[0] }} style={styles.listImage} />
+            )}
+            {isOutOfStock && (
+              <View style={styles.outOfStockOverlay}>
+                <Text style={styles.outOfStockOverlayText}>Out of Stock</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.listContent}>
+            <View style={styles.listTop}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.vendorRow}>
+                  <Text style={styles.vendor} numberOfLines={1}>
+                    {displayStoreName}
+                  </Text>
+                  {SELLER_BADGE_PRIORITY.filter((id) =>
+                    sellerBadgeIds?.includes(id),
+                  )
+                    .slice(0, 2)
+                    .map((id) => {
+                      const b = SELLER_BADGE_CONFIG[id];
+                      return (
+                        <Ionicons
+                          key={id}
+                          name={b.icon}
+                          size={12}
+                          color={b.color}
+                        />
+                      );
+                    })}
+                </View>
+                <Text numberOfLines={1} style={styles.title}>
+                  {product.title}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.listBottom}>
+              <View style={{ flex: 1 }}>
+                {hasFlashSale && (
+                  <FlashSaleCountdown
+                    endTime={flashSale.end_time}
+                    startTime={flashSale.start_time}
+                    compact
+                    availableQty={
+                      flashSale.max_quantity != null
+                        ? Math.max(
+                            0,
+                            (flashSale.max_quantity || 0) -
+                              (flashSale.sold_quantity || 0),
+                          )
+                        : null
+                    }
+                  />
+                )}
+                <View style={styles.priceRow}>
+                  {hasFlashSale && (
+                    <Text style={styles.originalPriceList}>
+                      GH₵
+                      {Number(
+                        flashSale.original_price || product.price,
+                      ).toLocaleString()}
+                    </Text>
+                  )}
+                  {priceLabelOverride ? (
+                    <Text
+                      numberOfLines={priceLabelLines}
+                      style={styles.metaDescriptionList}
+                    >
+                      {priceLabelOverride}
+                    </Text>
+                  ) : (
+                    <Text style={styles.price}>
+                      {formatPrice(product.price, product.discount)}
+                    </Text>
+                  )}
+                  {hasFlashSale ? (
+                    <View style={styles.discountBadgeList}>
+                      <LinearGradient
+                        colors={["#EF4444", "#DC2626"]}
+                        style={styles.flashBadgeGradient}
+                      >
+                        <Ionicons name="flash" size={10} color="#fff" />
+                        <Text style={styles.discountText}>
+                          {Math.round(flashSale.discount_percentage)}% OFF
+                        </Text>
+                      </LinearGradient>
+                    </View>
+                  ) : (
+                    product.discount > 0 && (
+                      <View style={styles.discountBadgeList}>
+                        <Text style={styles.discountText}>
+                          {product.discount}% OFF
+                        </Text>
+                      </View>
+                    )
+                  )}
+                </View>
+                <View style={styles.ratingRow}>
+                  <Ionicons name="star" size={12} color={accentColor} />
+                  <Text style={[styles.ratingText, { color: accentColor }]}>
+                    {product.rating !== null &&
+                    product.rating !== undefined &&
+                    product.rating > 0
+                      ? product.rating.toFixed(1)
+                      : "No rating"}
+                  </Text>
+                </View>
+                {hasFlashSale && flashSale.max_quantity != null && (
+                  <Text style={styles.availableText}>
+                    {Math.max(
+                      0,
+                      (flashSale.max_quantity || 0) -
+                        (flashSale.sold_quantity || 0),
+                    )}{" "}
+                    left
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+        </Pressable>
+
+        {/* Variant Selection Modal */}
+        <Modal
+          visible={showVariantModal}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setShowVariantModal(false)}
+        >
+          <View style={styles.variantOverlay}>
+            <View
+              style={[
+                styles.variantModal,
+                { paddingBottom: 28 + insets.bottom },
+              ]}
+            >
+              <View style={styles.variantHeader}>
+                <Text style={styles.variantTitle}>Select Options</Text>
+                <Pressable
+                  onPress={() => setShowVariantModal(false)}
+                  hitSlop={8}
+                >
+                  <Ionicons name="close" size={20} color={themeColors.dark} />
+                </Pressable>
+              </View>
+
+              {product.colors && product.colors.length > 0 && (
+                <View style={styles.variantSection}>
+                  <Text style={styles.variantLabel}>
+                    {product.colors.length > 1 ? "Color *" : "Color"}
+                  </Text>
+                  <View style={styles.variantOptionsRow}>
+                    {product.colors.map((colorName, index) => {
+                      const COLOR_MAP = {
+                        Black: "#000000",
+                        White: "#FFFFFF",
+                        Red: "#EF4444",
+                        Blue: "#3B82F6",
+                        Green: "#10B981",
+                        Yellow: "#F59E0B",
+                        Purple: "#8B5CF6",
+                        Pink: "#EC4899",
+                        Orange: "#F97316",
+                        Brown: "#92400E",
+                        Gray: "#6B7280",
+                        Navy: "#1E3A8A",
+                      };
+                      const isSelected = selectedColor === colorName;
+                      return (
+                        <Pressable
+                          key={index}
+                          onPress={() => setSelectedColor(colorName)}
+                          style={[
+                            styles.colorOption,
+                            isSelected && styles.colorOptionSelected,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.smallColorDot,
+                              {
+                                backgroundColor: COLOR_MAP[colorName] || "#CCC",
+                              },
+                              isSelected && {
+                                borderColor: accent,
+                                borderWidth: 3,
+                              },
+                            ]}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {product.sizes && product.sizes.length > 0 && (
+                <View style={styles.variantSection}>
+                  <Text style={styles.variantLabel}>
+                    {product.sizes.length > 1 ? "Size *" : "Size"}
+                  </Text>
+                  <View style={styles.variantOptionsRow}>
+                    {product.sizes.map((size, index) => {
+                      const isSelected = selectedSize === size;
+                      return (
+                        <Pressable
+                          key={index}
+                          onPress={() => setSelectedSize(size)}
+                          style={[
+                            styles.sizeOption,
+                            isSelected && {
+                              borderColor: accent,
+                              backgroundColor: themeColors.surface,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.sizeOptionText,
+                              isSelected && {
+                                color: accent,
+                                fontWeight: "700",
+                              },
+                            ]}
+                          >
+                            {size}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              <Pressable
+                style={styles.variantAddButton}
+                onPress={handleConfirmAddToCart}
+              >
+                <LinearGradient
+                  colors={[themeColors.primary, themeColors.accent]}
+                  style={styles.variantAddGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.variantAddText}>Add to Cart</Text>
+                </LinearGradient>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Pressable
+        style={[styles.card, isOutOfStock && styles.outOfStockCard, style]}
+        onPress={onPress}
+      >
+        <View style={styles.imageContainer}>
+          <LazyImage source={{ uri: images[0] }} style={styles.image} />
+          <LinearGradient
+            colors={["rgba(15, 23, 42, 0)", "rgba(15, 23, 42, 0.2)"]}
+            style={styles.imageFade}
+          />
+          {hasFlashSale ? (
+            <FlashSaleBadge
+              discountPercentage={flashSale.discount_percentage}
+              position="top-left"
+            />
+          ) : (
+            product.discount > 0 && (
+              <View style={styles.discountBadge}>
+                <Text style={styles.discountText}>{product.discount}% OFF</Text>
+              </View>
+            )
+          )}
+          <View style={styles.ratingPill}>
+            <Ionicons name="star" size={11} color="#F59E0B" />
+            <Text style={styles.ratingPillText}>
+              {product.rating && product.rating > 0
+                ? product.rating.toFixed(1)
+                : "New"}
+            </Text>
+          </View>
+          {(() => {
+            const tag =
+              (Array.isArray(product.tags) && product.tags[0]) ||
+              (typeof product.tags === "string" &&
+                product.tags
+                  .split(",")
+                  .map((t) => t.trim())
+                  .filter(Boolean)[0]) ||
+              product.category;
+            if (!tag) return null;
+            return (
+              <View style={styles.tagPill}>
+                <Text style={styles.tagText} numberOfLines={1}>
+                  {String(tag)}
+                </Text>
+              </View>
+            );
+          })()}
+          {!images[0] && (
+            <View style={styles.cardImagePlaceholder}>
+              <Ionicons
+                name="image-outline"
+                size={20}
+                color={themeColors.muted}
+              />
+            </View>
+          )}
+          {isOutOfStock && (
+            <View style={styles.outOfStockOverlay}>
+              <Text style={styles.outOfStockOverlayText}>Out of Stock</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.content}>
+          <View style={styles.vendorRow}>
+            <Text
+              style={compact ? styles.vendorCompact : styles.vendor}
+              numberOfLines={1}
+            >
+              {displayStoreName}
+            </Text>
+            {SELLER_BADGE_PRIORITY.filter((id) => sellerBadgeIds?.includes(id))
+              .slice(0, 2)
+              .map((id) => {
+                const b = SELLER_BADGE_CONFIG[id];
+                return (
+                  <Ionicons
+                    key={id}
+                    name={b.icon}
+                    size={compact ? 10 : 12}
+                    color={b.color}
+                  />
+                );
+              })}
+          </View>
+          <Text
+            numberOfLines={1}
+            style={compact ? styles.titleCompact : styles.title}
+          >
+            {product.title}
+          </Text>
+          {!hidePrice && (
+            <View style={styles.metaRow}>
+              <View style={{ flex: 1 }}>
+                {hasFlashSale && (
+                  <Text style={styles.originalPrice}>
+                    GH₵
+                    {Number(
+                      flashSale.original_price || product.price,
+                    ).toLocaleString()}
+                  </Text>
+                )}
+                {priceLabelOverride ? (
+                  <Text
+                    numberOfLines={priceLabelLines}
+                    style={
+                      compact
+                        ? styles.metaDescriptionCompact
+                        : styles.metaDescription
+                    }
+                  >
+                    {priceLabelOverride}
+                  </Text>
+                ) : (
+                  <Text style={compact ? styles.priceCompact : styles.price}>
+                    {formatPrice(product.price, product.discount)}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+          {hasFlashSale && (
+            <FlashSaleCountdown
+              endTime={flashSale.end_time}
+              startTime={flashSale.start_time}
+              withProgressBar
+              mini
+              availableQty={
+                flashSale.max_quantity != null
+                  ? Math.max(
+                      0,
+                      (flashSale.max_quantity || 0) -
+                        (flashSale.sold_quantity || 0),
+                    )
+                  : null
+              }
+            />
+          )}
+          {footerAction ? (
+            <View style={styles.footerActionWrap}>{footerAction}</View>
+          ) : null}
+
+          {/* Default Add to Cart CTA — shown unless the caller hides it or
+              supplies its own footerAction. */}
+          {!hideCta && !footerAction && (
+            <Pressable
+              style={[styles.cta, isOutOfStock && styles.ctaDisabled]}
+              onPress={handleAdd}
+              disabled={isOutOfStock}
+              accessibilityRole="button"
+              accessibilityLabel="Add to cart"
+            >
+              <LinearGradient
+                colors={
+                  isOutOfStock
+                    ? [themeColors.muted, themeColors.muted]
+                    : [themeColors.primary, themeColors.accent]
+                }
+                style={styles.ctaGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Ionicons
+                  name={isOutOfStock ? "close-circle-outline" : "cart-outline"}
+                  size={16}
+                  color="#fff"
+                />
+                <Text style={styles.ctaText}>
+                  {isOutOfStock ? "Out of Stock" : "Add to Cart"}
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          )}
+        </View>
+      </Pressable>
+
+      {/* Variant Selection Modal */}
+      <Modal
+        visible={showVariantModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowVariantModal(false)}
+      >
+        <View style={styles.variantOverlay}>
+          <View
+            style={[styles.variantModal, { paddingBottom: 28 + insets.bottom }]}
+          >
+            <View style={styles.variantHeader}>
+              <Text style={styles.variantTitle}>Select Options</Text>
+              <Pressable onPress={() => setShowVariantModal(false)} hitSlop={8}>
+                <Ionicons name="close" size={20} color={themeColors.dark} />
+              </Pressable>
+            </View>
+
+            {product.colors && product.colors.length > 0 && (
+              <View style={styles.variantSection}>
+                <Text style={styles.variantLabel}>
+                  {product.colors.length > 1 ? "Color *" : "Color"}
+                </Text>
+                <View style={styles.variantOptionsRow}>
+                  {product.colors.map((colorName, index) => {
+                    const COLOR_MAP = {
+                      Black: "#000000",
+                      White: "#FFFFFF",
+                      Red: "#EF4444",
+                      Blue: "#3B82F6",
+                      Green: "#10B981",
+                      Yellow: "#F59E0B",
+                      Purple: "#8B5CF6",
+                      Pink: "#EC4899",
+                      Orange: "#F97316",
+                      Brown: "#92400E",
+                      Gray: "#6B7280",
+                      Navy: "#1E3A8A",
+                    };
+                    const isSelected = selectedColor === colorName;
+                    return (
+                      <Pressable
+                        key={index}
+                        onPress={() => setSelectedColor(colorName)}
+                        style={[
+                          styles.colorOption,
+                          isSelected && styles.colorOptionSelected,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.smallColorDot,
+                            { backgroundColor: COLOR_MAP[colorName] || "#CCC" },
+                            isSelected && styles.smallColorDotSelected,
+                          ]}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {product.sizes && product.sizes.length > 0 && (
+              <View style={styles.variantSection}>
+                <Text style={styles.variantLabel}>
+                  {product.sizes.length > 1 ? "Size *" : "Size"}
+                </Text>
+                <View style={styles.variantOptionsRow}>
+                  {product.sizes.map((size, index) => {
+                    const isSelected = selectedSize === size;
+                    return (
+                      <Pressable
+                        key={index}
+                        onPress={() => setSelectedSize(size)}
+                        style={[
+                          styles.sizeOption,
+                          isSelected && styles.sizeOptionSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.sizeOptionText,
+                            isSelected && styles.sizeOptionTextSelected,
+                          ]}
+                        >
+                          {size}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            <Pressable
+              style={styles.variantAddButton}
+              onPress={handleConfirmAddToCart}
+            >
+              <LinearGradient
+                colors={[themeColors.primary, themeColors.accent]}
+                style={styles.variantAddGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.variantAddText}>Add to Cart</Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+};
+
+const buildStyles = (c) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: c.surface,
+      borderRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: c.border,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.08,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 5,
+    },
+    outOfStockCard: {
+      opacity: 0.72,
+    },
+    listCard: {
+      flexDirection: "row",
+      height: 150,
+      alignItems: "stretch",
+      borderRadius: radius.lg,
+    },
+    imageContainer: {
+      position: "relative",
+      width: "100%",
+      height: 140,
+      backgroundColor: c.border,
+    },
+    imageFade: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    outOfStockOverlay: {
+      position: "absolute",
+      top: 10,
+      right: 10,
+      backgroundColor: "rgba(31,41,55,0.9)",
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 10,
+    },
+    outOfStockOverlayText: {
+      color: "#FFFFFF",
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.4,
+      textTransform: "uppercase",
+    },
+    image: {
+      width: "100%",
+      height: 140,
+    },
+    imageIndicators: {
+      position: "absolute",
+      bottom: 10,
+      left: 0,
+      right: 0,
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 4,
+    },
+    imageIndicator: {
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: "rgba(255, 255, 255, 0.5)",
+    },
+    imageIndicatorActive: {
+      backgroundColor: "#FFFFFF",
+      width: 16,
+    },
+    listImageContainer: {
+      position: "relative",
+      width: 130,
+      marginRight: 12,
+      borderRadius: radius.lg,
+      overflow: "hidden",
+      backgroundColor: c.border,
+    },
+    listImage: {
+      width: 130,
+      height: "100%",
+    },
+    listImageIndicators: {
+      position: "absolute",
+      bottom: 8,
+      left: 0,
+      right: 12,
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 4,
+    },
+    content: {
+      padding: 14,
+      paddingTop: 12,
+      flex: 1,
+    },
+    vendorRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    vendor: {
+      fontSize: 10,
+      color: c.muted,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+      fontWeight: "700",
+    },
+    vendorCompact: {
+      fontSize: 9,
+      color: c.muted,
+      textTransform: "uppercase",
+      letterSpacing: 0.3,
+      fontWeight: "600",
+    },
+    sellerBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    title: {
+      fontSize: 14,
+      fontWeight: "800",
+      color: c.dark,
+      marginTop: 6,
+      lineHeight: 18,
+      letterSpacing: -0.25,
+    },
+    titleCompact: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: c.dark,
+      marginTop: 4,
+      lineHeight: 16,
+      letterSpacing: -0.2,
+    },
+    metaRow: {
+      marginTop: 4,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    price: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.dark,
+      letterSpacing: -0.35,
+    },
+    priceCompact: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: c.dark,
+      letterSpacing: -0.3,
+    },
+    originalPrice: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: c.muted,
+      textDecorationLine: "line-through",
+      marginBottom: 2,
+    },
+    ratingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+      backgroundColor: "#FEF9C3",
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      borderRadius: 8,
+    },
+    ratingText: {
+      fontWeight: "700",
+      fontSize: 12,
+      color: "#92400E",
+    },
+    ratingTextCompact: {
+      fontWeight: "700",
+      fontSize: 10,
+      color: "#92400E",
+    },
+    cta: {
+      marginTop: 10,
+    },
+    ctaDisabled: {
+      opacity: 1,
+    },
+    footerActionWrap: {
+      marginTop: 10,
+    },
+    ctaGradient: {
+      height: 40,
+      borderRadius: radius.xl,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 7,
+    },
+    ctaText: {
+      color: "#FFFFFF",
+      fontWeight: "800",
+      fontSize: 13,
+      letterSpacing: 0.2,
+    },
+    listContent: {
+      flex: 1,
+      justifyContent: "space-between",
+      paddingVertical: 8,
+      paddingRight: 8,
+    },
+    listTop: {
+      flex: 1,
+    },
+    listBottom: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: 8,
+    },
+    listCta: {
+      marginLeft: 4,
+    },
+    listCtaGradient: {
+      width: 46,
+      height: 46,
+      borderRadius: radius.xl,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    ratingPill: {
+      position: "absolute",
+      top: 10,
+      right: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: "rgba(255, 255, 255, 0.94)",
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+    },
+    ratingPillText: {
+      fontSize: 10,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    tagPill: {
+      position: "absolute",
+      bottom: 8,
+      right: 8,
+      maxWidth: "70%",
+      backgroundColor: "rgba(15, 23, 42, 0.78)",
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+    },
+    tagText: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: "#FFFFFF",
+    },
+    cardImagePlaceholder: {
+      position: "absolute",
+      bottom: 8,
+      right: 8,
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: "rgba(255, 255, 255, 0.9)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    variantOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "flex-end",
+    },
+    variantModal: {
+      backgroundColor: c.surface,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 28,
+      maxHeight: "55%",
+    },
+    variantHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 20,
+    },
+    variantTitle: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    variantSection: {
+      marginBottom: 18,
+    },
+    variantLabel: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.dark,
+      marginBottom: 10,
+    },
+    variantOptionsRow: {
+      flexDirection: "row",
+      gap: 10,
+      flexWrap: "wrap",
+    },
+    colorOption: {
+      padding: 3,
+    },
+    colorOptionSelected: {
+      opacity: 1,
+    },
+    smallColorDot: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 2,
+      borderColor: c.border,
+    },
+    smallColorDotSelected: {
+      borderColor: c.primary,
+      borderWidth: 3,
+    },
+    sizeOption: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+      minWidth: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    sizeOptionSelected: {
+      borderColor: c.primary,
+      backgroundColor: c.surface,
+    },
+    sizeOptionText: {
+      fontSize: 13,
+      color: c.dark,
+      fontWeight: "600",
+    },
+    sizeOptionTextSelected: {
+      color: c.primary,
+      fontWeight: "700",
+    },
+    variantAddButton: {
+      marginTop: 20,
+      borderRadius: radius.xl,
+      overflow: "hidden",
+    },
+    variantAddGradient: {
+      paddingVertical: 16,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    variantAddText: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: "#FFFFFF",
+    },
+    discountBadge: {
+      position: "absolute",
+      top: 10,
+      left: 10,
+      backgroundColor: "#EF4444",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: radius.sm,
+    },
+    discountBadgeList: {
+      backgroundColor: "#EF4444",
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radius.xs,
+      marginLeft: 8,
+    },
+    discountText: {
+      fontSize: 10,
+      fontWeight: "800",
+      color: "#FFFFFF",
+      letterSpacing: 0.3,
+    },
+    flashBadgeGradient: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: radius.xs,
+    },
+    originalPriceList: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.muted,
+      textDecorationLine: "line-through",
+      marginRight: 6,
+    },
+    priceRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    metaDescription: {
+      marginTop: 2,
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.muted,
+      lineHeight: 18,
+    },
+    metaDescriptionCompact: {
+      marginTop: 2,
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.muted,
+      lineHeight: 16,
+    },
+    metaDescriptionList: {
+      fontSize: 12,
+      color: c.muted,
+      fontWeight: "600",
+      lineHeight: 16,
+      maxWidth: 160,
+    },
+  });

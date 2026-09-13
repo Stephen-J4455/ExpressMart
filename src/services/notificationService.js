@@ -1,0 +1,274 @@
+// Notification Service Helper for tagit
+// Provides helper functions to send notifications via Supabase Edge Function
+
+import { supabase } from '../lib/supabase';
+
+/**
+ * Send a push notification to a specific user
+ * @param {string} userId - Target user's ID
+ * @param {string} title - Notification title
+ * @param {string} body - Notification body
+ * @param {Object} options - Additional options
+ */
+export const sendNotificationToUser = async (userId, title, body, options = {}) => {
+    try {
+        const { data, error } = await supabase.functions.invoke('send-push-notification', {
+            body: {
+                userId,
+                title,
+                body,
+                data: options.data || {},
+                notificationType: options.notificationType || 'general',
+                appType: options.appType || 'customer',
+                imageUrl: options.imageUrl,
+                android: {
+                    channelId: options.channelId || 'default',
+                    priority: options.priority || 'high',
+                    ...options.android,
+                },
+                ios: options.ios,
+                web: options.web,
+            },
+        });
+
+        if (error) throw error;
+        return { success: true, data };
+    } catch (err) {
+        console.error('Failed to send notification:', err);
+        return { success: false, error: err.message };
+    }
+};
+
+/**
+ * Send a notification to multiple users
+ * @param {string[]} userIds - Array of user IDs
+ * @param {string} title - Notification title
+ * @param {string} body - Notification body
+ * @param {Object} options - Additional options
+ */
+export const sendNotificationToUsers = async (userIds, title, body, options = {}) => {
+    try {
+        const { data, error } = await supabase.functions.invoke('send-push-notification', {
+            body: {
+                userIds,
+                title,
+                body,
+                data: options.data || {},
+                notificationType: options.notificationType || 'general',
+                appType: options.appType || 'all',
+                imageUrl: options.imageUrl,
+                android: {
+                    channelId: options.channelId || 'default',
+                    priority: options.priority || 'high',
+                    ...options.android,
+                },
+                ios: options.ios,
+                web: options.web,
+            },
+        });
+
+        if (error) throw error;
+        return { success: true, data };
+    } catch (err) {
+        console.error('Failed to send notifications:', err);
+        return { success: false, error: err.message };
+    }
+};
+
+/**
+ * Send notification to a topic (requires topic subscription setup)
+ * @param {string} topic - Topic name (e.g., 'promotions', 'news')
+ * @param {string} title - Notification title
+ * @param {string} body - Notification body
+ * @param {Object} options - Additional options
+ */
+export const sendNotificationToTopic = async (topic, title, body, options = {}) => {
+    try {
+        const { data, error } = await supabase.functions.invoke('send-push-notification', {
+            body: {
+                topic,
+                title,
+                body,
+                data: options.data || {},
+                notificationType: options.notificationType || 'general',
+                imageUrl: options.imageUrl,
+                android: options.android,
+                ios: options.ios,
+                web: options.web,
+            },
+        });
+
+        if (error) throw error;
+        return { success: true, data };
+    } catch (err) {
+        console.error('Failed to send topic notification:', err);
+        return { success: false, error: err.message };
+    }
+};
+
+// ============ Order Notifications ============
+
+/**
+ * Notify customer about order status update
+ */
+export const notifyOrderStatusUpdate = async (customerId, orderId, status, orderNumber) => {
+    const statusMessages = {
+        confirmed: { title: 'Order Confirmed! 🎉', body: `Your order #${orderNumber} has been confirmed.` },
+        processing: { title: 'Order Processing', body: `Your order #${orderNumber} is being prepared.` },
+        shipped: { title: 'Order Shipped! 📦', body: `Your order #${orderNumber} is on its way!` },
+        delivered: { title: 'Order Delivered! ✅', body: `Your order #${orderNumber} has been delivered.` },
+        cancelled: { title: 'Order Cancelled', body: `Your order #${orderNumber} has been cancelled.` },
+    };
+
+    const message = statusMessages[status] || {
+        title: 'Order Update',
+        body: `Your order #${orderNumber} status: ${status}`
+    };
+
+    return sendNotificationToUser(customerId, message.title, message.body, {
+        data: { orderId, status, screen: 'OrderDetail' },
+        notificationType: 'order',
+        appType: 'customer',
+        channelId: 'orders',
+    });
+};
+
+/**
+ * Notify seller about new order
+ */
+export const notifySellerNewOrder = async (sellerId, orderId, orderNumber, amount) => {
+    return sendNotificationToUser(sellerId, 'New Order! 🛒', `You have a new order #${orderNumber} for $${amount}`, {
+        data: { orderId, screen: 'OrderDetail' },
+        notificationType: 'order',
+        appType: 'seller',
+        channelId: 'orders',
+        priority: 'high',
+    });
+};
+
+// ============ Chat Notifications ============
+
+/**
+ * Notify user about new chat message
+ */
+export const notifyNewMessage = async (userId, senderName, messagePreview, chatId, appType = 'customer') => {
+    return sendNotificationToUser(userId, `Message from ${senderName}`, messagePreview.substring(0, 100), {
+        data: { chatId, screen: 'Chat' },
+        notificationType: 'chat',
+        appType,
+        channelId: 'chat',
+    });
+};
+
+// ============ Promotional Notifications ============
+
+/**
+ * Send promotional notification to all customers
+ */
+export const sendPromotion = async (title, body, promoData = {}) => {
+    try {
+        // Get all active customer tokens
+        const { data: tokens, error } = await supabase
+            .from('express_device_tokens')
+            .select('fcm_token')
+            .eq('app_type', 'customer')
+            .eq('is_active', true);
+
+        if (error) throw error;
+
+        if (tokens && tokens.length > 0) {
+            const { data, error: sendError } = await supabase.functions.invoke('send-push-notification', {
+                body: {
+                    tokens: tokens.map(t => t.fcm_token),
+                    title,
+                    body,
+                    data: { ...promoData, screen: 'Promotion' },
+                    notificationType: 'promotion',
+                    android: { channelId: 'promotions' },
+                },
+            });
+
+            if (sendError) throw sendError;
+            return { success: true, data, recipientCount: tokens.length };
+        }
+
+        return { success: true, data: null, recipientCount: 0 };
+    } catch (err) {
+        console.error('Failed to send promotion:', err);
+        return { success: false, error: err.message };
+    }
+};
+
+/**
+ * Queue a rich push notification for future delivery.
+ *
+ * The scheduled-notifications edge function (run every 5 min by pg_cron)
+ * drains this queue and sends each due entry through send-push-notification,
+ * so the app doesn't need to be open at send time.
+ *
+ * @param {Object} options
+ * @param {string} options.title - Notification title
+ * @param {string} options.body - Notification body
+ * @param {Date|string} options.sendAt - When to deliver
+ * @param {string} [options.imageUrl] - Rich image shown in the tray (Android big picture)
+ * @param {'user'|'users'|'topic'|'app_type'} [options.targetType='app_type']
+ * @param {*} [options.targetValue] - user id / ids array / topic name / app type ('all')
+ * @param {string} [options.screen] - In-app screen to open when tapped
+ * @param {Object} [options.params] - Navigation params (JSON-stringified into data)
+ * @param {string} [options.notificationType='promotion']
+ * @param {string} [options.channelId='promotions'] - Android channel id
+ * @param {'none'|'daily'|'weekly'} [options.repeatInterval='none']
+ */
+export const scheduleNotification = async ({
+    title,
+    body,
+    sendAt = new Date(),
+    imageUrl,
+    targetType = 'app_type',
+    targetValue = 'all',
+    screen = 'Home',
+    params,
+    notificationType = 'promotion',
+    channelId = 'promotions',
+    repeatInterval = 'none',
+}) => {
+    try {
+        const data = {
+            ...(params ? { params: JSON.stringify(params) } : {}),
+            screen,
+        };
+        const { error } = await supabase
+            .from('express_scheduled_notifications')
+            .insert({
+                title,
+                body: body || '',
+                image_url: imageUrl || null,
+                notification_type: notificationType,
+                channel_id: channelId,
+                target_type: targetType,
+                // Pass arrays/objects straight through — supabase serializes
+                // them into jsonb correctly (stringifying would store a JSON
+                // string scalar instead of an array).
+                target_value: targetValue,
+                data,
+                send_at: new Date(sendAt).toISOString(),
+                repeat_interval: repeatInterval,
+            });
+        if (error) throw error;
+        return { success: true };
+    } catch (err) {
+        console.error('Failed to schedule notification:', err);
+        return { success: false, error: err.message };
+    }
+};
+
+export default {
+    sendNotificationToUser,
+    sendNotificationToUsers,
+    sendNotificationToTopic,
+    notifyOrderStatusUpdate,
+    notifySellerNewOrder,
+    notifyNewMessage,
+    sendPromotion,
+    scheduleNotification,
+};

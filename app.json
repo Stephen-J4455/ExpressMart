@@ -1,0 +1,132 @@
+{
+  "expo": {
+    "name": "tagit",
+    "slug": "tagit",
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "expressmart",
+    "experiments": {
+      "baseUrl": "/"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "usesAppleSignIn": true,
+      "bundleIdentifier": "com.stephenj.tagit",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "associatedDomains": [
+        "applinks:www.expressmart.me",
+        "applinks:expressmart.me"
+      ],
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.stephenj.tagit",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "com.google.android.c2dm.permission.RECEIVE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "expressmart"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.expressmart.me",
+              "pathPrefix": "/product"
+            },
+            {
+              "scheme": "https",
+              "host": "expressmart.me",
+              "pathPrefix": "/product"
+            },
+            {
+              "scheme": "https",
+              "host": "www.expressmart.me",
+              "pathPrefix": "/p"
+            },
+            {
+              "scheme": "https",
+              "host": "expressmart.me",
+              "pathPrefix": "/p"
+            },
+            {
+              "scheme": "https",
+              "host": "www.expressmart.me",
+              "pathPrefix": "/wa/callback"
+            },
+            {
+              "scheme": "https",
+              "host": "expressmart.me",
+              "pathPrefix": "/wa/callback"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "./plugins/withMedia3Fix",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#ffffff",
+          "androidMode": "default",
+          "androidCollapsedTitle": "tagit"
+        }
+      ],
+      "expo-font",
+      "expo-apple-authentication",
+      "expo-web-browser",
+      "expo-asset",
+      "expo-build-properties",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#B7B8BF",
+          "darkMode": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      [
+        "expo-status-bar",
+        {
+          "style": "dark",
+          "backgroundColor": "#B7B8BF",
+          "translucent": true
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "aac19ddf-69df-45d7-a714-78f42558b146"
+      }
+    }
+  }
+}

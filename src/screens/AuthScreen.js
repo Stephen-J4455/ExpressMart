@@ -1,0 +1,887 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { radius } from "../theme/colors";
+import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
+import { useAppStyles } from "../hooks/useAppStyles";
+import { useResponsive } from "../hooks/useResponsive";
+import * as Linking from "expo-linking";
+
+import * as WebBrowser from "expo-web-browser";
+import * as AppleAuthentication from "expo-apple-authentication";
+import { supabase } from "../lib/supabase";
+import { useToast } from "../context/ToastContext";
+
+WebBrowser.maybeCompleteAuthSession();
+
+export const AuthScreen = ({ navigation, route }) => {
+  const getInitialIsLogin = useCallback(() => {
+    const mode = route?.params?.mode;
+    if (mode === "register" || mode === "signup" || mode === "create-account") {
+      return false;
+    }
+    return true;
+  }, [route?.params?.mode]);
+  const [isLogin, setIsLogin] = useState(getInitialIsLogin);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const { isWide } = useResponsive();
+  const isIOS = Platform.OS === "ios";
+
+  const { colors: themeColors } = useTheme();
+  const styles = useAppStyles((c) => buildAuthStyles(c));
+
+  const { signIn, signUp, isAuthenticated } = useAuth();
+  const toast = useToast();
+  const redirectHandledRef = useRef(false);
+  const oauthCallbackInFlightRef = useRef(false);
+
+  const navigateAfterLogin = useCallback(() => {
+    const redirectTo = route?.params?.redirectTo;
+    const redirectParams = route?.params?.redirectParams;
+    const tabScreens = new Set(["Home", "Categories", "Feed", "Cart", "Account"]);
+
+    if (redirectTo && tabScreens.has(redirectTo)) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "Main", params: { screen: redirectTo } }],
+      });
+      return;
+    }
+
+    if (redirectTo && redirectTo !== "Auth") {
+      navigation.reset({
+        index: 1,
+        routes: [{ name: "Main" }, { name: redirectTo, params: redirectParams }],
+      });
+      return;
+    }
+
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Main" }],
+    });
+  }, [navigation, route?.params?.redirectParams, route?.params?.redirectTo]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      redirectHandledRef.current = false;
+      return;
+    }
+
+    if (redirectHandledRef.current) return;
+    redirectHandledRef.current = true;
+    navigateAfterLogin();
+  }, [isAuthenticated, navigateAfterLogin]);
+
+  useEffect(() => {
+    setIsLogin(getInitialIsLogin());
+  }, [getInitialIsLogin]);
+
+  const cleanupWebAuthUrl = () => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    window.history.replaceState({}, document.title, window.location.pathname);
+  };
+
+  const isOAuthCallbackUrl = useCallback((callbackUrl) => {
+    if (!callbackUrl) return false;
+
+    try {
+      const parsed = Linking.parse(callbackUrl);
+      const path = (parsed.path || "").toLowerCase();
+      const host = (parsed.hostname || "").toLowerCase();
+      const query = parsed.queryParams || {};
+      const hash = String(parsed.fragment || "").toLowerCase();
+
+      if (path.includes("reset-password") || path.includes("password-reset")) {
+        return false;
+      }
+      if (query.type === "recovery") return false;
+      if (query.token_hash) return false;
+      if (query.token) return false;
+      if (hash.includes("type=recovery")) return false;
+      if (hash.includes("token_hash=")) return false;
+      if (hash.includes("token=")) return false;
+
+      return (
+        path.includes("auth/callback") ||
+        host === "auth" ||
+        path === "login" ||
+        path === "/login"
+      );
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const completeOAuthFromUrl = useCallback(
+    async (callbackUrl) => {
+      if (!callbackUrl || oauthCallbackInFlightRef.current) return false;
+      if (!isOAuthCallbackUrl(callbackUrl)) return false;
+      oauthCallbackInFlightRef.current = true;
+      try {
+        const urlObj = new URL(callbackUrl);
+        const hashParams = new URLSearchParams(urlObj.hash.replace(/^#/, ""));
+        const errorDescription =
+          urlObj.searchParams.get("error_description") ||
+          hashParams.get("error_description") ||
+          urlObj.searchParams.get("error") ||
+          hashParams.get("error");
+
+        if (errorDescription) {
+          throw new Error(decodeURIComponent(errorDescription));
+        }
+
+        const code = urlObj.searchParams.get("code");
+        if (code) {
+          const { error: exchangeError } =
+            await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+          toast.success("Successfully signed in!");
+          return true;
+        }
+
+        const access_token =
+          hashParams.get("access_token") ||
+          urlObj.searchParams.get("access_token");
+        const refresh_token =
+          hashParams.get("refresh_token") ||
+          urlObj.searchParams.get("refresh_token");
+
+        if (!access_token || !refresh_token) {
+          throw new Error("No authentication code or tokens found in callback URL");
+        }
+
+        const { error: setError } = await supabase.auth.setSession({
+          access_token,
+          refresh_token,
+        });
+        if (setError) throw setError;
+
+        toast.success("Successfully signed in!");
+        return true;
+      } finally {
+        oauthCallbackInFlightRef.current = false;
+      }
+    },
+    [isOAuthCallbackUrl, toast],
+  );
+
+  // Handle OAuth callback on web
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+
+    const handleWebOAuthCallback = async () => {
+      const url = new URL(window.location.href);
+      if (
+        url.pathname.toLowerCase().includes("reset-password") ||
+        url.pathname.toLowerCase().includes("password-reset") ||
+        url.searchParams.get("type") === "recovery" ||
+        url.searchParams.has("token_hash") ||
+        url.searchParams.has("token") ||
+        new URLSearchParams(url.hash.replace(/^#/, "")).has("token_hash") ||
+        new URLSearchParams(url.hash.replace(/^#/, "")).has("token") ||
+        url.hash.toLowerCase().includes("type=recovery")
+      ) {
+        return;
+      }
+
+      const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+      const hasOAuthParams =
+        url.searchParams.has("code") ||
+        url.searchParams.has("access_token") ||
+        url.searchParams.has("refresh_token") ||
+        hashParams.has("access_token") ||
+        hashParams.has("refresh_token") ||
+        url.searchParams.has("error") ||
+        hashParams.has("error");
+
+      if (!hasOAuthParams) return;
+
+      const oauthError =
+        url.searchParams.get("error_description") ||
+        hashParams.get("error_description") ||
+        url.searchParams.get("error") ||
+        hashParams.get("error");
+
+      if (oauthError) {
+        cleanupWebAuthUrl();
+        toast.error(decodeURIComponent(oauthError));
+        return;
+      }
+
+      try {
+        if (typeof supabase.auth.getSessionFromUrl === "function") {
+          const { data, error } = await supabase.auth.getSessionFromUrl({
+            storeSession: true,
+          });
+          if (error) throw error;
+
+          // Some mobile browsers can drop the PKCE exchange callback resolution.
+          if (!data?.session && url.searchParams.has("code")) {
+            const code = url.searchParams.get("code");
+            const { error: exchangeError } =
+              await supabase.auth.exchangeCodeForSession(code);
+            if (exchangeError) throw exchangeError;
+          }
+        } else if (url.searchParams.has("code")) {
+          const code = url.searchParams.get("code");
+          const { error: exchangeError } =
+            await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+        } else {
+          const access_token =
+            hashParams.get("access_token") || url.searchParams.get("access_token");
+          const refresh_token =
+            hashParams.get("refresh_token") || url.searchParams.get("refresh_token");
+
+          if (!access_token || !refresh_token) {
+            throw new Error("No authentication tokens found in callback URL");
+          }
+
+          const { error: setSessionError } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+          if (setSessionError) throw setSessionError;
+        }
+
+        toast.success("Successfully signed in!");
+      } catch (error) {
+        try {
+          const handled = await completeOAuthFromUrl(window.location.href);
+          if (!handled) throw error;
+        } catch (fallbackError) {
+          console.error("Error handling web OAuth callback:", fallbackError);
+          toast.error(fallbackError.message || "Failed to complete sign-in");
+        }
+      } finally {
+        cleanupWebAuthUrl();
+      }
+    };
+
+    handleWebOAuthCallback();
+  }, [completeOAuthFromUrl, toast]);
+
+  // Handle OAuth callback on native when the browser redirects back via deep-link.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+
+    const subscription = Linking.addEventListener("url", async ({ url }) => {
+      try {
+        await completeOAuthFromUrl(url);
+      } catch (error) {
+        console.error("Error handling native OAuth callback:", error);
+        toast.error(error.message || "Failed to complete sign-in");
+      }
+    });
+
+    return () => subscription.remove();
+  }, [completeOAuthFromUrl, toast]);
+
+  const getOAuthRedirectUrl = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      return new URL("/login", window.location.origin).toString();
+    }
+
+    return Linking.createURL("auth/callback", { scheme: "expressmart" });
+  };
+
+  const startOAuthLogin = async (provider, setProviderLoading) => {
+    setProviderLoading(true);
+    const providerLabel = provider === "apple" ? "Apple" : "Google";
+
+    try {
+      const redirectTo = getOAuthRedirectUrl();
+      console.log(`${providerLabel} OAuth redirectTo:`, redirectTo);
+
+      const queryParams =
+        provider === "google"
+          ? {
+              prompt: "select_account",
+            }
+          : undefined;
+
+      if (Platform.OS === "web") {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            redirectTo,
+            ...(queryParams ? { queryParams } : {}),
+          },
+        });
+
+        if (error) throw error;
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          ...(queryParams ? { queryParams } : {}),
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.url) throw new Error(`Unable to start ${providerLabel} Sign-In flow`);
+
+      // Mobile: Open browser for OAuth
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      console.log("OAuth result:", result);
+
+      if (result.type === "success" && result.url) {
+        console.log("OAuth redirect URL:", result.url);
+        await completeOAuthFromUrl(result.url);
+      } else if (result.type === "cancel" || result.type === "dismiss") {
+        console.log("User cancelled OAuth flow");
+      } else {
+        console.log("OAuth result type:", result.type);
+        throw new Error(`OAuth flow failed: ${result.type}`);
+      }
+    } catch (error) {
+      console.error(`${providerLabel} Sign-In Error:`, error);
+      toast.error(error.message || `${providerLabel} Sign-In failed`);
+    } finally {
+      setProviderLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    await startOAuthLogin("google", setGoogleLoading);
+  };
+
+  const handleAppleLogin = async () => {
+    setAppleLoading(true);
+    try {
+      if (Platform.OS === "ios") {
+        const isAvailable = await AppleAuthentication.isAvailableAsync();
+        if (!isAvailable) {
+          throw new Error("Apple Authentication is not available on this device");
+        }
+
+        const credential = await AppleAuthentication.signInAsync({
+          requestedScopes: [
+            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+            AppleAuthentication.AppleAuthenticationScope.EMAIL,
+          ],
+        });
+
+        if (credential.identityToken) {
+          const { data, error } = await supabase.auth.signInWithIdToken({
+            provider: "apple",
+            token: credential.identityToken,
+          });
+
+          if (error) throw error;
+
+          // If Apple provided full name on first sign-in, sync profile name
+          if (credential.fullName?.givenName && data?.user?.id) {
+            const fullNameStr = [
+              credential.fullName.givenName,
+              credential.fullName.familyName,
+            ]
+              .filter(Boolean)
+              .join(" ");
+
+            if (fullNameStr) {
+              await supabase
+                .from("express_profiles")
+                .update({ full_name: fullNameStr })
+                .eq("id", data.user.id);
+            }
+          }
+
+          toast.success("Successfully signed in with Apple!");
+        } else {
+          throw new Error("No identity token returned from Apple");
+        }
+      } else {
+        await startOAuthLogin("apple", setAppleLoading);
+      }
+    } catch (error) {
+      if (error.code === "ERR_REQUEST_CANCELED" || error.code === "1001") {
+        // User canceled Apple sign-in
+        return;
+      }
+      console.error("Apple Sign-In Error:", error);
+      toast.error(error.message || "Apple Sign-In failed");
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (isLogin) {
+        const { error } = await signIn(email, password);
+        if (error) throw error;
+      } else {
+        if (!fullName) {
+          toast.error("Please enter your full name");
+          setLoading(false);
+          return;
+        }
+        const { error } = await signUp(email, password, fullName);
+        if (error) throw error;
+        setIsLogin(true);
+        toast.success("Account created! Please sign in.");
+      }
+    } catch (error) {
+      toast.error(error.message || "Authentication failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Subtle background circles */}
+      <View style={styles.bgCircle1} />
+      <View style={styles.bgCircle2} />
+      <View style={styles.bgCircle3} />
+      <View style={styles.bgCircle4} />
+      <View style={styles.bgCircle5} />
+      <View style={styles.bgCircle6} />
+
+      <KeyboardAvoidingView
+        style={styles.content}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            isWide && { maxWidth: 480, alignSelf: "center", width: "100%" },
+          ]}
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          nestedScrollEnabled={true}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.iconContainer}>
+              <Image
+                source={require("../../assets/express.png")}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+            </View>
+            <Text style={styles.title}>
+              {isLogin ? "Welcome Back!" : "Create Account"}
+            </Text>
+            <Text style={styles.subtitle}>
+              {isLogin
+                ? "Sign in to continue shopping"
+                : "Join tagit and start shopping"}
+            </Text>
+          </View>
+
+          {/* Form */}
+          <View style={styles.form}>
+            {!isLogin && (
+              <View style={styles.inputContainer}>
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color={themeColors.muted}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Full Name"
+                  value={fullName}
+                  onChangeText={setFullName}
+                  autoCapitalize="words"
+                  placeholderTextColor={themeColors.muted}
+                />
+              </View>
+            )}
+
+            <View style={styles.inputContainer}>
+              <Ionicons
+                name="mail-outline"
+                size={20}
+                color={themeColors.muted}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholderTextColor={themeColors.muted}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color={themeColors.muted}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                placeholderTextColor={themeColors.muted}
+              />
+              <Pressable onPress={() => setShowPassword(!showPassword)}>
+                <Ionicons
+                  name={showPassword ? "eye-outline" : "eye-off-outline"}
+                  size={20}
+                  color={themeColors.muted}
+                />
+              </Pressable>
+            </View>
+
+            {isLogin && (
+              <Pressable
+                style={styles.forgotPassword}
+                onPress={() => navigation.navigate("ForgotPassword")}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </Pressable>
+            )}
+
+            <Pressable
+              style={[styles.submitButton, loading && styles.buttonDisabled]}
+              onPress={handleSubmit}
+              disabled={loading}
+            >
+              <LinearGradient
+                colors={[themeColors.primary, themeColors.accent]}
+                style={styles.buttonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name={isLogin ? "log-in" : "person-add"}
+                      size={20}
+                      color="#fff"
+                    />
+                    <Text style={styles.buttonText}>
+                      {isLogin ? "Sign In" : "Create Account"}
+                    </Text>
+                  </>
+                )}
+              </LinearGradient>
+            </Pressable>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <Pressable
+              style={[styles.socialButton, googleLoading && { opacity: 0.7 }]}
+              onPress={handleGoogleLogin}
+              disabled={googleLoading || appleLoading || loading}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color={themeColors.dark} />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={20} color="#EA4335" />
+                  <Text style={styles.socialButtonText}>
+                    Continue with Google
+                  </Text>
+                </>
+                )}
+            </Pressable>
+
+            {isIOS && (
+              <Pressable
+                style={[styles.socialButton, appleLoading && { opacity: 0.7 }]}
+                onPress={handleAppleLogin}
+                disabled={appleLoading || googleLoading || loading}
+              >
+                {appleLoading ? (
+                  <ActivityIndicator color={themeColors.dark} />
+                ) : (
+                  <>
+                    <Ionicons name="logo-apple" size={20} color="#000000" />
+                    <Text style={styles.socialButtonText}>Continue with Apple</Text>
+                  </>
+                )}
+              </Pressable>
+            )}
+          </View>
+
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              {isLogin ? "Don't have an account?" : "Already have an account?"}
+            </Text>
+            <Pressable onPress={() => setIsLogin(!isLogin)}>
+              <Text style={styles.footerLink}>
+                {isLogin ? "Sign Up" : "Sign In"}
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+};
+
+const buildAuthStyles = (c) =>
+  StyleSheet.create({ 
+  container: {
+    flex: 1,
+    backgroundColor: c.background,
+  },
+  // Subtle background circles
+  bgCircle1: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: `${c.primary}35`,
+    top: -50,
+    right: -50,
+  },
+  bgCircle2: {
+    position: "absolute",
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: `${c.accent}30`,
+    top: 200,
+    left: -40,
+  },
+  bgCircle3: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: `${c.primary}28`,
+    bottom: 100,
+    right: -30,
+  },
+  bgCircle4: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: `${c.accent}25`,
+    bottom: 50,
+    left: -60,
+  },
+  bgCircle5: {
+    position: "absolute",
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: `${c.primary}22`,
+    top: 400,
+    right: 30,
+  },
+  bgCircle6: {
+    position: "absolute",
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: `${c.accent}32`,
+    bottom: 200,
+    right: 50,
+  },
+  content: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 24,
+  },
+  header: {
+    alignItems: "center",
+    marginTop: 20,
+    marginBottom: 40,
+  },
+  iconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: `${c.primary}15`,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+  },
+  logoImage: {
+    width: 95,
+    height: 95,
+    borderRadius: 50,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: c.dark,
+    marginBottom: 12,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: c.muted,
+    textAlign: "center",
+    lineHeight: 24,
+    paddingHorizontal: 20,
+  },
+  form: {
+    gap: 16,
+  },
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: c.light,
+    borderRadius: radius.full,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#E4E8F0",
+    shadowColor: c.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    height: 56,
+    fontSize: 16,
+    color: c.dark,
+    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
+  },
+  forgotPassword: {
+    alignSelf: "flex-end",
+    marginTop: -8,
+  },
+  forgotPasswordText: {
+    color: c.primary,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  submitButton: {
+    borderRadius: radius.full,
+    overflow: "hidden",
+    marginTop: 8,
+    shadowColor: c.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonGradient: {
+    height: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  buttonText: {
+    color: c.light,
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 8,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#E4E8F0",
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    color: c.muted,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  socialButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: c.light,
+    borderRadius: radius.full,
+    height: 56,
+    borderWidth: 1,
+    borderColor: "#E4E8F0",
+    gap: 12,
+    shadowColor: c.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  socialButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: c.dark,
+  },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginTop: "auto",
+    paddingTop: 24,
+    paddingBottom: 20,
+  },
+  footerText: {
+    fontSize: 16,
+    color: c.muted,
+  },
+  footerLink: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: c.primary,
+  },
+});

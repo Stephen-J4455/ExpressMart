@@ -1,0 +1,698 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "../lib/supabase";
+import { trackEvent } from "../services/feedPersonalizationService";
+
+const ShopContext = createContext();
+
+const CACHE_KEYS = {
+  products: "expressmart.cache.products",
+  categories: "expressmart.cache.categories",
+  sellers: "expressmart.cache.sellers",
+  settings: "expressmart.cache.settings",
+};
+const PAGE_SIZE = 24;
+const isTruthySetting = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+  return false;
+};
+
+const mapProduct = (product) => ({
+  id: product.id,
+  title: product.title,
+  vendor: product.vendor,
+  price: Number(product.price || 0),
+  shipping_fee: Number(product.shipping_fee || 0),
+  rating: Number(product.rating || 0),
+  badges: product.badges || [],
+  thumbnail: product.thumbnail,
+  thumbnails: product.thumbnails || [],
+  category: product.category,
+  description: product.description,
+  discount: product.discount || 0,
+  quantity: product.quantity || 0,
+  is_preorder: product.is_preorder || false,
+  allow_backorder: product.allow_backorder || false,
+  sizes: product.sizes || [],
+  colors: product.colors || [],
+  specifications: product.specifications || null,
+  tags: product.tags || [],
+  weight: product.weight || null,
+  weight_unit: product.weight_unit || null,
+  sku: product.sku || null,
+  barcode: product.barcode || null,
+  seller: product.seller_id || null,
+  // Engagement counters (attached fresh by cached-products on every fetch).
+  // Without these, feed cards show "Q&A"/blank until opened.
+  comments_count: Number(product.comments_count || 0),
+  likes_count: Number(product.likes_count || 0),
+});
+
+export const ShopProvider = ({ children }) => {
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [sellers, setSellers] = useState([]);
+  const [settings, setSettings] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [error, setError] = useState(null);
+  const [followedSellers, setFollowedSellers] = useState([]);
+
+  // Guard so the initial bootstrap (loadCache + first fetchProducts) runs
+  // exactly once. Without this, the effect re-runs whenever a dependency's
+  // identity changes (e.g. `supabase` resolves after auth init, which changes
+  // `fetchProducts`), causing a second fetch that overwrites the feed and
+  // produces a visible flicker.
+  const bootstrappedRef = useRef(false);
+
+  const loadCache = useCallback(async () => {
+    try {
+      const [cachedCategories, cachedSellers, cachedSettings] =
+        await Promise.all([
+          AsyncStorage.getItem(CACHE_KEYS.categories),
+          AsyncStorage.getItem(CACHE_KEYS.sellers),
+          AsyncStorage.getItem(CACHE_KEYS.settings),
+        ]);
+
+      // NOTE: Products are intentionally NOT pre-hydrated from the local cache.
+      // The "For You" feed must load from Upstash first; the local cache is only
+      // used as a fallback inside fetchProducts() when Upstash fails. Pre-loading
+      // products from disk here would show stale local data before the Upstash
+      // response arrives, which is exactly what we want to avoid.
+      if (cachedCategories) {
+        const { data } = JSON.parse(cachedCategories);
+        if (Array.isArray(data)) setCategories(data);
+      }
+      if (cachedSellers) {
+        const { data } = JSON.parse(cachedSellers);
+        if (Array.isArray(data)) setSellers(data);
+      }
+      if (cachedSettings) {
+        const { data } = JSON.parse(cachedSettings);
+        if (data && typeof data === "object") setSettings(data);
+      }
+
+      // Products are no longer pre-hydrated from cache (see note above), so we
+      // always let the network/Upstash call drive the first paint.
+      return false;
+    } catch (e) {
+      // Cache read failure is non-fatal
+      return false;
+    }
+  }, []);
+
+  const saveCache = useCallback(async (key, data) => {
+    try {
+      await AsyncStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
+    } catch (e) {
+      // Cache write failure is non-fatal
+    }
+  }, []);
+
+  const readCacheProducts = useCallback(async () => {
+    try {
+      const cached = await AsyncStorage.getItem(CACHE_KEYS.products);
+      if (!cached) return null;
+      const { data } = JSON.parse(cached);
+      if (Array.isArray(data) && data.length > 0) return data;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }, []);
+
+  // Fetch products from the Upstash-backed edge function with a hard timeout
+  // so a slow network fails fast and we can fall back to the local cache.
+  //
+  // `userId` is forwarded to the edge function so the "For You" feed can
+  // re-order the cached set per user on page 0. The server takes the
+  // user id from the body's `userId` field only when the JWT also matches
+  // (enforced inside the edge function), so passing a stale id is safe —
+  // the server just falls back to the recency-sorted feed.
+  const fetchFromUpstash = useCallback(
+    async (offset, limit, { userId = null } = {}) => {
+      if (!supabase) throw new Error("Supabase not initialized");
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Upstash request timed out")), 4000),
+      );
+      const page = Math.floor(offset / Math.max(1, limit));
+      const body = { offset, limit, page };
+      if (userId) body.userId = userId;
+      const call = supabase.functions.invoke("cached-products", {
+        body,
+      });
+      const { data, error } = await Promise.race([call, timeoutPromise]);
+      if (error) throw error;
+      return data;
+    },
+    [supabase],
+  );
+
+  const fetchProducts = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!silent) setLoading(true);
+      setError(null);
+      if (!supabase) {
+        console.error("Supabase not initialized");
+        if (!silent) setLoading(false);
+        return;
+      }
+
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        const [
+          { data: categoriesData, error: categoriesError },
+          { data: sellersData, error: sellersError },
+          { data: reviewsData, error: reviewsError },
+          { data: settingsData, error: settingsError },
+          { data: followsData, error: followsError },
+        ] = await Promise.all([
+          supabase
+            .from("express_categories")
+            .select("id,name,icon,color")
+            .eq("is_active", true)
+            .order("sort_order"),
+          supabase
+            .from("express_sellers")
+            .select(
+              "id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
+            )
+            .eq("is_active", true)
+            .order("rating", { ascending: false })
+            .limit(10),
+          supabase
+            .from("express_reviews")
+            .select("product_id, rating")
+            .eq("is_approved", true),
+          supabase.from("express_settings").select("key, value"),
+          user
+            ? supabase
+                .from("express_follows")
+                .select("seller_id")
+                .eq("user_id", user.id)
+            : { data: [], error: null },
+        ]);
+
+        if (categoriesError) throw categoriesError;
+        if (sellersError) throw sellersError;
+        if (reviewsError) throw reviewsError;
+        if (settingsError) throw settingsError;
+        if (followsError) throw followsError;
+
+        // Extract followed seller IDs
+        const followedIds = (followsData || []).map((f) => f.seller_id);
+        setFollowedSellers(followedIds);
+
+        // Map settings to object
+        const settingsMap = {};
+        (settingsData || []).forEach((s) => {
+          settingsMap[s.key] = s.value;
+        });
+        setSettings(settingsMap);
+
+        const redisProductsCacheEnabled = isTruthySetting(
+          settingsMap.redis_products_cache_enabled,
+        );
+
+        let productsData = [];
+        let fromLocalCache = false;
+        if (redisProductsCacheEnabled) {
+          // Upstash Redis first; fall back to local cache, then database on failure or slow network
+          try {
+            const cachedData = await fetchFromUpstash(0, PAGE_SIZE, {
+              userId: user?.id || null,
+            });
+            const cacheSource = cachedData?.cache?.source || "database";
+            const personalized = !!cachedData?.cache?.personalized;
+            console.info(
+              `[ShopContext] Network sync fetched products from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}${personalized ? " (personalized)" : ""}`,
+            );
+            productsData = cachedData?.products || [];
+          } catch (upstashErr) {
+            console.warn(
+              "[ShopContext] Upstash fetch failed or timed out, falling back to local cache:",
+              upstashErr?.message || JSON.stringify(upstashErr),
+            );
+            // The "For You" feed is served from Upstash only. On a cache miss /
+            // timeout we keep the user's view stable by using the existing local
+            // cache and deliberately NOT re-querying the live database — a direct
+            // DB read would reshuffle/replace the products the user is looking at.
+            const localProducts = await readCacheProducts();
+            if (localProducts && localProducts.length > 0) {
+              productsData = localProducts;
+              fromLocalCache = true;
+            } else if (products.length === 0) {
+              // Only fall back to the database on a brand-new device with no
+              // cached snapshot yet AND no products currently rendered, so first
+              // launch still shows something without disrupting an existing view.
+              console.warn(
+                "[ShopContext] No local cache available, falling back to database (first launch).",
+              );
+              const { data, error: productError } = await supabase
+                .from("express_products")
+                .select(
+                  "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+                )
+                .eq("status", "active")
+                .not("seller_id", "is", null)
+                .eq("seller_id.is_active", true)
+                .or("quantity.gt.0,is_preorder.eq.true")
+                .order("created_at", { ascending: false })
+                .range(0, PAGE_SIZE - 1);
+              if (productError) throw productError;
+              productsData = data || [];
+            } else {
+              // We already have products on screen and no cache snapshot — keep the
+              // current "For You" view exactly as-is instead of querying the DB
+              // (which would change the products the user is viewing).
+              console.warn(
+                "[ShopContext] Upstash failed and no local cache; keeping current feed to avoid changing the user's view.",
+              );
+            }
+          }
+        }
+
+        // Local cache already stores mapped products, so skip re-mapping there.
+        const mappedProducts = fromLocalCache
+          ? productsData || []
+          : (productsData || []).map(mapProduct);
+        setProducts(mappedProducts);
+        setHasMore(mappedProducts.length === PAGE_SIZE);
+
+        // Calculate seller ratings from actual reviews
+        const sellerRatings = {};
+        (reviewsData || []).forEach((review) => {
+          // Find the product to get the seller_id
+          const product = mappedProducts.find(
+            (p) => p.id === review.product_id,
+          );
+          if (product?.seller?.id) {
+            if (!sellerRatings[product.seller.id]) {
+              sellerRatings[product.seller.id] = {
+                totalRating: 0,
+                count: 0,
+              };
+            }
+            sellerRatings[product.seller.id].totalRating += review.rating;
+            sellerRatings[product.seller.id].count += 1;
+          }
+        });
+
+        // Update sellers with calculated ratings
+        const updatedSellers = (sellersData || []).map((seller) => {
+          const sellerStats = sellerRatings[seller.id];
+          if (sellerStats && sellerStats.count > 0) {
+            const calculatedRating =
+              sellerStats.totalRating / sellerStats.count;
+            return {
+              ...seller,
+              rating: Number(calculatedRating.toFixed(1)),
+              total_ratings: sellerStats.count,
+            };
+          }
+          return {
+            ...seller,
+            rating: 0,
+            total_ratings: 0,
+          };
+        });
+
+        setCategories(categoriesData || []);
+        setSellers(updatedSellers);
+
+        // Persist to cache for instant loads next time
+        saveCache(CACHE_KEYS.products, mappedProducts);
+        saveCache(CACHE_KEYS.categories, categoriesData || []);
+        saveCache(CACHE_KEYS.sellers, updatedSellers);
+        saveCache(CACHE_KEYS.settings, settingsMap);
+      } catch (err) {
+        console.error(
+          "Error fetching products:",
+          err?.message || JSON.stringify(err),
+        );
+
+        // OFFLINE FALLBACK — when the whole network sync fails before anything
+        // is on screen, hydrate the feed from the last snapshot persisted in
+        // AsyncStorage instead of leaving the home page blank until
+        // connectivity returns.
+        if (products.length === 0) {
+          const cachedProducts = await readCacheProducts();
+          if (cachedProducts && cachedProducts.length > 0) {
+            console.warn(
+              `[ShopContext] Network sync failed — serving ${cachedProducts.length} cached product(s) from local storage.`,
+            );
+            setProducts(cachedProducts);
+            // The disk snapshot is a single finite page — disable further
+            // infinite-scroll paging so we don't hammer the network offline.
+            setHasMore(false);
+            // Rehydrate categories/sellers/settings so the rest of the home
+            // page (category strip, top sellers) matches the cached feed.
+            await loadCache();
+            return;
+          }
+          setError(err?.message || JSON.stringify(err));
+        } else {
+          console.warn(
+            "Network sync failed, continuing with local cache:",
+            err?.message || JSON.stringify(err),
+          );
+        }
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [products.length, saveCache, fetchFromUpstash, readCacheProducts, loadCache],
+  );
+
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMore || loading) return;
+    setLoadingMore(true);
+    try {
+      const start = products.length;
+      const end = start + PAGE_SIZE - 1;
+
+      // Resolve the current user id for the personalization layer. The
+      // server only re-ranks on page 0 (offset < PAGE_SIZE), so the id
+      // is technically optional here, but we forward it for symmetry
+      // with the page-0 path. Same auth.getUser() pattern as fetchProducts.
+      let loadMoreUserId = null;
+      if (supabase) {
+        try {
+          const {
+            data: { user: currentUser },
+          } = await supabase.auth.getUser();
+          loadMoreUserId = currentUser?.id || null;
+        } catch {
+          // Non-fatal: anonymous / unauthenticated loadMore is fine.
+        }
+      }
+
+      let rows = [];
+      if (isTruthySetting(settings.redis_products_cache_enabled)) {
+        // Upstash Redis first; fall back to database on failure or slow network
+        try {
+          // `userId` is forwarded but the server only re-ranks on page 0
+          // (offset < PAGE_SIZE), so loadMore requests always hit the
+          // recency-sorted path even for signed-in users.
+          const cachedData = await fetchFromUpstash(start, PAGE_SIZE, {
+            userId: loadMoreUserId,
+          });
+          const cacheSource = cachedData?.cache?.source || "database";
+          console.info(
+            `[ShopContext] loadMore products fetched from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"} (offset=${start})`,
+          );
+          rows = cachedData?.products || [];
+        } catch (upstashErr) {
+          // Upstash is the source of truth for the feed. On failure we stop
+          // here and keep the existing products instead of re-querying the
+          // database, which would change the items the user is currently
+          // viewing in the "For You" section.
+          console.warn(
+            `[ShopContext] loadMore failed from Upstash; keeping current feed (offset=${start})`,
+            upstashErr?.message || JSON.stringify(upstashErr),
+          );
+          rows = [];
+        }
+      } else {
+        console.info(
+          `[ShopContext] loadMore products fetched from database (cache disabled, offset=${start})`,
+        );
+        const { data, error: fetchError } = await supabase
+          .from("express_products")
+          .select(
+            "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+          )
+          .eq("status", "active")
+          .not("seller_id", "is", null)
+          .eq("seller_id.is_active", true)
+          .or("quantity.gt.0,is_preorder.eq.true")
+          .order("created_at", { ascending: false })
+          .range(start, end);
+
+        if (fetchError) throw fetchError;
+        rows = data || [];
+      }
+
+      const newProducts = rows.map(mapProduct);
+      const allProducts = [...products, ...newProducts];
+      setProducts(allProducts);
+      setHasMore(newProducts.length === PAGE_SIZE);
+      saveCache(CACHE_KEYS.products, allProducts);
+    } catch (err) {
+      console.warn("loadMore error:", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [
+    hasMore,
+    loadingMore,
+    loading,
+    products,
+    saveCache,
+    settings,
+    fetchFromUpstash,
+  ]);
+
+  const refreshSellers = useCallback(async () => {
+    await fetchProducts({ silent: true });
+  }, [fetchProducts]);
+
+  const followSeller = useCallback(async (sellerId) => {
+    if (!supabase) return;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const { error } = await supabase.from("express_follows").insert({
+        user_id: user.id,
+        seller_id: sellerId,
+      });
+
+      if (error) throw error;
+
+      setFollowedSellers((prev) => [...prev, sellerId]);
+      // Personalization signal: user has expressed sustained interest in
+      // this seller, so boost it in the For-You feed.
+      trackEvent("follow", { sellerId });
+    } catch (err) {
+      console.error("Error following seller:", err);
+      throw err;
+    }
+  }, []);
+
+  const unfollowSeller = useCallback(async (sellerId) => {
+    if (!supabase) return;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const { error } = await supabase
+        .from("express_follows")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("seller_id", sellerId);
+
+      if (error) throw error;
+
+      setFollowedSellers((prev) => prev.filter((id) => id !== sellerId));
+      // Personalization signal: decay this seller's contribution to the
+      // For-You ranking.
+      trackEvent("unfollow", { sellerId });
+    } catch (err) {
+      console.error("Error unfollowing seller:", err);
+      throw err;
+    }
+  }, []);
+
+  const isFollowing = useCallback(
+    (sellerId) => followedSellers.includes(sellerId),
+    [followedSellers],
+  );
+
+  useEffect(() => {
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
+    const bootstrap = async () => {
+      // Categories/sellers/settings are pre-hydrated from local cache for a
+      // fast first paint, but PRODUCTS are NOT — the "For You" feed must load
+      // from Upstash first, with the local cache only used as a fallback when
+      // Upstash fails (handled inside fetchProducts).
+      await loadCache();
+      console.info(
+        "[ShopContext] Bootstrap order: Upstash Redis first -> local cache fallback",
+      );
+      await fetchProducts();
+    };
+    bootstrap();
+    // Run once on mount. Dependencies are intentionally omitted: the ref guard
+    // guarantees a single execution, and re-running on dependency changes is
+    // exactly what caused the duplicate fetch + feed flicker.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Realtime subscriptions — update products/sellers in-place without full reload
+  useEffect(() => {
+    if (!supabase) return;
+
+    const productsChannel = supabase
+      .channel("shop-products-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "express_products",
+          filter: "status=eq.active&quantity=gt.0",
+        },
+        (payload) => {
+          // Only insert if quantity > 0 (filter should already ensure this)
+          if (!payload.new || (payload.new.quantity || 0) <= 0) return;
+          const newProduct = mapProduct(payload.new);
+          setProducts((prev) => {
+            if (prev.some((p) => p.id === newProduct.id)) return prev;
+            return [newProduct, ...prev];
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "express_products",
+        },
+        (payload) => {
+          // If product deactivated or now out of stock, remove it
+          if (
+            payload.new.status !== "active" ||
+            (payload.new.quantity || 0) <= 0
+          ) {
+            setProducts((prev) => prev.filter((p) => p.id !== payload.new.id));
+            return;
+          }
+          const updated = mapProduct(payload.new);
+          setProducts((prev) => {
+            const exists = prev.some((p) => p.id === updated.id);
+            if (exists) {
+              return prev.map((p) => (p.id === updated.id ? updated : p));
+            }
+            return [updated, ...prev];
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "express_products",
+        },
+        (payload) => {
+          setProducts((prev) => prev.filter((p) => p.id !== payload.old.id));
+        },
+      )
+      .subscribe();
+
+    const sellersChannel = supabase
+      .channel("shop-sellers-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "express_sellers",
+        },
+        (payload) => {
+          setSellers((prev) =>
+            prev.map((s) =>
+              s.id === payload.new.id ? { ...s, ...payload.new } : s,
+            ),
+          );
+        },
+      )
+      .subscribe();
+
+    return () => {
+      if (
+        productsChannel &&
+        typeof productsChannel.unsubscribe === "function"
+      ) {
+        Promise.resolve(productsChannel.unsubscribe()).catch((error) => {
+          console.warn("Products realtime cleanup failed:", error);
+        });
+      }
+      if (sellersChannel && typeof sellersChannel.unsubscribe === "function") {
+        Promise.resolve(sellersChannel.unsubscribe()).catch((error) => {
+          console.warn("Sellers realtime cleanup failed:", error);
+        });
+      }
+    };
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      products,
+      categories,
+      sellers,
+      settings,
+      loading,
+      loadingMore,
+      hasMore,
+      error,
+      refresh: fetchProducts,
+      refreshSellers,
+      loadMore,
+      followedSellers,
+      followSeller,
+      unfollowSeller,
+      isFollowing,
+    }),
+    [
+      products,
+      categories,
+      sellers,
+      settings,
+      loading,
+      loadingMore,
+      hasMore,
+      error,
+      refreshSellers,
+      loadMore,
+      followedSellers,
+      followSeller,
+      unfollowSeller,
+      isFollowing,
+    ],
+  );
+
+  return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;
+};
+
+export const useShop = () => {
+  const context = useContext(ShopContext);
+  if (!context) {
+    throw new Error("useShop must be used within a ShopProvider");
+  }
+  return context;
+};

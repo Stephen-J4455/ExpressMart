@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.stephenj.expressmart",
+      "sha256_cert_fingerprints": [
+        "97:49:6A:A7:4F:0C:76:8E:74:1C:19:3A:ED:F1:0A:11:F1:B2:E0:B4:37:98:62:7B:EA:6D:AB:67:79:DB:1F:94"
+      ]
+    }
+  }
+]
