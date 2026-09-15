@@ -20,6 +20,8 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import Markdown from "react-native-markdown-display";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { FlashSaleBadge } from "./FlashSaleBadge";
@@ -37,6 +39,7 @@ import { formatTimeAgo } from "../utils/timeAgo";
 import { shareProduct } from "../utils/shareUtils";
 import { playLikeSound } from "../lib/sounds";
 import { trackEvent } from "../services/feedPersonalizationService";
+import { R2_FOLDERS, resolveMediaUrl } from "../services/r2Storage";
 
 const REVIEW_STAR_COLOR = "#F97316";
 
@@ -55,6 +58,7 @@ export const FeedProductCard = memo(function FeedProductCard({
 }) {
   const { colors: c } = useTheme();
   const styles = useAppStyles(buildFeedCardStyles);
+  const markdownStyles = useAppStyles(buildFeedDescriptionMarkdownStyles);
   const navigation = useNavigation();
   const route = useRoute();
   const toast = useToast();
@@ -63,8 +67,13 @@ export const FeedProductCard = memo(function FeedProductCard({
 
   // --- Derived product data -------------------------------------------------
   const images = useMemo(() => {
-    if (product.thumbnails?.length > 0) return product.thumbnails;
-    return product.thumbnail ? [product.thumbnail] : [];
+    const values =
+      product.thumbnails?.length > 0
+        ? product.thumbnails
+        : product.thumbnail
+          ? [product.thumbnail]
+          : [];
+    return values.map((image) => resolveMediaUrl(image, R2_FOLDERS.PRODUCTS));
   }, [product.thumbnails, product.thumbnail]);
 
   const seller = product.seller || product.seller_id || null;
@@ -92,12 +101,24 @@ export const FeedProductCard = memo(function FeedProductCard({
   const tags = Array.isArray(product.tags)
     ? product.tags.filter(Boolean).slice(0, 4)
     : typeof product.tags === "string"
-    ? product.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-        .slice(0, 4)
-    : [];
+      ? product.tags
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .slice(0, 4)
+      : [];
+
+  const markdownDescription =
+    product.description_markdown ||
+    product.description_md ||
+    product.markdown_description ||
+    (typeof product.description === "string" ? product.description : null);
+  const shouldRenderMarkdownDescription =
+    typeof markdownDescription === "string" &&
+    markdownDescription.trim().length > 0 &&
+    /(^|\n)([#*_`>\-]|\d+\.|•)|\*\*|__|\[.*\]\(.*\)|\n\s*[-*]\s+/.test(
+      markdownDescription,
+    );
 
   // --- Local state ----------------------------------------------------------
   const [expanded, setExpanded] = useState(false);
@@ -107,6 +128,7 @@ export const FeedProductCard = memo(function FeedProductCard({
   const [variantVisible, setVariantVisible] = useState(false);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
+  const [singleImageRatio, setSingleImageRatio] = useState(null);
 
   // Sub-modals opened from the overflow menu. Kept outside the main menu
   // modal so the user can return to the same menu state if they back out.
@@ -128,6 +150,28 @@ export const FeedProductCard = memo(function FeedProductCard({
   const [commentRating, setCommentRating] = useState(5);
   const [commentPosting, setCommentPosting] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
+
+  useEffect(() => {
+    if (images.length !== 1 || !images[0]) {
+      setSingleImageRatio(null);
+      return;
+    }
+
+    const uri = images[0];
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (!width || !height) {
+          setSingleImageRatio(1);
+          return;
+        }
+        setSingleImageRatio(width / height);
+      },
+      () => {
+        setSingleImageRatio(1);
+      },
+    );
+  }, [images]);
 
   const openProduct = () => {
     if (onPress) return onPress();
@@ -460,13 +504,23 @@ export const FeedProductCard = memo(function FeedProductCard({
         <Text style={styles.title}>{product.title}</Text>
         {description ? (
           <>
-            <Text
-              style={styles.description}
-              numberOfLines={expanded ? undefined : 2}
-            >
-              {description}
-            </Text>
-            {description.length > 90 && (
+            {shouldRenderMarkdownDescription ? (
+              <Markdown style={markdownStyles} onLinkPress={() => {}}>
+                {expanded
+                  ? markdownDescription
+                  : markdownDescription.split("\n").slice(0, 3).join("\n")}
+              </Markdown>
+            ) : (
+              <Text
+                style={styles.description}
+                numberOfLines={expanded ? undefined : 2}
+              >
+                {description}
+              </Text>
+            )}
+            {(description.length > 90 ||
+              (shouldRenderMarkdownDescription &&
+                markdownDescription.length > 90)) && (
               <Pressable onPress={() => setExpanded((p) => !p)} hitSlop={6}>
                 <Text style={styles.seeMore}>
                   {expanded ? "see less" : "...see more"}
@@ -497,12 +551,19 @@ export const FeedProductCard = memo(function FeedProductCard({
       {/* ── Media block: 1 / 2 / 2+N image grid with badges & label pill ── */}
       {images.length > 0 && (
         <Pressable onPress={openProduct} style={styles.mediaWrap}>
-          <View style={styles.mediaGrid}>
+          <View
+            style={
+              images.length === 1 ? styles.mediaGridSingle : styles.mediaGrid
+            }
+          >
             {images.length === 1 ? (
               <LazyImage
                 source={{ uri: images[0] }}
-                style={styles.mediaSingle}
-                resizeMode="cover"
+                style={[
+                  styles.mediaSingle,
+                  singleImageRatio ? { aspectRatio: singleImageRatio } : null,
+                ]}
+                resizeMode="contain"
               />
             ) : (
               <>
@@ -612,10 +673,17 @@ export const FeedProductCard = memo(function FeedProductCard({
           accessibilityRole="button"
           accessibilityLabel="Add to cart"
         >
-          <Ionicons name="cart-outline" size={20} color={c.primary} />
-          <Text style={[styles.engagementLabel, { color: c.primary }]}>
-            Add to Cart
-          </Text>
+          <LinearGradient
+            colors={[c.primary, c.primaryDark || "#F03A70"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.engagementAddToCartGradient}
+          >
+            <View style={styles.engagementAddToCartContent}>
+              <Ionicons name="cart-outline" size={18} color="#fff" />
+              <Text style={styles.engagementAddToCartText}>Add to Cart</Text>
+            </View>
+          </LinearGradient>
         </Pressable>
         <Pressable
           style={styles.engagementItem}
@@ -1184,6 +1252,64 @@ const FeedWishlistButton = ({
   );
 };
 
+const buildFeedDescriptionMarkdownStyles = (c) =>
+  StyleSheet.create({
+    body: {
+      fontSize: 13,
+      color: c.muted,
+      lineHeight: 18,
+      paddingHorizontal: 14,
+      marginTop: 4,
+    },
+    heading1: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: c.dark,
+      marginTop: 4,
+      marginBottom: 2,
+    },
+    heading2: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.dark,
+      marginTop: 4,
+      marginBottom: 2,
+    },
+    heading3: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.dark,
+      marginTop: 4,
+      marginBottom: 2,
+    },
+    text: {
+      fontSize: 13,
+      color: c.muted,
+      lineHeight: 18,
+    },
+    strong: {
+      color: c.dark,
+      fontWeight: "700",
+    },
+    em: {
+      fontStyle: "italic",
+    },
+    bullet_list: {
+      marginVertical: 2,
+    },
+    list_item: {
+      marginLeft: 16,
+      marginVertical: 2,
+    },
+    link: {
+      color: c.accentBlue,
+    },
+    paragraph: {
+      marginTop: 0,
+      marginBottom: 0,
+    },
+  });
+
 const buildFeedCardStyles = (c) =>
   StyleSheet.create({
     card: {
@@ -1290,17 +1416,28 @@ const buildFeedCardStyles = (c) =>
     },
 
     /* Media grid */
-    mediaWrap: { position: "relative" },
+    mediaWrap: {
+      position: "relative",
+      backgroundColor: c.surface,
+    },
     mediaGrid: {
       flexDirection: "row",
       gap: 4,
       height: 220,
     },
+    mediaGridSingle: {
+      width: "100%",
+      overflow: "hidden",
+      backgroundColor: c.surface,
+    },
     // Single-image layout: full product visible (no crop), centered on a
     // neutral surface instead of being zoomed/cropped by "cover".
     mediaSingle: {
-      flex: 1,
-      backgroundColor: c.surfaceAlpha,
+      width: "100%",
+      backgroundColor: c.surface,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
     },
     mediaTile: { flex: 1, backgroundColor: c.border },
     moreOverlay: {
@@ -1386,7 +1523,7 @@ const buildFeedCardStyles = (c) =>
       gap: 12,
       paddingHorizontal: 14,
       paddingTop: 10,
-      backgroundColor: c.surfaceAlpha,
+      backgroundColor: c.surface,
     },
     price: {
       fontSize: 17,
@@ -1409,7 +1546,7 @@ const buildFeedCardStyles = (c) =>
       paddingVertical: 8,
       borderTopWidth: 1,
       borderTopColor: c.borderAlpha,
-      backgroundColor: c.surfaceAlpha,
+      backgroundColor: c.surface,
 
       gap: 4,
     },
@@ -1426,16 +1563,30 @@ const buildFeedCardStyles = (c) =>
       color: c.muted,
     },
     engagementAddToCart: {
+      marginLeft: "auto",
+      borderRadius: radius.full,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 2,
+    },
+    engagementAddToCartGradient: {
+      borderRadius: radius.full,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+    },
+    engagementAddToCartContent: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 5,
-      marginLeft: "auto",
-      backgroundColor: c.primary + "15",
-      borderColor: c.primary + "30",
-      borderWidth: 1,
-      borderRadius: radius.full,
-      paddingVertical: 6,
-      paddingHorizontal: 12,
+      gap: 6,
+    },
+    engagementAddToCartText: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: "#fff",
+      letterSpacing: 0.1,
     },
 
     /* Overflow menu */

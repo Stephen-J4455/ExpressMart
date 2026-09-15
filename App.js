@@ -1231,7 +1231,6 @@ const DeepLinkHandler = () => {
           type === "recovery";
 
         if (isRecovery) {
-          console.log("DeepLinkHandler: recovery link detected");
           if (setIsRecoveryMode) setIsRecoveryMode(true);
 
           // small delay to ensure recovery mode is set before session is applied
@@ -1243,17 +1242,15 @@ const DeepLinkHandler = () => {
               refresh_token: refreshToken || "",
             });
             if (error) {
-              console.error("Error setting session from deep link:", error);
               if (setIsRecoveryMode) setIsRecoveryMode(false);
             } else {
               // give session a moment to persist
               await new Promise((r) => setTimeout(r, 500));
-              console.log("DeepLinkHandler: session set from deep link");
             }
           }
         }
       } catch (e) {
-        console.error("Error processing deep link:", e);
+        // Deep link processing error handled silently
       }
     };
 

@@ -188,6 +188,7 @@ async function readAssetBody(uri, pickedFile = null) {
  * @param {Blob|null} [opts.pickedFile] Web File/Blob when available.
  * @param {string} opts.folder         R2 key prefix, e.g. "profile/<userId>".
  * @param {string} [opts.fileName]     Optional base file name.
+ * @param {string} [opts.contentType]  Content type for transformed files.
  * @returns {Promise<{publicUrl: string, key: string}>}
  */
 export const uploadToR2Presigned = async ({
@@ -195,6 +196,7 @@ export const uploadToR2Presigned = async ({
   pickedFile = null,
   folder,
   fileName = null,
+  contentType: preferredContentType = null,
 }) => {
   if (!uri) throw new Error("A local file URI is required");
   if (!folder) throw new Error("An R2 folder prefix is required");
@@ -203,7 +205,8 @@ export const uploadToR2Presigned = async ({
   const safeName =
     fileName ||
     `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const contentType = pickedFile?.type || getImageMimeType(uri);
+  const contentType =
+    preferredContentType || pickedFile?.type || getImageMimeType(uri);
 
   try {
     const { uploadUrl, publicUrl, key } = await fetchPresignedUploadUrl(

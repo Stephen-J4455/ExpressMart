@@ -20,6 +20,12 @@ const CACHE_KEYS = {
   settings: "expressmart.cache.settings",
 };
 const PAGE_SIZE = 24;
+const isOfflineNetworkError = (error) => {
+  const message = String(error?.message || error || "");
+  return /(UnknownHostException|No address associated with hostname|fetch failed|Network request failed|Failed to fetch|ERR_NETWORK|ERR_INTERNET_DISCONNECTED|resolve host|offline|timed out)/i.test(
+    message,
+  );
+};
 const isTruthySetting = (value) => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value === 1;
@@ -81,18 +87,18 @@ export const ShopProvider = ({ children }) => {
 
   const loadCache = useCallback(async () => {
     try {
-      const [cachedCategories, cachedSellers, cachedSettings] =
+      const [cachedProducts, cachedCategories, cachedSellers, cachedSettings] =
         await Promise.all([
+          AsyncStorage.getItem(CACHE_KEYS.products),
           AsyncStorage.getItem(CACHE_KEYS.categories),
           AsyncStorage.getItem(CACHE_KEYS.sellers),
           AsyncStorage.getItem(CACHE_KEYS.settings),
         ]);
 
-      // NOTE: Products are intentionally NOT pre-hydrated from the local cache.
-      // The "For You" feed must load from Upstash first; the local cache is only
-      // used as a fallback inside fetchProducts() when Upstash fails. Pre-loading
-      // products from disk here would show stale local data before the Upstash
-      // response arrives, which is exactly what we want to avoid.
+      if (cachedProducts) {
+        const { data } = JSON.parse(cachedProducts);
+        if (Array.isArray(data) && data.length > 0) setProducts(data);
+      }
       if (cachedCategories) {
         const { data } = JSON.parse(cachedCategories);
         if (Array.isArray(data)) setCategories(data);
@@ -106,9 +112,7 @@ export const ShopProvider = ({ children }) => {
         if (data && typeof data === "object") setSettings(data);
       }
 
-      // Products are no longer pre-hydrated from cache (see note above), so we
-      // always let the network/Upstash call drive the first paint.
-      return false;
+      return true;
     } catch (e) {
       // Cache read failure is non-fatal
       return false;
@@ -245,6 +249,25 @@ export const ShopProvider = ({ children }) => {
               `[ShopContext] Network sync fetched products from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}${personalized ? " (personalized)" : ""}`,
             );
             productsData = cachedData?.products || [];
+            // A successful edge-function response can still contain an empty
+            // or stale cache snapshot. On a blank home screen, verify against
+            // the live database instead of treating that response as truth.
+            if (productsData.length === 0 && products.length === 0) {
+              const { data, error: productError } = await supabase
+                .from("express_products")
+                .select(
+                  "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+                )
+                .eq("status", "active")
+                .not("seller_id", "is", null)
+                .eq("seller_id.is_active", true)
+                .or("quantity.gt.0,is_preorder.eq.true")
+                .order("created_at", { ascending: false })
+                .range(0, PAGE_SIZE - 1);
+              if (productError) throw productError;
+              productsData = data || [];
+              fromLocalCache = false;
+            }
           } catch (upstashErr) {
             console.warn(
               "[ShopContext] Upstash fetch failed or timed out, falling back to local cache:",
@@ -287,6 +310,20 @@ export const ShopProvider = ({ children }) => {
               );
             }
           }
+        } else {
+          const { data, error: productError } = await supabase
+            .from("express_products")
+            .select(
+              "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
+            )
+            .eq("status", "active")
+            .not("seller_id", "is", null)
+            .eq("seller_id.is_active", true)
+            .or("quantity.gt.0,is_preorder.eq.true")
+            .order("created_at", { ascending: false })
+            .range(0, PAGE_SIZE - 1);
+          if (productError) throw productError;
+          productsData = data || [];
         }
 
         // Local cache already stores mapped products, so skip re-mapping there.
@@ -343,10 +380,16 @@ export const ShopProvider = ({ children }) => {
         saveCache(CACHE_KEYS.sellers, updatedSellers);
         saveCache(CACHE_KEYS.settings, settingsMap);
       } catch (err) {
-        console.error(
-          "Error fetching products:",
-          err?.message || JSON.stringify(err),
-        );
+        if (!isOfflineNetworkError(err)) {
+          console.error(
+            "Error fetching products:",
+            err?.message || JSON.stringify(err),
+          );
+        } else {
+          console.warn(
+            "[ShopContext] Offline or DNS resolution failed; using cached products.",
+          );
+        }
 
         // OFFLINE FALLBACK — when the whole network sync fails before anything
         // is on screen, hydrate the feed from the last snapshot persisted in
@@ -367,7 +410,9 @@ export const ShopProvider = ({ children }) => {
             await loadCache();
             return;
           }
-          setError(err?.message || JSON.stringify(err));
+          if (!isOfflineNetworkError(err)) {
+            setError(err?.message || JSON.stringify(err));
+          }
         } else {
           console.warn(
             "Network sync failed, continuing with local cache:",
@@ -378,7 +423,13 @@ export const ShopProvider = ({ children }) => {
         if (!silent) setLoading(false);
       }
     },
-    [products.length, saveCache, fetchFromUpstash, readCacheProducts, loadCache],
+    [
+      products.length,
+      saveCache,
+      fetchFromUpstash,
+      readCacheProducts,
+      loadCache,
+    ],
   );
 
   const loadMore = useCallback(async () => {

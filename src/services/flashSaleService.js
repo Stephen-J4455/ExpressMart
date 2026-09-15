@@ -5,6 +5,13 @@ import { supabase } from "../lib/supabase";
  * Fetches active flash sales and product details
  */
 
+const isOfflineNetworkError = (error) => {
+  const message = String(error?.message || error || "");
+  return /(UnknownHostException|No address associated with hostname|fetch failed|Network request failed|Failed to fetch|ERR_NETWORK|ERR_INTERNET_DISCONNECTED|resolve host|offline)/i.test(
+    message,
+  );
+};
+
 export const flashSaleService = {
   /**
    * Get all active flash sales
@@ -18,7 +25,7 @@ export const flashSaleService = {
           `
           *,
           product:express_products(*, seller_id(id,name,avatar,badges))
-        `
+        `,
         )
         .eq("is_active", true)
         .lte("start_time", now)
@@ -29,13 +36,19 @@ export const flashSaleService = {
 
       // Filter out products that aren't active
       const activeFlashSales = (data || []).filter(
-        (fs) => fs.product?.status === "active"
+        (fs) => fs.product?.status === "active",
       );
 
       return { success: true, data: activeFlashSales };
     } catch (error) {
-      console.error("Error fetching active flash sales:", error);
-      return { success: false, error: error.message, data: [] };
+      if (!isOfflineNetworkError(error)) {
+        console.error("Error fetching active flash sales:", error);
+      }
+      return {
+        success: false,
+        error: isOfflineNetworkError(error) ? "Offline" : error.message,
+        data: [],
+      };
     }
   },
 
@@ -74,7 +87,7 @@ export const flashSaleService = {
           `
           *,
           product:express_products(*, seller_id(id,name,avatar,badges))
-        `
+        `,
         )
         .eq("is_active", true)
         .gt("start_time", now)
@@ -85,7 +98,7 @@ export const flashSaleService = {
 
       // Filter out products that aren't active
       const activeUpcoming = (data || []).filter(
-        (fs) => fs.product?.status === "active"
+        (fs) => fs.product?.status === "active",
       );
 
       return { success: true, data: activeUpcoming };
@@ -138,7 +151,7 @@ export const flashSaleService = {
           `
           *,
           product:express_products(*, seller_id(id,name,avatar,badges))
-        `
+        `,
         )
         .eq("is_active", true)
         .lte("start_time", now)
@@ -149,7 +162,7 @@ export const flashSaleService = {
       // Filter by category and active products
       const categoryFlashSales = (data || []).filter(
         (fs) =>
-          fs.product?.status === "active" && fs.product?.category === category
+          fs.product?.status === "active" && fs.product?.category === category,
       );
 
       return { success: true, data: categoryFlashSales };
@@ -175,7 +188,7 @@ export const flashSaleService = {
         },
         (payload) => {
           callback(payload);
-        }
+        },
       )
       .subscribe();
 

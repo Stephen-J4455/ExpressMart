@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }) => {
         .update({ last_seen_at: new Date().toISOString() })
         .eq("id", userId);
     } catch (error) {
-      console.warn("User last-seen update failed:", error);
+      // Presence update failures are non-fatal; continue without disrupting the session
     }
   }, []);
 
@@ -67,7 +67,7 @@ export const AuthProvider = ({ children }) => {
       try {
         await presenceChannelRef.current.untrack();
       } catch (error) {
-        console.warn("User presence untrack failed:", error);
+        // Presence untrack failures are non-fatal; continue to cleanup
       }
 
       supabase.removeChannel(presenceChannelRef.current);
@@ -99,7 +99,7 @@ export const AuthProvider = ({ children }) => {
               online_at: new Date().toISOString(),
             });
           } catch (error) {
-            console.error("User presence track failed:", error);
+            // Presence track failures are non-fatal; continue without disrupting the session
           }
         }
       });
@@ -128,29 +128,18 @@ export const AuthProvider = ({ children }) => {
           // fresh session token re-stamps it from the server, which usually
           // self-heals; otherwise the user must sync the device clock.
           if (!retried && /issued at future|jwt.*future/i.test(msg)) {
-            console.warn(
-              "[AuthContext] Clock-skew detected (JWT issued at future) — refreshing session and retrying profile fetch.",
-            );
             try {
               await supabase.auth.refreshSession();
             } catch (refreshErr) {
-              console.warn(
-                "[AuthContext] Session refresh during clock-skew recovery failed:",
-                refreshErr?.message || refreshErr,
-              );
+              // Session refresh failure is non-fatal; continue with retry
             }
             return fetchProfile(userId, { retried: true });
           }
 
-          console.error("Error fetching profile:", msg);
           return null;
         }
         return data;
       } catch (error) {
-        console.error(
-          "Profile fetch error:",
-          error?.message || JSON.stringify(error),
-        );
         return null;
       }
     },
@@ -203,7 +192,6 @@ export const AuthProvider = ({ children }) => {
         if (error) throw error;
         await applySessionState(nextSession);
       } catch (error) {
-        console.error("Error syncing session:", error?.message || error);
         await applySessionState(null, { fetchUserProfile: false });
       } finally {
         sessionRefreshInFlightRef.current = false;
@@ -305,9 +293,6 @@ export const AuthProvider = ({ children }) => {
 
         // Skip auto-login for recovery/reset deep links to prevent premature login
         if (bypassAuthSync) {
-          console.log(
-            "AuthContext: Detected password-reset recovery URL, skipping auto-login",
-          );
           await applySessionState(null, { fetchUserProfile: false });
           setLoading(false);
           return;
@@ -315,7 +300,6 @@ export const AuthProvider = ({ children }) => {
 
         await syncSessionFromStorage({ showLoader: true });
       } catch (error) {
-        console.error("Error fetching initial session:", error.message);
         await applySessionState(null, { fetchUserProfile: false });
       } finally {
         if (mountedRef.current) {
@@ -331,18 +315,10 @@ export const AuthProvider = ({ children }) => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (skipAuthStateSyncRef.current) {
-        console.log(
-          "AuthContext: Ignoring auth state change during password reset flow",
-          event,
-        );
         return;
       }
 
       if (isRecoveryModeRef.current && event === "SIGNED_IN") {
-        console.log(
-          "AuthContext: Recovery mode - applying session without fetching profile",
-          event,
-        );
         setTimeout(() => {
           if (!mountedRef.current) return;
           void applySessionState(nextSession, { fetchUserProfile: false });
@@ -350,7 +326,6 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      console.log("Auth state changed:", event, nextSession?.user?.id);
       // Avoid async Supabase calls directly in callback to prevent auth deadlocks.
       setTimeout(() => {
         if (!mountedRef.current) return;
@@ -368,7 +343,7 @@ export const AuthProvider = ({ children }) => {
       try {
         subscription?.unsubscribe?.();
       } catch (error) {
-        console.warn("Auth subscription cleanup failed:", error);
+        // Auth subscription cleanup failed silently
       }
     };
   }, [applySessionState, syncSessionFromStorage]);
@@ -421,7 +396,6 @@ export const AuthProvider = ({ children }) => {
       try {
         subscription?.remove?.();
       } catch (error) {
-        console.warn("AppState subscription cleanup failed:", error);
       }
       if (visibilityListener && typeof document !== "undefined") {
         document.removeEventListener("visibilitychange", visibilityListener);
@@ -432,7 +406,6 @@ export const AuthProvider = ({ children }) => {
 
   const signUp = async (email, password, fullName) => {
     if (!supabase) {
-      console.error("Supabase not configured");
       return { error: new Error("Supabase not configured") };
     }
 
@@ -473,21 +446,18 @@ export const AuthProvider = ({ children }) => {
             });
           }
         } catch (profileError) {
-          console.error("Profile creation fallback error:", profileError);
           // Don't fail signup if profile creation fails
         }
       }
 
       return { data, error: null };
     } catch (error) {
-      console.error("Sign Up Error:", error.message);
       return { data: null, error };
     }
   };
 
   const signIn = async (email, password) => {
     if (!supabase) {
-      console.error("Supabase not configured");
       return { error: new Error("Supabase not configured") };
     }
 
@@ -500,7 +470,6 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error;
       return { data, error: null };
     } catch (error) {
-      console.error("Sign In Error:", error.message);
       return { data: null, error };
     }
   };
@@ -515,7 +484,6 @@ export const AuthProvider = ({ children }) => {
       setProfile(null);
       setSession(null);
     } catch (error) {
-      console.error("Sign out error:", error);
     }
   };
 
@@ -544,7 +512,6 @@ export const AuthProvider = ({ children }) => {
       setSession(null);
       return { error: null };
     } catch (error) {
-      console.error("Delete account error:", error);
       return {
         error:
           error instanceof Error
@@ -561,7 +528,6 @@ export const AuthProvider = ({ children }) => {
 
   const resetPassword = async (email) => {
     if (!supabase) {
-      console.error("Supabase not configured");
       return { error: new Error("Supabase not configured") };
     }
 
@@ -574,7 +540,6 @@ export const AuthProvider = ({ children }) => {
 
       return { error: null };
     } catch (error) {
-      console.error("Reset Password Error:", error.message);
       return { error };
     }
   };
@@ -594,7 +559,6 @@ export const AuthProvider = ({ children }) => {
       setProfile(data);
       return { data, error: null };
     } catch (error) {
-      console.error("Update Profile Error:", error.message);
       return { data: null, error };
     }
   };
@@ -611,7 +575,6 @@ export const AuthProvider = ({ children }) => {
       await signOut();
       return true;
     } catch (error) {
-      console.error("Update Password Error:", error.message);
       return false;
     }
   };
@@ -639,7 +602,6 @@ export const AuthProvider = ({ children }) => {
 
       return true;
     } catch (error) {
-      console.error("Update Email Error:", error.message);
       return false;
     }
   };

@@ -119,10 +119,6 @@ const runOAuth = async (
       client_secret: appSecret,
     };
     if (redirectUri) tokenParams.redirect_uri = redirectUri;
-    console.log(
-      "[oauth] exchanging code:",
-      JSON.stringify({ appId, sellerId, hasRedirectUri: !!redirectUri }),
-    );
     const tokenRes = await graphGet(
       `${graphVersion}/oauth/access_token`,
       tokenParams,
@@ -146,10 +142,7 @@ const runOAuth = async (
       });
       accessToken = longLivedRes?.access_token || shortLivedToken;
     } catch (e) {
-      console.warn(
-        "[oauth] long-lived exchange skipped:",
-        e instanceof Error ? e.message : e,
-      );
+      // Long-lived token extension is optional; continue with short-lived token
     }
 
     // 3. Resolve the WABA id, business id, and catalog id from the token.
@@ -177,7 +170,7 @@ const runOAuth = async (
           access_token: accessToken,
         });
       } catch (e) {
-        console.warn("[oauth] waba subscribed_apps failed:", e);
+        // subscribed_apps failed silently
       }
 
       try {
@@ -187,7 +180,6 @@ const runOAuth = async (
         });
         wabaBusinessId = waba?.business_id || null;
       } catch (e) {
-        console.warn("waba profile lookup failed", e);
       }
 
       // Resolve the WABA's phone number id (needed for messaging later).
@@ -200,7 +192,6 @@ const runOAuth = async (
         });
         phoneNumberId = phones?.data?.[0]?.id || null;
       } catch (e) {
-        console.warn("phone number lookup failed", e);
       }
     }
 
@@ -229,7 +220,7 @@ const runOAuth = async (
           catalogName = first.name || null;
         }
       } catch (e) {
-        console.warn("catalog lookup failed", e);
+        // Catalog lookup failures are non-fatal; continue with fallback
       }
     }
 
@@ -242,7 +233,7 @@ const runOAuth = async (
         });
         catalogName = cat?.name || null;
       } catch (e) {
-        console.warn("catalog name lookup failed", e);
+        // Catalog name lookup failures are non-fatal; continue without name
       }
     }
 
@@ -276,7 +267,6 @@ const runOAuth = async (
 
     return { success: true, catalogId, catalogName, wabaBusinessId };
   } catch (error) {
-    console.error("runOAuth error:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unexpected error",
@@ -413,10 +403,6 @@ serve(async (req) => {
         `&override_default_response_type=code` +
         `&redirect_uri=${encodeURIComponent(url.origin + url.pathname)}` +
         `&state=${launchState}`;
-      console.log(
-        "[oauth] launching embedded signup:",
-        JSON.stringify({ sellerId: launchSellerId, mode: loginMode ? "login" : "es" }),
-      );
       return Response.redirect(dialogUrl, 302);
     }
 
@@ -485,7 +471,6 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error("meta-oauth-callback error:", error);
     return new Response(
       JSON.stringify({
         success: false,

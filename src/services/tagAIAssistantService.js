@@ -1813,10 +1813,11 @@ export const planLocalTurn = (text, ctx = {}) => {
  * deployed, OpenRouter is not configured, or the request fails — so the
  * assistant never hard-fails.
  */
-export const planTurn = async (text, history = []) => {
+export const planTurn = async (text, history = [], image = null) => {
   try {
     const data = await callEdgeFunction("ai-assistant", {
       message: text,
+      image: image || null,
       history: (Array.isArray(history) ? history : [])
         .slice(-8)
         .map((m) => ({

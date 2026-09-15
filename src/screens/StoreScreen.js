@@ -799,17 +799,14 @@ export const StoreScreen = ({ route, navigation }) => {
                   </View>
                   <View style={styles.headerTrustTextWrap}>
                     <Text style={styles.headerTrustTitle}>
-                      {sellerDetail?.default_shipping_fee === 0 ||
-                      sellerDetail?.default_shipping_fee == null
-                        ? "Free shipping"
-                        : "Standard shipping"}
+                      Shipping options
                     </Text>
                     <Text style={styles.headerTrustSubtitle}>
                       {sellerDetail?.default_shipping_fee > 0
                         ? `Fee GH₵${Number(
                             sellerDetail.default_shipping_fee,
                           ).toFixed(2)}`
-                        : "On all orders from this store"}
+                        : "Fees shown at checkout"}
                     </Text>
                   </View>
                 </View>

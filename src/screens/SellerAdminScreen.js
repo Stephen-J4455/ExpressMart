@@ -42,6 +42,7 @@ import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
 import { colors as brandColors, getTheme, radius } from "../theme/colors";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { getImageContentType } from "../utils/webUpload";
+import { compressProductImage } from "../utils/compressImage";
 import { showTabBar, updateTabBarOnScroll } from "../utils/tabBarAutoHide";
 import {
   R2_FOLDERS,
@@ -117,9 +118,9 @@ const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
 const MAX_VIDEO_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 const PRODUCT_FORM_STEPS = [
+  { key: "media", label: "Media" },
   { key: "basics", label: "Basics" },
   { key: "inventory", label: "Inventory" },
-  { key: "media", label: "Media" },
   { key: "details", label: "Details" },
 ];
 
@@ -205,7 +206,19 @@ const getBlobFromUri = async (uri, timeoutMs = 30000) => {
 const formatBytes = (bytes) => {
   const value = Number(bytes || 0);
   if (!value) return "0 MB";
+  if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const storageSegment = (value, fallback = "unnamed") => {
+  const segment = String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return segment || fallback;
 };
 
 // Compact count formatting for the profile stats line ("3.6K followers").
@@ -417,6 +430,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [discount, setDiscount] = useState(0);
   const [imageUris, setImageUris] = useState([]);
   const [imageFiles, setImageFiles] = useState({});
+  const [imageCompression, setImageCompression] = useState({});
+  const [generatingProduct, setGeneratingProduct] = useState(false);
+  const [agentActivity, setAgentActivity] = useState([]);
   const [existingImageUrls, setExistingImageUrls] = useState([]);
   const [removingImageUrl, setRemovingImageUrl] = useState(null);
   const [selectedSizes, setSelectedSizes] = useState([]);
@@ -1294,6 +1310,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setDiscount(0);
     setImageUris([]);
     setImageFiles({});
+    setImageCompression({});
+    setAgentActivity([]);
     setExistingImageUrls([]);
     setRemovingImageUrl(null);
     setSelectedSizes([]);
@@ -1385,6 +1403,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setRemovingImageUrl(null);
     setImageUris([]);
     setImageFiles({});
+    setImageCompression({});
     setVideoUri(null);
     setVideoFile(null);
     setExistingVideoUrl(product.video_url || null);
@@ -1457,6 +1476,21 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     if (!result.canceled) {
       const uris = result.assets.map((a) => a.uri);
       setImageUris((prev) => [...prev, ...uris]);
+      const compressedImages = await Promise.all(
+        result.assets.map((asset) =>
+          compressProductImage(
+            asset.uri,
+            Platform.OS === "web" ? asset.file || null : null,
+          ),
+        ),
+      );
+      setImageCompression((prev) => {
+        const next = { ...prev };
+        result.assets.forEach((asset, index) => {
+          next[asset.uri] = compressedImages[index];
+        });
+        return next;
+      });
       if (Platform.OS === "web") {
         setImageFiles((prev) => {
           const next = { ...prev };
@@ -1484,24 +1518,28 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       if (!ext || ext.length > 5) return "jpg";
       return ext === "jpeg" ? "jpg" : ext;
     };
-    const ext = getExt(uri);
-    const fileName = `product-${Date.now()}-${Math.random()
-      .toString(36)
-      .substring(7)}.${ext}`;
-    const folder = sellerId || "unknown";
-    const r2Folder = `${R2_FOLDERS.PRODUCTS}/products/${folder}`;
-
-    // Upload to Cloudflare R2 via presigned URL (web Blob / native bytes).
     const picked =
       Platform.OS === "web" ? imageFiles?.[uri]?.file || null : null;
     const pickedType =
       Platform.OS === "web" ? imageFiles?.[uri]?.type || null : null;
+    const compressed =
+      imageCompression?.[uri] || (await compressProductImage(uri, picked));
+    const ext = compressed.fileName?.split(".").pop() || getExt(compressed.uri);
+    const productSegment = storageSegment(title, "product");
+    const storeSegment = storageSegment(seller?.name, "store");
+    const storeFolder = `${storeSegment}-${sellerId || "unknown"}`;
+    const fileName = `${productSegment}-${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(7)}.${ext}`;
+    const r2Folder = `${R2_FOLDERS.PRODUCTS}/products/${storeFolder}`;
 
+    // Upload to Cloudflare R2 via presigned URL (web Blob / native bytes).
     const { publicUrl } = await uploadToR2Presigned({
-      uri,
-      pickedFile: picked,
+      uri: compressed.uri,
+      pickedFile: compressed.pickedFile,
       folder: r2Folder,
       fileName,
+      contentType: compressed.contentType || pickedType,
     });
     return publicUrl;
   };
@@ -1621,15 +1659,19 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // the raw file bytes are streamed straight to R2 (the reliable React Native
   // path — reading a local file into a Blob via fetch/XHR is unsupported and was
   // silently storing empty/garbage objects). On web we PUT the picked Blob.
-  const uploadVideoToR2 = async (uri, pickedFile, onProgress) => {
+  const uploadVideoToR2 = async (
+    uri,
+    pickedFile,
+    productTitle,
+    onProgress,
+  ) => {
     const { contentType, extension } = getVideoUploadDetails(uri, pickedFile);
-    const fileName = `product-video-${Date.now()}-${Math.random()
+    const productSegment = storageSegment(productTitle, "product");
+    const storeSegment = storageSegment(seller?.name, "store");
+    const storeFolder = `${storeSegment}-${sellerId || user?.id || "unknown"}`;
+    const fileName = `${productSegment}-video-${Date.now()}-${Math.random()
       .toString(36)
       .substring(7)}.${extension}`;
-    const uploadFolderOwnerId = sellerId || user?.id;
-    if (!uploadFolderOwnerId) {
-      throw new Error("Could not resolve upload folder owner id");
-    }
 
     // ── 1. Request a presigned PUT URL from the edge function ────────────────
     let presigned;
@@ -1640,7 +1682,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           body: {
             fileName,
             fileType: contentType,
-            folder: `products/${uploadFolderOwnerId}`,
+            folder: `products/${storeFolder}`,
           },
         },
       );
@@ -1734,8 +1776,131 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     return url;
   };
 
+  const generateProductFromImage = async () => {
+    const firstUri = imageUris[0];
+    const compressed = firstUri ? imageCompression?.[firstUri] : null;
+    const storedImageReference = existingImageUrls[0];
+    const existingImageUrl = /^https:\/\//i.test(String(storedImageReference || ""))
+      ? String(storedImageReference)
+      : /^http:\/\//i.test(String(storedImageReference || ""))
+        ? String(storedImageReference).replace(/^http:\/\//i, "https://")
+        : resolveMediaUrl(storedImageReference, R2_FOLDERS.PRODUCTS);
+    if ((!firstUri || !compressed) && !existingImageUrl) {
+      toast.warning("Add a photo first", "Choose a product photo to generate details.");
+      return;
+    }
+
+    const addAgentActivity = (message, status = "done") => {
+      setAgentActivity((previous) => [
+        ...previous.slice(-5),
+        { id: `${Date.now()}-${Math.random()}`, message, status },
+      ]);
+    };
+
+    setGeneratingProduct(true);
+    setAgentActivity([]);
+    addAgentActivity(
+      compressed ? "Reading compressed product image" : "Reading published product image URL",
+      "active",
+    );
+    try {
+      let image;
+      if (compressed) {
+        let base64;
+        if (Platform.OS === "web") {
+          const blob = compressed.pickedFile;
+          if (!blob) throw new Error("Compressed image is not ready");
+          const buffer = await blob.arrayBuffer();
+          const bytes = new Uint8Array(buffer);
+          let binary = "";
+          for (let index = 0; index < bytes.length; index += 1) {
+            binary += String.fromCharCode(bytes[index]);
+          }
+          base64 = btoa(binary);
+        } else {
+          base64 = await FileSystem.readAsStringAsync(compressed.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+        }
+        image = `data:image/jpeg;base64,${base64}`;
+      } else {
+        image = existingImageUrl;
+      }
+
+      addAgentActivity("Sending image to product vision agent", "active");
+      const result = await callEdgeFunction("product-vision", {
+        image,
+        category: category || null,
+        categories: categories.map((item) => item.name).filter(Boolean),
+      });
+      if (!result?.success || !result.product) {
+        throw new Error(result?.error || "AI could not identify this product");
+      }
+
+      const generated = result.product;
+      addAgentActivity("Navigating to Basics", "active");
+      setProductFormStep(2);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (generated.category) {
+        const suggestedCategory = categories.find(
+          (item) =>
+            String(item.name || "").trim().toLowerCase() ===
+            String(generated.category).trim().toLowerCase(),
+        );
+        if (suggestedCategory) {
+          setCategory(suggestedCategory.name);
+          addAgentActivity(`Selected category: ${suggestedCategory.name}`);
+        } else {
+          addAgentActivity(`Category suggestion needs review: ${String(generated.category)}`);
+        }
+      }
+      if (generated.title) {
+        addAgentActivity(`Typing product name: ${String(generated.title)}`);
+        setTitle(String(generated.title));
+      }
+      if (generated.description) {
+        addAgentActivity("Inserting product description");
+        setDescription(String(generated.description));
+      }
+      addAgentActivity("Navigating to Inventory", "active");
+      setProductFormStep(3);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      addAgentActivity("Inventory left for you: price and stock are seller-specific");
+      addAgentActivity("Navigating to Details", "active");
+      setProductFormStep(4);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (Array.isArray(generated.specifications)) {
+        setSpecifications(
+          generated.specifications
+            .map((spec) => ({
+              key: String(spec?.key || "").trim(),
+              value: String(spec?.value || "").trim(),
+            }))
+            .filter((spec) => spec.key && spec.value),
+        );
+        addAgentActivity(`Inserted ${generated.specifications.length} specifications`);
+      }
+      if (Array.isArray(generated.tags)) {
+        setTags(generated.tags.map((tag) => String(tag).trim()).filter(Boolean));
+        addAgentActivity(`Typed ${generated.tags.length} search tags`);
+      }
+      addAgentActivity("Draft ready for your review");
+      toast.success("Product details generated", "Review the suggestions before publishing.");
+    } catch (error) {
+      console.error("[product-vision] generation failed:", error);
+      toast.error("AI generation failed", error?.message || "Try another image.");
+    } finally {
+      setGeneratingProduct(false);
+    }
+  };
+
   const goToNextProductStep = () => {
-    if (productFormStep === 1) {
+    if (productFormStep === 1 && imageUris.length === 0 && existingImageUrls.length === 0) {
+      toast.warning("Add media first", "Choose at least one product image before continuing.");
+      return;
+    }
+
+    if (productFormStep === 2) {
       if (!title || !price || !category) {
         toast.warning(
           "Missing info",
@@ -1745,7 +1910,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       }
     }
 
-    if (productFormStep === 2 && !isPreorder && !quantity) {
+    if (productFormStep === 3 && !isPreorder && !quantity) {
       toast.warning(
         "Missing info",
         "Please add a quantity or mark the product as preorder.",
@@ -1926,6 +2091,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         const { publicUrl, key } = await uploadVideoToR2(
           uri,
           pickedFile,
+          productTitle,
           (progress) => {
             upsertVideoUploadJob(jobId, {
               status: "uploading",
@@ -2249,6 +2415,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         status,
         total: orders.filter((o) => o.status === status).length,
       })),
+    [orders],
+  );
+
+  const processingOrderCount = useMemo(
+    () => orders.filter((order) => order.status === "processing").length,
     [orders],
   );
 
@@ -4226,6 +4397,33 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     </Modal>
   );
 
+  const detailMedia = viewingProduct
+    ? [
+        ...(Array.isArray(viewingProduct.thumbnails)
+          ? viewingProduct.thumbnails
+          : viewingProduct.thumbnail
+            ? [viewingProduct.thumbnail]
+            : []),
+      ].filter(Boolean)
+    : [];
+  const detailSpecifications =
+    viewingProduct?.specifications && typeof viewingProduct.specifications === "object"
+      ? Object.entries(viewingProduct.specifications)
+      : [];
+  const detailTags = Array.isArray(viewingProduct?.tags)
+    ? viewingProduct.tags.filter(Boolean)
+    : [];
+  const detailColors = Array.isArray(viewingProduct?.colors)
+    ? viewingProduct.colors
+        .map((color) => (typeof color === "string" ? color : color?.name))
+        .filter(Boolean)
+    : [];
+  const detailSizes = Array.isArray(viewingProduct?.sizes)
+    ? viewingProduct.sizes.filter(Boolean)
+    : [];
+  const detailValue = (value, fallback = "Not set") =>
+    value === null || value === undefined || value === "" ? fallback : String(value);
+
   return (
     <View style={styles.container}>
       {/* Elastic-overscroll backdrop: iOS rubber-banding reveals whatever sits
@@ -4640,6 +4838,22 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 >
                   {TAB_LABELS[tab]}
                 </Text>
+                  {tab === "orders" && processingOrderCount > 0 ? (
+                    <View
+                      style={[
+                        styles.tabCountBadge,
+                        {
+                          backgroundColor: isActive
+                            ? accent
+                            : themeColors.badgeDanger,
+                        },
+                      ]}
+                    >
+                      <Text style={styles.tabCountBadgeText}>
+                        {processingOrderCount > 99 ? "99+" : processingOrderCount}
+                      </Text>
+                    </View>
+                  ) : null}
               </Pressable>
             );
           })}
@@ -4739,13 +4953,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {productFormStep === 1 && (
+            {productFormStep === 2 && (
               <>
                 <View style={styles.card}>
                   <Text style={styles.cardTitle}>Product info</Text>
                   <Text style={styles.label}>Title *</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, !title.trim() && styles.requiredEmpty]}
                     value={title}
                     onChangeText={setTitle}
                     placeholder="e.g. Ankara two-piece set"
@@ -4757,7 +4971,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     <View style={styles.col}>
                       <Text style={styles.label}>Price (GH₵) *</Text>
                       <TextInput
-                        style={styles.input}
+                        style={[styles.input, !price.trim() && styles.requiredEmpty]}
                         value={price}
                         onChangeText={setPrice}
                         keyboardType="decimal-pad"
@@ -4822,7 +5036,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
                 <View style={styles.card}>
                   <Text style={styles.cardTitle}>Category *</Text>
-                  <View style={styles.categoryRow}>
+                  <View
+                    style={[
+                      styles.categoryRow,
+                      !category && styles.requiredGroupEmpty,
+                    ]}
+                  >
                     {categories.map((c) => {
                       const selected = category === c.name;
                       return (
@@ -4873,7 +5092,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </>
             )}
 
-            {productFormStep === 2 && (
+            {productFormStep === 3 && (
               <>
                 <View style={styles.card}>
                   <Text style={styles.cardTitle}>Stock & pricing</Text>
@@ -4881,7 +5100,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     <View style={styles.col}>
                       <Text style={styles.label}>Quantity *</Text>
                       <TextInput
-                        style={styles.input}
+                        style={[styles.input, !isPreorder && !quantity.trim() && styles.requiredEmpty]}
                         value={quantity}
                         onChangeText={setQuantity}
                         keyboardType="number-pad"
@@ -5058,7 +5277,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </>
             )}
 
-            {productFormStep === 3 && (
+            {productFormStep === 1 && (
               <>
                 <View style={styles.card}>
                   <View style={styles.cardTitleRow}>
@@ -5067,7 +5286,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       {imageUris.length + existingImageUrls.length}/5
                     </Text>
                   </View>
-                  <View style={styles.imageGrid}>
+                  <View
+                    style={[
+                      styles.imageGrid,
+                      imageUris.length + existingImageUrls.length === 0 &&
+                        styles.requiredGroupEmpty,
+                    ]}
+                  >
                     {existingImageUrls.map((u) => (
                       <View key={u} style={styles.imageWrap}>
                         <Image source={{ uri: u }} style={styles.imageThumb} />
@@ -5090,7 +5315,14 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                         <Pressable
                           style={styles.imageRemove}
                           onPress={() =>
-                            setImageUris((prev) => prev.filter((x) => x !== u))
+                            (() => {
+                              setImageUris((prev) => prev.filter((x) => x !== u));
+                              setImageCompression((prev) => {
+                                const next = { ...prev };
+                                delete next[u];
+                                return next;
+                              });
+                            })()
                           }
                         >
                           <Ionicons
@@ -5099,6 +5331,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                             color="#EF4444"
                           />
                         </Pressable>
+                        <Text style={styles.imageSizeText}>
+                          {imageCompression[u]?.originalSize
+                            ? `${formatBytes(imageCompression[u].originalSize)} -> ${formatBytes(imageCompression[u].compressedSize)}`
+                            : "Compressing..."}
+                        </Text>
                       </View>
                     ))}
                     {imageUris.length + existingImageUrls.length < 5 && (
@@ -5117,6 +5354,24 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   <Text style={styles.hintText}>
                     The first photo becomes the cover image.
                   </Text>
+                  {agentActivity.length > 0 && (
+                    <View style={styles.agentActivityPanel}>
+                      <View style={styles.agentActivityHeader}>
+                        <Ionicons name="sparkles" size={15} color={accent} />
+                        <Text style={[styles.agentActivityTitle, { color: accent }]}>Auto-create agent</Text>
+                      </View>
+                      {agentActivity.map((activity) => (
+                        <View key={activity.id} style={styles.agentActivityRow}>
+                          <Ionicons
+                            name={activity.status === "active" ? "radio-button-on" : "checkmark-circle"}
+                            size={13}
+                            color={activity.status === "active" ? accent : "#10B981"}
+                          />
+                          <Text style={styles.agentActivityText}>{activity.message}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.card}>
@@ -5420,6 +5675,26 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             ) : (
               <View style={styles.stepSpacer} />
             )}
+            {productFormStep === 1 && (
+              <TouchableOpacity
+                style={[styles.stepButton, styles.agentButton]}
+                onPress={generateProductFromImage}
+                disabled={
+                  generatingProduct ||
+                  submitting ||
+                  (imageUris.length === 0 && existingImageUrls.length === 0)
+                }
+              >
+                {generatingProduct ? (
+                  <ActivityIndicator size="small" color={accent} />
+                ) : (
+                  <Ionicons name="sparkles-outline" size={16} color={accent} />
+                )}
+                <Text style={[styles.stepButtonSecondaryText, { color: accent }]}> 
+                  {generatingProduct ? "Working" : "Auto-create"}
+                </Text>
+              </TouchableOpacity>
+            )}
             {productFormStep < PRODUCT_FORM_STEPS.length ? (
               <TouchableOpacity
                 style={[
@@ -5678,29 +5953,204 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       {/* Detail modal */}
       <Modal visible={detailModalVisible} animationType="slide">
         <View style={styles.modalContainer}>
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            <View style={styles.modalHead}>
-              <Text style={styles.modalTitle}>{viewingProduct?.title}</Text>
-              <Pressable onPress={() => setDetailModalVisible(false)}>
-                <Ionicons name="close" size={24} color={themeColors.dark} />
-              </Pressable>
+          <View style={[styles.detailHeader, { paddingTop: insets.top + 10 }]}>
+            <View style={styles.detailHeaderCopy}>
+              <Text style={styles.detailEyebrow}>PRODUCT VIEW</Text>
+              <Text style={styles.detailHeaderTitle} numberOfLines={1}>
+                {detailValue(viewingProduct?.title, "Untitled product")}
+              </Text>
             </View>
-            {viewingProduct?.thumbnail ? (
-              <Image
-                source={{ uri: viewingProduct.thumbnail }}
-                style={styles.detailImage}
-              />
-            ) : null}
-            <Text style={styles.detailPrice}>
-              {formatPrice(viewingProduct?.price)}
-            </Text>
-            <Text style={styles.detailStatus}>
-              Status: {viewingProduct?.status}
-            </Text>
-            <Text style={styles.detailDesc}>{viewingProduct?.description}</Text>
-            <Text style={styles.detailMeta}>
-              Quantity: {viewingProduct?.quantity || 0}
-            </Text>
+            <Pressable
+              style={styles.detailCloseButton}
+              onPress={() => setDetailModalVisible(false)}
+              hitSlop={8}
+            >
+              <Ionicons name="close" size={22} color={themeColors.dark} />
+            </Pressable>
+          </View>
+          <ScrollView
+            style={styles.detailScroll}
+            contentContainerStyle={styles.detailContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.detailHero}>
+              {detailMedia.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.detailGallery}
+                >
+                  {detailMedia.map((uri, index) => (
+                    <Image
+                      key={`${uri}-${index}`}
+                      source={{ uri }}
+                      style={styles.detailGalleryImage}
+                    />
+                  ))}
+                </ScrollView>
+              ) : (
+                <View style={styles.detailGalleryEmpty}>
+                  <Ionicons name="cube-outline" size={42} color={accent} />
+                  <Text style={styles.detailGalleryEmptyText}>No product photos</Text>
+                </View>
+              )}
+              <View style={styles.detailHeroBody}>
+                <View style={styles.detailTitleRow}>
+                  <View style={styles.detailTitleCopy}>
+                    <Text style={styles.detailCategory}>
+                      {detailValue(viewingProduct?.category, "Uncategorized")}
+                    </Text>
+                    <Text style={styles.detailProductTitle}>
+                      {detailValue(viewingProduct?.title, "Untitled product")}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.detailStatusPill,
+                      { backgroundColor: CATALOG_STATUS_COLORS[viewingProduct?.status] || themeColors.muted },
+                    ]}
+                  >
+                    <Text style={styles.detailStatusPillText}>
+                      {detailValue(viewingProduct?.status, "unknown")}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.detailPrice, { color: accent }]}>
+                  {formatPrice(viewingProduct?.price)}
+                </Text>
+                <Text style={styles.detailDescription}>
+                  {detailValue(viewingProduct?.description, "No description added.")}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.detailMetricGrid}>
+              {[
+                { label: "In stock", value: viewingProduct?.is_preorder ? "Preorder" : detailValue(viewingProduct?.quantity, "0"), icon: "layers-outline" },
+                { label: "Sold", value: detailValue(viewingProduct?.sold_count, "0"), icon: "trending-up-outline" },
+                { label: "Shipping", value: viewingProduct?.shipping_fee ? formatPrice(viewingProduct.shipping_fee) : "Free", icon: "car-outline" },
+                { label: "Discount", value: viewingProduct?.discount ? `${viewingProduct.discount}%` : "None", icon: "pricetag-outline" },
+              ].map((metric) => (
+                <View key={metric.label} style={styles.detailMetric}>
+                  <Ionicons name={metric.icon} size={17} color={accent} />
+                  <Text style={styles.detailMetricValue}>{metric.value}</Text>
+                  <Text style={styles.detailMetricLabel}>{metric.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.detailSection}>
+              <View style={styles.detailSectionHeading}>
+                <Ionicons name="cash-outline" size={18} color={accent} />
+                <Text style={styles.detailSectionTitle}>Pricing & fulfillment</Text>
+              </View>
+              <View style={styles.detailTwoColumn}>
+                {[
+                  ["Selling price", formatPrice(viewingProduct?.price)],
+                  ["Compare-at price", viewingProduct?.compare_at_price ? formatPrice(viewingProduct.compare_at_price) : "Not set"],
+                  ["Cost price", viewingProduct?.cost_price ? formatPrice(viewingProduct.cost_price) : "Not set"],
+                  ["Shipping fee", viewingProduct?.shipping_fee ? formatPrice(viewingProduct.shipping_fee) : "Free"],
+                ].map(([label, value]) => (
+                  <View key={label} style={styles.detailField}>
+                    <Text style={styles.detailFieldLabel}>{label}</Text>
+                    <Text style={styles.detailFieldValue}>{value}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.detailSection}>
+              <View style={styles.detailSectionHeading}>
+                <Ionicons name="cube-outline" size={18} color={accent} />
+                <Text style={styles.detailSectionTitle}>Inventory & variants</Text>
+              </View>
+              <View style={styles.detailTwoColumn}>
+                {[
+                  ["Quantity", viewingProduct?.is_preorder ? "Preorder" : detailValue(viewingProduct?.quantity, "0")],
+                  ["Inventory tracking", viewingProduct?.track_inventory === false ? "Disabled" : "Enabled"],
+                  ["Backorders", viewingProduct?.allow_backorder ? "Allowed" : "Not allowed"],
+                  ["Weight", viewingProduct?.weight ? `${viewingProduct.weight} ${detailValue(viewingProduct.weight_unit, "kg")}` : "Not set"],
+                ].map(([label, value]) => (
+                  <View key={label} style={styles.detailField}>
+                    <Text style={styles.detailFieldLabel}>{label}</Text>
+                    <Text style={styles.detailFieldValue}>{value}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={styles.detailVariantBlock}>
+                <Text style={styles.detailFieldLabel}>Sizes</Text>
+                <Text style={styles.detailFieldValue}>{detailSizes.length ? detailSizes.join(" · ") : "No sizes"}</Text>
+              </View>
+              <View style={styles.detailVariantBlock}>
+                <Text style={styles.detailFieldLabel}>Colors</Text>
+                <Text style={styles.detailFieldValue}>{detailColors.length ? detailColors.join(" · ") : "No colors"}</Text>
+              </View>
+            </View>
+
+            <View style={styles.detailSection}>
+              <View style={styles.detailSectionHeading}>
+                <Ionicons name="list-outline" size={18} color={accent} />
+                <Text style={styles.detailSectionTitle}>Specifications</Text>
+              </View>
+              {detailSpecifications.length ? detailSpecifications.map(([label, value]) => (
+                <View key={label} style={styles.detailSpecRow}>
+                  <Text style={styles.detailSpecLabel}>{label}</Text>
+                  <Text style={styles.detailSpecValue}>{detailValue(value)}</Text>
+                </View>
+              )) : <Text style={styles.detailEmptyText}>No specifications added.</Text>}
+            </View>
+
+            <View style={styles.detailSection}>
+              <View style={styles.detailSectionHeading}>
+                <Ionicons name="barcode-outline" size={18} color={accent} />
+                <Text style={styles.detailSectionTitle}>Organization & discoverability</Text>
+              </View>
+              <View style={styles.detailTwoColumn}>
+                {[
+                  ["SKU", viewingProduct?.sku],
+                  ["Barcode", viewingProduct?.barcode],
+                  ["Vendor", viewingProduct?.vendor],
+                  ["Slug", viewingProduct?.slug],
+                ].map(([label, value]) => (
+                  <View key={label} style={styles.detailField}>
+                    <Text style={styles.detailFieldLabel}>{label}</Text>
+                    <Text style={styles.detailFieldValue}>{detailValue(value)}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={[styles.detailFieldLabel, { marginTop: 14 }]}>Search tags</Text>
+              {detailTags.length ? (
+                <View style={styles.detailTagWrap}>
+                  {detailTags.map((tag) => <View key={tag} style={[styles.detailTag, { borderColor: accent }]}><Text style={[styles.detailTagText, { color: accent }]}>{tag}</Text></View>)}
+                </View>
+              ) : <Text style={styles.detailEmptyText}>No tags added.</Text>}
+            </View>
+
+            <View style={styles.detailSection}>
+              <View style={styles.detailSectionHeading}>
+                <Ionicons name="images-outline" size={18} color={accent} />
+                <Text style={styles.detailSectionTitle}>Media & record</Text>
+              </View>
+              <View style={styles.detailTwoColumn}>
+                <View style={styles.detailField}>
+                  <Text style={styles.detailFieldLabel}>Photos</Text>
+                  <Text style={styles.detailFieldValue}>{detailMedia.length}</Text>
+                </View>
+                <View style={styles.detailField}>
+                  <Text style={styles.detailFieldLabel}>Video</Text>
+                  <Text style={styles.detailFieldValue}>{viewingProduct?.video_url ? "Attached" : "Not attached"}</Text>
+                </View>
+                <View style={styles.detailField}>
+                  <Text style={styles.detailFieldLabel}>Product ID</Text>
+                  <Text style={styles.detailFieldValue} numberOfLines={1}>{detailValue(viewingProduct?.id)}</Text>
+                </View>
+                <View style={styles.detailField}>
+                  <Text style={styles.detailFieldLabel}>Created</Text>
+                  <Text style={styles.detailFieldValue}>{viewingProduct?.created_at ? new Date(viewingProduct.created_at).toLocaleDateString() : "Not available"}</Text>
+                </View>
+              </View>
+            </View>
           </ScrollView>
         </View>
       </Modal>
@@ -6053,11 +6503,28 @@ const buildSellerAdminStyles = (c) =>
       paddingHorizontal: 16,
       paddingVertical: 9,
       borderRadius: radius.full,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
     },
     tabPillText: {
       fontSize: 14,
       fontWeight: "700",
       color: c.muted,
+    },
+    tabCountBadge: {
+      minWidth: 18,
+      height: 18,
+      paddingHorizontal: 5,
+      borderRadius: radius.full,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    tabCountBadgeText: {
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: "900",
+      lineHeight: 12,
     },
     tabContent: {
       borderRadius: radius.lg,
@@ -6938,6 +7405,16 @@ const buildSellerAdminStyles = (c) =>
       fontSize: 14,
       color: c.dark,
     },
+    requiredEmpty: {
+      borderColor: "#EF4444",
+      borderWidth: 1.5,
+    },
+    requiredGroupEmpty: {
+      borderColor: "#EF4444",
+      borderWidth: 1.5,
+      borderRadius: radius.md,
+      padding: 7,
+    },
     textArea: { height: 100, backgroundColor: c.background,
       borderWidth: 1,
       borderColor: c.border,
@@ -7027,6 +7504,14 @@ const buildSellerAdminStyles = (c) =>
       position: "relative",
     },
     imageThumb: { width: 84, height: 84, borderRadius: radius.md },
+    imageSizeText: {
+      width: 84,
+      marginTop: 3,
+      fontSize: 9,
+      lineHeight: 11,
+      textAlign: "center",
+      color: c.muted,
+    },
     imageRemove: {
       position: "absolute",
       top: -6,
@@ -7102,6 +7587,12 @@ const buildSellerAdminStyles = (c) =>
       backgroundColor: c.background,
     },
     stepSpacer: { flex: 1 },
+    agentButton: {
+      backgroundColor: c.light,
+      borderWidth: 1,
+      borderColor: c.border,
+      minWidth: 118,
+    },
     stepButton: {
       minWidth: 110,
       paddingVertical: 14,
@@ -7119,6 +7610,24 @@ const buildSellerAdminStyles = (c) =>
     },
     stepButtonText: { color: c.light, fontWeight: "800", fontSize: 15 },
     stepButtonSecondaryText: { color: c.dark, fontWeight: "800", fontSize: 15 },
+    agentActivityPanel: {
+      marginTop: 12,
+      padding: 12,
+      borderRadius: radius.md,
+      backgroundColor: c.light,
+      borderWidth: 1,
+      borderColor: c.border,
+      gap: 7,
+    },
+    agentActivityHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 2,
+    },
+    agentActivityTitle: { fontSize: 12, fontWeight: "800" },
+    agentActivityRow: { flexDirection: "row", alignItems: "flex-start", gap: 7 },
+    agentActivityText: { flex: 1, color: c.muted, fontSize: 11.5, lineHeight: 16 },
     submitButton: {
       marginTop: 20,
       paddingVertical: 14,
@@ -7126,6 +7635,85 @@ const buildSellerAdminStyles = (c) =>
       alignItems: "center",
     },
     submitButtonText: { color: c.light, fontWeight: "700", fontSize: 15 },
+    detailHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.surface,
+      backgroundColor: c.light,
+    },
+    detailHeaderCopy: { flex: 1, minWidth: 0 },
+    detailEyebrow: {
+      color: c.muted,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+    detailHeaderTitle: {
+      color: c.dark,
+      fontSize: 17,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    detailCloseButton: {
+      width: 36,
+      height: 36,
+      borderRadius: radius.full,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.surface,
+    },
+    detailScroll: { flex: 1 },
+    detailContent: { padding: 16, paddingBottom: 36, gap: 12 },
+    detailHero: {
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    detailGallery: { width: "100%", height: 260, backgroundColor: c.surface },
+    detailGalleryImage: { width: 360, height: 260, resizeMode: "cover" },
+    detailGalleryEmpty: {
+      height: 260,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.surface,
+      gap: 8,
+    },
+    detailGalleryEmptyText: { color: c.muted, fontSize: 13, fontWeight: "700" },
+    detailHeroBody: { padding: 16 },
+    detailTitleRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+    detailTitleCopy: { flex: 1, minWidth: 0 },
+    detailCategory: {
+      color: c.muted,
+      fontSize: 11,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    detailProductTitle: {
+      color: c.dark,
+      fontSize: 23,
+      lineHeight: 29,
+      fontWeight: "900",
+      marginTop: 4,
+    },
+    detailStatusPill: {
+      borderRadius: radius.full,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      marginTop: 2,
+    },
+    detailStatusPillText: {
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
     detailImage: {
       width: "100%",
       height: 200,
@@ -7135,12 +7723,88 @@ const buildSellerAdminStyles = (c) =>
     detailPrice: {
       fontSize: 20,
       fontWeight: "800",
-      color: c.accent,
+      marginTop: 12,
+      marginBottom: 8,
+    },
+    detailDescription: { fontSize: 14, color: c.muted, lineHeight: 21 },
+    detailMetricGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    detailMetric: {
+      flexGrow: 1,
+      flexBasis: "22%",
+      minWidth: 74,
+      backgroundColor: c.light,
+      borderRadius: radius.md,
+      padding: 11,
+      borderWidth: 1,
+      borderColor: c.surface,
+      gap: 4,
+    },
+    detailMetricValue: { color: c.dark, fontSize: 15, fontWeight: "900" },
+    detailMetricLabel: { color: c.muted, fontSize: 10, fontWeight: "700" },
+    detailSection: {
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      padding: 15,
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    detailSectionHeading: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.surface,
+      marginBottom: 2,
+    },
+    detailSectionTitle: { color: c.dark, fontSize: 14, fontWeight: "900" },
+    detailTwoColumn: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      columnGap: 18,
+      rowGap: 14,
+      paddingTop: 12,
+    },
+    detailField: { flex: 1, minWidth: 125 },
+    detailFieldLabel: {
+      color: c.muted,
+      fontSize: 10,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
       marginBottom: 4,
     },
-    detailStatus: { fontSize: 14, color: c.muted, marginBottom: 8 },
-    detailDesc: { fontSize: 14, color: c.dark, lineHeight: 20 },
-    detailMeta: { fontSize: 13, color: c.muted, marginTop: 8 },
+    detailFieldValue: { color: c.dark, fontSize: 13, fontWeight: "800" },
+    detailVariantBlock: {
+      marginTop: 14,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: c.surface,
+    },
+    detailSpecRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12,
+      paddingVertical: 11,
+      borderBottomWidth: 1,
+      borderBottomColor: c.surface,
+    },
+    detailSpecLabel: { flex: 0.8, color: c.muted, fontSize: 13, fontWeight: "700" },
+    detailSpecValue: { flex: 1.2, color: c.dark, fontSize: 13, fontWeight: "800", textAlign: "right" },
+    detailEmptyText: { color: c.muted, fontSize: 13, paddingTop: 12 },
+    detailTagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 8 },
+    detailTag: {
+      borderWidth: 1,
+      borderRadius: radius.full,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      backgroundColor: c.surfaceAlpha,
+    },
+    detailTagText: { fontSize: 11, fontWeight: "800" },
     sheetOverlay: {
       flex: 1,
       backgroundColor: c.overlay,

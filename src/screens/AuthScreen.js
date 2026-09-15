@@ -276,7 +276,6 @@ export const AuthScreen = ({ navigation, route }) => {
           const handled = await completeOAuthFromUrl(window.location.href);
           if (!handled) throw error;
         } catch (fallbackError) {
-          console.error("Error handling web OAuth callback:", fallbackError);
           toast.error(fallbackError.message || "Failed to complete sign-in");
         }
       } finally {
@@ -295,7 +294,6 @@ export const AuthScreen = ({ navigation, route }) => {
       try {
         await completeOAuthFromUrl(url);
       } catch (error) {
-        console.error("Error handling native OAuth callback:", error);
         toast.error(error.message || "Failed to complete sign-in");
       }
     });
@@ -317,7 +315,6 @@ export const AuthScreen = ({ navigation, route }) => {
 
     try {
       const redirectTo = getOAuthRedirectUrl();
-      console.log(`${providerLabel} OAuth redirectTo:`, redirectTo);
 
       const queryParams =
         provider === "google"
@@ -353,19 +350,14 @@ export const AuthScreen = ({ navigation, route }) => {
 
       // Mobile: Open browser for OAuth
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-      console.log("OAuth result:", result);
 
       if (result.type === "success" && result.url) {
-        console.log("OAuth redirect URL:", result.url);
         await completeOAuthFromUrl(result.url);
       } else if (result.type === "cancel" || result.type === "dismiss") {
-        console.log("User cancelled OAuth flow");
       } else {
-        console.log("OAuth result type:", result.type);
         throw new Error(`OAuth flow failed: ${result.type}`);
       }
     } catch (error) {
-      console.error(`${providerLabel} Sign-In Error:`, error);
       toast.error(error.message || `${providerLabel} Sign-In failed`);
     } finally {
       setProviderLoading(false);
@@ -429,7 +421,6 @@ export const AuthScreen = ({ navigation, route }) => {
         // User canceled Apple sign-in
         return;
       }
-      console.error("Apple Sign-In Error:", error);
       toast.error(error.message || "Apple Sign-In failed");
     } finally {
       setAppleLoading(false);

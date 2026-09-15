@@ -15,6 +15,10 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { Image, Platform } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import { compressProductImage } from "../utils/compressImage";
 import {
   Animated,
   Easing,
@@ -51,7 +55,17 @@ const TOOL_META = {
   filter_catalog: { icon: "options", label: "Filtering catalog" },
   add_to_cart: { icon: "cart", label: "Adding to cart" },
   navigate_to_page: { icon: "navigate", label: "Navigating" },
+  navigate_to_store: { icon: "storefront", label: "Opening store" },
+  navigate_to_product: { icon: "pricetag", label: "Opening product" },
   point_to_element: { icon: "location", label: "Pointing" },
+  read_screen: { icon: "eye", label: "Reading screen" },
+  find_on_screen: { icon: "search", label: "Finding on screen" },
+  scroll: { icon: "swap-vertical", label: "Scrolling" },
+  scroll_to: { icon: "locate", label: "Scrolling to item" },
+  wait_for: { icon: "time", label: "Waiting for screen" },
+  tap_element: { icon: "hand-left", label: "Tapping control" },
+  get_app_state: { icon: "information-circle", label: "Checking app state" },
+  dismiss_overlay: { icon: "close-circle", label: "Dismissing overlay" },
 };
 
 const SUGGESTIONS = [
@@ -147,6 +161,7 @@ export const TagAIAssistantScreen = () => {
   const { messages, isThinking, sendMessage, clearChat } = useTagAIAssistant();
 
   const [input, setInput] = useState("");
+    const [visionImage, setVisionImage] = useState(null);
   const listRef = useRef(null);
   // Register the input bar so the assistant can point at its own chat box.
   const inputBarRef = useGrounding("tagAI.inputBar");
@@ -160,9 +175,10 @@ export const TagAIAssistantScreen = () => {
   const handleSend = useCallback(
     (text) => {
       const trimmed = (text ?? input).trim();
-      if (!trimmed || isThinking) return;
+      if ((!trimmed && !visionImage) || isThinking) return;
       setInput("");
       sendMessage(trimmed, {
+        image: visionImage,
         navigateTo: (route, params) => navigation.navigate(route, params),
         addProductToCart: async (product, qty) => {
           await addToCart(product, qty);
@@ -170,9 +186,38 @@ export const TagAIAssistantScreen = () => {
         // No local cache needed — the service resolves product ids straight
         // from the catalog via resolveProductById when this is omitted.
       });
+      setVisionImage(null);
     },
-    [input, isThinking, navigation, addToCart, sendMessage],
+    [input, isThinking, navigation, addToCart, sendMessage, visionImage],
   );
+
+  const pickVisionImage = useCallback(async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    const compressed = await compressProductImage(
+      asset.uri,
+      Platform.OS === "web" ? asset.file || null : null,
+    );
+    if (Platform.OS === "web" && compressed.pickedFile) {
+      const buffer = await compressed.pickedFile.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let index = 0; index < bytes.length; index += 1) {
+        binary += String.fromCharCode(bytes[index]);
+      }
+      setVisionImage(`data:image/jpeg;base64,${btoa(binary)}`);
+      return;
+    }
+    const base64 = await FileSystem.readAsStringAsync(compressed.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    setVisionImage(`data:image/jpeg;base64,${base64}`);
+  }, []);
 
   // Inverted list: newest message at the bottom. The typing indicator is a
   // synthetic item so it appears right where the reply will land.
@@ -194,6 +239,9 @@ export const TagAIAssistantScreen = () => {
               end={{ x: 1, y: 1 }}
               style={styles.userBubble}
             >
+              {item.image ? (
+                <Image source={{ uri: item.image }} style={styles.sentVisionImage} />
+              ) : null}
               <Text style={styles.userText}>{item.text}</Text>
             </LinearGradient>
           </View>
@@ -371,9 +419,22 @@ export const TagAIAssistantScreen = () => {
             },
           ]}
         >
-          <View style={styles.aiBadgeSmall}>
-            <Ionicons name="sparkles" size={12} color={colors.primary} />
-          </View>
+          {visionImage ? (
+            <View style={styles.visionPreviewWrap}>
+              <Image source={{ uri: visionImage }} style={styles.visionPreview} />
+              <Pressable onPress={() => setVisionImage(null)} style={styles.visionRemove}>
+                <Ionicons name="close" size={12} color="#FFFFFF" />
+              </Pressable>
+            </View>
+          ) : null}
+          <Pressable
+            onPress={pickVisionImage}
+            disabled={isThinking}
+            style={[styles.attachButton, isThinking && { opacity: 0.4 }]}
+            accessibilityLabel="Attach image for TagAI vision"
+          >
+            <Ionicons name="image-outline" size={19} color={colors.primary} />
+          </Pressable>
           <TextInput
             style={[styles.input, { color: colors.dark }]}
             placeholder="Message TagAI…"
@@ -386,10 +447,10 @@ export const TagAIAssistantScreen = () => {
           />
           <Pressable
             onPress={() => handleSend()}
-            disabled={!input.trim() || isThinking}
+            disabled={(!input.trim() && !visionImage) || isThinking}
             style={({ pressed }) => [
               styles.sendButton,
-              (!input.trim() || isThinking) && { opacity: 0.4 },
+              ((!input.trim() && !visionImage) || isThinking) && { opacity: 0.4 },
               pressed && { transform: [{ scale: 0.94 }] },
             ]}
           >
@@ -520,6 +581,13 @@ const buildStyles = (c) =>
       paddingHorizontal: 14,
       paddingVertical: 10,
     },
+    sentVisionImage: {
+      width: 180,
+      height: 180,
+      borderRadius: radius.md,
+      marginBottom: 8,
+      backgroundColor: c.surfaceAlpha,
+    },
     userText: {
       color: "#FFFFFF",
       fontSize: 14,
@@ -605,6 +673,34 @@ const buildStyles = (c) =>
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: c.surfaceAlpha,
+    },
+    attachButton: {
+      width: 32,
+      height: 32,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    visionPreviewWrap: {
+      position: "absolute",
+      left: 8,
+      bottom: 50,
+      padding: 3,
+      borderRadius: radius.sm,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    visionPreview: { width: 48, height: 48, borderRadius: radius.xs },
+    visionRemove: {
+      position: "absolute",
+      top: -7,
+      right: -7,
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.dark,
     },
     input: {
       flex: 1,

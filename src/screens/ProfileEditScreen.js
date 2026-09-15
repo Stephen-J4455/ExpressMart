@@ -13,7 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import {getTheme, THEMES, radius } from "../theme/colors";
+import { getTheme, THEMES, radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { supabase } from "../lib/supabase";
@@ -216,7 +216,11 @@ export const ProfileEditScreen = ({ navigation }) => {
           {/* Email (read-only) card */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
-              <Ionicons name="mail-outline" size={18} color={themeColors.primary} />
+              <Ionicons
+                name="mail-outline"
+                size={18}
+                color={themeColors.primary}
+              />
               <Text style={styles.cardTitle}>Email Address</Text>
             </View>
 
@@ -235,7 +239,11 @@ export const ProfileEditScreen = ({ navigation }) => {
                   placeholderTextColor={themeColors.muted}
                 />
                 <View style={styles.lockPill}>
-                  <Ionicons name="lock-closed" size={11} color={themeColors.muted} />
+                  <Ionicons
+                    name="lock-closed"
+                    size={11}
+                    color={themeColors.muted}
+                  />
                 </View>
               </View>
               <Text style={styles.helperText}>
@@ -357,137 +365,139 @@ export const ProfileEditScreen = ({ navigation }) => {
 };
 
 const buildProfileEditStyles = (c) =>
-  StyleSheet.create({ 
-  container: { flex: 1, backgroundColor: c.background },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: c.light,
-    borderBottomWidth: 1,
-    borderBottomColor: c.light,
-  },
-  backButton: { padding: 8 },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: c.dark },
-  saveButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 9,
-    backgroundColor: c.primary,
-    borderRadius: radius.lg,
-  },
-  saveButtonDisabled: { opacity: 0.6 },
-  saveText: { color: c.light, fontSize: 14, fontWeight: "700" },
-  scrollView: { flex: 1 },
-  avatarHero: {
-    alignItems: "center",
-    paddingTop: 36,
-    paddingBottom: 28,
-    paddingHorizontal: 24,
-    gap: 6,
-  },
-  avatarCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: "rgba(255,255,255,0.6)",
-    marginBottom: 6,
-  },
-  avatarInitials: { fontSize: 32, fontWeight: "800", color: c.light },
-  avatarName: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: c.light,
-    letterSpacing: -0.3,
-  },
-  avatarEmail: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.8)",
-    fontWeight: "500",
-  },
-  card: {
-    backgroundColor: c.light,
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 20,
-  },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: c.dark },
-  inputGroup: { marginBottom: 16 },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: c.muted,
-    marginBottom: 8,
-  },
-  inputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: c.border,
-    borderRadius: radius.full,
-    paddingHorizontal: 12,
-    backgroundColor: "#FAFBFC",
-  },
-  inputWrapDisabled: { backgroundColor: c.surface, borderColor: c.border },
-  inputIcon: { marginRight: 8 },
-  input: {
-    flex: 1,
-    paddingVertical: 13,
-    fontSize: 15,
-    color: c.dark,
-    ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
-  },
-  inputDisabled: { color: c.muted },
-  lockPill: { backgroundColor: c.border, borderRadius: 6, padding: 4 },
-  helperText: {
-    fontSize: 12,
-    color: c.muted,
-    marginTop: 6,
-    lineHeight: 16,
-  },
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-  },
-  actionRowBorder: { borderTopWidth: 1, borderTopColor: c.surface },
-  actionLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  actionIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionLabel: { fontSize: 15, fontWeight: "600", color: c.dark },
-  inputWrapTop: { alignItems: "flex-start" },
-  textAreaInput: { height: 96, textAlignVertical: "top" },
-  themeSwatchesContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginTop: 4,
-  },
-  themeSwatchCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-});
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: c.light,
+      borderBottomWidth: 1,
+      borderBottomColor: c.light,
+    },
+    backButton: { padding: 8 },
+    headerTitle: { fontSize: 18, fontWeight: "700", color: c.dark },
+    saveButton: {
+      paddingHorizontal: 20,
+      paddingVertical: 9,
+      backgroundColor: c.primary,
+      borderRadius: radius.lg,
+    },
+    saveButtonDisabled: { opacity: 0.6 },
+    saveText: { color: c.light, fontSize: 14, fontWeight: "700" },
+    scrollView: { flex: 1 },
+    avatarHero: {
+      alignItems: "center",
+      paddingTop: 36,
+      paddingBottom: 28,
+      paddingHorizontal: 24,
+      gap: 6,
+    },
+    avatarCircle: {
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+      backgroundColor: "rgba(255,255,255,0.25)",
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 3,
+      borderColor: "rgba(255,255,255,0.6)",
+      marginBottom: 6,
+    },
+    avatarInitials: { fontSize: 32, fontWeight: "800", color: c.light },
+    avatarName: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: c.light,
+      letterSpacing: -0.3,
+    },
+    avatarEmail: {
+      fontSize: 13,
+      color: "rgba(255,255,255,0.8)",
+      fontWeight: "500",
+    },
+    card: {
+      backgroundColor: c.light,
+      marginHorizontal: 16,
+      marginTop: 16,
+      borderRadius: 20,
+      padding: 20,
+      shadowColor: "#000",
+      shadowOpacity: 0.04,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    cardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 20,
+    },
+    cardTitle: { fontSize: 15, fontWeight: "700", color: c.dark },
+    inputGroup: { marginBottom: 16 },
+    inputLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: c.muted,
+      marginBottom: 8,
+    },
+    inputWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1.5,
+      borderColor: c.border,
+      borderRadius: radius.full,
+      paddingHorizontal: 12,
+      backgroundColor: c.surface,
+    },
+    inputWrapDisabled: { backgroundColor: c.surface, borderColor: c.border },
+    inputIcon: { marginRight: 8 },
+    input: {
+      flex: 1,
+      paddingVertical: 13,
+      fontSize: 15,
+      color: c.dark,
+      ...(Platform.OS === "web"
+        ? { outlineStyle: "none", outlineWidth: 0 }
+        : {}),
+    },
+    inputDisabled: { color: c.muted },
+    lockPill: { backgroundColor: c.border, borderRadius: 6, padding: 4 },
+    helperText: {
+      fontSize: 12,
+      color: c.muted,
+      marginTop: 6,
+      lineHeight: 16,
+    },
+    actionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+    },
+    actionRowBorder: { borderTopWidth: 1, borderTopColor: c.surface },
+    actionLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+    actionIconWrap: {
+      width: 38,
+      height: 38,
+      borderRadius: radius.lg,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    actionLabel: { fontSize: 15, fontWeight: "600", color: c.dark },
+    inputWrapTop: { alignItems: "flex-start" },
+    textAreaInput: { height: 96, textAlignVertical: "top" },
+    themeSwatchesContainer: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+      marginTop: 4,
+    },
+    themeSwatchCircle: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+    },
+  });

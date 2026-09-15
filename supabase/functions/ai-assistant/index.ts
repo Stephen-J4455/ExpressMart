@@ -24,12 +24,45 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const DEFAULT_MODEL = "openai/gpt-4o-mini";
+const DEFAULT_MODEL = "openrouter/free";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 // Bumped from 3 → 5: "agent has eyes" tasks (read_screen → point) need
 // more headroom than simple search/navigate flows.
 const MAX_AGENT_ITERATIONS = 5;
 const MAX_HISTORY_MESSAGES = 10;
+
+const supportsImageInput = (model: any) =>
+  Array.isArray(model?.architecture?.input_modalities) &&
+  model.architecture.input_modalities.some(
+    (modality: unknown) => String(modality).toLowerCase() === "image",
+  );
+
+const isFreeModel = (model: any) =>
+  String(model?.id || "").endsWith(":free") ||
+  (String(model?.pricing?.prompt || "") === "0" &&
+    String(model?.pricing?.completion || "") === "0");
+
+const getOpenRouterModels = async (apiKey: string) => {
+  const response = await fetch(OPENROUTER_MODELS_URL, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!response.ok) throw new Error(`Could not check free vision models (${response.status})`);
+  const payload = await response.json();
+  return Array.isArray(payload?.data) ? payload.data : [];
+};
+
+const findFreeVisionModel = (models: any[]) =>
+  models.find(
+    (candidate: any) => isFreeModel(candidate) && supportsImageInput(candidate),
+  );
+
+const findConfiguredVisionModel = (models: any[], configuredModel: string) =>
+  models.find(
+    (candidate: any) =>
+      String(candidate?.id || "") === configuredModel &&
+      supportsImageInput(candidate),
+  );
 
 // Tool schemas (OpenAI function-calling format — OpenRouter is compatible).
 const TOOLS = [
@@ -496,6 +529,13 @@ Capabilities:
 • list_screens / get_screen_info — discover every navigable screen (and the seller admin) and its tap targets before issuing tap_element calls.
 • tap_element — programmatically tap a registered UI element (e.g. "productDetail.addToCart", "store.follow", "checkout.payButton"). Pass an optional \`screen\` name to navigate first.
 • go_back / list_tap_targets — pop the stack / list live tap targets.
+
+Tool selection and UI control rules:
+1. For navigation requests, use navigate_to_page, navigate_to_store, or navigate_to_product first. After navigation, use wait_for before reading or pointing at the destination.
+2. For questions about what is visible, use read_screen first. Use find_on_screen when the user names a visible target or item.
+3. If a target is not visible, use scroll or scroll_to, then wait_for and read_screen again. Do not point at guessed coordinates when indexed items or scroll tools can locate it.
+4. Use point_to_element only after locating the target, preferring item_id from read_screen/find_on_screen. Use tap_element only for registered actionable controls and only when the user asks you to tap or complete the action.
+5. For an attached image, inspect the image first and combine its visual evidence with catalog/app state. Use navigation and pointing tools only when the user's request requires an app action.
 
 Reasoning tips:
 • The user often wants to know about a product they just saw. After a search_products result, prefer to call get_product_details with the product's id when the user asks "tell me about this" or "what are the specs".
@@ -1331,10 +1371,56 @@ serve(async (req) => {
 
     const body = await req.json();
     const message = String(body?.message || "").trim();
-    if (!message) throw new Error("message is required");
+    const visionImage = String(body?.image || "").trim();
+    const hasVisionImage = /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(visionImage) ||
+      /^https:\/\//i.test(visionImage);
+    if (!message && !hasVisionImage) throw new Error("message or image is required");
+    if (visionImage && !hasVisionImage) {
+      return serveCors({ success: false, error: "Vision input must be a data image or HTTPS image URL" }, 400);
+    }
+    if (visionImage.startsWith("data:") && visionImage.length > 8_000_000) {
+      return serveCors({ success: false, error: "Vision image is too large" }, 413);
+    }
 
     const writeClient = createClient(supabaseUrl, serviceRoleKey);
-    const model = await resolveModel(writeClient);
+    const configuredModel = await resolveModel(writeClient);
+    let model = hasVisionImage ? DEFAULT_MODEL : configuredModel;
+    if (hasVisionImage) {
+      const models = await getOpenRouterModels(apiKey);
+      const configuredVisionModel = findConfiguredVisionModel(
+        models,
+        configuredModel,
+      );
+      const visionModel = configuredVisionModel || findFreeVisionModel(models);
+      if (!visionModel?.id) {
+        return serveCors({
+          success: false,
+          error: `Configured model '${configuredModel}' does not support image input, and no free vision model is available`,
+          code: "VISION_MODEL_UNSUPPORTED",
+        }, 400);
+      }
+      // Prefer the configured database model when it supports images. If it
+      // does not, send the concrete free vision model selected from the
+      // OpenRouter catalog instead of using the router alias blindly.
+      model = visionModel.id;
+    }
+
+    // Text turns honor the model selected by the user/admin. If that model is
+    // unavailable, retry once with OpenRouter's free router. Vision turns use
+    // only the concrete image-capable model selected above.
+    const callWithModelFallback = async (messages: any[], extra = {}) => {
+      let response = await callOpenRouter(apiKey, model, messages, extra);
+      if (!response.ok && !hasVisionImage && model !== DEFAULT_MODEL) {
+        const errorText = await response.text().catch(() => "");
+        console.warn(
+          `[ai-assistant] configured model failed (${response.status}); falling back to ${DEFAULT_MODEL}:`,
+          errorText.slice(0, 200),
+        );
+        model = DEFAULT_MODEL;
+        response = await callOpenRouter(apiKey, model, messages, extra);
+      }
+      return response;
+    };
 
     // Conversation so far (trimmed + role-normalised).
     const history = (Array.isArray(body?.history) ? body.history : [])
@@ -1348,7 +1434,15 @@ serve(async (req) => {
     const chatMessages = [
       { role: "system", content: SYSTEM_PROMPT },
       ...history,
-      { role: "user", content: message },
+      {
+        role: "user",
+        content: hasVisionImage
+          ? [
+              { type: "text", text: message || "Find me a similar product to this image." },
+              { type: "image_url", image_url: { url: visionImage } },
+            ]
+          : message,
+      },
     ];
 
     // Auto-flip `include_details: true` for the current turn when the
@@ -1365,7 +1459,7 @@ serve(async (req) => {
     const clientToolCalls = [];
 
     for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration += 1) {
-      const res = await callOpenRouter(apiKey, model, chatMessages, {
+      const res = await callWithModelFallback(chatMessages, {
         tools: TOOLS,
         tool_choice: "auto",
       });
@@ -1568,7 +1662,7 @@ serve(async (req) => {
     }
 
     // Iteration budget exhausted — ask for a wrap-up without tools.
-    const res = await callOpenRouter(apiKey, model, [
+    const res = await callWithModelFallback([
       ...chatMessages,
       {
         role: "user",

@@ -894,8 +894,6 @@ serve(async (req) => {
       redisEnabled,
     });
 
-    console.log("✅ User authenticated:", user.id);
-
     const { data: existingOrders, error: existingOrdersError } = await writeClient
       .from("express_orders")
       .select("*")

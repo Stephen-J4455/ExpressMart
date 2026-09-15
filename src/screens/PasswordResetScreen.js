@@ -122,8 +122,6 @@ export default function PasswordResetScreen({ navigation, route }) {
           );
         }
 
-        console.log("PasswordResetScreen incoming url:", url);
-
         const {
           access_token,
           refresh_token,
@@ -236,7 +234,6 @@ export default function PasswordResetScreen({ navigation, route }) {
         // This ensures the PasswordResetScreen handles the reset flow, not AuthContext
         const { data: { session: existingSession } } = await supabase.auth.getSession();
         if (existingSession) {
-          console.log("PasswordResetScreen: Clearing existing session to prevent auto-login");
           await supabase.auth.signOut();
         }
 

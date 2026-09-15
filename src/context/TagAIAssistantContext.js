@@ -326,9 +326,15 @@ export const TagAIAssistantProvider = ({ children }) => {
   const sendMessage = useCallback(
     async (text, nav = {}) => {
       const trimmed = (text || "").trim();
-      if (!trimmed || isThinking) return;
+      if ((!trimmed && !nav.image) || isThinking) return;
 
-      appendMessage({ id: makeId(), role: "user", text: trimmed, ts: Date.now() });
+      appendMessage({
+        id: makeId(),
+        role: "user",
+        text: trimmed || "Find me a similar product to this image.",
+        image: nav.image || null,
+        ts: Date.now(),
+      });
       setIsThinking(true);
       // Reset thinking buffer for this turn.
       thinkingBuffer.current = [];
@@ -340,7 +346,7 @@ export const TagAIAssistantProvider = ({ children }) => {
         pushThinking("Planning the next step…");
 
         const { reply, toolCalls, products: remoteProducts = [] } =
-          await planTurn(trimmed, messages);
+          await planTurn(trimmed, messages, nav.image || null);
 
         // Execute tool calls sequentially (order matters: navigate before
         // point_to_element, search before add_to_cart, etc.)

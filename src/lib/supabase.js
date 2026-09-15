@@ -61,8 +61,23 @@ export const callEdgeFunction = async (functionName, body) => {
           !msg.toLowerCase().includes("abort") &&
           !msg.toLowerCase().includes("fetch")
         ) {
-          console.error("supabase.functions.invoke returned error:", error);
-          throw error;
+          let detail = msg || "Edge function returned an error";
+          try {
+            const response = error?.context;
+            if (response && typeof response.clone === "function") {
+              const payload = await response.clone().json();
+              detail = payload?.error || payload?.message || detail;
+            }
+          } catch {
+            // Keep the SDK message when the error response is not JSON.
+          }
+          const enrichedError = new Error(
+            `${functionName} failed: ${detail}`,
+          );
+          enrichedError.name = error?.name || "FunctionsHttpError";
+          enrichedError.isNonTransientEdgeError = true;
+          console.error("supabase.functions.invoke returned error:", detail);
+          throw enrichedError;
         }
         console.warn(
           "supabase.functions.invoke transient error, falling back:",
@@ -72,6 +87,7 @@ export const callEdgeFunction = async (functionName, body) => {
         return data;
       }
     } catch (invokeErr) {
+      if (invokeErr?.isNonTransientEdgeError) throw invokeErr;
       console.warn(
         "supabase.functions.invoke threw, falling back to fetch:",
         invokeErr,
@@ -89,7 +105,6 @@ export const callEdgeFunction = async (functionName, body) => {
   } = await supabase.auth.getSession();
 
   if (sessionError || !session?.access_token) {
-    console.error("❌ No valid session:", { sessionError });
     throw new Error("Authentication session expired. Please log in again.");
   }
 

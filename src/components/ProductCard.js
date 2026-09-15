@@ -21,6 +21,7 @@ import { useAppStyles } from "../hooks/useAppStyles";
 import { FlashSaleBadge } from "./FlashSaleBadge";
 import { FlashSaleCountdown } from "./FlashSaleCountdown";
 import { LazyImage } from "./LazyImage";
+import { R2_FOLDERS, resolveMediaUrl } from "../services/r2Storage";
 
 const SELLER_BADGE_CONFIG = {
   verified: {
@@ -209,6 +210,9 @@ export const ProductCard = ({
     product.thumbnails && product.thumbnails.length > 0
       ? product.thumbnails
       : [product.thumbnail];
+  const imageUrls = images.map((image) =>
+    resolveMediaUrl(image, R2_FOLDERS.PRODUCTS),
+  );
 
   // theme is an object from themeColors.getTheme() or undefined
   const themeObj = theme || {
@@ -263,7 +267,9 @@ export const ProductCard = ({
                   {images.map((imageUri, index) => (
                     <Image
                       key={index}
-                      source={{ uri: imageUri }}
+                      source={{
+                        uri: resolveMediaUrl(imageUri, R2_FOLDERS.PRODUCTS),
+                      }}
                       style={styles.listImage}
                     />
                   ))}
@@ -282,7 +288,10 @@ export const ProductCard = ({
                 </View>
               </>
             ) : (
-              <LazyImage source={{ uri: images[0] }} style={styles.listImage} />
+              <LazyImage
+                source={{ uri: imageUrls[0] }}
+                style={styles.listImage}
+              />
             )}
             {isOutOfStock && (
               <View style={styles.outOfStockOverlay}>
@@ -543,7 +552,7 @@ export const ProductCard = ({
         onPress={onPress}
       >
         <View style={styles.imageContainer}>
-          <LazyImage source={{ uri: images[0] }} style={styles.image} />
+          <LazyImage source={{ uri: imageUrls[0] }} style={styles.image} />
           <LinearGradient
             colors={["rgba(15, 23, 42, 0)", "rgba(15, 23, 42, 0.2)"]}
             style={styles.imageFade}
@@ -694,7 +703,10 @@ export const ProductCard = ({
                 colors={
                   isOutOfStock
                     ? [themeColors.muted, themeColors.muted]
-                    : [themeColors.primary, themeColors.accent]
+                    : [
+                        themeColors.primary,
+                        themeColors.primaryDark || themeColors.primary,
+                      ]
                 }
                 style={styles.ctaGradient}
                 start={{ x: 0, y: 0 }}
@@ -1029,6 +1041,11 @@ const buildStyles = (c) =>
       justifyContent: "center",
       flexDirection: "row",
       gap: 7,
+      shadowColor: "#000",
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 3,
     },
     ctaText: {
       color: "#FFFFFF",

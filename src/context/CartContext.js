@@ -14,6 +14,49 @@ import { trackEvent } from "../services/feedPersonalizationService";
 const STORAGE_KEY = "expressmart.cart";
 const CartContext = createContext();
 
+const isOfflineNetworkError = (error) => {
+  const message = String(error?.message || error || "");
+  return /(UnknownHostException|No address associated with hostname|fetch failed|Network request failed|Failed to fetch|ERR_NETWORK|ERR_INTERNET_DISCONNECTED|resolve host|offline|timed out)/i.test(
+    message,
+  );
+};
+
+const readLocalCart = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const normalizeCartProduct = (product) => {
+  if (!product || typeof product !== "object") return product;
+
+  const safeSeller = product.seller || product.seller_id || null;
+  const thumbnails = Array.isArray(product.thumbnails)
+    ? product.thumbnails.filter(Boolean)
+    : Array.isArray(product.images)
+      ? product.images.filter(Boolean)
+      : product.thumbnail
+        ? [product.thumbnail]
+        : [];
+
+  return {
+    ...product,
+    seller: safeSeller,
+    seller_id: safeSeller,
+    thumbnails,
+    thumbnail: product.thumbnail || thumbnails[0] || null,
+    tags: Array.isArray(product.tags) ? product.tags : [],
+    colors: Array.isArray(product.colors) ? product.colors : [],
+    sizes: Array.isArray(product.sizes) ? product.sizes : [],
+    images: thumbnails,
+  };
+};
+
 export const CartProvider = ({ children }) => {
   const [items, setItems] = useState([]);
   const [cartId, setCartId] = useState(null);
@@ -23,10 +66,18 @@ export const CartProvider = ({ children }) => {
 
   // Load cart from database or local storage
   const loadCart = useCallback(async () => {
+    const localFallback = await readLocalCart();
+    if (localFallback.length > 0) {
+      setItems(localFallback);
+    }
+
     try {
       if (user && supabase) {
-        // Load from database for authenticated users
-        const { data: cart, error: cartError } = await supabase
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Cart load timed out")), 5000),
+        );
+
+        const cartQuery = supabase
           .from("express_carts")
           .select("id")
           .eq("user_id", user.id)
@@ -34,14 +85,18 @@ export const CartProvider = ({ children }) => {
           .limit(1)
           .maybeSingle();
 
+        const { data: cart, error: cartError } = await Promise.race([
+          cartQuery,
+          timeoutPromise,
+        ]);
+
         if (cartError) {
           console.warn("Error fetching cart:", cartError);
         }
 
         if (cart) {
           setCartId(cart.id);
-          // Load cart items with product data
-          const { data: cartItems, error: itemsError } = await supabase
+          const cartItemsQuery = supabase
             .from("express_cart_items")
             .select(
               `
@@ -57,41 +112,51 @@ export const CartProvider = ({ children }) => {
             )
             .eq("cart_id", cart.id);
 
+          const { data: cartItems, error: itemsError } = await Promise.race([
+            cartItemsQuery,
+            timeoutPromise,
+          ]);
+
           if (itemsError) {
             console.warn("Error fetching cart items:", itemsError);
           } else if (cartItems) {
             const formattedItems = cartItems
-              .filter((item) => item.product) // Only include items with valid products
+              .filter((item) => item.product)
               .map((item) => ({
                 id: item.id,
-                product: item.product,
+                product: normalizeCartProduct(item.product),
                 quantity: item.quantity,
                 size: item.size,
                 color: item.color,
                 variant_id: item.variant_id,
-                price: item.price, // Store the discounted price
+                price: item.price,
               }));
             setItems(formattedItems);
           }
         } else {
-          // Create new cart for user
-          const { data: newCart, error: createError } = await supabase
-            .from("express_carts")
-            .insert({ user_id: user.id })
-            .select("id")
-            .single();
+          const { data: newCart, error: createError } = await Promise.race([
+            supabase
+              .from("express_carts")
+              .insert({ user_id: user.id })
+              .select("id")
+              .single(),
+            timeoutPromise,
+          ]);
 
           if (createError) {
             console.warn("Error creating cart:", createError);
             if (createError.code === "23505") {
               const { data: existingCart, error: existingCartError } =
-                await supabase
-                  .from("express_carts")
-                  .select("id")
-                  .eq("user_id", user.id)
-                  .order("created_at", { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
+                await Promise.race([
+                  supabase
+                    .from("express_carts")
+                    .select("id")
+                    .eq("user_id", user.id)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle(),
+                  timeoutPromise,
+                ]);
               if (existingCartError) {
                 console.warn(
                   "Error loading existing cart after unique violation:",
@@ -101,20 +166,34 @@ export const CartProvider = ({ children }) => {
                 setCartId(existingCart.id);
               }
             }
-          } else {
+          } else if (newCart) {
             setCartId(newCart.id);
           }
-          setItems([]);
+
+          if (localFallback.length > 0) {
+            setItems(localFallback);
+          } else {
+            setItems([]);
+          }
         }
       } else {
         // Load from local storage for guests
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
-          setItems(JSON.parse(raw));
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) setItems(parsed);
         }
       }
     } catch (error) {
+      if (isOfflineNetworkError(error)) {
+        const cached = await readLocalCart();
+        if (cached.length > 0) setItems(cached);
+        else setItems([]);
+        return;
+      }
       console.warn("Failed to load cart", error);
+      const cached = await readLocalCart();
+      if (cached.length > 0) setItems(cached);
     } finally {
       setReady(true);
     }
@@ -223,7 +302,7 @@ export const CartProvider = ({ children }) => {
         ...prev,
         {
           id: `temp-${product.id}-${size ?? "x"}-${color ?? "x"}-${Date.now()}`,
-          product,
+          product: normalizeCartProduct(product),
           quantity,
           size,
           color,

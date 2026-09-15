@@ -320,6 +320,16 @@ export const HomeScreen = ({ navigation }) => {
     [hiddenSellers],
   );
 
+  const dedupeFeedItems = useCallback((items) => {
+    const seen = new Set();
+    return (items || []).filter((item) => {
+      const id = item?.id;
+      if (!id || seen.has(String(id))) return false;
+      seen.add(String(id));
+      return true;
+    });
+  }, []);
+
   const feedItems = useMemo(() => {
     let base;
     switch (activeFilter) {
@@ -352,13 +362,14 @@ export const HomeScreen = ({ navigation }) => {
       default:
         base = products;
     }
-    return injectFlashSaleRow(filterHiddenSellers(base));
+    return injectFlashSaleRow(dedupeFeedItems(filterHiddenSellers(base)));
   }, [
     activeFilter,
     products,
     followedSellers,
     injectFlashSaleRow,
     filterHiddenSellers,
+    dedupeFeedItems,
   ]);
 
   const handleRefresh = useCallback(async () => {

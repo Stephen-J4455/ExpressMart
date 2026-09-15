@@ -20,7 +20,6 @@ export async function verifyPaymentAndCreateOrder(reference, orderData) {
     } = await supabase.auth.getSession();
 
     if (sessionError || !session) {
-      console.error("❌ Session error:", sessionError);
       throw new Error("Authentication required");
     }
 

@@ -111,7 +111,6 @@ export const OrderProvider = ({ children }) => {
           await supabase.auth.refreshSession();
 
         if (refreshError) {
-          console.error("OrderContext: Session refresh error:", refreshError);
           throw new Error("Authentication failed. Please log in again.");
         }
 

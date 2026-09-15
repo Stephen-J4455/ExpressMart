@@ -20,7 +20,9 @@
         "applinks:expressmart.me"
       ],
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -41,7 +43,10 @@
               "scheme": "expressmart"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "VIEW",
@@ -78,7 +83,10 @@
               "pathPrefix": "/wa/callback"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -121,7 +129,8 @@
           "backgroundColor": "#B7B8BF",
           "translucent": true
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "extra": {
       "eas": {

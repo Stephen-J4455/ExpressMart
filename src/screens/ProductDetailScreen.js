@@ -37,6 +37,7 @@ import { trackEvent } from "../services/feedPersonalizationService";
 import { useDeepLinkProductHandler } from "../hooks/useDeepLinkProductHandler";
 import { InstallAppBanner } from "../components/InstallAppBanner";
 import { radius } from "../theme/colors";
+import { R2_FOLDERS, resolveMediaUrl } from "../services/r2Storage";
 
 const SELLER_BADGE_CONFIG = {
   verified: {
@@ -102,6 +103,7 @@ const normalizeColors = (raw) => {
 };
 
 const REVIEW_STAR_COLOR = "#F97316";
+const productImageUrl = (value) => resolveMediaUrl(value, R2_FOLDERS.PRODUCTS);
 
 export const ProductDetailScreen = ({ route, navigation }) => {
   const { colors: themeColors } = useTheme();
@@ -127,7 +129,14 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const toast = useToast();
   const { refresh: refreshShop } = useShop();
   const { fetchAdsByPlacement } = useAds();
-  const [product, setProduct] = useState(initialProduct);
+  const [product, setProduct] = useState(() =>
+    initialProduct
+      ? {
+          ...initialProduct,
+          seller: initialProduct.seller || initialProduct.seller_id || null,
+        }
+      : null,
+  );
   const [productAds, setProductAds] = useState([]);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
@@ -323,7 +332,14 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       // at re-rank time. The first tag is sent as `metadata` for debugging.
       metadata: { tags: tags.slice(0, 4) },
     });
-  }, [user, product?.id, product?.category_id, product?.category, product?.seller?.id, product?.seller_id]);
+  }, [
+    user,
+    product?.id,
+    product?.category_id,
+    product?.category,
+    product?.seller?.id,
+    product?.seller_id,
+  ]);
 
   // Fetch reviews
   useEffect(() => {
@@ -644,7 +660,17 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     } finally {
       setWishlistLoading(false);
     }
-  }, [user, isWishlisted, product?.id, product?.category_id, product?.category, product?.seller?.id, product?.seller_id, navigation, toast]);
+  }, [
+    user,
+    isWishlisted,
+    product?.id,
+    product?.category_id,
+    product?.category,
+    product?.seller?.id,
+    product?.seller_id,
+    navigation,
+    toast,
+  ]);
 
   const submitReview = async () => {
     if (!user) {
@@ -1054,7 +1080,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 }}
               >
                 <Image
-                  source={{ uri: imageUri }}
+                  source={{ uri: productImageUrl(imageUri) }}
                   style={[styles.heroImage, { width: screenWidth - 32 }]}
                 />
               </Pressable>
@@ -1094,7 +1120,10 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                   activeImageIndex === index && styles.thumbActive,
                 ]}
               >
-                <Image source={{ uri: imageUri }} style={styles.thumbImage} />
+                <Image
+                  source={{ uri: productImageUrl(imageUri) }}
+                  style={styles.thumbImage}
+                />
               </Pressable>
             ))}
             {product.thumbnails.length > 5 && (
@@ -1106,7 +1135,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 }}
               >
                 <Image
-                  source={{ uri: product.thumbnails[4] }}
+                  source={{ uri: productImageUrl(product.thumbnails[4]) }}
                   style={styles.thumbImage}
                 />
                 <View style={styles.thumbMoreOverlay}>
@@ -1227,7 +1256,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                       : "rocket-outline"
                   }
                   size={13}
-                  color={product.shipping_fee > 0 ? themeColors.muted : "#059669"}
+                  color={
+                    product.shipping_fee > 0 ? themeColors.muted : "#059669"
+                  }
                 />
                 <Text
                   style={[
@@ -1822,7 +1853,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             ).map((imageUri, index) => (
               <View key={index} style={styles.previewPage}>
                 <Image
-                  source={{ uri: imageUri }}
+                  source={{ uri: productImageUrl(imageUri) }}
                   style={styles.previewImage}
                   resizeMode="contain"
                 />
@@ -1883,7 +1914,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
           >
             <View style={styles.productInfo}>
               <Image
-                source={{ uri: product.thumbnail }}
+                source={{ uri: productImageUrl(product.thumbnail) }}
                 style={styles.productImage}
               />
               <View style={styles.productDetails}>
