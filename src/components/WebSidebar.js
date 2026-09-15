@@ -20,6 +20,12 @@ const NAV_ITEMS = [
 ];
 
 const BOTTOM_ITEMS = [
+  {
+    name: "TagAI",
+    label: "TagAI",
+    icon: "sparkles-outline",
+    iconFocused: "sparkles",
+  },
   // "Stores" lives outside the tabs now — navigate() bubbles up to the root
   // stack, which still registers the Stores screen.
   {
@@ -36,7 +42,14 @@ const BOTTOM_ITEMS = [
   },
 ];
 
-export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
+export const WebSidebar = ({
+  state,
+  navigation,
+  sidebarWidth,
+  expanded = false,
+  onToggle,
+  onHoverChange,
+}) => {
   const insets = useSafeAreaInsets();
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildStyles(c));
@@ -72,7 +85,7 @@ export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
             </View>
           )}
         </View>
-        {sidebarWidth >= 200 && (
+        {expanded && (
           <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
             {item.label ?? item.name}
           </Text>
@@ -86,8 +99,15 @@ export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
     <View
       style={[
         styles.container,
-        { width: sidebarWidth, paddingTop: insets.top },
+        {
+          width: sidebarWidth,
+          paddingTop: insets.top,
+          zIndex: 20,
+          elevation: 20,
+        },
       ]}
+      onMouseEnter={() => onHoverChange?.(true)}
+      onMouseLeave={() => onHoverChange?.(false)}
     >
       {/* Brand */}
       <View style={styles.brandContainer}>
@@ -99,9 +119,20 @@ export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
         >
           <Ionicons name="flash" size={22} color="#fff" />
         </LinearGradient>
-        {sidebarWidth >= 200 && (
-          <Text style={styles.brandText}>tagit</Text>
-        )}
+        {expanded && <Text style={styles.brandText}>tagit</Text>}
+        <Pressable
+          style={styles.toggleButton}
+          onPress={onToggle}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? "Collapse sidebar" : "Expand sidebar"}
+          hitSlop={8}
+        >
+          <Ionicons
+            name={expanded ? "chevron-back" : "chevron-forward"}
+            size={16}
+            color={themeColors.muted}
+          />
+        </Pressable>
       </View>
 
       {/* Nav Items */}
@@ -126,7 +157,7 @@ export const WebSidebar = ({ state, navigation, sidebarWidth }) => {
 };
 
 const buildStyles = (c) =>
-  StyleSheet.create({ 
+  StyleSheet.create({
     container: {
       backgroundColor: c.surface,
       borderRightWidth: 1,
@@ -136,10 +167,22 @@ const buildStyles = (c) =>
     brandContainer: {
       flexDirection: "row",
       alignItems: "center",
+      position: "relative",
       paddingHorizontal: 20,
       paddingBottom: 28,
       paddingTop: 12,
       gap: 12,
+    },
+    toggleButton: {
+      position: "absolute",
+      right: 8,
+      top: 16,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.background,
     },
     brandIcon: {
       width: 40,
@@ -229,4 +272,4 @@ const buildStyles = (c) =>
       marginBottom: 8,
       marginTop: 4,
     },
-   });
+  });

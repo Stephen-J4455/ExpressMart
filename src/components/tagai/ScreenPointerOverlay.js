@@ -61,7 +61,8 @@ export const ScreenPointerOverlay = () => {
   const { colors, isDark } = useTheme();
   const styles = useAppStyles(buildStyles);
   const insets = useSafeAreaInsets();
-  const { groundingTarget, clearGrounding, getGroundingRef } = useTagAIAssistant();
+  const { groundingTarget, clearGrounding, getGroundingRef } =
+    useTagAIAssistant();
 
   const [rect, setRect] = useState(null);
   const [found, setFound] = useState(false);
@@ -263,16 +264,25 @@ export const ScreenPointerOverlay = () => {
     inputRange: [0, 1],
     outputRange: [0, -7],
   });
+
+  // Direction (final, after "auto" inference) — drives the pointer/arrow
+  // orientation and the bobbing vector.
+  const resolvedDirection = useMemo(() => {
+    if (targetDirectionRaw && targetDirectionRaw !== "auto")
+      return targetDirectionRaw;
+    return inferDirection(rect, Dimensions.get("window"));
+  }, [targetDirectionRaw, rect, nonce]);
+
   // Direction-aware translate for the caret — when the pointer is at the
   // bottom half of the screen we flip so it still points "outward".
   const directionTranslate =
     resolvedDirection === "up"
       ? pointerBob.interpolate({ inputRange: [0, 1], outputRange: [0, 7] })
       : resolvedDirection === "left"
-      ? pointerBob.interpolate({ inputRange: [0, 1], outputRange: [0, 7] })
-      : resolvedDirection === "right"
-      ? pointerBob.interpolate({ inputRange: [0, 1], outputRange: [0, 7] })
-      : pointerTranslateY;
+        ? pointerBob.interpolate({ inputRange: [0, 1], outputRange: [0, 7] })
+        : resolvedDirection === "right"
+          ? pointerBob.interpolate({ inputRange: [0, 1], outputRange: [0, 7] })
+          : pointerTranslateY;
 
   // Spotlight geometry: a padded hole around the measured target.
   const spotlight = useMemo(() => {
@@ -284,13 +294,6 @@ export const ScreenPointerOverlay = () => {
       height: rect.height + spotlightPad * 2,
     };
   }, [rect, spotlightPad]);
-
-  // Direction (final, after "auto" inference) — drives the pointer/arrow
-  // orientation and the bobbing vector.
-  const resolvedDirection = useMemo(() => {
-    if (targetDirectionRaw && targetDirectionRaw !== "auto") return targetDirectionRaw;
-    return inferDirection(rect, Dimensions.get("window"));
-  }, [targetDirectionRaw, rect, nonce]);
 
   // Animated trail — a short line from the previous rect to the current one.
   // We render it as a thin View positioned between the two rects and fade it
@@ -309,7 +312,10 @@ export const ScreenPointerOverlay = () => {
     const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
     return { x: px, y: py, length, angle };
   }, [rect, nonce]);
-  const trailOpacity = trail.interpolate({ inputRange: [0, 1], outputRange: [0.7, 0] });
+  const trailOpacity = trail.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.7, 0],
+  });
 
   // Generic pointing mode — no registered ref matched this key. Instead of
   // dead-ending, highlight the middle of the current screen so TagAI can
@@ -354,7 +360,10 @@ export const ScreenPointerOverlay = () => {
         {spotlight ? (
           <>
             <View
-              style={[styles.dim, { top: 0, left: 0, right: 0, height: spotlight.y }]}
+              style={[
+                styles.dim,
+                { top: 0, left: 0, right: 0, height: spotlight.y },
+              ]}
             />
             <View
               style={[
@@ -428,8 +437,8 @@ export const ScreenPointerOverlay = () => {
                   targetShape === "circle"
                     ? Math.max(spotlight.width, spotlight.height) / 2
                     : targetShape === "bracket"
-                    ? 0
-                    : radius.md,
+                      ? 0
+                      : radius.md,
               },
             ]}
           />
@@ -481,7 +490,11 @@ export const ScreenPointerOverlay = () => {
                 ],
               }}
             >
-              <Ionicons name="caret-up-circle" size={28} color={colors.accent} />
+              <Ionicons
+                name="caret-up-circle"
+                size={28}
+                color={colors.accent}
+              />
             </Animated.View>
           ) : null}
 
@@ -516,10 +529,14 @@ export const ScreenPointerOverlay = () => {
                     width: 14,
                     height: 14,
                     borderColor: colors.accent,
-                    borderTopWidth: b.corner === "tl" || b.corner === "tr" ? 3 : 0,
-                    borderLeftWidth: b.corner === "tl" || b.corner === "bl" ? 3 : 0,
-                    borderRightWidth: b.corner === "tr" || b.corner === "br" ? 3 : 0,
-                    borderBottomWidth: b.corner === "bl" || b.corner === "br" ? 3 : 0,
+                    borderTopWidth:
+                      b.corner === "tl" || b.corner === "tr" ? 3 : 0,
+                    borderLeftWidth:
+                      b.corner === "tl" || b.corner === "bl" ? 3 : 0,
+                    borderRightWidth:
+                      b.corner === "tr" || b.corner === "br" ? 3 : 0,
+                    borderBottomWidth:
+                      b.corner === "bl" || b.corner === "br" ? 3 : 0,
                     borderTopLeftRadius: b.corner === "tl" ? 6 : 0,
                     borderTopRightRadius: b.corner === "tr" ? 6 : 0,
                     borderBottomLeftRadius: b.corner === "bl" ? 6 : 0,

@@ -107,12 +107,42 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 const MOBILE_TAB_BAR_PADDING_BOTTOM = 10;
+const COLLAPSED_SIDEBAR_WIDTH = 76;
 
 const TabNavigator = () => {
   const { items } = useCart();
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const { isWide, sidebarWidth } = useResponsive();
   const { colors, isDark } = useTheme();
+  const [sidebarExpanded, setSidebarExpanded] = React.useState(false);
+  const [sidebarPinned, setSidebarPinned] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isWide) {
+      setSidebarExpanded(false);
+      setSidebarPinned(false);
+    }
+  }, [isWide]);
+
+  const toggleSidebar = () => {
+    setSidebarPinned((pinned) => {
+      const nextPinned = !pinned;
+      setSidebarExpanded(nextPinned);
+      return nextPinned;
+    });
+  };
+
+  const handleSidebarHover = (isHovered) => {
+    if (isHovered) {
+      setSidebarExpanded(true);
+    } else if (!sidebarPinned) {
+      setSidebarExpanded(false);
+    }
+  };
+
+  const activeSidebarWidth = sidebarExpanded
+    ? sidebarWidth
+    : COLLAPSED_SIDEBAR_WIDTH;
 
   return (
     <Tab.Navigator
@@ -122,7 +152,10 @@ const TabNavigator = () => {
         tabBarInactiveTintColor: colors.muted,
         tabBarPosition: isWide ? "left" : "bottom",
         tabBarStyle: isWide
-          ? { width: sidebarWidth, borderRightWidth: 0 }
+          ? {
+              width: activeSidebarWidth,
+              borderRightWidth: 0,
+            }
           : {
               position: "absolute",
               bottom: 0,
@@ -135,7 +168,13 @@ const TabNavigator = () => {
       }}
       tabBar={(props) =>
         isWide ? (
-          <WebSidebar {...props} sidebarWidth={sidebarWidth} />
+          <WebSidebar
+            {...props}
+            sidebarWidth={activeSidebarWidth}
+            expanded={sidebarExpanded}
+            onToggle={toggleSidebar}
+            onHoverChange={handleSidebarHover}
+          />
         ) : (
           <DefaultTabBar {...props} cartCount={cartCount} />
         )
@@ -1172,7 +1211,10 @@ const AuthenticatedApp = () => {
         <Stack.Screen name="OrderDetail" component={GuardedOrderDetail} />
         <Stack.Screen name="OrderSuccess" component={OrderSuccessScreen} />
         <Stack.Screen name="Collections" component={GuardedCollections} />
-        <Stack.Screen name="CollectionDetail" component={GuardedCollectionDetail} />
+        <Stack.Screen
+          name="CollectionDetail"
+          component={GuardedCollectionDetail}
+        />
         <Stack.Screen name="Notifications" component={GuardedNotifications} />
         <Stack.Screen name="Addresses" component={GuardedAddresses} />
         <Stack.Screen name="Payments" component={GuardedPayments} />

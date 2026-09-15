@@ -8,7 +8,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
   Image,
   Animated,
@@ -22,6 +21,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
@@ -55,14 +55,12 @@ const REELS_CACHE_TS_KEY = "expressmart.cache.reels_timestamp";
 // Reels change infrequently; refresh the local copy at most once per 30 min.
 const REELS_CACHE_DURATION = 30 * 60 * 1000;
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 const REEL_ASPECT = 9 / 16;
 
 // Top inset (status bar / header) reserved by the wrapper. The feed area is the
 // full screen minus this inset, so each reel page must be exactly this tall to
 // avoid a gap that pushes the next video down.
 const TOP_INSET = Platform.OS === "web" ? 0 : 50;
-const ITEM_HEIGHT = SCREEN_HEIGHT - TOP_INSET;
 
 const FLOATING_TAB_OFFSET = 120;
 
@@ -80,7 +78,20 @@ export const FeedScreen = ({ route, navigation }) => {
   // Web starts muted (autoplay policies); native starts unmuted.
   const [isMuted, setIsMuted] = useState(Platform.OS === "web");
   const screenIsFocused = useIsFocused();
-  const { isWide } = useResponsive();
+  const { isWide, sidebarWidth } = useResponsive();
+  const { width: viewportWidth, height: viewportHeight } =
+    useWindowDimensions();
+  const itemHeight = Math.max(viewportHeight - TOP_INSET, 1);
+  const reelWidth = isWide
+    ? Math.min(viewportWidth, Math.round(itemHeight * REEL_ASPECT))
+    : viewportWidth;
+  const availableWidth = Math.max(
+    viewportWidth - (isWide ? sidebarWidth : 0),
+    reelWidth,
+  );
+  const reelLeft = isWide
+    ? sidebarWidth + Math.max((availableWidth - reelWidth) / 2, 0)
+    : 0;
   const { colors: themeColors } = useTheme();
   const { user } = useAuth();
   const styles = useAppStyles((c) => buildFeedStyles(c));
@@ -242,1008 +253,1034 @@ export const FeedScreen = ({ route, navigation }) => {
         styles,
         themeColors,
         isWide,
+        reelWidth,
+        reelHeight,
+        reelLeft,
+        viewportWidth,
         isMuted,
         onToggleMute,
       }) => {
-      const itemId = item.id;
-      const streamUrl = item.video_url || item.hls_url;
-      // Resolve the best source: prefer a locally-cached copy (downloaded once)
-      // and fall back to the streaming URL so playback never waits on the
-      // download. When the cache finishes we swap to the local file URI.
-      const [source, setSource] = useState(() => ({
-        uri: streamUrl,
-        isNetwork: true,
-      }));
-      const videoRef = useRef(null);
-      // Mirror of the video's current time, kept in a ref (no re-renders) so
-      // the hold-to-rewind stepper always reads a fresh position.
-      const currentTimeRef = useRef(0);
-      // TikTok-style hold gestures: press-and-hold the right half → 2x speed
-      // forward; left half → continuous rewind; both until release. A short
-      // tap still toggles play/pause.
-      const [playbackRate, setPlaybackRate] = useState(1);
-      const [holdAction, setHoldAction] = useState(null); // "forward" | "rewind" | null
-      // NOTE: mute is NOT owned here any more — `isMuted` / `onToggleMute`
-      // come from FeedScreen so the setting persists across scrolling.
-      const holdTimerRef = useRef(null);
-      const rewindIntervalRef = useRef(null);
-      const holdActivatedRef = useRef(false);
-      // Looping pulse that only plays when the video is *user-paused* (so it
-      // never flashes while scrolling or while the feed is backgrounded).
-      const pulseAnim = useRef(new Animated.Value(0)).current;
-      // One-shot ripple that fires on every center tap for tactile feedback.
-      const tapAnim = useRef(new Animated.Value(0)).current;
+        const itemId = item.id;
+        const streamUrl = item.video_url || item.hls_url;
+        // Resolve the best source: prefer a locally-cached copy (downloaded once)
+        // and fall back to the streaming URL so playback never waits on the
+        // download. When the cache finishes we swap to the local file URI.
+        const [source, setSource] = useState(() => ({
+          uri: streamUrl,
+          isNetwork: true,
+        }));
+        const videoRef = useRef(null);
+        // Mirror of the video's current time, kept in a ref (no re-renders) so
+        // the hold-to-rewind stepper always reads a fresh position.
+        const currentTimeRef = useRef(0);
+        // TikTok-style hold gestures: press-and-hold the right half → 2x speed
+        // forward; left half → continuous rewind; both until release. A short
+        // tap still toggles play/pause.
+        const [playbackRate, setPlaybackRate] = useState(1);
+        const [holdAction, setHoldAction] = useState(null); // "forward" | "rewind" | null
+        // NOTE: mute is NOT owned here any more — `isMuted` / `onToggleMute`
+        // come from FeedScreen so the setting persists across scrolling.
+        const holdTimerRef = useRef(null);
+        const rewindIntervalRef = useRef(null);
+        const holdActivatedRef = useRef(false);
+        // Looping pulse that only plays when the video is *user-paused* (so it
+        // never flashes while scrolling or while the feed is backgrounded).
+        const pulseAnim = useRef(new Animated.Value(0)).current;
+        // One-shot ripple that fires on every center tap for tactile feedback.
+        const tapAnim = useRef(new Animated.Value(0)).current;
 
-      const fireTapPulse = useCallback(() => {
-        tapAnim.stopAnimation();
-        tapAnim.setValue(0);
-        Animated.timing(tapAnim, {
-          toValue: 1,
-          duration: 450,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }).start();
-      }, [tapAnim]);
+        const fireTapPulse = useCallback(() => {
+          tapAnim.stopAnimation();
+          tapAnim.setValue(0);
+          Animated.timing(tapAnim, {
+            toValue: 1,
+            duration: 450,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }).start();
+        }, [tapAnim]);
 
-      const logReel = useCallback(
-        (...args) => {
-          if (typeof __DEV__ === "undefined" || __DEV__) {
-            console.log("[FeedScreen][Reel]", itemId, ...args);
-          }
-        },
-        [itemId],
-      );
-
-      // Platform-aware seek used by the hold-to-rewind gesture:
-      // react-native-video v6 exposes ref.seek(); the web backend forwards
-      // the DOM <video> element as the ref (currentTime assignment).
-      const seekTo = useCallback(
-        (seconds) => {
-          const ref = videoRef.current;
-          if (!ref) return;
-          try {
-            if (Platform.OS === "web") {
-              ref.currentTime = seconds;
-            } else if (typeof ref.seek === "function") {
-              ref.seek(seconds);
+        const logReel = useCallback(
+          (...args) => {
+            if (typeof __DEV__ === "undefined" || __DEV__) {
+              console.log("[FeedScreen][Reel]", itemId, ...args);
             }
-            currentTimeRef.current = seconds;
-          } catch (e) {
-            logReel("seek failed", e);
-          }
-        },
-        [logReel],
-      );
-
-      // ── Hold-to-seek (TikTok-style) ────────────────────────────────────────
-      const clearHoldTimers = useCallback(() => {
-        if (holdTimerRef.current) {
-          clearTimeout(holdTimerRef.current);
-          holdTimerRef.current = null;
-        }
-        if (rewindIntervalRef.current) {
-          clearInterval(rewindIntervalRef.current);
-          rewindIntervalRef.current = null;
-        }
-      }, []);
-
-      // Ends any active hold. Returns true when the gesture was a hold
-      // (already consumed) and false for a quick tap (caller should toggle
-      // play/pause).
-      const endHold = useCallback(() => {
-        clearHoldTimers();
-        if (!holdActivatedRef.current) return false;
-        holdActivatedRef.current = false;
-        setPlaybackRate(1);
-        setHoldAction(null);
-        return true;
-      }, [clearHoldTimers]);
-
-      const handleVideoPressIn = useCallback(
-        (e) => {
-          const locationX = e.nativeEvent?.locationX ?? 0;
-          const side = locationX < SCREEN_WIDTH / 2 ? "left" : "right";
-          // Grace period so a quick tap doesn't trigger seeking.
-          holdTimerRef.current = setTimeout(() => {
-            holdActivatedRef.current = true;
-            if (side === "right") {
-              // Smooth continuous forward: bump the playback rate (TikTok's
-              // 2x hold-to-fast-forward).
-              setHoldAction("forward");
-              setPlaybackRate(2);
-            } else {
-              // Continuous rewind: step backwards from the live position
-              // until release (or the start of the video).
-              setHoldAction("rewind");
-              rewindIntervalRef.current = setInterval(() => {
-                const next = Math.max(0, currentTimeRef.current - 0.4);
-                seekTo(next);
-                if (next <= 0) endHold();
-              }, 80);
-            }
-          }, 280);
-        },
-        [seekTo, endHold],
-      );
-
-      const handleVideoPressOut = useCallback(() => {
-        // Ends any active hold (restores 1x rate, clears the rewind timer).
-        // Tap toggling is handled by onPress, which — unlike onPressOut —
-        // does not fire when the FlatList steals the touch for scrolling.
-        endHold();
-      }, [endHold]);
-
-      const handleVideoTap = useCallback(() => {
-        // Ignore the release of a completed hold — the gesture already ran.
-        if (holdActivatedRef.current) return;
-        fireTapPulse();
-        togglePlay();
-      }, [fireTapPulse, togglePlay]);
-
-      // ── Centered control-strip hold actions ────────────────────────────────
-      // • Hold ⏩ → VISIBLE fast-forward: playback rate goes to 1.5X (with an
-      //   on-screen badge) so you actually watch the video speed up.
-      // • Hold ⏪ → gradual rewind: the position steps backwards continuously
-      //   while held (same cadence as the TikTok-style hold).
-      // A quick tap intentionally does nothing — actions run only while held.
-      const stripHoldIntervalRef = useRef(null);
-      // Anchor for the wall-clock-driven rewind (start position + start time).
-      const stripHoldRef = useRef({ startPos: 0, startedAt: 0 });
-
-      const endStripHold = useCallback(() => {
-        if (stripHoldIntervalRef.current) {
-          clearInterval(stripHoldIntervalRef.current);
-          stripHoldIntervalRef.current = null;
-        }
-      }, []);
-
-      // Released (or reel scrolled away): restore normal 1X playback.
-      const endStripActions = useCallback(() => {
-        endStripHold();
-        setPlaybackRate(1);
-        setHoldAction(null);
-      }, [endStripHold]);
-
-      // Release safety-net on unmount (e.g. reel scrolls away mid-hold).
-      useEffect(() => endStripHold, [endStripHold]);
-
-      const startStripForward = useCallback(() => {
-        fireTapPulse();
-        setHoldAction("forward");
-        setPlaybackRate(1.5);
-      }, [fireTapPulse]);
-
-      const startStripRewind = useCallback(() => {
-        fireTapPulse();
-        // Anchor the rewind to WALL-CLOCK time: every tick seeks to exactly
-        // where the video should be at that instant (start position minus
-        // 1.5 seconds of video per real second elapsed). Because each target
-        // is computed fresh from the clock — never from the previous target —
-        // slow or fast seeks cannot cause drift, and the motion stays at a
-        // true, even 1.5X in reverse.
-        stripHoldRef.current = {
-          startPos: currentTimeRef.current || 0,
-          startedAt: Date.now(),
-        };
-        setHoldAction("rewind");
-        stripHoldIntervalRef.current = setInterval(() => {
-          const { startPos, startedAt } = stripHoldRef.current;
-          const target = Math.max(
-            0,
-            startPos - ((Date.now() - startedAt) / 1000) * 1.5,
-          );
-          seekTo(target);
-          if (target <= 0) endStripActions();
-        }, 120);
-      }, [fireTapPulse, seekTo, endStripActions]);
-
-      const handleControlsTogglePlay = useCallback(() => {
-        fireTapPulse();
-        togglePlay();
-      }, [fireTapPulse, togglePlay]);
-
-      useEffect(() => clearHoldTimers, [clearHoldTimers]);
-
-      // Resolve the source (cached local file if present, else stream) once on
-      // mount, then upgrade to the local copy when the background download
-      // completes — without interrupting playback if it's already streaming.
-      useEffect(() => {
-        let mounted = true;
-        getReelSource(streamUrl).then(({ uri, cached }) => {
-          if (!mounted) return;
-          setSource({ uri, isNetwork: !cached });
-        });
-        return () => {
-          mounted = false;
-        };
-      }, [streamUrl]);
-
-      useEffect(() => {
-        // The looping pulse + play button only appear when the user has
-        // explicitly paused. This prevents the button from flashing during a
-        // scroll (where the outgoing item is briefly !isActive) or lingering
-        // after returning from a product/store page (where the feed was
-        // backgrounded and auto-paused).
-        if (!paused) {
-          pulseAnim.stopAnimation();
-          pulseAnim.setValue(0);
-          return;
-        }
-
-        const loop = Animated.loop(
-          Animated.sequence([
-            Animated.timing(pulseAnim, {
-              toValue: 1,
-              duration: 900,
-              easing: Easing.out(Easing.quad),
-              useNativeDriver: true,
-            }),
-            Animated.timing(pulseAnim, {
-              toValue: 0,
-              duration: 900,
-              easing: Easing.in(Easing.quad),
-              useNativeDriver: true,
-            }),
-          ]),
+          },
+          [itemId],
         );
 
-        loop.start();
-        return () => {
-          loop.stop();
-        };
-      }, [isActive, paused, pulseAnim, screenIsFocused]);
+        // Platform-aware seek used by the hold-to-rewind gesture:
+        // react-native-video v6 exposes ref.seek(); the web backend forwards
+        // the DOM <video> element as the ref (currentTime assignment).
+        const seekTo = useCallback(
+          (seconds) => {
+            const ref = videoRef.current;
+            if (!ref) return;
+            try {
+              if (Platform.OS === "web") {
+                ref.currentTime = seconds;
+              } else if (typeof ref.seek === "function") {
+                ref.seek(seconds);
+              }
+              currentTimeRef.current = seconds;
+            } catch (e) {
+              logReel("seek failed", e);
+            }
+          },
+          [logReel],
+        );
 
-      const storeName = item.seller?.name || "Store";
-      const storeAvatar = resolveAvatarUri(item.seller?.avatar);
-      // Tags can come from the DB as an array OR (rarely) as a comma-separated
-      // string — normalize so the first non-empty tag is always picked.
-      const itemTags = Array.isArray(item.tags)
-        ? item.tags
-        : typeof item.tags === "string"
-        ? item.tags
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean)
-        : [];
-      const primaryTag =
-        itemTags.find((tag) => String(tag || "").trim()) ||
-        item.category ||
-        "Featured";
-      const baseLikeCount = Number(item.likes_count || 0);
-      const baseCommentCount = Number(item.comments_count || 0);
-
-      // Product-based actions (like / comment / tag) operate on the linked
-      // product, mirroring the ProductDetail screen, not the video itself.
-      const { user } = useAuth();
-      const toast = useToast();
-      const productId = item.product_id;
-
-      // --- Like (product wishlist) with optimistic update + pop animation ---
-      const [isWishlisted, setIsWishlisted] = useState(false);
-      const [likeCount, setLikeCount] = useState(baseLikeCount);
-      const likeAnim = useRef(new Animated.Value(1)).current;
-      const likeBurstAnim = useRef(new Animated.Value(0)).current;
-
-      useEffect(() => {
-        let mounted = true;
-        const checkWishlist = async () => {
-          if (!user || !productId || !supabase) return;
-          const { data } = await supabase
-            .from("express_wishlists")
-            .select("id")
-            .eq("user_id", user.id)
-            .eq("product_id", productId)
-            .maybeSingle();
-          if (!mounted) return;
-          // maybeSingle() returns null (not an error) when no row exists.
-          setIsWishlisted(!!data);
-        };
-        checkWishlist();
-        return () => {
-          mounted = false;
-        };
-      }, [user, productId]);
-
-      const playLikeAnimation = useCallback(() => {
-        likeAnim.setValue(0.6);
-        Animated.spring(likeAnim, {
-          toValue: 1,
-          friction: 3,
-          tension: 220,
-          useNativeDriver: true,
-        }).start();
-        likeBurstAnim.setValue(0);
-        Animated.timing(likeBurstAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }).start();
-      }, [likeAnim, likeBurstAnim]);
-
-      const toggleLike = useCallback(async () => {
-        if (!user) {
-          toast.info("Sign in required", "Please sign in to like this product");
-          return;
-        }
-        if (!productId || !supabase) return;
-
-        // Optimistic update: flip state + count immediately for snappy UX.
-        const willLike = !isWishlisted;
-        setIsWishlisted(willLike);
-        setLikeCount((c) => Math.max(0, c + (willLike ? 1 : -1)));
-        if (willLike) {
-          playLikeAnimation();
-          playLikeSound();
-        }
-
-        try {
-          if (!willLike) {
-            await supabase
-              .from("express_wishlists")
-              .delete()
-              .eq("user_id", user.id)
-              .eq("product_id", productId);
-          } else {
-            await supabase.from("express_wishlists").insert({
-              user_id: user.id,
-              product_id: productId,
-            });
+        // ── Hold-to-seek (TikTok-style) ────────────────────────────────────────
+        const clearHoldTimers = useCallback(() => {
+          if (holdTimerRef.current) {
+            clearTimeout(holdTimerRef.current);
+            holdTimerRef.current = null;
           }
-          // Personalization signal: like/unlike from the reels feed.
-          // Forward whatever product metadata is on the reel record so
-          // the scorer doesn't need an extra round-trip.
-          const productFromItem = item && item.product;
-          const sellerField =
-            productFromItem && productFromItem.seller_id;
-          const sellerId =
-            typeof sellerField === "string"
-              ? sellerField
-              : sellerField && sellerField.id;
-          trackEvent(willLike ? "like" : "unlike", {
-            productId,
-            categoryId:
-              productFromItem && productFromItem.category_id
-                ? productFromItem.category_id
-                : undefined,
-            category:
-              productFromItem && productFromItem.category
-                ? productFromItem.category
-                : undefined,
-            sellerId,
-          });
-        } catch (err) {
-          // Roll back on failure.
-          setIsWishlisted(!willLike);
-          setLikeCount((c) => Math.max(0, c + (willLike ? -1 : 1)));
-          toast.error("Error", err.message);
-        }
-      }, [user, isWishlisted, productId, toast, playLikeAnimation, item]);
+          if (rewindIntervalRef.current) {
+            clearInterval(rewindIntervalRef.current);
+            rewindIntervalRef.current = null;
+          }
+        }, []);
 
-      // --- Comment: own modal in the feed, backed by PRODUCT comments
-      // (express_reviews + express_review_comments), mirroring the
-      // ProductDetail screen. ---
-      const [commentModalVisible, setCommentModalVisible] = useState(false);
-      const [comments, setComments] = useState([]);
-      const [commentCount, setCommentCount] = useState(baseCommentCount);
-      const [commentText, setCommentText] = useState("");
-      const [commentPosting, setCommentPosting] = useState(false);
-      const [commentsLoading, setCommentsLoading] = useState(false);
+        // Ends any active hold. Returns true when the gesture was a hold
+        // (already consumed) and false for a quick tap (caller should toggle
+        // play/pause).
+        const endHold = useCallback(() => {
+          clearHoldTimers();
+          if (!holdActivatedRef.current) return false;
+          holdActivatedRef.current = false;
+          setPlaybackRate(1);
+          setHoldAction(null);
+          return true;
+        }, [clearHoldTimers]);
 
-      const loadComments = useCallback(async () => {
-        if (!productId || !supabase) return;
-        setCommentsLoading(true);
-        try {
-          // Pull approved product reviews that have a comment, newest first.
-          const { data: reviews } = await supabase
-            .from("express_reviews")
-            .select(
-              "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
-            )
-            .eq("product_id", productId)
-            .eq("is_approved", true)
-            .not("comment", "is", null)
-            .order("created_at", { ascending: false })
-            .limit(50);
+        const handleVideoPressIn = useCallback(
+          (e) => {
+            const locationX = e.nativeEvent?.locationX ?? 0;
+            const side = locationX < viewportWidth / 2 ? "left" : "right";
+            // Grace period so a quick tap doesn't trigger seeking.
+            holdTimerRef.current = setTimeout(() => {
+              holdActivatedRef.current = true;
+              if (side === "right") {
+                // Smooth continuous forward: bump the playback rate (TikTok's
+                // 2x hold-to-fast-forward).
+                setHoldAction("forward");
+                setPlaybackRate(2);
+              } else {
+                // Continuous rewind: step backwards from the live position
+                // until release (or the start of the video).
+                setHoldAction("rewind");
+                rewindIntervalRef.current = setInterval(() => {
+                  const next = Math.max(0, currentTimeRef.current - 0.4);
+                  seekTo(next);
+                  if (next <= 0) endHold();
+                }, 80);
+              }
+            }, 280);
+          },
+          [seekTo, endHold],
+        );
 
-          const rows = (reviews ?? [])
-            .filter((r) => String(r.comment || "").trim())
-            .map((r) => {
-              const profile = Array.isArray(r.express_profiles)
-                ? r.express_profiles[0]
-                : r.express_profiles;
-              return {
-                id: r.id,
-                review_id: r.id,
-                user_id: r.user_id,
-                rating: r.rating,
-                comment: r.comment,
-                created_at: r.created_at,
-                author_name: profile?.full_name || "Customer",
-                author_avatar: profile?.avatar_url || null,
-              };
-            });
-          setComments(rows);
-          setCommentCount(rows.length);
-        } catch (e) {
-          console.warn("loadComments error:", e);
-        } finally {
-          setCommentsLoading(false);
-        }
-      }, [productId]);
+        const handleVideoPressOut = useCallback(() => {
+          // Ends any active hold (restores 1x rate, clears the rewind timer).
+          // Tap toggling is handled by onPress, which — unlike onPressOut —
+          // does not fire when the FlatList steals the touch for scrolling.
+          endHold();
+        }, [endHold]);
 
-      const openCommentModal = useCallback(() => {
-        setCommentModalVisible(true);
-        loadComments();
-      }, [loadComments]);
+        const handleVideoTap = useCallback(() => {
+          // Ignore the release of a completed hold — the gesture already ran.
+          if (holdActivatedRef.current) return;
+          fireTapPulse();
+          togglePlay();
+        }, [fireTapPulse, togglePlay]);
 
-      const submitComment = useCallback(async () => {
-        const trimmed = String(commentText).trim();
-        if (!trimmed) return;
-        if (!user) {
-          toast.info("Sign in required", "Please sign in to comment");
-          return;
-        }
-        if (!productId || !supabase) return;
-        setCommentPosting(true);
-        try {
-          // A feed comment is a product review with a comment (default 5-star
-          // rating). Users may post MULTIPLE comments, so we always INSERT a
-          // new row rather than upserting an existing one.
-          const { data, error } = await supabase
-            .from("express_reviews")
-            .insert({
-              product_id: productId,
-              user_id: user.id,
-              rating: 5,
-              comment: trimmed,
-              is_approved: true,
-            })
-            .select(
-              "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
-            )
-            .single();
-          if (error) throw error;
-          const saved = data;
+        // ── Centered control-strip hold actions ────────────────────────────────
+        // • Hold ⏩ → VISIBLE fast-forward: playback rate goes to 1.5X (with an
+        //   on-screen badge) so you actually watch the video speed up.
+        // • Hold ⏪ → gradual rewind: the position steps backwards continuously
+        //   while held (same cadence as the TikTok-style hold).
+        // A quick tap intentionally does nothing — actions run only while held.
+        const stripHoldIntervalRef = useRef(null);
+        // Anchor for the wall-clock-driven rewind (start position + start time).
+        const stripHoldRef = useRef({ startPos: 0, startedAt: 0 });
 
-          const profile = Array.isArray(saved.express_profiles)
-            ? saved.express_profiles[0]
-            : saved.express_profiles;
-          const newComment = {
-            id: saved.id,
-            review_id: saved.id,
-            user_id: saved.user_id,
-            rating: saved.rating,
-            comment: saved.comment,
-            created_at: saved.created_at,
-            author_name: profile?.full_name || "You",
-            author_avatar: profile?.avatar_url || null,
+        const endStripHold = useCallback(() => {
+          if (stripHoldIntervalRef.current) {
+            clearInterval(stripHoldIntervalRef.current);
+            stripHoldIntervalRef.current = null;
+          }
+        }, []);
+
+        // Released (or reel scrolled away): restore normal 1X playback.
+        const endStripActions = useCallback(() => {
+          endStripHold();
+          setPlaybackRate(1);
+          setHoldAction(null);
+        }, [endStripHold]);
+
+        // Release safety-net on unmount (e.g. reel scrolls away mid-hold).
+        useEffect(() => endStripHold, [endStripHold]);
+
+        const startStripForward = useCallback(() => {
+          fireTapPulse();
+          setHoldAction("forward");
+          setPlaybackRate(1.5);
+        }, [fireTapPulse]);
+
+        const startStripRewind = useCallback(() => {
+          fireTapPulse();
+          // Anchor the rewind to WALL-CLOCK time: every tick seeks to exactly
+          // where the video should be at that instant (start position minus
+          // 1.5 seconds of video per real second elapsed). Because each target
+          // is computed fresh from the clock — never from the previous target —
+          // slow or fast seeks cannot cause drift, and the motion stays at a
+          // true, even 1.5X in reverse.
+          stripHoldRef.current = {
+            startPos: currentTimeRef.current || 0,
+            startedAt: Date.now(),
           };
+          setHoldAction("rewind");
+          stripHoldIntervalRef.current = setInterval(() => {
+            const { startPos, startedAt } = stripHoldRef.current;
+            const target = Math.max(
+              0,
+              startPos - ((Date.now() - startedAt) / 1000) * 1.5,
+            );
+            seekTo(target);
+            if (target <= 0) endStripActions();
+          }, 120);
+        }, [fireTapPulse, seekTo, endStripActions]);
 
-          // Prepend the new comment to the top of the list.
-          setComments((prev) => [newComment, ...prev]);
-          setCommentCount((c) => c + 1);
-          setCommentText("");
-          toast.success(
-            "Comment posted",
-            "Your comment was added to the product",
-          );
-        } catch (err) {
-          toast.error("Error", err.message);
-        } finally {
-          setCommentPosting(false);
-        }
-      }, [commentText, user, productId, toast]);
+        const handleControlsTogglePlay = useCallback(() => {
+          fireTapPulse();
+          togglePlay();
+        }, [fireTapPulse, togglePlay]);
 
-      const handleComment = useCallback(() => {
-        openCommentModal();
-      }, [openCommentModal]);
+        useEffect(() => clearHoldTimers, [clearHoldTimers]);
 
-      const handleTag = useCallback(async () => {
-        if (!productId) return;
-        try {
-          const result = await shareProduct(productId, item.title);
-          if (result.success) {
-            toast.success("Product shared!", "Share link copied to clipboard");
-          } else {
-            toast.error("Failed to share", result.error || "Please try again");
-          }
-        } catch (error) {
-          toast.error("Error", "Failed to share product");
-          console.error("Error sharing product:", error);
-        }
-      }, [productId, item.title, toast]);
-
-      const openStore = () => {
-        if (item.seller?.id) {
-          navigation.navigate("Store", {
-            sellerId: item.seller.id,
-            seller: item.seller,
+        // Resolve the source (cached local file if present, else stream) once on
+        // mount, then upgrade to the local copy when the background download
+        // completes — without interrupting playback if it's already streaming.
+        useEffect(() => {
+          let mounted = true;
+          getReelSource(streamUrl).then(({ uri, cached }) => {
+            if (!mounted) return;
+            setSource({ uri, isNetwork: !cached });
           });
-        }
-      };
+          return () => {
+            mounted = false;
+          };
+        }, [streamUrl]);
 
-      return (
-        <View style={styles.reelContainer}>
-          <FeedVideo
-            ref={videoRef}
-            source={source}
-            style={styles.video}
-            resizeMode="cover"
-            repeat
-            // CRITICAL (Android/Fabric): react-native-video is a LEGACY
-            // component rendered through the interop layer (no codegenConfig),
-            // and on the new architecture its native view participates in
-            // touch dispatch ABOVE Fabric siblings — swallowing every tap and
-            // press in the video's bounds no matter what zIndex the gesture
-            // layer uses. The video never needs touches (the invisible
-            // gesture layer below owns them), so disable its interactivity
-            // entirely.
-            pointerEvents="none"
-            muted={isMuted}
-            controls={false}
-            rate={playbackRate}
-            // Freeze REAL playback while reverse-scrubbing: otherwise the
-            // decoder keeps playing forward between our backward seeks, the
-            // picture appears stuck, and the seeks pile up into one big jump.
-            // Pausing lets every 1.5X-rate seek render its own frame, giving
-            // smooth visible reverse playback. On release the hold flag clears
-            // and playback resumes exactly where the rewind stopped.
-            paused={
-              !screenIsFocused ||
-              !isActive ||
-              paused ||
-              holdAction === "rewind"
-            }
-            onLoad={(meta) => logReel("onLoad", meta?.duration, source?.uri)}
-            onReadyForDisplay={() =>
-              logReel("onReadyForDisplay", source?.uri)
-            }
-            onBuffer={(event) =>
-              logReel("onBuffer", event?.isBuffering, source?.uri)
-            }
-            onError={(error) => logReel("onError", error, source?.uri)}
-            onProgress={(progress) => {
-              if (progress?.currentTime != null) {
-                logReel(
-                  "onProgress",
-                  progress.currentTime,
-                  progress.playableDuration,
-                );
-              }
-              // Keep the ref fresh for the hold-to-rewind stepper (no
-              // re-renders — there is no visible progress UI anymore).
-              if (progress?.currentTime != null) {
-                currentTimeRef.current = progress.currentTime;
-              }
-            }}
-            // ABR: keep a modest forward buffer so rendition switches are
-            // smooth without over-fetching data on metered connections.
-            bufferConfig={{
-              minBufferMs: 10000,
-              maxBufferMs: 30000,
-              bufferForPlaybackMs: 2500,
-              bufferForPlaybackAfterRebufferMs: 5000,
-            }}
-          />
+        useEffect(() => {
+          // The looping pulse + play button only appear when the user has
+          // explicitly paused. This prevents the button from flashing during a
+          // scroll (where the outgoing item is briefly !isActive) or lingering
+          // after returning from a product/store page (where the feed was
+          // backgrounded and auto-paused).
+          if (!paused) {
+            pulseAnim.stopAnimation();
+            pulseAnim.setValue(0);
+            return;
+          }
 
-          {/* Invisible touch layer rendered ABOVE the video. This is the key
+          const loop = Animated.loop(
+            Animated.sequence([
+              Animated.timing(pulseAnim, {
+                toValue: 1,
+                duration: 900,
+                easing: Easing.out(Easing.quad),
+                useNativeDriver: true,
+              }),
+              Animated.timing(pulseAnim, {
+                toValue: 0,
+                duration: 900,
+                easing: Easing.in(Easing.quad),
+                useNativeDriver: true,
+              }),
+            ]),
+          );
+
+          loop.start();
+          return () => {
+            loop.stop();
+          };
+        }, [isActive, paused, pulseAnim, screenIsFocused]);
+
+        const storeName = item.seller?.name || "Store";
+        const storeAvatar = resolveAvatarUri(item.seller?.avatar);
+        // Tags can come from the DB as an array OR (rarely) as a comma-separated
+        // string — normalize so the first non-empty tag is always picked.
+        const itemTags = Array.isArray(item.tags)
+          ? item.tags
+          : typeof item.tags === "string"
+            ? item.tags
+                .split(",")
+                .map((t) => t.trim())
+                .filter(Boolean)
+            : [];
+        const primaryTag =
+          itemTags.find((tag) => String(tag || "").trim()) ||
+          item.category ||
+          "Featured";
+        const baseLikeCount = Number(item.likes_count || 0);
+        const baseCommentCount = Number(item.comments_count || 0);
+
+        // Product-based actions (like / comment / tag) operate on the linked
+        // product, mirroring the ProductDetail screen, not the video itself.
+        const { user } = useAuth();
+        const toast = useToast();
+        const productId = item.product_id;
+
+        // --- Like (product wishlist) with optimistic update + pop animation ---
+        const [isWishlisted, setIsWishlisted] = useState(false);
+        const [likeCount, setLikeCount] = useState(baseLikeCount);
+        const likeAnim = useRef(new Animated.Value(1)).current;
+        const likeBurstAnim = useRef(new Animated.Value(0)).current;
+
+        useEffect(() => {
+          let mounted = true;
+          const checkWishlist = async () => {
+            if (!user || !productId || !supabase) return;
+            const { data } = await supabase
+              .from("express_wishlists")
+              .select("id")
+              .eq("user_id", user.id)
+              .eq("product_id", productId)
+              .maybeSingle();
+            if (!mounted) return;
+            // maybeSingle() returns null (not an error) when no row exists.
+            setIsWishlisted(!!data);
+          };
+          checkWishlist();
+          return () => {
+            mounted = false;
+          };
+        }, [user, productId]);
+
+        const playLikeAnimation = useCallback(() => {
+          likeAnim.setValue(0.6);
+          Animated.spring(likeAnim, {
+            toValue: 1,
+            friction: 3,
+            tension: 220,
+            useNativeDriver: true,
+          }).start();
+          likeBurstAnim.setValue(0);
+          Animated.timing(likeBurstAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }).start();
+        }, [likeAnim, likeBurstAnim]);
+
+        const toggleLike = useCallback(async () => {
+          if (!user) {
+            toast.info(
+              "Sign in required",
+              "Please sign in to like this product",
+            );
+            return;
+          }
+          if (!productId || !supabase) return;
+
+          // Optimistic update: flip state + count immediately for snappy UX.
+          const willLike = !isWishlisted;
+          setIsWishlisted(willLike);
+          setLikeCount((c) => Math.max(0, c + (willLike ? 1 : -1)));
+          if (willLike) {
+            playLikeAnimation();
+            playLikeSound();
+          }
+
+          try {
+            if (!willLike) {
+              await supabase
+                .from("express_wishlists")
+                .delete()
+                .eq("user_id", user.id)
+                .eq("product_id", productId);
+            } else {
+              await supabase.from("express_wishlists").insert({
+                user_id: user.id,
+                product_id: productId,
+              });
+            }
+            // Personalization signal: like/unlike from the reels feed.
+            // Forward whatever product metadata is on the reel record so
+            // the scorer doesn't need an extra round-trip.
+            const productFromItem = item && item.product;
+            const sellerField = productFromItem && productFromItem.seller_id;
+            const sellerId =
+              typeof sellerField === "string"
+                ? sellerField
+                : sellerField && sellerField.id;
+            trackEvent(willLike ? "like" : "unlike", {
+              productId,
+              categoryId:
+                productFromItem && productFromItem.category_id
+                  ? productFromItem.category_id
+                  : undefined,
+              category:
+                productFromItem && productFromItem.category
+                  ? productFromItem.category
+                  : undefined,
+              sellerId,
+            });
+          } catch (err) {
+            // Roll back on failure.
+            setIsWishlisted(!willLike);
+            setLikeCount((c) => Math.max(0, c + (willLike ? -1 : 1)));
+            toast.error("Error", err.message);
+          }
+        }, [user, isWishlisted, productId, toast, playLikeAnimation, item]);
+
+        // --- Comment: own modal in the feed, backed by PRODUCT comments
+        // (express_reviews + express_review_comments), mirroring the
+        // ProductDetail screen. ---
+        const [commentModalVisible, setCommentModalVisible] = useState(false);
+        const [comments, setComments] = useState([]);
+        const [commentCount, setCommentCount] = useState(baseCommentCount);
+        const [commentText, setCommentText] = useState("");
+        const [commentPosting, setCommentPosting] = useState(false);
+        const [commentsLoading, setCommentsLoading] = useState(false);
+
+        const loadComments = useCallback(async () => {
+          if (!productId || !supabase) return;
+          setCommentsLoading(true);
+          try {
+            // Pull approved product reviews that have a comment, newest first.
+            const { data: reviews } = await supabase
+              .from("express_reviews")
+              .select(
+                "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
+              )
+              .eq("product_id", productId)
+              .eq("is_approved", true)
+              .not("comment", "is", null)
+              .order("created_at", { ascending: false })
+              .limit(50);
+
+            const rows = (reviews ?? [])
+              .filter((r) => String(r.comment || "").trim())
+              .map((r) => {
+                const profile = Array.isArray(r.express_profiles)
+                  ? r.express_profiles[0]
+                  : r.express_profiles;
+                return {
+                  id: r.id,
+                  review_id: r.id,
+                  user_id: r.user_id,
+                  rating: r.rating,
+                  comment: r.comment,
+                  created_at: r.created_at,
+                  author_name: profile?.full_name || "Customer",
+                  author_avatar: profile?.avatar_url || null,
+                };
+              });
+            setComments(rows);
+            setCommentCount(rows.length);
+          } catch (e) {
+            console.warn("loadComments error:", e);
+          } finally {
+            setCommentsLoading(false);
+          }
+        }, [productId]);
+
+        const openCommentModal = useCallback(() => {
+          setCommentModalVisible(true);
+          loadComments();
+        }, [loadComments]);
+
+        const submitComment = useCallback(async () => {
+          const trimmed = String(commentText).trim();
+          if (!trimmed) return;
+          if (!user) {
+            toast.info("Sign in required", "Please sign in to comment");
+            return;
+          }
+          if (!productId || !supabase) return;
+          setCommentPosting(true);
+          try {
+            // A feed comment is a product review with a comment (default 5-star
+            // rating). Users may post MULTIPLE comments, so we always INSERT a
+            // new row rather than upserting an existing one.
+            const { data, error } = await supabase
+              .from("express_reviews")
+              .insert({
+                product_id: productId,
+                user_id: user.id,
+                rating: 5,
+                comment: trimmed,
+                is_approved: true,
+              })
+              .select(
+                "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
+              )
+              .single();
+            if (error) throw error;
+            const saved = data;
+
+            const profile = Array.isArray(saved.express_profiles)
+              ? saved.express_profiles[0]
+              : saved.express_profiles;
+            const newComment = {
+              id: saved.id,
+              review_id: saved.id,
+              user_id: saved.user_id,
+              rating: saved.rating,
+              comment: saved.comment,
+              created_at: saved.created_at,
+              author_name: profile?.full_name || "You",
+              author_avatar: profile?.avatar_url || null,
+            };
+
+            // Prepend the new comment to the top of the list.
+            setComments((prev) => [newComment, ...prev]);
+            setCommentCount((c) => c + 1);
+            setCommentText("");
+            toast.success(
+              "Comment posted",
+              "Your comment was added to the product",
+            );
+          } catch (err) {
+            toast.error("Error", err.message);
+          } finally {
+            setCommentPosting(false);
+          }
+        }, [commentText, user, productId, toast]);
+
+        const handleComment = useCallback(() => {
+          openCommentModal();
+        }, [openCommentModal]);
+
+        const handleTag = useCallback(async () => {
+          if (!productId) return;
+          try {
+            const result = await shareProduct(productId, item.title);
+            if (result.success) {
+              toast.success(
+                "Product shared!",
+                "Share link copied to clipboard",
+              );
+            } else {
+              toast.error(
+                "Failed to share",
+                result.error || "Please try again",
+              );
+            }
+          } catch (error) {
+            toast.error("Error", "Failed to share product");
+            console.error("Error sharing product:", error);
+          }
+        }, [productId, item.title, toast]);
+
+        const openStore = () => {
+          if (item.seller?.id) {
+            navigation.navigate("Store", {
+              sellerId: item.seller.id,
+              seller: item.seller,
+            });
+          }
+        };
+
+        return (
+          <View
+            style={[
+              styles.reelContainer,
+              { width: reelWidth, height: reelHeight, marginLeft: reelLeft },
+            ]}
+          >
+            <FeedVideo
+              ref={videoRef}
+              source={source}
+              style={[styles.video, { width: reelWidth, height: reelHeight }]}
+              resizeMode="cover"
+              repeat
+              // CRITICAL (Android/Fabric): react-native-video is a LEGACY
+              // component rendered through the interop layer (no codegenConfig),
+              // and on the new architecture its native view participates in
+              // touch dispatch ABOVE Fabric siblings — swallowing every tap and
+              // press in the video's bounds no matter what zIndex the gesture
+              // layer uses. The video never needs touches (the invisible
+              // gesture layer below owns them), so disable its interactivity
+              // entirely.
+              pointerEvents="none"
+              muted={isMuted}
+              controls={false}
+              rate={playbackRate}
+              // Freeze REAL playback while reverse-scrubbing: otherwise the
+              // decoder keeps playing forward between our backward seeks, the
+              // picture appears stuck, and the seeks pile up into one big jump.
+              // Pausing lets every 1.5X-rate seek render its own frame, giving
+              // smooth visible reverse playback. On release the hold flag clears
+              // and playback resumes exactly where the rewind stopped.
+              paused={
+                !screenIsFocused ||
+                !isActive ||
+                paused ||
+                holdAction === "rewind"
+              }
+              onLoad={(meta) => logReel("onLoad", meta?.duration, source?.uri)}
+              onReadyForDisplay={() =>
+                logReel("onReadyForDisplay", source?.uri)
+              }
+              onBuffer={(event) =>
+                logReel("onBuffer", event?.isBuffering, source?.uri)
+              }
+              onError={(error) => logReel("onError", error, source?.uri)}
+              onProgress={(progress) => {
+                if (progress?.currentTime != null) {
+                  logReel(
+                    "onProgress",
+                    progress.currentTime,
+                    progress.playableDuration,
+                  );
+                }
+                // Keep the ref fresh for the hold-to-rewind stepper (no
+                // re-renders — there is no visible progress UI anymore).
+                if (progress?.currentTime != null) {
+                  currentTimeRef.current = progress.currentTime;
+                }
+              }}
+              // ABR: keep a modest forward buffer so rendition switches are
+              // smooth without over-fetching data on metered connections.
+              bufferConfig={{
+                minBufferMs: 10000,
+                maxBufferMs: 30000,
+                bufferForPlaybackMs: 2500,
+                bufferForPlaybackAfterRebufferMs: 5000,
+              }}
+            />
+
+            {/* Invisible touch layer rendered ABOVE the video. This is the key
               fix for "taps don't work": the native video surface (ExoPlayer on
               Android) and the web <video> element can swallow touches aimed at
               a parent wrapper, so the gesture layer must sit ON TOP of it.
               • tap → play/pause (onPress — never fires when the FlatList
                 steals the touch for scrolling)
               • hold left/right → rewind / 2x forward until release */}
-          <Pressable
-            style={styles.videoTouchLayer}
-            // collapsable={false} stops Android from optimizing the layer out
-            // of the native view tree, and zIndex pins it above the video
-            // (matters on the new architecture where legacy-view ordering
-            // can place the player surface above Fabric siblings).
-            collapsable={false}
-            onPressIn={handleVideoPressIn}
-            onPressOut={handleVideoPressOut}
-            onPress={handleVideoTap}
-          >
-            {/* NOTE: the hold indicator badge lives in the controls layer
+            <Pressable
+              style={styles.videoTouchLayer}
+              // collapsable={false} stops Android from optimizing the layer out
+              // of the native view tree, and zIndex pins it above the video
+              // (matters on the new architecture where legacy-view ordering
+              // can place the player surface above Fabric siblings).
+              collapsable={false}
+              onPressIn={handleVideoPressIn}
+              onPressOut={handleVideoPressOut}
+              onPress={handleVideoTap}
+            >
+              {/* NOTE: the hold indicator badge lives in the controls layer
                 ABOVE this touch layer (single instance). It previously also
                 rendered here and showed doubled-up next to the controls-layer
                 badge once the control strips went transparent. */}
-          </Pressable>
+            </Pressable>
 
-          {/* Centered player controls — the FIX for "controls don't work".
+            {/* Centered player controls — the FIX for "controls don't work".
               Rendered as a sibling ABOVE the touch layer and pinned to the
               exact center of the reel with a zIndex ABOVE the gesture layer
               but BELOW all other page buttons (see style comments).
               Hold-to-seek: ⏪/⏩ scrub gradually while held (no jump on tap).
               • hold ⏪ = rewind   • tap = play/pause (resumes in place)
               • hold ⏩ = fast-forward */}
-          <View
-            style={styles.centerControlsLayer}
-            pointerEvents="box-none"
-            collapsable={false}
-          >
-            <View style={styles.centerControlsRow}>
-              <Pressable
-                style={styles.controlSideBtn}
-                onPressIn={startStripRewind}
-                onPressOut={endStripActions}
-                hitSlop={6}
-              >
-                <Ionicons name="play-back" size={18} color="#fff" />
-                <Text style={styles.controlSideLabel}>rew</Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.controlMainBtn}
-                onPress={handleControlsTogglePlay}
-                hitSlop={6}
-              >
-                {/* Pulsing halo only while user-paused (same behaviour as the
-                    previous paused-state button). */}
-                {paused ? (
-                  <Animated.View
-                    pointerEvents="none"
-                    style={[
-                      styles.centerPlayPulse,
-                      {
-                        opacity: pulseAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.22, 0.62],
-                        }),
-                        transform: [
-                          {
-                            scale: pulseAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [1, 1.5],
-                            }),
-                          },
-                        ],
-                      },
-                    ]}
-                  />
-                ) : null}
-                <Ionicons
-                  name={paused ? "play" : "pause"}
-                  size={28}
-                  color="#fff"
-                />
-              </Pressable>
-
-              <Pressable
-                style={styles.controlSideBtn}
-                onPressIn={startStripForward}
-                onPressOut={endStripActions}
-                hitSlop={6}
-              >
-                <Ionicons name="play-forward" size={18} color="#fff" />
-                <Text style={styles.controlSideLabel}>fwd</Text>
-              </Pressable>
-            </View>
-
-            {/* Hold indicator — shown ABOVE the control cards while an action
-                is active: "1.5x" while ⏩ is held, "rewind" while ⏪ is held.
-                Purely visual — pointerEvents="none". */}
-            {holdAction ? (
-              <View style={styles.holdBadge} pointerEvents="none">
-                <View style={styles.holdBadgePill}>
-                  <Ionicons
-                    name={
-                      holdAction === "forward"
-                        ? "play-forward-outline"
-                        : "play-back-outline"
-                    }
-                    size={14}
-                    color="#fff"
-                  />
-                  <Text style={styles.holdBadgeText}>
-                    {holdAction === "forward" ? "▶ 1.5x" : "◀ 1.5x"}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-
-            {/* One-shot tap ripple — lives HERE (above the control columns)
-                so the feedback ring is fully visible and dead-centre of the
-                screen on every tap, instead of rendering buried underneath
-                the translucent strips in the touch layer below.
-                Purely visual — pointerEvents="none". */}
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.centerTapRipple,
-                {
-                  opacity: tapAnim.interpolate({
-                    inputRange: [0, 0.25, 1],
-                    outputRange: [0, 0.55, 0],
-                  }),
-                  transform: [
-                    {
-                      scale: tapAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.6, 1.6],
-                      }),
-                    },
-                  ],
-                },
-              ]}
+            <View
+              style={styles.centerControlsLayer}
+              pointerEvents="box-none"
+              collapsable={false}
             >
-              <View style={styles.centerTapRing} />
-            </Animated.View>
-          </View>
-
-          <View
-            style={[
-              styles.overlayShell,
-              { paddingBottom: isWide ? 24 : FLOATING_TAB_OFFSET },
-            ]}
-            pointerEvents="box-none"
-          >
-            <View style={styles.reelBottomRow}>
-              {/* Left: store + tiny product card */}
-              <View style={styles.leftCol}>
-                <Pressable style={styles.storeRow} onPress={openStore}>
-                  <View style={styles.storeAvatarWrap}>
-                    {storeAvatar ? (
-                      <Image
-                        source={{ uri: storeAvatar }}
-                        style={styles.storeAvatar}
-                      />
-                    ) : (
-                      <View style={styles.storeAvatarFallback}>
-                        <Ionicons
-                          name="storefront-outline"
-                          size={14}
-                          color={themeColors.primary}
-                        />
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.storeMeta}>
-                    <Text style={styles.storeName} numberOfLines={1}>
-                      {storeName}
-                    </Text>
-                    <Text style={styles.storeSub} numberOfLines={1}>
-                      {primaryTag}
-                    </Text>
-                  </View>
-                </Pressable>
-
-                {/* Tiny product card under the store */}
+              <View style={styles.centerControlsRow}>
                 <Pressable
-                  style={styles.tinyProductCard}
-                  onPress={() =>
-                    item.product_id
-                      ? navigation.navigate("ProductDetail", {
-                          product: { id: item.product_id },
-                        })
-                      : null
-                  }
+                  style={styles.controlSideBtn}
+                  onPressIn={startStripRewind}
+                  onPressOut={endStripActions}
+                  hitSlop={6}
                 >
-                  {item.thumbnail_url ? (
-                    <Image
-                      source={{ uri: item.thumbnail_url }}
-                      style={styles.tinyProductThumb}
-                    />
-                  ) : (
-                    <View style={styles.tinyProductThumbFallback}>
-                      <Ionicons
-                        name="image-outline"
-                        size={16}
-                        color={themeColors.muted}
-                      />
-                    </View>
-                  )}
-                  <View style={styles.tinyProductMeta}>
-                    <Text style={styles.tinyProductTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    {item.price != null ? (
-                      <Text style={styles.tinyProductPrice}>
-                        GH₵ {Number(item.price).toLocaleString()}
-                      </Text>
-                    ) : null}
-                  </View>
+                  <Ionicons name="play-back" size={18} color="#fff" />
+                  <Text style={styles.controlSideLabel}>rew</Text>
                 </Pressable>
-              </View>
 
-              {/* Right: mute / like / comment / tag actions stacked vertically.
-                  Mute is a video control but lives at the top of this rail so
-                  it's thumb-reachable; the rest act on the linked PRODUCT
-                  (like the ProductDetail screen), not the video. */}
-              <View style={styles.actionCol}>
-                {/* Mute/unmute — feed-wide setting (persists across scrolls),
-                    drives the FeedVideo `muted` prop. */}
                 <Pressable
-                  style={styles.actionBtn}
-                  onPress={onToggleMute}
+                  style={styles.controlMainBtn}
+                  onPress={handleControlsTogglePlay}
+                  hitSlop={6}
                 >
-                  <View style={styles.actionIconWrap}>
-                    <Ionicons
-                      name={isMuted ? "volume-mute" : "volume-high"}
-                      size={22}
-                      color="#fff"
-                    />
-                  </View>
-                  <Text style={styles.actionLabel}>
-                    {isMuted ? "Muted" : "Sound"}
-                  </Text>
-                </Pressable>
-
-                <Pressable style={styles.actionBtn} onPress={toggleLike}>
-                  <View style={styles.actionIconWrap}>
-                    {/* Burst ring behind the heart on like */}
+                  {/* Pulsing halo only while user-paused (same behaviour as the
+                    previous paused-state button). */}
+                  {paused ? (
                     <Animated.View
                       pointerEvents="none"
                       style={[
-                        styles.likeBurst,
+                        styles.centerPlayPulse,
                         {
-                          opacity: likeBurstAnim.interpolate({
-                            inputRange: [0, 0.4, 1],
-                            outputRange: [0, 0.7, 0],
+                          opacity: pulseAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.22, 0.62],
                           }),
                           transform: [
                             {
-                              scale: likeBurstAnim.interpolate({
+                              scale: pulseAnim.interpolate({
                                 inputRange: [0, 1],
-                                outputRange: [0.4, 1.8],
+                                outputRange: [1, 1.5],
                               }),
                             },
                           ],
                         },
                       ]}
                     />
-                    <Animated.View style={{ transform: [{ scale: likeAnim }] }}>
-                      <Ionicons
-                        name={isWishlisted ? "heart" : "heart-outline"}
-                        size={24}
-                        color={
-                          isWishlisted ? themeColors.accent : themeColors.light
-                        }
-                      />
-                    </Animated.View>
-                  </View>
-                  <Text style={styles.actionLabel}>{likeCount}</Text>
+                  ) : null}
+                  <Ionicons
+                    name={paused ? "play" : "pause"}
+                    size={28}
+                    color="#fff"
+                  />
                 </Pressable>
 
-                <Pressable style={styles.actionBtn} onPress={handleComment}>
-                  <View style={styles.actionIconWrap}>
-                    <Ionicons name="chatbubble" size={24} color="#fff" />
-                  </View>
-                  <Text style={styles.actionLabel}>{commentCount}</Text>
-                </Pressable>
-
-                <Pressable style={styles.actionBtn} onPress={handleTag}>
-                  <View style={[styles.actionIconWrap, styles.tagIconWrap]}>
-                    <Ionicons
-                      name="pricetag"
-                      size={22}
-                      color={themeColors.primary}
-                    />
-                  </View>
-                  <Text style={styles.actionLabel}>Tag</Text>
+                <Pressable
+                  style={styles.controlSideBtn}
+                  onPressIn={startStripForward}
+                  onPressOut={endStripActions}
+                  hitSlop={6}
+                >
+                  <Ionicons name="play-forward" size={18} color="#fff" />
+                  <Text style={styles.controlSideLabel}>fwd</Text>
                 </Pressable>
               </View>
-            </View>
-          </View>
 
-          {/* Comment modal — own to the feed, posts reel-native comments */}
-          <Modal
-            visible={commentModalVisible}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setCommentModalVisible(false)}
-          >
-            <View style={styles.commentModalBackdrop}>
-              <Pressable
-                style={styles.commentModalBackdrop}
-                onPress={() => setCommentModalVisible(false)}
-              />
-              <View style={styles.commentModalSheet}>
-                <View style={styles.commentModalHandle} />
-                <View style={styles.commentModalHeader}>
-                  <Text style={styles.commentModalTitle}>
-                    Comments ({commentCount})
-                  </Text>
+              {/* Hold indicator — shown ABOVE the control cards while an action
+                is active: "1.5x" while ⏩ is held, "rewind" while ⏪ is held.
+                Purely visual — pointerEvents="none". */}
+              {holdAction ? (
+                <View style={styles.holdBadge} pointerEvents="none">
+                  <View style={styles.holdBadgePill}>
+                    <Ionicons
+                      name={
+                        holdAction === "forward"
+                          ? "play-forward-outline"
+                          : "play-back-outline"
+                      }
+                      size={14}
+                      color="#fff"
+                    />
+                    <Text style={styles.holdBadgeText}>
+                      {holdAction === "forward" ? "▶ 1.5x" : "◀ 1.5x"}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* One-shot tap ripple — lives HERE (above the control columns)
+                so the feedback ring is fully visible and dead-centre of the
+                screen on every tap, instead of rendering buried underneath
+                the translucent strips in the touch layer below.
+                Purely visual — pointerEvents="none". */}
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.centerTapRipple,
+                  {
+                    opacity: tapAnim.interpolate({
+                      inputRange: [0, 0.25, 1],
+                      outputRange: [0, 0.55, 0],
+                    }),
+                    transform: [
+                      {
+                        scale: tapAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.6, 1.6],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <View style={styles.centerTapRing} />
+              </Animated.View>
+            </View>
+
+            <View
+              style={[
+                styles.overlayShell,
+                { paddingBottom: isWide ? 24 : FLOATING_TAB_OFFSET },
+              ]}
+              pointerEvents="box-none"
+            >
+              <View style={styles.reelBottomRow}>
+                {/* Left: store + tiny product card */}
+                <View style={styles.leftCol}>
+                  <Pressable style={styles.storeRow} onPress={openStore}>
+                    <View style={styles.storeAvatarWrap}>
+                      {storeAvatar ? (
+                        <Image
+                          source={{ uri: storeAvatar }}
+                          style={styles.storeAvatar}
+                        />
+                      ) : (
+                        <View style={styles.storeAvatarFallback}>
+                          <Ionicons
+                            name="storefront-outline"
+                            size={14}
+                            color={themeColors.primary}
+                          />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.storeMeta}>
+                      <Text style={styles.storeName} numberOfLines={1}>
+                        {storeName}
+                      </Text>
+                      <Text style={styles.storeSub} numberOfLines={1}>
+                        {primaryTag}
+                      </Text>
+                    </View>
+                  </Pressable>
+
+                  {/* Tiny product card under the store */}
                   <Pressable
-                    onPress={() => setCommentModalVisible(false)}
-                    hitSlop={8}
+                    style={styles.tinyProductCard}
+                    onPress={() =>
+                      item.product_id
+                        ? navigation.navigate("ProductDetail", {
+                            product: { id: item.product_id },
+                          })
+                        : null
+                    }
                   >
-                    <Ionicons name="close" size={22} color={themeColors.dark} />
+                    {item.thumbnail_url ? (
+                      <Image
+                        source={{ uri: item.thumbnail_url }}
+                        style={styles.tinyProductThumb}
+                      />
+                    ) : (
+                      <View style={styles.tinyProductThumbFallback}>
+                        <Ionicons
+                          name="image-outline"
+                          size={16}
+                          color={themeColors.muted}
+                        />
+                      </View>
+                    )}
+                    <View style={styles.tinyProductMeta}>
+                      <Text style={styles.tinyProductTitle} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      {item.price != null ? (
+                        <Text style={styles.tinyProductPrice}>
+                          GH₵ {Number(item.price).toLocaleString()}
+                        </Text>
+                      ) : null}
+                    </View>
                   </Pressable>
                 </View>
 
-                {commentsLoading ? (
-                  <View style={styles.commentModalLoading}>
-                    <ActivityIndicator color={themeColors.primary} />
-                  </View>
-                ) : (
-                  <ScrollView
-                    style={styles.commentList}
-                    contentContainerStyle={styles.commentListContent}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {comments.length === 0 ? (
-                      <Text style={styles.commentEmpty}>
-                        No comments yet. Be the first!
-                      </Text>
-                    ) : (
-                      comments.map((c) => (
-                        <View key={c.id} style={styles.commentItem}>
-                          <View style={styles.commentAvatarWrap}>
-                            {c.author_avatar ? (
-                              <Image
-                                source={{ uri: c.author_avatar }}
-                                style={styles.commentAvatar}
-                              />
-                            ) : (
-                              <View style={styles.commentAvatarFallback}>
-                                <Ionicons
-                                  name="person"
-                                  size={14}
-                                  color={themeColors.primary}
-                                />
-                              </View>
-                            )}
-                          </View>
-                          <View style={styles.commentBody}>
-                            <View style={styles.commentAuthorRow}>
-                              <Text style={styles.commentAuthor}>
-                                {c.author_name}
-                              </Text>
-                              {c.rating ? (
-                                <View style={styles.commentStars}>
-                                  {[1, 2, 3, 4, 5].map((s) => (
-                                    <Ionicons
-                                      key={s}
-                                      name={
-                                        s <= c.rating ? "star" : "star-outline"
-                                      }
-                                      size={11}
-                                      color={REVIEW_STAR_COLOR}
-                                    />
-                                  ))}
-                                </View>
-                              ) : null}
-                            </View>
-                            <Text style={styles.commentText}>{c.comment}</Text>
-                          </View>
-                        </View>
-                      ))
-                    )}
-                  </ScrollView>
-                )}
-
-                <KeyboardStickyView style={styles.commentInputRow}>
-                  <TextInput
-                    style={styles.commentInput}
-                    placeholder="Add a comment…"
-                    placeholderTextColor={themeColors.muted}
-                    value={commentText}
-                    onChangeText={setCommentText}
-                    multiline
-                    editable={!commentPosting}
-                  />
-                  <Pressable
-                    style={[
-                      styles.commentSendBtn,
-                      (!commentText.trim() || commentPosting) &&
-                        styles.commentSendBtnDisabled,
-                    ]}
-                    onPress={submitComment}
-                    disabled={!commentText.trim() || commentPosting}
-                  >
-                    {commentPosting ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Ionicons name="send" size={18} color="#fff" />
-                    )}
+                {/* Right: mute / like / comment / tag actions stacked vertically.
+                  Mute is a video control but lives at the top of this rail so
+                  it's thumb-reachable; the rest act on the linked PRODUCT
+                  (like the ProductDetail screen), not the video. */}
+                <View style={styles.actionCol}>
+                  {/* Mute/unmute — feed-wide setting (persists across scrolls),
+                    drives the FeedVideo `muted` prop. */}
+                  <Pressable style={styles.actionBtn} onPress={onToggleMute}>
+                    <View style={styles.actionIconWrap}>
+                      <Ionicons
+                        name={isMuted ? "volume-mute" : "volume-high"}
+                        size={22}
+                        color="#fff"
+                      />
+                    </View>
+                    <Text style={styles.actionLabel}>
+                      {isMuted ? "Muted" : "Sound"}
+                    </Text>
                   </Pressable>
-                </KeyboardStickyView>
+
+                  <Pressable style={styles.actionBtn} onPress={toggleLike}>
+                    <View style={styles.actionIconWrap}>
+                      {/* Burst ring behind the heart on like */}
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[
+                          styles.likeBurst,
+                          {
+                            opacity: likeBurstAnim.interpolate({
+                              inputRange: [0, 0.4, 1],
+                              outputRange: [0, 0.7, 0],
+                            }),
+                            transform: [
+                              {
+                                scale: likeBurstAnim.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0.4, 1.8],
+                                }),
+                              },
+                            ],
+                          },
+                        ]}
+                      />
+                      <Animated.View
+                        style={{ transform: [{ scale: likeAnim }] }}
+                      >
+                        <Ionicons
+                          name={isWishlisted ? "heart" : "heart-outline"}
+                          size={24}
+                          color={
+                            isWishlisted
+                              ? themeColors.accent
+                              : themeColors.light
+                          }
+                        />
+                      </Animated.View>
+                    </View>
+                    <Text style={styles.actionLabel}>{likeCount}</Text>
+                  </Pressable>
+
+                  <Pressable style={styles.actionBtn} onPress={handleComment}>
+                    <View style={styles.actionIconWrap}>
+                      <Ionicons name="chatbubble" size={24} color="#fff" />
+                    </View>
+                    <Text style={styles.actionLabel}>{commentCount}</Text>
+                  </Pressable>
+
+                  <Pressable style={styles.actionBtn} onPress={handleTag}>
+                    <View style={[styles.actionIconWrap, styles.tagIconWrap]}>
+                      <Ionicons
+                        name="pricetag"
+                        size={22}
+                        color={themeColors.primary}
+                      />
+                    </View>
+                    <Text style={styles.actionLabel}>Tag</Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
-          </Modal>
-        </View>
-      );
+
+            {/* Comment modal — own to the feed, posts reel-native comments */}
+            <Modal
+              visible={commentModalVisible}
+              transparent
+              animationType="slide"
+              onRequestClose={() => setCommentModalVisible(false)}
+            >
+              <View style={styles.commentModalBackdrop}>
+                <Pressable
+                  style={styles.commentModalBackdrop}
+                  onPress={() => setCommentModalVisible(false)}
+                />
+                <View style={styles.commentModalSheet}>
+                  <View style={styles.commentModalHandle} />
+                  <View style={styles.commentModalHeader}>
+                    <Text style={styles.commentModalTitle}>
+                      Comments ({commentCount})
+                    </Text>
+                    <Pressable
+                      onPress={() => setCommentModalVisible(false)}
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name="close"
+                        size={22}
+                        color={themeColors.dark}
+                      />
+                    </Pressable>
+                  </View>
+
+                  {commentsLoading ? (
+                    <View style={styles.commentModalLoading}>
+                      <ActivityIndicator color={themeColors.primary} />
+                    </View>
+                  ) : (
+                    <ScrollView
+                      style={styles.commentList}
+                      contentContainerStyle={styles.commentListContent}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {comments.length === 0 ? (
+                        <Text style={styles.commentEmpty}>
+                          No comments yet. Be the first!
+                        </Text>
+                      ) : (
+                        comments.map((c) => (
+                          <View key={c.id} style={styles.commentItem}>
+                            <View style={styles.commentAvatarWrap}>
+                              {c.author_avatar ? (
+                                <Image
+                                  source={{ uri: c.author_avatar }}
+                                  style={styles.commentAvatar}
+                                />
+                              ) : (
+                                <View style={styles.commentAvatarFallback}>
+                                  <Ionicons
+                                    name="person"
+                                    size={14}
+                                    color={themeColors.primary}
+                                  />
+                                </View>
+                              )}
+                            </View>
+                            <View style={styles.commentBody}>
+                              <View style={styles.commentAuthorRow}>
+                                <Text style={styles.commentAuthor}>
+                                  {c.author_name}
+                                </Text>
+                                {c.rating ? (
+                                  <View style={styles.commentStars}>
+                                    {[1, 2, 3, 4, 5].map((s) => (
+                                      <Ionicons
+                                        key={s}
+                                        name={
+                                          s <= c.rating
+                                            ? "star"
+                                            : "star-outline"
+                                        }
+                                        size={11}
+                                        color={REVIEW_STAR_COLOR}
+                                      />
+                                    ))}
+                                  </View>
+                                ) : null}
+                              </View>
+                              <Text style={styles.commentText}>
+                                {c.comment}
+                              </Text>
+                            </View>
+                          </View>
+                        ))
+                      )}
+                    </ScrollView>
+                  )}
+
+                  <KeyboardStickyView style={styles.commentInputRow}>
+                    <TextInput
+                      style={styles.commentInput}
+                      placeholder="Add a comment…"
+                      placeholderTextColor={themeColors.muted}
+                      value={commentText}
+                      onChangeText={setCommentText}
+                      multiline
+                      editable={!commentPosting}
+                    />
+                    <Pressable
+                      style={[
+                        styles.commentSendBtn,
+                        (!commentText.trim() || commentPosting) &&
+                          styles.commentSendBtnDisabled,
+                      ]}
+                      onPress={submitComment}
+                      disabled={!commentText.trim() || commentPosting}
+                    >
+                      {commentPosting ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Ionicons name="send" size={18} color="#fff" />
+                      )}
+                    </Pressable>
+                  </KeyboardStickyView>
+                </View>
+              </View>
+            </Modal>
+          </View>
+        );
       },
     ),
   );
@@ -1260,6 +1297,10 @@ export const FeedScreen = ({ route, navigation }) => {
         styles={styles}
         themeColors={themeColors}
         isWide={isWide}
+        reelWidth={reelWidth}
+        reelHeight={itemHeight}
+        reelLeft={reelLeft}
+        viewportWidth={viewportWidth}
         isMuted={isMuted}
         onToggleMute={toggleMute}
       />
@@ -1273,6 +1314,10 @@ export const FeedScreen = ({ route, navigation }) => {
       styles,
       themeColors,
       isWide,
+      reelWidth,
+      itemHeight,
+      reelLeft,
+      viewportWidth,
       isMuted,
       toggleMute,
     ],
@@ -1296,12 +1341,12 @@ export const FeedScreen = ({ route, navigation }) => {
             renderItem={renderReel}
             pagingEnabled
             showsVerticalScrollIndicator={false}
-            snapToInterval={ITEM_HEIGHT}
+            snapToInterval={itemHeight}
             snapToAlignment="start"
             decelerationRate="fast"
             getItemLayout={(data, index) => ({
-              length: ITEM_HEIGHT,
-              offset: ITEM_HEIGHT * index,
+              length: itemHeight,
+              offset: itemHeight * index,
               index,
             })}
             initialNumToRender={2}
@@ -1333,8 +1378,8 @@ const buildFeedStyles = (c) =>
       justifyContent: "center",
     },
     reelContainer: {
-      height: ITEM_HEIGHT,
-      width: SCREEN_WIDTH,
+      height: "100%",
+      width: "100%",
       backgroundColor: "#000",
     },
     // Invisible full-size touch layer sitting ON TOP of the video surface —
@@ -1471,8 +1516,8 @@ const buildFeedStyles = (c) =>
       left: 0,
       right: 0,
       bottom: 0,
-      width: SCREEN_WIDTH,
-      height: ITEM_HEIGHT,
+      width: "100%",
+      height: "100%",
       zIndex: 0,
     },
     overlayShell: {
