@@ -1,7 +1,11 @@
 allowBuilds:
-  '@shopify/react-native-skia': true
+  "@shopify/react-native-skia": true
 
 # pnpm workspace & settings
+# Allow the build environment to use its installed pnpm without signature verification
+# blocking the frozen-lockfile install when the registry is temporarily unreachable.
+pmOnFail: ignore
+
 # Disables the minimumReleaseAge supply-chain check (default 1440 min / 24h in pnpm v11+).
 # Transitive deps like electron-to-chromium and baseline-browser-mapping are republished
 # frequently, so freshly-pinned versions trip the age check and fail EAS builds with

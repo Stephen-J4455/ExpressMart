@@ -7,18 +7,27 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "pnpm_config_pm_on_fail": "ignore"
+      },
       "cache": {
         "disabled": true
       }
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "pnpm_config_pm_on_fail": "ignore"
+      },
       "cache": {
         "disabled": true
       }
     },
     "production": {
       "autoIncrement": true,
+      "env": {
+        "pnpm_config_pm_on_fail": "ignore"
+      },
       "cache": {
         "disabled": true
       }
