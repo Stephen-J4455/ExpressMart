@@ -182,7 +182,7 @@ export const ShopProvider = ({ children }) => {
         ] = await Promise.all([
           supabase
             .from("express_categories")
-            .select("id,name,icon,color")
+            .select("id,name,icon,color,image_url")
             .eq("is_active", true)
             .order("sort_order"),
           supabase

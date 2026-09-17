@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Dimensions,
@@ -26,9 +27,10 @@ import Markdown from "react-native-markdown-display";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { FlashSaleBadge } from "./FlashSaleBadge";
-import { LazyImage } from "./LazyImage";
 import { ReportListingModal } from "./ReportListingModal";
 import { CollectionsPickerModal } from "./CollectionsPickerModal";
+import { FeedVideo } from "./FeedVideo";
+import { LazyImage } from "./LazyImage";
 import { radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -43,6 +45,8 @@ import { trackEvent } from "../services/feedPersonalizationService";
 import { R2_FOLDERS, resolveMediaUrl } from "../services/r2Storage";
 
 const REVIEW_STAR_COLOR = "#F97316";
+const LIGHT_PLACEHOLDER = require("../../assets/placeholder/placeholder-light.png");
+const DARK_PLACEHOLDER = require("../../assets/placeholder/placeholder.png");
 
 const SELLER_BADGE_CONFIG = {
   verified: { icon: "checkmark-circle", color: "success" },
@@ -51,14 +55,88 @@ const SELLER_BADGE_CONFIG = {
 
 const SELLER_BADGE_PRIORITY = ["verified", "top_seller"];
 const DISABLE_FEED_CARD_IMAGE_FETCHING = false;
+const DISABLE_PRODUCT_IMAGE_RENDERING = false;
+const VIDEO_SOUND_PREFERENCE_KEY = "expressmart.feed.videoSoundEnabled";
+
+let globalVideoMuted = true;
+let videoSoundHydrationPromise = null;
+const videoSoundListeners = new Set();
+
+const setGlobalVideoMuted = (muted) => {
+  globalVideoMuted =
+    typeof muted === "function" ? muted(globalVideoMuted) : Boolean(muted);
+  videoSoundListeners.forEach((listener) => listener(globalVideoMuted));
+  AsyncStorage.setItem(
+    VIDEO_SOUND_PREFERENCE_KEY,
+    JSON.stringify(!globalVideoMuted),
+  ).catch(() => {});
+};
+
+const hydrateVideoSoundPreference = () => {
+  if (videoSoundHydrationPromise) return videoSoundHydrationPromise;
+
+  videoSoundHydrationPromise = AsyncStorage.getItem(VIDEO_SOUND_PREFERENCE_KEY)
+    .then((storedValue) => {
+      if (storedValue == null) return;
+      const soundEnabled = JSON.parse(storedValue) === true;
+      globalVideoMuted = !soundEnabled;
+      videoSoundListeners.forEach((listener) => listener(globalVideoMuted));
+    })
+    .catch(() => {});
+
+  return videoSoundHydrationPromise;
+};
+
+const useGlobalVideoMuted = () => {
+  const [muted, setMuted] = useState(globalVideoMuted);
+
+  useEffect(() => {
+    const listener = (nextMuted) => setMuted(nextMuted);
+    videoSoundListeners.add(listener);
+    hydrateVideoSoundPreference();
+    return () => videoSoundListeners.delete(listener);
+  }, []);
+
+  return [muted, setGlobalVideoMuted];
+};
+
+const getImageReferences = (product) => {
+  const rawThumbnails = product?.thumbnails;
+  let thumbnails = rawThumbnails;
+
+  if (typeof thumbnails === "string") {
+    try {
+      thumbnails = JSON.parse(thumbnails);
+    } catch {
+      thumbnails = [thumbnails];
+    }
+  }
+
+  const values =
+    Array.isArray(thumbnails) && thumbnails.length > 0
+      ? thumbnails
+      : product?.thumbnail
+        ? [product.thumbnail]
+        : [];
+
+  return values
+    .map((image) => {
+      if (typeof image === "string") return image;
+      if (!image || typeof image !== "object") return null;
+      return image.uri || image.url || image.path || image.publicUrl || null;
+    })
+    .filter(Boolean);
+};
 
 // Memoized so the FlatList only re-renders a card when its `product` or
 // `onPress` identity changes (VirtualizedList performance best practice).
 export const FeedProductCard = memo(function FeedProductCard({
   product,
   onPress,
+  isVideoActive = false,
+  showVideo = true,
 }) {
-  const { colors: c } = useTheme();
+  const { colors: c, isDark } = useTheme();
   const styles = useAppStyles(buildFeedCardStyles);
   const markdownStyles = useAppStyles(buildFeedDescriptionMarkdownStyles);
   const navigation = useNavigation();
@@ -71,13 +149,9 @@ export const FeedProductCard = memo(function FeedProductCard({
   const images = useMemo(() => {
     if (DISABLE_FEED_CARD_IMAGE_FETCHING) return [];
 
-    const values =
-      product.thumbnails?.length > 0
-        ? product.thumbnails
-        : product.thumbnail
-          ? [product.thumbnail]
-          : [];
-    return values.map((image) => resolveMediaUrl(image, R2_FOLDERS.PRODUCTS));
+    return getImageReferences(product).map((image) =>
+      resolveMediaUrl(image, R2_FOLDERS.PRODUCTS),
+    );
   }, [product.thumbnails, product.thumbnail]);
 
   const seller = product.seller || product.seller_id || null;
@@ -90,6 +164,9 @@ export const FeedProductCard = memo(function FeedProductCard({
       : null;
 
   const hasDiscount = Number(product.discount) > 0;
+  const videoUrl = String(
+    product.video_url || product.video_hls_url || "",
+  ).trim();
 
   // Average rating (from product.rating) and total review count
   // (product.total_ratings). Falls back to 0 when not yet rated.
@@ -133,6 +210,7 @@ export const FeedProductCard = memo(function FeedProductCard({
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
   const [singleImageRatio, setSingleImageRatio] = useState(null);
+  const [videoMuted, setVideoMuted] = useGlobalVideoMuted();
 
   // Sub-modals opened from the overflow menu. Kept outside the main menu
   // modal so the user can return to the same menu state if they back out.
@@ -239,10 +317,11 @@ export const FeedProductCard = memo(function FeedProductCard({
       (product.colors && product.colors.length > 1 && !selectedColor) ||
       (product.sizes && product.sizes.length > 1 && !selectedSize)
     ) {
-      toast.error("Selection Required", "Please select all required options");
+      toast.warning("Select options", "Please choose the required variants");
       return;
     }
-    addToCart(product, 1, selectedSize, selectedColor);
+
+    addToCart(product, 1, selectedColor, selectedSize);
     setVariantVisible(false);
     toast.success(
       "Added to Cart",
@@ -443,8 +522,10 @@ export const FeedProductCard = memo(function FeedProductCard({
 
   const description = String(product.description || "").trim();
 
+  const isSingleImageCard = !videoUrl && images.length === 1;
+
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, isSingleImageCard && styles.singleImageCard]}>
       {/* ── Header row: avatar, name + badges, timestamp, overflow menu ── */}
       <View style={styles.headerRow}>
         <Pressable style={styles.sellerRow} onPress={openStore}>
@@ -546,8 +627,54 @@ export const FeedProductCard = memo(function FeedProductCard({
         )}
       </Pressable>
 
-      {/* ── Media block: 1 / 2 / 2+N image grid with badges & label pill ── */}
-      {images.length > 0 ? (
+      {/* ── Media block: product video first, then the image gallery ── */}
+      {showVideo && videoUrl ? (
+        <Pressable onPress={openProduct} style={styles.mediaWrap}>
+          <View style={[styles.mediaGridSingle, styles.videoMedia]}>
+            <FeedVideo
+              source={{ uri: resolveMediaUrl(videoUrl, R2_FOLDERS.PRODUCTS) }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+              paused={!isVideoActive}
+              muted={videoMuted}
+              repeat
+            />
+            <View style={styles.videoBadge}>
+              <Ionicons name="play" size={11} color="#fff" />
+              <Text style={styles.videoBadgeText}>Video</Text>
+            </View>
+            <Pressable
+              style={styles.videoSoundButton}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                setVideoMuted((muted) => !muted);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={videoMuted ? "Unmute video" : "Mute video"}
+              hitSlop={8}
+            >
+              <Ionicons
+                name={videoMuted ? "volume-mute" : "volume-high"}
+                size={16}
+                color="#fff"
+              />
+            </Pressable>
+          </View>
+          {hasDiscount && (
+            <View style={styles.discountBadge}>
+              <Ionicons name="flash" size={11} color={c.onPrimary} />
+              <Text style={styles.discountText}>{product.discount}% OFF</Text>
+            </View>
+          )}
+          {(tags[0] || product.category) && (
+            <View style={styles.labelPill}>
+              <Text style={styles.labelPillText} numberOfLines={1}>
+                {tags[0] || product.category}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+      ) : images.length > 0 ? (
         <Pressable onPress={openProduct} style={styles.mediaWrap}>
           <View
             style={
@@ -555,20 +682,34 @@ export const FeedProductCard = memo(function FeedProductCard({
             }
           >
             {images.length === 1 ? (
-              <LazyImage
-                source={{ uri: images[0] }}
-                style={[
-                  styles.mediaSingle,
-                  singleImageRatio ? { aspectRatio: singleImageRatio } : null,
-                ]}
-                resizeMode="contain"
-              />
+              singleImageRatio && !DISABLE_PRODUCT_IMAGE_RENDERING ? (
+                <Image
+                  source={{ uri: images[0] }}
+                  style={[
+                    styles.mediaSingle,
+                    { aspectRatio: singleImageRatio },
+                  ]}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={styles.singleImagePlaceholder}>
+                  <Image
+                    source={isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER}
+                    style={styles.placeholderImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              )
             ) : (
               <>
                 <LazyImage
                   source={{ uri: images[0] }}
+                  placeholderSource={
+                    isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
+                  }
                   style={styles.mediaTile}
                   resizeMode="cover"
+                  placeholderResizeMode="contain"
                 />
                 <Pressable
                   style={styles.mediaTile}
@@ -579,7 +720,12 @@ export const FeedProductCard = memo(function FeedProductCard({
                 >
                   <LazyImage
                     source={{ uri: images[1] }}
+                    placeholderSource={
+                      isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
+                    }
                     style={StyleSheet.absoluteFill}
+                    resizeMode="cover"
+                    placeholderResizeMode="contain"
                   />
                   {images.length > 2 && (
                     <View style={styles.moreOverlay}>
@@ -1322,6 +1468,7 @@ const buildFeedCardStyles = (c) =>
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
+      minHeight: 400,
 
       overflow: "hidden",
       shadowColor: "#000",
@@ -1329,6 +1476,9 @@ const buildFeedCardStyles = (c) =>
       shadowRadius: 16,
       shadowOffset: { width: 0, height: 8 },
       elevation: 5,
+    },
+    singleImageCard: {
+      minHeight: 500,
     },
 
     /* Header */
@@ -1428,26 +1578,74 @@ const buildFeedCardStyles = (c) =>
     },
     mediaGrid: {
       flexDirection: "row",
-      gap: 4,
-      height: 220,
+      gap: 0,
+      width: "100%",
+      height: 200,
     },
     mediaGridSingle: {
       width: "100%",
       overflow: "hidden",
       backgroundColor: c.surface,
     },
+    videoMedia: {
+      height: 450,
+      position: "relative",
+    },
+    videoBadge: {
+      position: "absolute",
+      top: 10,
+      left: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: c.scrim,
+      borderRadius: radius.full,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+    },
+    videoBadgeText: {
+      color: c.light,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    videoSoundButton: {
+      position: "absolute",
+      top: 10,
+      right: 10,
+      width: 32,
+      height: 32,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.scrim,
+      borderRadius: radius.full,
+    },
     // Single-image layout: full product visible (no crop), centered on a
     // neutral surface instead of being zoomed/cropped by "cover".
     mediaSingle: {
       width: "100%",
-      minHeight: 220,
+      minHeight: 200,
 
       backgroundColor: c.surface,
       alignItems: "center",
       justifyContent: "center",
       overflow: "hidden",
     },
-    mediaTile: { flex: 1, backgroundColor: c.border },
+    singleImagePlaceholder: {
+      width: "100%",
+      aspectRatio: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.surface,
+    },
+    placeholderImage: {
+      width: "100%",
+      height: "100%",
+    },
+    mediaTile: {
+      flex: 1,
+      backgroundColor: c.border,
+      overflow: "hidden",
+    },
     moreOverlay: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: c.overlay,

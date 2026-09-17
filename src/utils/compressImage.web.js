@@ -12,7 +12,10 @@ const loadImage = (uri) =>
 const canvasToBlob = (canvas) =>
   new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("Could not compress selected image"))),
+      (blob) =>
+        blob
+          ? resolve(blob)
+          : reject(new Error("Could not compress selected image")),
       "image/jpeg",
       IMAGE_QUALITY,
     );
@@ -28,11 +31,21 @@ export const compressProductImage = async (uri, pickedFile = null) => {
 
     const scale = Math.min(
       1,
-      MAX_IMAGE_DIMENSION / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height),
+      MAX_IMAGE_DIMENSION /
+        Math.max(
+          image.naturalWidth || image.width,
+          image.naturalHeight || image.height,
+        ),
     );
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
-    canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+    canvas.width = Math.max(
+      1,
+      Math.round((image.naturalWidth || image.width) * scale),
+    );
+    canvas.height = Math.max(
+      1,
+      Math.round((image.naturalHeight || image.height) * scale),
+    );
     canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
 
     const compressedFile = await canvasToBlob(canvas);
@@ -45,7 +58,10 @@ export const compressProductImage = async (uri, pickedFile = null) => {
       fileName: `product-${Date.now()}.jpg`,
     };
   } catch (error) {
-    console.warn("Product image compression failed; uploading original:", error);
+    console.warn(
+      "Product image compression failed; uploading original:",
+      error,
+    );
     return {
       uri,
       originalSize: pickedFile?.size || 0,
@@ -53,6 +69,64 @@ export const compressProductImage = async (uri, pickedFile = null) => {
       pickedFile,
       contentType: pickedFile?.type || null,
       fileName: null,
+    };
+  }
+};
+
+export const compressProductVideo = async (uri, pickedFile = null) => {
+  if (!uri) throw new Error("A local video URI is required");
+
+  try {
+    const originalSize = Number(pickedFile?.size || 0);
+    const sourceFile =
+      pickedFile instanceof Blob
+        ? pickedFile
+        : await fetch(uri)
+            .then((response) => response.blob())
+            .catch(() => null);
+
+    const effectiveSize = Number(sourceFile?.size || originalSize || 0);
+
+    if (effectiveSize <= 0 || !sourceFile) {
+      return {
+        uri,
+        originalSize: effectiveSize,
+        compressedSize: effectiveSize,
+        pickedFile: sourceFile || pickedFile || null,
+        contentType: sourceFile?.type || pickedFile?.type || "video/mp4",
+        fileName:
+          pickedFile?.name ||
+          String(uri).split("?")[0].split("/").pop() ||
+          "product-video.mp4",
+        unchanged: true,
+      };
+    }
+
+    return {
+      uri,
+      originalSize: effectiveSize,
+      compressedSize: effectiveSize,
+      pickedFile: sourceFile || pickedFile || null,
+      contentType: sourceFile?.type || pickedFile?.type || "video/mp4",
+      fileName:
+        pickedFile?.name ||
+        String(uri).split("?")[0].split("/").pop() ||
+        "product-video.mp4",
+      unchanged: true,
+    };
+  } catch (error) {
+    console.warn(
+      "Product video compression failed; uploading original:",
+      error,
+    );
+    return {
+      uri,
+      originalSize: pickedFile?.size || 0,
+      compressedSize: pickedFile?.size || 0,
+      pickedFile,
+      contentType: pickedFile?.type || "video/mp4",
+      fileName: null,
+      unchanged: true,
     };
   }
 };

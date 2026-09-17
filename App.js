@@ -25,6 +25,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { subscribeTabBarVisibility } from "./src/utils/tabBarAutoHide";
 import { radius } from "./src/theme/colors";
 import * as Linking from "expo-linking";
@@ -1412,29 +1413,31 @@ function PaystackVerificationWatcher() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <KeyboardProvider>
-        <ThemeProvider>
-          <AuthProvider>
-            <PaystackVerificationWatcher />
-            <ToastProvider>
-              <CartProvider>
-                <ShopProvider>
-                  <FeedPersonalizationBoot />
-                  <OrderProvider>
-                    <ChatProvider>
-                      <AdsProvider>
-                        <DeepLinkHandler />
-                        <NavigationWithTheme />
-                      </AdsProvider>
-                    </ChatProvider>
-                  </OrderProvider>
-                </ShopProvider>
-              </CartProvider>
-            </ToastProvider>
-          </AuthProvider>
-        </ThemeProvider>
-      </KeyboardProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <KeyboardProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <PaystackVerificationWatcher />
+              <ToastProvider>
+                <CartProvider>
+                  <ShopProvider>
+                    <FeedPersonalizationBoot />
+                    <OrderProvider>
+                      <ChatProvider>
+                        <AdsProvider>
+                          <DeepLinkHandler />
+                          <NavigationWithTheme />
+                        </AdsProvider>
+                      </ChatProvider>
+                    </OrderProvider>
+                  </ShopProvider>
+                </CartProvider>
+              </ToastProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </KeyboardProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

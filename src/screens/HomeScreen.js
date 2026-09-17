@@ -25,9 +25,11 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { NativeViewGestureHandler } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { AppHeader } from "../components/AppHeader";
@@ -35,6 +37,7 @@ import { FeedProductCard } from "../components/FeedProductCard";
 import { FeedCardPlaceholder } from "../components/FeedCardPlaceholder";
 import { ProductCard } from "../components/ProductCard";
 import { AdRenderer } from "../components/AdBanner";
+import { StorefrontHomeScreen } from "./StorefrontHomeScreen";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
 import { useTheme } from "../context/ThemeContext";
@@ -62,6 +65,29 @@ const FEED_PLACEHOLDER_ITEMS = Array.from(
 export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
   const styles = useAppStyles(buildHomeStyles);
+  const { width } = useWindowDimensions();
+  const [pagerScrollEnabled, setPagerScrollEnabled] = useState(true);
+  const pagerRef = useRef(null);
+  const pagerOffsetRef = useRef(0);
+  const pagerLockedRef = useRef(false);
+  const lockPager = useCallback((locked) => {
+    pagerLockedRef.current = locked;
+    if (locked) {
+      pagerOffsetRef.current = Math.round(pagerOffsetRef.current);
+    }
+    setPagerScrollEnabled(!locked);
+  }, []);
+  const handlePagerScroll = useCallback((event) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    if (pagerLockedRef.current) {
+      const lockedOffset = pagerOffsetRef.current;
+      if (Math.abs(offsetX - lockedOffset) > 0.5) {
+        pagerRef.current?.scrollTo({ x: lockedOffset, animated: false });
+      }
+      return;
+    }
+    pagerOffsetRef.current = offsetX;
+  }, []);
   const { fetchAdsByPlacement } = useAds();
   const {
     products,
@@ -83,6 +109,17 @@ export const HomeScreen = ({ navigation }) => {
   // nothing); a non-empty array renders the row.
   const [flashSales, setFlashSales] = useState(null);
   const [homeAds, setHomeAds] = useState([]);
+  const [visibleVideoId, setVisibleVideoId] = useState(null);
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 60,
+    minimumViewTime: 120,
+  }).current;
+  const onViewableItemsChanged = useRef(({ viewableItems }) => {
+    const visibleVideo = viewableItems.find(
+      (entry) => entry?.isViewable && entry.item?.__type === "product_video",
+    );
+    setVisibleVideoId(visibleVideo ? String(visibleVideo.item.id) : null);
+  }).current;
   // Local mirror of the device-wide hidden-sellers list. Hydrated from
   // AsyncStorage on mount / focus so we don't show previously-hidden sellers
   // again on app launch (e.g. sellers the user hid from the feed in a prior
@@ -375,6 +412,54 @@ export const HomeScreen = ({ navigation }) => {
     });
   }, []);
 
+  const mixProductVideoItems = useCallback((items) => {
+    const productsWithVideos = (items || [])
+      .map((product, productIndex) => ({
+        product,
+        productIndex,
+        video: Boolean(product?.video_url || product?.video_hls_url),
+      }))
+      .filter((entry) => entry.video);
+    const videoPosts = productsWithVideos
+      .map(({ product, productIndex }) => ({
+        __type: "product_video",
+        id: `${product.id}-video`,
+        product,
+        productIndex,
+        video_url: product.video_url || product.video_hls_url,
+      }))
+      .sort(() => Math.random() - 0.5);
+    const postsBySlot = new Map();
+    const slotCount = (items || []).length + 1;
+
+    videoPosts.forEach((post) => {
+      const validSlots = Array.from({ length: slotCount }, (_, slot) => slot)
+        .filter(
+          (slot) =>
+            slot !== post.productIndex && slot !== post.productIndex + 1,
+        )
+        .filter((slot) => !postsBySlot.has(slot));
+      const fallbackSlots = Array.from(
+        { length: slotCount },
+        (_, slot) => slot,
+      ).filter((slot) => !postsBySlot.has(slot));
+      const slots = validSlots.length > 0 ? validSlots : fallbackSlots;
+      if (slots.length === 0) return;
+      const slot = slots[Math.floor(Math.random() * slots.length)];
+      postsBySlot.set(slot, post);
+    });
+
+    const mixed = [];
+    (items || []).forEach((product, index) => {
+      if (postsBySlot.has(index)) mixed.push(postsBySlot.get(index));
+      mixed.push(product);
+    });
+    if (postsBySlot.has((items || []).length)) {
+      mixed.push(postsBySlot.get((items || []).length));
+    }
+    return mixed;
+  }, []);
+
   const feedItems = useMemo(() => {
     let base;
     switch (activeFilter) {
@@ -406,8 +491,9 @@ export const HomeScreen = ({ navigation }) => {
         base = products;
     }
     const visibleProducts = dedupeFeedItems(filterHiddenSellers(base));
+    const feedProductsWithVideos = mixProductVideoItems(visibleProducts);
     const withAds = injectAdsIntoProducts({
-      products: visibleProducts,
+      products: feedProductsWithVideos,
       ads: homeAds,
       seed: "home",
       minInterval: 5,
@@ -422,6 +508,7 @@ export const HomeScreen = ({ navigation }) => {
     injectFlashSaleRow,
     filterHiddenSellers,
     dedupeFeedItems,
+    mixProductVideoItems,
     homeAds,
   ]);
 
@@ -461,6 +548,23 @@ export const HomeScreen = ({ navigation }) => {
       }
     },
     [hasMore, loadingMore, loadMore, animateHeader],
+  );
+
+  const handleStorefrontScroll = useCallback(
+    (e) => {
+      const y = e.nativeEvent.contentOffset.y;
+      updateTabBarOnScroll(y);
+      const delta = y - lastScrollYRef.current;
+      lastScrollYRef.current = y;
+      if (y <= 60) {
+        animateHeader(false);
+      } else if (delta > 8) {
+        animateHeader(true);
+      } else if (delta < -8) {
+        animateHeader(false);
+      }
+    },
+    [animateHeader],
   );
 
   // Renders one row in the FlatList. Regular products go through the standard
@@ -526,10 +630,24 @@ export const HomeScreen = ({ navigation }) => {
           </View>
         );
       }
+      if (item?.__type === "product_video") {
+        return (
+          <View style={[styles.cardWrap, { width: "100%" }]}>
+            <FeedProductCard
+              product={item.product}
+              isVideoActive={visibleVideoId === String(item.id)}
+              onPress={() =>
+                navigation.navigate("ProductDetail", { product: item.product })
+              }
+            />
+          </View>
+        );
+      }
       return (
         <View style={[styles.cardWrap, { width: "100%" }]}>
           <FeedProductCard
             product={item}
+            showVideo={false}
             onPress={() =>
               navigation.navigate("ProductDetail", { product: item })
             }
@@ -537,7 +655,7 @@ export const HomeScreen = ({ navigation }) => {
         </View>
       );
     },
-    [navigation, styles],
+    [navigation, styles, visibleVideoId],
   );
 
   // Skeleton rows for the initial load — same wrapper as renderFeedItem so
@@ -642,88 +760,105 @@ export const HomeScreen = ({ navigation }) => {
 
       {categoriesLoading && !topCategories.length ? (
         // Skeleton cards shaped like the category cards
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.catRow}
-        >
-          {Array.from({ length: TOP_CATEGORIES_LIMIT }).map((_, i) => (
-            <View key={i} style={styles.catCard}>
-              <View style={[styles.catImageFallback, styles.catSkeletonBg]} />
-              <View style={styles.catInfo}>
-                <View style={[styles.catSkeletonLine, { width: 80 }]} />
-                <View style={[styles.catSkeletonLine, { width: 44 }]} />
+        <NativeViewGestureHandler>
+          <ScrollView
+            horizontal
+            directionalLockEnabled
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.catRow}
+            onTouchStart={() => lockPager(true)}
+            onTouchMove={() => lockPager(true)}
+            onTouchEnd={() => lockPager(false)}
+            onTouchCancel={() => lockPager(false)}
+          >
+            {Array.from({ length: TOP_CATEGORIES_LIMIT }).map((_, i) => (
+              <View key={i} style={styles.catCard}>
+                <View style={[styles.catImageFallback, styles.catSkeletonBg]} />
+                <View style={styles.catInfo}>
+                  <View style={[styles.catSkeletonLine, { width: 80 }]} />
+                  <View style={[styles.catSkeletonLine, { width: 44 }]} />
+                </View>
               </View>
-            </View>
-          ))}
-        </ScrollView>
-      ) : topCategories.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.catRow}
-        >
-          {topCategories.map((cat) => (
-            <Pressable
-              key={cat.id}
-              style={({ pressed }) => [
-                styles.catCard,
-                pressed && styles.catCardPressed,
-              ]}
-              onPress={() =>
-                navigation.navigate("CategoryProducts", {
-                  category: { id: cat.id, name: cat.name },
-                })
-              }
-            >
-              {/* Background: photo if one exists, otherwise brand color with
+            ))}
+          </ScrollView>
+        </NativeViewGestureHandler>
+      ) : topCategories.length ? (
+        <NativeViewGestureHandler>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            directionalLockEnabled
+            nestedScrollEnabled
+            contentContainerStyle={styles.catRow}
+            onTouchStart={() => lockPager(true)}
+            onTouchMove={() => lockPager(true)}
+            onTouchEnd={() => lockPager(false)}
+            onTouchCancel={() => lockPager(false)}
+          >
+            {topCategories.map((cat) => (
+              <Pressable
+                key={cat.id}
+                style={({ pressed }) => [
+                  styles.catCard,
+                  pressed && styles.catCardPressed,
+                ]}
+                onPress={() =>
+                  navigation.navigate("CategoryProducts", {
+                    category: { id: cat.id, name: cat.name },
+                  })
+                }
+              >
+                {/* Background: photo if one exists, otherwise brand color with
                   the category icon. Only ever one of the two renders, so the
                   card reads as a single surface. */}
-              {String(cat.image_url || "").trim() ? (
-                <Image
-                  source={{ uri: String(cat.image_url).trim() }}
-                  style={styles.catImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.catImageFallback,
-                    cat.color ? { backgroundColor: cat.color } : null,
-                  ]}
-                >
-                  <Ionicons
-                    name={cat.icon || "apps"}
-                    size={40}
-                    color="rgba(255,255,255,0.9)"
+                {String(cat.image_url || "").trim() ? (
+                  <Image
+                    source={{ uri: String(cat.image_url).trim() }}
+                    style={styles.catImage}
+                    resizeMode="cover"
                   />
-                </View>
-              )}
+                ) : (
+                  <View
+                    style={[
+                      styles.catImageFallback,
+                      cat.color ? { backgroundColor: cat.color } : null,
+                    ]}
+                  >
+                    <Ionicons
+                      name={cat.icon || "apps"}
+                      size={40}
+                      color="rgba(255,255,255,0.9)"
+                    />
+                  </View>
+                )}
 
-              {/* Layer 3: bottom-weighted gradient — one continuous surface
+                {/* Layer 3: bottom-weighted gradient — one continuous surface
                   under both the photo and the label, no seam */}
-              <LinearGradient
-                colors={[
-                  "rgba(0,0,0,0)",
-                  "rgba(0,0,0,0.25)",
-                  "rgba(0,0,0,0.75)",
-                ]}
-                locations={[0.45, 0.7, 1]}
-                style={styles.catScrim}
-              />
+                <LinearGradient
+                  colors={[
+                    "rgba(0,0,0,0)",
+                    "rgba(0,0,0,0.25)",
+                    "rgba(0,0,0,0.75)",
+                  ]}
+                  locations={[0.45, 0.7, 1]}
+                  style={styles.catScrim}
+                />
 
-              {/* Layer 4: label overlaid on the gradient */}
-              <View style={styles.catInfo}>
-                <Text style={styles.catName} numberOfLines={1}>
-                  {cat.name}
-                </Text>
-                <Text style={styles.catCount}>
-                  {cat.productCount} {cat.productCount === 1 ? "item" : "items"}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </ScrollView>
+                {/* Layer 4: label overlaid on the gradient */}
+                <View style={styles.catInfo}>
+                  <Text style={styles.catName} numberOfLines={1}>
+                    {cat.name}
+                  </Text>
+                  <Text style={styles.catCount}>
+                    {cat.productCount}{" "}
+                    {cat.productCount === 1 ? "item" : "items"}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </NativeViewGestureHandler>
       ) : null}
     </View>
   );
@@ -775,41 +910,70 @@ export const HomeScreen = ({ navigation }) => {
           items so the page keeps its exact structure (filter pills →
           categories strip → feed-shaped skeletons) and the placeholders are
           scrollable exactly like the loaded feed. */}
-      <FlatList
-        data={loading ? FEED_PLACEHOLDER_ITEMS : feedItems}
-        keyExtractor={(item) =>
-          loading ? String(item) : String(item?.id ?? item)
-        }
-        renderItem={loading ? renderPlaceholderItem : renderFeedItem}
-        ListHeaderComponent={listHeader}
-        ListEmptyComponent={!loading ? renderEmpty : null}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.listContent,
-          { paddingTop: headerHeight + 8 },
-        ]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            progressViewOffset={headerHeight}
+      <ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        directionalLockEnabled
+        disableIntervalMomentum
+        scrollEnabled={pagerScrollEnabled}
+        onScroll={handlePagerScroll}
+        scrollEventThrottle={1}
+        showsHorizontalScrollIndicator={false}
+        nestedScrollEnabled
+        style={styles.homePager}
+      >
+        <View style={{ width }}>
+          <FlatList
+            data={loading ? FEED_PLACEHOLDER_ITEMS : feedItems}
+            keyExtractor={(item) =>
+              loading ? String(item) : String(item?.id ?? item)
+            }
+            renderItem={loading ? renderPlaceholderItem : renderFeedItem}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            ListHeaderComponent={listHeader}
+            ListEmptyComponent={!loading ? renderEmpty : null}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingTop: headerHeight + 8 },
+            ]}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                progressViewOffset={headerHeight}
+              />
+            }
+            initialNumToRender={4}
+            maxToRenderPerBatch={4}
+            updateCellsBatchingPeriod={16}
+            windowSize={5}
+            removeClippedSubviews={Platform.OS !== "web"}
           />
-        }
-        initialNumToRender={3}
-        maxToRenderPerBatch={2}
-        updateCellsBatchingPeriod={50}
-        windowSize={3}
-        removeClippedSubviews={Platform.OS !== "web"}
-      />
 
-      {loadingMore ? (
-        <View style={styles.footerLoader}>
-          <ActivityIndicator size="small" color={c.primary} />
+          {loadingMore ? (
+            <View style={styles.footerLoader}>
+              <ActivityIndicator size="small" color={c.primary} />
+            </View>
+          ) : null}
         </View>
-      ) : null}
+
+        <View style={{ width }}>
+          <StorefrontHomeScreen
+            navigation={navigation}
+            width={width}
+            topInset={headerHeight + 8}
+            onScroll={handleStorefrontScroll}
+            onHorizontalTouchStart={() => lockPager(true)}
+            onHorizontalTouchEnd={() => lockPager(false)}
+          />
+        </View>
+      </ScrollView>
     </View>
   );
 };

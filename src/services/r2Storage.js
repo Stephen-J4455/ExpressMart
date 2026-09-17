@@ -41,7 +41,12 @@ export const R2_FOLDERS = {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 export const getFileExtension = (uri, fallback = "jpg") => {
-  const seg = String(uri || "").split("?")[0].split("#")[0].split("/").pop() || "";
+  const seg =
+    String(uri || "")
+      .split("?")[0]
+      .split("#")[0]
+      .split("/")
+      .pop() || "";
   if (!seg.includes(".")) return fallback;
   const ext = seg.split(".").pop()?.toLowerCase();
   if (!ext || ext.length > 5) return fallback;
@@ -83,7 +88,7 @@ export const resolveMediaUrl = (rawValue, folder = null) => {
   if (!value) return "";
 
   if (/^https?:\/\//i.test(value)) {
-    return value.split("?")[0];
+    return value;
   }
   if (value.startsWith("file://")) return value;
 
@@ -104,7 +109,9 @@ export const getStorageBackend = (rawValue) => {
   if (!value) return null;
   if (/storage\/v1\/object\//i.test(value)) return "supabase";
   if (/^https?:\/\//i.test(value)) {
-    return value.startsWith(R2_PUBLIC_DOMAIN.replace(/\/+$/g, "")) ? "r2" : null;
+    return value.startsWith(R2_PUBLIC_DOMAIN.replace(/\/+$/g, ""))
+      ? "r2"
+      : null;
   }
   return "r2"; // bare path → new-style R2 key
 };
@@ -116,10 +123,15 @@ export const getKeyFromUrl = (url) => {
 
   const cdnBase = R2_PUBLIC_DOMAIN.replace(/\/+$/g, "");
   if (clean.startsWith(cdnBase)) {
-    return decodeURIComponent(clean.slice(cdnBase.length).replace(/^\/+/, "")) || null;
+    return (
+      decodeURIComponent(clean.slice(cdnBase.length).replace(/^\/+/, "")) ||
+      null
+    );
   }
 
-  const match = clean.match(/\/storage\/v1\/object\/(?:public|sign)\/([^/?]+)\/(.+)$/i);
+  const match = clean.match(
+    /\/storage\/v1\/object\/(?:public|sign)\/([^/?]+)\/(.+)$/i,
+  );
   if (match) {
     return `${decodeURIComponent(match[1])}/${decodeURIComponent(match[2])}`;
   }
@@ -225,8 +237,8 @@ export const uploadToR2Presigned = async ({
     const stage = err?.message?.startsWith("Could not read")
       ? "reading file"
       : err?.message?.startsWith("Upload failed")
-      ? "uploading to storage"
-      : "requesting upload URL";
+        ? "uploading to storage"
+        : "requesting upload URL";
     console.error(
       `[r2Storage] upload failed during ${stage}:`,
       err?.stack || err,

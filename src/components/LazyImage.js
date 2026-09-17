@@ -1,4 +1,4 @@
-import { View, Image, StyleSheet } from "react-native";
+import { Animated, View, Image, StyleSheet } from "react-native";
 import { useContext, useEffect, useRef, useState, useCallback } from "react";
 import { LazyScrollContext, lazyScroll } from "../context/LazyScrollContext";
 
@@ -11,14 +11,30 @@ const PLACEHOLDER = require("../../assets/placeholder/placeholder.png");
 // is shown eagerly (no lazy behavior).
 export const LazyImage = ({
   source,
+  placeholderSource = PLACEHOLDER,
   style,
   resizeMode = "cover",
+  placeholderResizeMode = "contain",
   placeholderColor = "#F1F5F9",
+  eager = false,
 }) => {
   const ctx = useContext(LazyScrollContext);
   const ref = useRef(null);
   const topRef = useRef(null);
   const [visible, setVisible] = useState(false);
+  const imageOpacity = useRef(new Animated.Value(0)).current;
+  const placeholderOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    imageOpacity.setValue(0);
+    placeholderOpacity.setValue(1);
+  }, [imageOpacity, placeholderOpacity, source?.uri]);
+
+  useEffect(() => {
+    if (!eager || !source?.uri) return;
+    setVisible(true);
+    Image.prefetch(source.uri).catch(() => {});
+  }, [eager, source?.uri]);
 
   const updateVisibility = useCallback((scrollY) => {
     if (topRef.current == null) return;
@@ -54,7 +70,7 @@ export const LazyImage = ({
   }, [ctx, updateVisibility]);
 
   useEffect(() => {
-    if (!ctx) {
+    if (eager || !ctx) {
       setVisible(true);
       return;
     }
@@ -67,24 +83,48 @@ export const LazyImage = ({
       lazyScroll.unregister(cb);
       clearTimeout(t);
     };
-  }, [ctx, measure, updateVisibility]);
+  }, [ctx, eager, measure, updateVisibility]);
 
   return (
-    <View ref={ref} style={[style, { backgroundColor: placeholderColor }]}>
-      {/* Local placeholder asset — always rendered, never lazy-loaded */}
-      <Image
-        source={PLACEHOLDER}
-        style={[style, StyleSheet.absoluteFill]}
-        resizeMode={resizeMode}
-      />
+    <View
+      ref={ref}
+      style={[style, { backgroundColor: placeholderColor, overflow: "hidden" }]}
+    >
       {/* Real product image — lazy: only mounted when near the viewport */}
       {visible && (
-        <Image
+        <Animated.Image
           source={source}
-          style={[style, StyleSheet.absoluteFill]}
+          style={[styles.imageLayer, { opacity: imageOpacity }]}
           resizeMode={resizeMode}
+          onLoad={() => {
+            Animated.parallel([
+              Animated.timing(imageOpacity, {
+                toValue: 1,
+                duration: 260,
+                useNativeDriver: true,
+              }),
+              Animated.timing(placeholderOpacity, {
+                toValue: 0,
+                duration: 260,
+                useNativeDriver: true,
+              }),
+            ]).start();
+          }}
         />
       )}
+      <Animated.Image
+        source={placeholderSource}
+        style={[styles.imageLayer, { opacity: placeholderOpacity }]}
+        resizeMode={placeholderResizeMode}
+      />
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  imageLayer: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+});

@@ -133,7 +133,11 @@ export const FeedVideo = forwardRef(function FeedVideo(props, forwardedRef) {
         preload: "auto",
         disablePictureInPicture: true,
         onLoadedMetadata: (e) =>
-          onLoad?.({ duration: e.target.duration || 0 }),
+          onLoad?.({
+            duration: e.target.duration || 0,
+            naturalVideoWidth: e.target.videoWidth || 0,
+            naturalVideoHeight: e.target.videoHeight || 0,
+          }),
         onLoadedData: (e) => {
           onBuffer?.({ isBuffering: false });
           onReadyForDisplay?.();

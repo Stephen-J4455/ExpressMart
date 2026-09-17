@@ -42,7 +42,7 @@ import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
 import { colors as brandColors, getTheme, radius } from "../theme/colors";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { getImageContentType } from "../utils/webUpload";
-import { compressProductImage } from "../utils/compressImage";
+import { compressProductImage, compressProductVideo } from "../utils/compressImage";
 import { showTabBar, updateTabBarOnScroll } from "../utils/tabBarAutoHide";
 import {
   R2_FOLDERS,
@@ -115,7 +115,7 @@ const AVAILABLE_COLORS = [
 
 const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
 
-const MAX_VIDEO_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_UPLOAD_BYTES = 30 * 1024 * 1024;
 
 const PRODUCT_FORM_STEPS = [
   { key: "media", label: "Media" },
@@ -208,6 +208,30 @@ const formatBytes = (bytes) => {
   if (!value) return "0 MB";
   if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const getVideoCompressionSummary = (meta) => {
+  if (!meta) return "Compressing...";
+  if (meta.status === "compressing") {
+    return "Compressing...";
+  }
+
+  const originalSize = Number(meta.originalSize || 0);
+  const compressedSize = Number(meta.compressedSize || 0);
+  if (!originalSize && !compressedSize) return "Ready";
+
+  if (meta.unchanged || compressedSize >= originalSize) {
+    return `${formatBytes(originalSize)} · unchanged`;
+  }
+
+  const savedPercent =
+    originalSize > 0
+      ? Math.max(0, Math.round((1 - compressedSize / originalSize) * 100))
+      : 0;
+
+  const sizePart = `${formatBytes(originalSize)} → ${formatBytes(compressedSize)}`;
+  if (savedPercent > 0) return `${sizePart} · ${savedPercent}% saved`;
+  return sizePart;
 };
 
 const storageSegment = (value, fallback = "unnamed") => {
@@ -587,6 +611,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // ── Product video (attached to a product, uploaded to Cloudflare R2) ────
   const [videoUri, setVideoUri] = useState(null);
   const [videoFile, setVideoFile] = useState(null); // { file, type, name } (web)
+  const [videoCompression, setVideoCompression] = useState({});
   const [existingVideoUrl, setExistingVideoUrl] = useState(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [removingVideo, setRemovingVideo] = useState(false);
@@ -596,6 +621,19 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [pendingVideo, setPendingVideo] = useState(null); // { uri, pickedFile, title }
   const [productSelectModalVisible, setProductSelectModalVisible] =
     useState(false);
+  const isMediaCompressionActive = useMemo(
+    () =>
+      imageUris.some(
+        (uri) =>
+          !imageCompression[uri] ||
+          imageCompression[uri]?.status === "compressing",
+      ) ||
+      (!!videoUri &&
+        (!videoCompression[videoUri] ||
+          videoCompression[videoUri]?.status === "compressing")) ||
+      (!!pendingVideo && pendingVideo.status === "compressing"),
+    [imageCompression, imageUris, pendingVideo, videoCompression, videoUri],
+  );
   // Per-video popup menu (kebab) — holds the reel being acted on.
   const [cardMenu, setCardMenu] = useState(null); // reel object or null
   const [deleteConfirmProduct, setDeleteConfirmProduct] = useState(null); // product awaiting delete confirmation
@@ -1334,6 +1372,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setProductFormStep(1);
     setVideoUri(null);
     setVideoFile(null);
+    setVideoCompression({});
     setExistingVideoUrl(null);
     setUploadingVideo(false);
     setRemovingVideo(false);
@@ -1406,6 +1445,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setImageCompression({});
     setVideoUri(null);
     setVideoFile(null);
+    setVideoCompression({});
     setExistingVideoUrl(product.video_url || null);
     setModalVisible(true);
   };
@@ -1568,26 +1608,80 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     });
     if (!result.canceled && result.assets?.length) {
       const asset = result.assets[0];
-      const sizeBytes = Number(
+      const pickedFile = Platform.OS === "web" ? asset.file || null : null;
+      const originalSize = Number(
         asset?.fileSize || asset?.size || asset?.file?.size || 0,
       );
-      if (sizeBytes > MAX_VIDEO_UPLOAD_BYTES) {
-        toast.error(
-          "Video too large",
-          `Choose a video smaller than ${formatBytes(MAX_VIDEO_UPLOAD_BYTES)}.`,
-        );
-        return;
-      }
-      setVideoUri(asset.uri);
+      const tempVideoUri = asset.uri;
+
+      setVideoUri(tempVideoUri);
+      setVideoCompression((prev) => ({
+        ...prev,
+        [tempVideoUri]: {
+          ...prev[tempVideoUri],
+          status: "compressing",
+          originalSize,
+          compressedSize: 0,
+        },
+      }));
       if (Platform.OS === "web") {
         const type = normalizePickedVideoType(asset);
         setVideoFile({
           file: asset.file || null,
           type,
-          name: asset.fileName || asset.uri?.split("/").pop() || "video.mp4",
+          name:
+            asset.fileName ||
+            asset.uri?.split("/").pop() ||
+            "video.mp4",
         });
       } else {
         setVideoFile(null);
+      }
+
+      const compressedVideo = await compressProductVideo(
+        tempVideoUri,
+        pickedFile,
+      );
+      const finalVideoUri = compressedVideo.uri || tempVideoUri;
+      const compressedSize = Number(
+        compressedVideo.compressedSize ||
+          asset?.fileSize ||
+          asset?.size ||
+          asset?.file?.size ||
+          0,
+      );
+
+      if (compressedSize > MAX_VIDEO_UPLOAD_BYTES) {
+        toast.error(
+          "Video too large after compression",
+          `Choose a video smaller than ${formatBytes(MAX_VIDEO_UPLOAD_BYTES)} or a shorter clip.`,
+        );
+        return;
+      }
+
+      setVideoCompression((prev) => {
+        const next = { ...prev };
+        if (tempVideoUri !== finalVideoUri) delete next[tempVideoUri];
+        next[finalVideoUri] = {
+          ...compressedVideo,
+          status: "compressed",
+          originalSize,
+          compressedSize,
+        };
+        return next;
+      });
+      setVideoUri(finalVideoUri);
+      if (Platform.OS === "web") {
+        const type = compressedVideo.contentType || normalizePickedVideoType(asset);
+        setVideoFile({
+          file: compressedVideo.pickedFile || asset.file || null,
+          type,
+          name:
+            compressedVideo.fileName ||
+            asset.fileName ||
+            asset.uri?.split("/").pop() ||
+            "video.mp4",
+        });
       }
     }
   };
@@ -1615,13 +1709,35 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     if (result.canceled || !result.assets?.length) return;
 
     const asset = result.assets[0];
-    const sizeBytes = Number(
+    const pickedFile = Platform.OS === "web" ? asset.file || null : null;
+    const originalSize = Number(
       asset?.fileSize || asset?.size || asset?.file?.size || 0,
     );
-    if (sizeBytes > MAX_VIDEO_UPLOAD_BYTES) {
+    const tempUri = asset.uri;
+    const pendingState = {
+      uri: tempUri,
+      pickedFile,
+      title: asset.fileName || asset.uri?.split("/").pop() || "Product video",
+      status: "compressing",
+      originalSize,
+      compressedSize: 0,
+    };
+    setPendingVideo(pendingState);
+    setProductSelectModalVisible(true);
+
+    const compressedVideo = await compressProductVideo(tempUri, pickedFile);
+    const finalUri = compressedVideo.uri || tempUri;
+    const compressedSize = Number(
+      compressedVideo.compressedSize ||
+        asset?.fileSize ||
+        asset?.size ||
+        asset?.file?.size ||
+        0,
+    );
+    if (compressedSize > MAX_VIDEO_UPLOAD_BYTES) {
       toast.error(
-        "Video too large",
-        `Choose a video smaller than ${formatBytes(MAX_VIDEO_UPLOAD_BYTES)}.`,
+        "Video too large after compression",
+        `Choose a video smaller than ${formatBytes(MAX_VIDEO_UPLOAD_BYTES)} or a shorter clip.`,
       );
       return;
     }
@@ -1629,11 +1745,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     // Hold the picked video and show the product picker so the seller can
     // choose which product to attach it to from a modal.
     setPendingVideo({
-      uri: asset.uri,
-      pickedFile: Platform.OS === "web" ? asset.file || null : null,
+      uri: finalUri,
+      pickedFile: compressedVideo.pickedFile || pickedFile,
       title: asset.fileName || asset.uri?.split("/").pop() || "Product video",
+      status: "compressed",
+      originalSize: compressedVideo.originalSize || originalSize,
+      compressedSize,
     });
-    setProductSelectModalVisible(true);
   };
 
   // Attach the previously picked video to the chosen product.
@@ -1665,7 +1783,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     productTitle,
     onProgress,
   ) => {
-    const { contentType, extension } = getVideoUploadDetails(uri, pickedFile);
+    const compressedVideo = await compressProductVideo(uri, pickedFile);
+    const sourceUri = compressedVideo.uri || uri;
+    const sourceFile = compressedVideo.pickedFile || pickedFile;
+    const { contentType, extension } = getVideoUploadDetails(
+      sourceUri,
+      sourceFile,
+    );
     const productSegment = storageSegment(productTitle, "product");
     const storeSegment = storageSegment(seller?.name, "store");
     const storeFolder = `${storeSegment}-${sellerId || user?.id || "unknown"}`;
@@ -1702,7 +1826,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     try {
       if (Platform.OS === "web") {
         const body =
-          pickedFile instanceof Blob ? pickedFile : await getBlobFromUri(uri);
+          sourceFile instanceof Blob ? sourceFile : await getBlobFromUri(sourceUri);
         if (!body) throw new Error("Could not read the selected video file");
 
         await new Promise((resolve, reject) => {
@@ -1729,10 +1853,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         });
       } else {
         // expo-file-system progress callback gives us upload progress on native.
-        const totalBytes = await getVideoSizeBytes(uri, pickedFile);
+        const totalBytes = await getVideoSizeBytes(sourceUri, sourceFile);
         const uploadTask = FileSystem.createUploadTask(
           uploadTaskUrl(uploadUrl),
-          uri,
+          sourceUri,
           {
             httpMethod: "PUT",
             headers: { "Content-Type": contentType },
@@ -2076,7 +2200,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       });
 
       try {
-        const sizeBytes = await getVideoSizeBytes(uri, pickedFile);
+        const compressedVideo = await compressProductVideo(uri, pickedFile);
+        const finalUri = compressedVideo.uri || uri;
+        const finalPickedFile = compressedVideo.pickedFile || pickedFile;
+        const sizeBytes = Number(
+          compressedVideo.compressedSize ||
+            (await getVideoSizeBytes(finalUri, finalPickedFile)),
+        );
         if (sizeBytes > MAX_VIDEO_UPLOAD_BYTES) {
           throw new Error(
             `Video is ${formatBytes(sizeBytes)}. Limit is ${formatBytes(MAX_VIDEO_UPLOAD_BYTES)}.`,
@@ -2085,12 +2215,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
         upsertVideoUploadJob(jobId, {
           status: "uploading",
-          message: "Preparing upload URL",
+          message: `Optimizing ${formatBytes(sizeBytes)}`,
         });
 
         const { publicUrl, key } = await uploadVideoToR2(
-          uri,
-          pickedFile,
+          finalUri,
+          finalPickedFile,
           productTitle,
           (progress) => {
             upsertVideoUploadJob(jobId, {
@@ -4173,6 +4303,14 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <Ionicons name="cube-outline" size={20} color="#fff" />
             <Text style={styles.modalHeaderTitle}>Select a product</Text>
           </LinearGradient>
+          {pendingVideo && (
+            <View style={styles.attachVideoSelection}>
+              <Text style={styles.attachVideoLabel}>Selected video</Text>
+              <Text style={styles.attachVideoMeta}>
+                {getVideoCompressionSummary(pendingVideo)}
+              </Text>
+            </View>
+          )}
           <ScrollView
             style={styles.videoDeleteList}
             showsVerticalScrollIndicator={false}
@@ -5377,43 +5515,60 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 <View style={styles.card}>
                   <View style={styles.cardTitleRow}>
                     <Text style={styles.cardTitle}>Video</Text>
-                    <Text style={styles.cardCounter}>Optional · max 10 MB</Text>
+                    <Text style={styles.cardCounter}>Optional · max 30 MB</Text>
                   </View>
                   <View style={styles.videoGrid}>
                     {existingVideoUrl || videoUri ? (
-                      <View style={styles.videoWrap}>
-                        <FeedVideo
-                          source={{ uri: videoUri || existingVideoUrl }}
-                          style={styles.videoThumb}
-                          resizeMode="cover"
-                          repeat
-                          muted
-                          paused
-                        />
-                        <Pressable
-                          style={styles.videoRemove}
-                          onPress={
-                            videoUri
-                              ? () => {
-                                  setVideoUri(null);
-                                  setVideoFile(null);
-                                }
-                              : handleRemoveExistingVideo
-                          }
-                          disabled={removingVideo}
-                        >
-                          <Ionicons
-                            name="close-circle"
-                            size={20}
-                            color="#EF4444"
+                      <View style={styles.videoItem}>
+                        <View style={styles.videoWrap}>
+                          <FeedVideo
+                            source={{ uri: videoUri || existingVideoUrl }}
+                            style={styles.videoThumb}
+                            resizeMode="cover"
+                            repeat
+                            muted
+                            paused
                           />
-                        </Pressable>
-                        <View style={styles.videoBadge}>
-                          <Ionicons name="videocam" size={14} color="#fff" />
-                          <Text style={styles.videoBadgeText}>
-                            {videoUri ? "New video" : "Current video"}
-                          </Text>
+                          <Pressable
+                            style={styles.videoRemove}
+                            onPress={
+                              videoUri
+                                ? () => {
+                                    setVideoUri(null);
+                                    setVideoFile(null);
+                                    setVideoCompression((prev) => {
+                                      const next = { ...prev };
+                                      if (videoUri) delete next[videoUri];
+                                      return next;
+                                    });
+                                  }
+                                : handleRemoveExistingVideo
+                            }
+                            disabled={removingVideo}
+                          >
+                            <Ionicons
+                              name="close-circle"
+                              size={20}
+                              color="#EF4444"
+                            />
+                          </Pressable>
+                          <View style={styles.videoBadge}>
+                            <Ionicons name="videocam" size={14} color="#fff" />
+                            <Text style={styles.videoBadgeText}>
+                              {videoUri ? "New video" : "Current video"}
+                            </Text>
+                          </View>
                         </View>
+                        {videoUri && videoCompression[videoUri] && (
+                          <Text style={[styles.videoSizeText, { color: themeColors.muted }]}>
+                            {getVideoCompressionSummary(videoCompression[videoUri])}
+                          </Text>
+                        )}
+                        {videoUri && !videoCompression[videoUri] && (
+                          <Text style={[styles.videoSizeText, { color: themeColors.muted }]}>
+                            Compressing...
+                          </Text>
+                        )}
                       </View>
                     ) : null}
                     {!videoUri && (
@@ -5682,6 +5837,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 disabled={
                   generatingProduct ||
                   submitting ||
+                  isMediaCompressionActive ||
                   (imageUris.length === 0 && existingImageUrls.length === 0)
                 }
               >
@@ -5702,7 +5858,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   { backgroundColor: accent, flex: 1 },
                 ]}
                 onPress={goToNextProductStep}
-                disabled={submitting}
+                disabled={submitting || isMediaCompressionActive}
               >
                 <Text style={styles.stepButtonText}>Continue</Text>
                 <Ionicons
@@ -6896,6 +7052,19 @@ const buildSellerAdminStyles = (c) =>
       textTransform: "uppercase",
       letterSpacing: 0.4,
     },
+    attachVideoSelection: {
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.surface,
+      backgroundColor: c.background,
+    },
+    attachVideoMeta: {
+      marginTop: 4,
+      color: c.dark,
+      fontWeight: "700",
+      fontSize: 12,
+    },
     attachProductRow: {
       gap: 10,
     },
@@ -7537,6 +7706,10 @@ const buildSellerAdminStyles = (c) =>
       gap: 10,
       marginTop: 10,
     },
+    videoItem: {
+      width: 140,
+      gap: 5,
+    },
     videoWrap: {
       position: "relative",
       width: 140,
@@ -7566,6 +7739,13 @@ const buildSellerAdminStyles = (c) =>
       paddingVertical: 2,
     },
     videoBadgeText: { color: c.light, fontSize: 10, fontWeight: "700" },
+    videoSizeText: {
+      width: 140,
+      fontSize: 9,
+      lineHeight: 11,
+      textAlign: "center",
+      color: c.muted,
+    },
     videoAdd: {
       width: 140,
       height: 140,
