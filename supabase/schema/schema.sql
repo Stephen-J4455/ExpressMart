@@ -437,6 +437,7 @@ CREATE TABLE public.express_ads (
   discount_badge text,
   discount_color text DEFAULT '#FF6B6B'::text,
   placement text NOT NULL DEFAULT 'home'::text,
+  priority integer DEFAULT 0 CHECK (priority >= 0 AND priority <= 100),
   position integer DEFAULT 0,
   is_active boolean DEFAULT true,
   show_on_web boolean DEFAULT true,
@@ -452,6 +453,39 @@ CREATE TABLE public.express_ads (
   CONSTRAINT express_ads_pkey PRIMARY KEY (id),
   CONSTRAINT express_ads_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
 );
+
+CREATE OR REPLACE FUNCTION public.increment_ad_engagement(
+  ad_id uuid,
+  event_type text,
+  amount integer DEFAULT 1
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF amount < 1 THEN
+    RETURN;
+  END IF;
+
+  IF event_type = 'impression' THEN
+    UPDATE public.express_ads
+    SET impressions = COALESCE(impressions, 0) + amount,
+        updated_at = now()
+    WHERE id = ad_id;
+  ELSIF event_type = 'click' THEN
+    UPDATE public.express_ads
+    SET clicks = COALESCE(clicks, 0) + amount,
+        updated_at = now()
+    WHERE id = ad_id;
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.increment_ad_engagement(uuid, text, integer)
+  TO anon, authenticated;
+
 CREATE TABLE public.express_seller_statuses (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   seller_id uuid NOT NULL,

@@ -37,20 +37,7 @@ export const injectAdsIntoProducts = ({
   maxAds = 3,
 }) => {
   const baseProducts = Array.isArray(products) ? products : [];
-  const inlineOnlyStyles = new Set([
-    "popup",
-    "fullscreen",
-    "sticky_footer",
-    "carousel",
-    "sidebar",
-    "story",
-  ]);
-  const activeAds = Array.isArray(ads)
-    ? ads.filter(
-        (ad) =>
-          ad && !inlineOnlyStyles.has(String(ad.style || "").toLowerCase()),
-      )
-    : [];
+  const activeAds = Array.isArray(ads) ? ads.filter(Boolean) : [];
 
   if (baseProducts.length === 0 || activeAds.length === 0) {
     return baseProducts;
@@ -66,10 +53,9 @@ export const injectAdsIntoProducts = ({
     1,
     Math.min(maxAds, densityLimit, activeAds.length),
   );
-  const selectedAds = shuffleWithSeed(activeAds, `${seed}-pick`).slice(
-    0,
-    injectCount,
-  );
+  const selectedAds = [...activeAds]
+    .sort((a, b) => (Number(b.priority) || 0) - (Number(a.priority) || 0))
+    .slice(0, injectCount);
 
   const injected = [];
   let adCursor = 0;

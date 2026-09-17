@@ -37,7 +37,6 @@ import { ProductCard } from "../components/ProductCard";
 import { AdRenderer } from "../components/AdBanner";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
-import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { radius } from "../theme/colors";
@@ -63,7 +62,6 @@ const FEED_PLACEHOLDER_ITEMS = Array.from(
 export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
   const styles = useAppStyles(buildHomeStyles);
-  const { user } = useAuth();
   const { fetchAdsByPlacement } = useAds();
   const {
     products,
@@ -411,10 +409,10 @@ export const HomeScreen = ({ navigation }) => {
     const withAds = injectAdsIntoProducts({
       products: visibleProducts,
       ads: homeAds,
-      seed: `home-${user?.id || "guest"}`,
+      seed: "home",
       minInterval: 5,
       maxInterval: 9,
-      maxAds: 3,
+      maxAds: homeAds.length,
     });
     return injectFlashSaleRow(withAds);
   }, [
@@ -425,7 +423,6 @@ export const HomeScreen = ({ navigation }) => {
     filterHiddenSellers,
     dedupeFeedItems,
     homeAds,
-    user?.id,
   ]);
 
   const handleRefresh = useCallback(async () => {

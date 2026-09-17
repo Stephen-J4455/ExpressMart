@@ -26,16 +26,6 @@ const isOfflineNetworkError = (error) => {
     message,
   );
 };
-const isTruthySetting = (value) => {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value === 1;
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    return normalized === "true" || normalized === "1" || normalized === "yes";
-  }
-  return false;
-};
-
 const mapProduct = (product) => ({
   id: product.id,
   title: product.title,
@@ -233,99 +223,28 @@ export const ShopProvider = ({ children }) => {
         });
         setSettings(settingsMap);
 
-        const redisProductsCacheEnabled = isTruthySetting(
-          settingsMap.redis_products_cache_enabled,
-        );
-
         let productsData = [];
         let fromLocalCache = false;
-        if (redisProductsCacheEnabled) {
-          // Upstash Redis first; fall back to local cache, then database on failure or slow network
-          try {
-            const cachedData = await fetchFromUpstash(0, PAGE_SIZE, {
-              userId: user?.id || null,
-            });
-            const cacheSource = cachedData?.cache?.source || "database";
-            const personalized = !!cachedData?.cache?.personalized;
-            console.info(
-              `[ShopContext] Network sync fetched products from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"}${personalized ? " (personalized)" : ""}`,
-            );
-            productsData = cachedData?.products || [];
-            // A successful edge-function response can still contain an empty
-            // or stale cache snapshot. On a blank home screen, verify against
-            // the live database instead of treating that response as truth.
-            if (productsData.length === 0 && products.length === 0) {
-              const { data, error: productError } = await supabase
-                .from("express_products")
-                .select(
-                  "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-                )
-                .eq("status", "active")
-                .not("seller_id", "is", null)
-                .eq("seller_id.is_active", true)
-                .or("quantity.gt.0,is_preorder.eq.true")
-                .order("created_at", { ascending: false })
-                .range(0, PAGE_SIZE - 1);
-              if (productError) throw productError;
-              productsData = data || [];
-              fromLocalCache = false;
-            }
-          } catch (upstashErr) {
-            console.warn(
-              "[ShopContext] Upstash fetch failed or timed out, falling back to local cache:",
-              upstashErr?.message || JSON.stringify(upstashErr),
-            );
-            // The "For You" feed is served from Upstash only. On a cache miss /
-            // timeout we keep the user's view stable by using the existing local
-            // cache and deliberately NOT re-querying the live database — a direct
-            // DB read would reshuffle/replace the products the user is looking at.
-            const localProducts = await readCacheProducts();
-            if (localProducts && localProducts.length > 0) {
-              productsData = localProducts;
-              fromLocalCache = true;
-            } else if (products.length === 0) {
-              // Only fall back to the database on a brand-new device with no
-              // cached snapshot yet AND no products currently rendered, so first
-              // launch still shows something without disrupting an existing view.
-              console.warn(
-                "[ShopContext] No local cache available, falling back to database (first launch).",
-              );
-              const { data, error: productError } = await supabase
-                .from("express_products")
-                .select(
-                  "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-                )
-                .eq("status", "active")
-                .not("seller_id", "is", null)
-                .eq("seller_id.is_active", true)
-                .or("quantity.gt.0,is_preorder.eq.true")
-                .order("created_at", { ascending: false })
-                .range(0, PAGE_SIZE - 1);
-              if (productError) throw productError;
-              productsData = data || [];
-            } else {
-              // We already have products on screen and no cache snapshot — keep the
-              // current "For You" view exactly as-is instead of querying the DB
-              // (which would change the products the user is viewing).
-              console.warn(
-                "[ShopContext] Upstash failed and no local cache; keeping current feed to avoid changing the user's view.",
-              );
-            }
+        try {
+          const cachedData = await fetchFromUpstash(0, PAGE_SIZE, {
+            userId: user?.id || null,
+          });
+          const cacheSource = cachedData?.cache?.source || "redis";
+          const personalized = !!cachedData?.cache?.personalized;
+          console.info(
+            `[ShopContext] Network sync fetched products through cached-products (${cacheSource})${personalized ? " (personalized)" : ""}`,
+          );
+          productsData = cachedData?.products || [];
+        } catch (upstashErr) {
+          console.warn(
+            "[ShopContext] cached-products fetch failed, falling back to local cache:",
+            upstashErr?.message || JSON.stringify(upstashErr),
+          );
+          const localProducts = await readCacheProducts();
+          if (localProducts && localProducts.length > 0) {
+            productsData = localProducts;
+            fromLocalCache = true;
           }
-        } else {
-          const { data, error: productError } = await supabase
-            .from("express_products")
-            .select(
-              "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-            )
-            .eq("status", "active")
-            .not("seller_id", "is", null)
-            .eq("seller_id.is_active", true)
-            .or("quantity.gt.0,is_preorder.eq.true")
-            .order("created_at", { ascending: false })
-            .range(0, PAGE_SIZE - 1);
-          if (productError) throw productError;
-          productsData = data || [];
         }
 
         // Local cache already stores mapped products, so skip re-mapping there.
@@ -439,7 +358,6 @@ export const ShopProvider = ({ children }) => {
     setLoadingMore(true);
     try {
       const start = products.length;
-      const end = start + PAGE_SIZE - 1;
 
       // Resolve the current user id for the personalization layer. The
       // server only re-ranks on page 0 (offset < PAGE_SIZE), so the id
@@ -458,49 +376,20 @@ export const ShopProvider = ({ children }) => {
       }
 
       let rows = [];
-      if (isTruthySetting(settings.redis_products_cache_enabled)) {
-        // Upstash Redis first; fall back to database on failure or slow network
-        try {
-          // `userId` is forwarded but the server only re-ranks on page 0
-          // (offset < PAGE_SIZE), so loadMore requests always hit the
-          // recency-sorted path even for signed-in users.
-          const cachedData = await fetchFromUpstash(start, PAGE_SIZE, {
-            userId: loadMoreUserId,
-          });
-          const cacheSource = cachedData?.cache?.source || "database";
-          console.info(
-            `[ShopContext] loadMore products fetched from ${cacheSource === "redis" ? "Upstash Redis cache" : "database"} (offset=${start})`,
-          );
-          rows = cachedData?.products || [];
-        } catch (upstashErr) {
-          // Upstash is the source of truth for the feed. On failure we stop
-          // here and keep the existing products instead of re-querying the
-          // database, which would change the items the user is currently
-          // viewing in the "For You" section.
-          console.warn(
-            `[ShopContext] loadMore failed from Upstash; keeping current feed (offset=${start})`,
-            upstashErr?.message || JSON.stringify(upstashErr),
-          );
-          rows = [];
-        }
-      } else {
+      try {
+        const cachedData = await fetchFromUpstash(start, PAGE_SIZE, {
+          userId: loadMoreUserId,
+        });
+        const cacheSource = cachedData?.cache?.source || "redis";
         console.info(
-          `[ShopContext] loadMore products fetched from database (cache disabled, offset=${start})`,
+          `[ShopContext] loadMore products fetched through cached-products (${cacheSource}, offset=${start})`,
         );
-        const { data, error: fetchError } = await supabase
-          .from("express_products")
-          .select(
-            "*, seller_id(id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer)",
-          )
-          .eq("status", "active")
-          .not("seller_id", "is", null)
-          .eq("seller_id.is_active", true)
-          .or("quantity.gt.0,is_preorder.eq.true")
-          .order("created_at", { ascending: false })
-          .range(start, end);
-
-        if (fetchError) throw fetchError;
-        rows = data || [];
+        rows = cachedData?.products || [];
+      } catch (upstashErr) {
+        console.warn(
+          `[ShopContext] loadMore failed through cached-products (offset=${start}); keeping current feed`,
+          upstashErr?.message || JSON.stringify(upstashErr),
+        );
       }
 
       const newProducts = rows.map(mapProduct);
@@ -513,15 +402,7 @@ export const ShopProvider = ({ children }) => {
     } finally {
       setLoadingMore(false);
     }
-  }, [
-    hasMore,
-    loadingMore,
-    loading,
-    products,
-    saveCache,
-    settings,
-    fetchFromUpstash,
-  ]);
+  }, [hasMore, loadingMore, loading, products, saveCache, fetchFromUpstash]);
 
   const refreshSellers = useCallback(async () => {
     await fetchProducts({ silent: true });

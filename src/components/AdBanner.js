@@ -21,6 +21,36 @@ import { radius } from "../theme/colors";
 
 const { width } = Dimensions.get("window");
 
+const useAdImageAspectRatio = (imageUrl, fallback = 16 / 9) => {
+  const [aspectRatio, setAspectRatio] = React.useState(fallback);
+
+  useEffect(() => {
+    if (!imageUrl) {
+      setAspectRatio(fallback);
+      return undefined;
+    }
+
+    let active = true;
+    Image.getSize(
+      imageUrl,
+      (imageWidth, imageHeight) => {
+        if (active && imageWidth > 0 && imageHeight > 0) {
+          setAspectRatio(imageWidth / imageHeight);
+        }
+      },
+      () => {
+        if (active) setAspectRatio(fallback);
+      },
+    );
+
+    return () => {
+      active = false;
+    };
+  }, [fallback, imageUrl]);
+
+  return aspectRatio;
+};
+
 const ensureHttpProtocol = (value) => {
   const trimmed = String(value || "").trim();
   if (!trimmed) return "";
@@ -138,6 +168,7 @@ export const AdBanner = ({ ad, onClose, flush = false }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
   const styles = useAppStyles((c) => buildAdStyles(c));
+  const imageAspectRatio = useAdImageAspectRatio(ad?.image_url);
 
   useEffect(() => {
     if (ad && isFocused) {
@@ -172,14 +203,20 @@ export const AdBanner = ({ ad, onClose, flush = false }) => {
           styles.bannerContainer,
           flush && styles.flushContainer,
           bannerStyle,
+          { aspectRatio: imageAspectRatio },
         ]}
-        imageStyle={{ borderRadius: flush ? 0 : ad.border_radius || 12 }}
+        imageStyle={{
+          borderRadius: flush ? 0 : ad.border_radius || 12,
+          resizeMode: "contain",
+        }}
       >
-        <View style={styles.imageBgOverlay} />
+        <View pointerEvents="none" style={styles.imageBgOverlay} />
         <Pressable style={styles.closeButton} onPress={onClose}>
           <Ionicons name="close" size={20} color="#fff" />
         </Pressable>
-        <View style={[styles.bannerContent, { flex: 1 }]}>
+        <View
+          style={[styles.bannerContent, styles.imageBgContent, { flex: 1 }]}
+        >
           {!!ad.discount_badge && (
             <View
               style={[
@@ -229,7 +266,10 @@ export const AdBanner = ({ ad, onClose, flush = false }) => {
 
       <Image
         source={ad.image_url ? { uri: ad.image_url } : undefined}
-        style={styles.bannerImage}
+        style={[
+          styles.bannerImage,
+          { aspectRatio: imageAspectRatio, height: undefined },
+        ]}
       />
 
       <View style={styles.bannerContent}>
@@ -268,6 +308,7 @@ export const AdCard = ({ ad, flush = false }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
   const styles = useAppStyles((c) => buildAdStyles(c));
+  const imageAspectRatio = useAdImageAspectRatio(ad?.image_url);
 
   useEffect(() => {
     if (ad && isFocused) {
@@ -292,12 +333,22 @@ export const AdCard = ({ ad, flush = false }) => {
             {
               borderRadius: flush ? 0 : ad.border_radius || 12,
               overflow: "hidden",
+              aspectRatio: imageAspectRatio,
             },
           ]}
-          imageStyle={{ borderRadius: flush ? 0 : ad.border_radius || 12 }}
+          imageStyle={{
+            borderRadius: flush ? 0 : ad.border_radius || 12,
+            resizeMode: "contain",
+          }}
         >
-          <View style={styles.imageBgOverlay} />
-          <View style={[styles.cardContent, { justifyContent: "flex-end" }]}>
+          <View pointerEvents="none" style={styles.imageBgOverlay} />
+          <View
+            style={[
+              styles.cardContent,
+              styles.imageBgContent,
+              { justifyContent: "flex-end" },
+            ]}
+          >
             {!!ad.discount_badge && (
               <View
                 style={[
@@ -355,7 +406,10 @@ export const AdCard = ({ ad, flush = false }) => {
     >
       <Image
         source={ad.image_url ? { uri: ad.image_url } : undefined}
-        style={styles.cardImage}
+        style={[
+          styles.cardImage,
+          { aspectRatio: imageAspectRatio, height: undefined },
+        ]}
       />
 
       <View style={styles.cardContent}>
@@ -402,7 +456,7 @@ export const AdCard = ({ ad, flush = false }) => {
   );
 };
 
-export const AdCarousel = ({ ads }) => {
+export const AdCarousel = ({ ads, flush = false }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
   const [currentIndex, setCurrentIndex] = React.useState(0);
@@ -411,6 +465,7 @@ export const AdCarousel = ({ ads }) => {
   const scrollRef = React.useRef(null);
   const { isWide } = useResponsive();
   const styles = useAppStyles((c) => buildAdStyles(c));
+  const imageAspectRatio = useAdImageAspectRatio(ads?.[0]?.image_url);
 
   // Auto-scroll on mobile (pauses briefly after user interaction)
   useEffect(() => {
@@ -438,7 +493,9 @@ export const AdCarousel = ({ ads }) => {
   // On tablet/desktop: show all ads side-by-side in one row
   if (isWide && ads.length > 1) {
     return (
-      <View style={styles.carouselGridRow}>
+      <View
+        style={[styles.carouselGridRow, flush && styles.flushCarouselGridRow]}
+      >
         {ads.map((ad) => {
           const handleAdPress = async () => {
             await openAdDestination(ad, trackClick);
@@ -451,13 +508,20 @@ export const AdCarousel = ({ ads }) => {
                 source={ad.image_url ? { uri: ad.image_url } : undefined}
                 style={[
                   styles.carouselGridItem,
-                  { borderRadius: ad.border_radius || 12, overflow: "hidden" },
+                  {
+                    borderRadius: flush ? 0 : ad.border_radius || 12,
+                    overflow: "hidden",
+                    aspectRatio: imageAspectRatio,
+                  },
                 ]}
-                imageStyle={{ borderRadius: ad.border_radius || 12 }}
+                imageStyle={{
+                  borderRadius: flush ? 0 : ad.border_radius || 12,
+                  resizeMode: "contain",
+                }}
               >
-                <View style={styles.imageBgOverlay} />
+                <View pointerEvents="none" style={styles.imageBgOverlay} />
                 <Pressable
-                  style={styles.carouselContent}
+                  style={[styles.carouselContent, styles.imageBgContent]}
                   onPress={handleAdPress}
                 >
                   {!!ad.discount_badge && (
@@ -494,7 +558,10 @@ export const AdCarousel = ({ ads }) => {
                       styles.carouselCta,
                       { backgroundColor: ad.accent_color || "#0B6EFE" },
                     ]}
-                    onPress={handleAdPress}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      handleAdPress();
+                    }}
                   >
                     <Text style={styles.carouselCtaText}>
                       {ad.cta_text || "Shop Now"}
@@ -512,14 +579,17 @@ export const AdCarousel = ({ ads }) => {
                 styles.carouselGridItem,
                 {
                   backgroundColor: ad.background_color || "#FFFFFF",
-                  borderRadius: ad.border_radius || 12,
+                  borderRadius: flush ? 0 : ad.border_radius || 12,
                 },
               ]}
               onPress={handleAdPress}
             >
               <Image
                 source={ad.image_url ? { uri: ad.image_url } : undefined}
-                style={styles.carouselImage}
+                style={[
+                  styles.carouselImage,
+                  { aspectRatio: imageAspectRatio, height: undefined },
+                ]}
               />
               <View style={styles.carouselContent}>
                 {!!ad.discount_badge && (
@@ -559,7 +629,10 @@ export const AdCarousel = ({ ads }) => {
                     styles.carouselCta,
                     { backgroundColor: ad.accent_color || "#0B6EFE" },
                   ]}
-                  onPress={handleAdPress}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    handleAdPress();
+                  }}
                 >
                   <Text style={styles.carouselCtaText}>
                     {ad.cta_text || "Shop Now"}
@@ -580,8 +653,8 @@ export const AdCarousel = ({ ads }) => {
   };
 
   // For paging math
-  const containerPadding = 16;
-  const slideGap = 12; // gap between slides
+  const containerPadding = flush ? 0 : 16;
+  const slideGap = flush ? 0 : 12; // gap between slides
   const slideWidth = width - containerPadding * 2;
   const itemWidth = slideWidth + slideGap; // full step when paging
 
@@ -620,7 +693,9 @@ export const AdCarousel = ({ ads }) => {
   };
 
   return (
-    <View style={styles.carouselContainer}>
+    <View
+      style={[styles.carouselContainer, flush && styles.flushCarouselContainer]}
+    >
       <ScrollView
         horizontal
         pagingEnabled
@@ -651,13 +726,20 @@ export const AdCarousel = ({ ads }) => {
                 source={ad.image_url ? { uri: ad.image_url } : undefined}
                 style={[
                   ...slideStyle,
-                  { borderRadius: ad.border_radius || 12, overflow: "hidden" },
+                  {
+                    borderRadius: flush ? 0 : ad.border_radius || 12,
+                    overflow: "hidden",
+                    aspectRatio: imageAspectRatio,
+                  },
                 ]}
-                imageStyle={{ borderRadius: ad.border_radius || 12 }}
+                imageStyle={{
+                  borderRadius: flush ? 0 : ad.border_radius || 12,
+                  resizeMode: "contain",
+                }}
               >
-                <View style={styles.imageBgOverlay} />
+                <View pointerEvents="none" style={styles.imageBgOverlay} />
                 <Pressable
-                  style={styles.carouselContent}
+                  style={[styles.carouselContent, styles.imageBgContent]}
                   onPress={handleAdPress}
                 >
                   {!!ad.discount_badge && (
@@ -694,7 +776,10 @@ export const AdCarousel = ({ ads }) => {
                       styles.carouselCta,
                       { backgroundColor: ad.accent_color || "#0B6EFE" },
                     ]}
-                    onPress={handleAdPress}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      handleAdPress();
+                    }}
                   >
                     <Text style={styles.carouselCtaText}>
                       {ad.cta_text || "Shop Now"}
@@ -712,14 +797,21 @@ export const AdCarousel = ({ ads }) => {
                 ...slideStyle,
                 {
                   backgroundColor: ad.background_color || "#FFFFFF",
-                  borderRadius: ad.border_radius || 12,
+                  borderRadius: flush ? 0 : ad.border_radius || 12,
                 },
               ]}
               onPress={handleAdPress}
             >
               <Image
                 source={ad.image_url ? { uri: ad.image_url } : undefined}
-                style={[styles.carouselImage, { width: "100%" }]}
+                style={[
+                  styles.carouselImage,
+                  {
+                    width: "100%",
+                    aspectRatio: imageAspectRatio,
+                    height: undefined,
+                  },
+                ]}
               />
               <View style={styles.carouselContent}>
                 {!!ad.discount_badge && (
@@ -863,7 +955,7 @@ export const AdPopup = ({ ad, onClose, visible = true }) => {
           <Image
             source={ad.image_url ? { uri: ad.image_url } : undefined}
             style={styles.popupImage}
-            resizeMode="cover"
+            resizeMode="contain"
           />
 
           <View style={styles.popupContent}>
@@ -1240,7 +1332,7 @@ export const AdRenderer = ({
     case "popup":
       return <AdPopup ad={ad} onClose={onClose} visible={visible} />;
     case "carousel":
-      return <AdCarousel ads={[ad]} />;
+      return <AdCarousel ads={[ad]} flush={flush} />;
     case "story":
       return <AdStory ad={ad} onClose={onClose} />;
     case "fullscreen":
@@ -1264,7 +1356,21 @@ const buildAdStyles = (c) =>
     // Shared overlay for use_image_as_bg mode
     imageBgOverlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: c.overlay,
+      position: "absolute",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      zIndex: 1,
+      elevation: 1,
+    },
+    imageBgContent: {
+      position: "relative",
+      zIndex: 2,
+      elevation: 2,
+      flex: 1,
+      justifyContent: "flex-end",
     },
     // Banner styles
     sidebarAdSlot: {
@@ -1297,9 +1403,9 @@ const buildAdStyles = (c) =>
     },
     bannerImage: {
       width: "100%",
-      height: 120,
       borderRadius: 8,
       marginBottom: 12,
+      resizeMode: "contain",
     },
     bannerContent: {
       gap: 8,
@@ -1355,6 +1461,7 @@ const buildAdStyles = (c) =>
     cardImage: {
       width: "100%",
       height: 160,
+      resizeMode: "contain",
     },
     cardContent: {
       padding: 12,
@@ -1399,11 +1506,20 @@ const buildAdStyles = (c) =>
       marginVertical: 12,
       gap: 12,
     },
+    flushCarouselContainer: {
+      paddingHorizontal: 0,
+      marginVertical: 0,
+      gap: 0,
+    },
     carouselGridRow: {
       flexDirection: "row",
       marginHorizontal: 16,
       marginVertical: 12,
       gap: 12,
+    },
+    flushCarouselGridRow: {
+      marginHorizontal: 0,
+      marginVertical: 0,
     },
     carouselGridItem: {
       flex: 1,
@@ -1425,6 +1541,7 @@ const buildAdStyles = (c) =>
     carouselImage: {
       width: "100%",
       height: 180,
+      resizeMode: "contain",
     },
     carouselContent: {
       padding: 16,
@@ -1504,6 +1621,7 @@ const buildAdStyles = (c) =>
     popupImage: {
       width: "100%",
       height: 180,
+      resizeMode: "contain",
     },
     popupContent: {
       padding: 20,
@@ -1558,6 +1676,7 @@ const buildAdStyles = (c) =>
       width: "100%",
       height: "100%",
       position: "absolute",
+      resizeMode: "contain",
     },
     storyGradient: {
       position: "absolute",
@@ -1627,6 +1746,7 @@ const buildAdStyles = (c) =>
       width: "100%",
       height: "100%",
       position: "absolute",
+      resizeMode: "contain",
     },
     fullscreenGradient: {
       position: "absolute",
@@ -1719,6 +1839,7 @@ const buildAdStyles = (c) =>
       width: 50,
       height: 50,
       borderRadius: 8,
+      resizeMode: "contain",
     },
     stickyFooterContent: {
       flex: 1,

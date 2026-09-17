@@ -12,6 +12,22 @@ import { supabase } from "../lib/supabase";
 
 const AdsContext = createContext();
 
+const sortAdsByPriority = (items) =>
+  [...(Array.isArray(items) ? items : [])].sort((a, b) => {
+    const priorityDiff =
+      (Number(b?.priority) || 0) - (Number(a?.priority) || 0);
+    if (priorityDiff !== 0) return priorityDiff;
+
+    const positionDiff =
+      (Number(a?.position) || 0) - (Number(b?.position) || 0);
+    if (positionDiff !== 0) return positionDiff;
+
+    return (
+      new Date(b?.created_at || 0).getTime() -
+      new Date(a?.created_at || 0).getTime()
+    );
+  });
+
 export const useAds = () => {
   const context = useContext(AdsContext);
   if (!context) {
@@ -82,7 +98,7 @@ export const AdsProvider = ({ children }) => {
         const raw = await AsyncStorage.getItem(key);
         if (!raw) return [];
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed?.data) ? parsed.data : [];
+        return sortAdsByPriority(parsed?.data);
       } catch {
         return [];
       }
@@ -96,7 +112,10 @@ export const AdsProvider = ({ children }) => {
         const key = getAdsCacheKey(placement);
         await AsyncStorage.setItem(
           key,
-          JSON.stringify({ data: Array.isArray(data) ? data : [], ts: Date.now() }),
+          JSON.stringify({
+            data: Array.isArray(data) ? data : [],
+            ts: Date.now(),
+          }),
         );
       } catch {
         // Cache write failure is non-fatal.
@@ -105,67 +124,74 @@ export const AdsProvider = ({ children }) => {
     [getAdsCacheKey],
   );
 
-  const fetchFreshAdsByPlacement = useCallback(async (placement, silent = false) => {
-    if (!supabase) return [];
+  const fetchFreshAdsByPlacement = useCallback(
+    async (placement, silent = false) => {
+      if (!supabase) return [];
 
-    try {
-      if (!silent) setLoading(true);
+      try {
+        if (!silent) setLoading(true);
 
-      // Fetch active ads and filter placement/date/platform client-side for reliability.
-      const { data, error } = await supabase
-        .from("express_ads")
-        .select("*")
-        .eq("is_active", true)
-        .order("position", { ascending: true });
+        // Fetch active ads and filter placement/date/platform client-side for reliability.
+        const { data, error } = await supabase
+          .from("express_ads")
+          .select("*")
+          .eq("is_active", true)
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: false });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      const now = Date.now();
-      const requestedPlacement = normalizePlacement(placement);
-      const aliasSet = new Set([
-        requestedPlacement,
-        ...(placementAliases[requestedPlacement] || []),
-      ]);
-      const onWeb = Platform.OS === "web";
+        const now = Date.now();
+        const requestedPlacement = normalizePlacement(placement);
+        const aliasSet = new Set([
+          requestedPlacement,
+          ...(placementAliases[requestedPlacement] || []),
+        ]);
+        const onWeb = Platform.OS === "web";
 
-      const valid = (data || []).filter((ad) => {
-        const adPlacements = parsePlacements(ad.placement);
-        const hasPlacement = adPlacements.some((p) => aliasSet.has(p));
-        if (!hasPlacement) return false;
+        const valid = sortAdsByPriority(
+          (data || []).filter((ad) => {
+            const adPlacements = parsePlacements(ad.placement);
+            const hasPlacement = adPlacements.some((p) => aliasSet.has(p));
+            if (!hasPlacement) return false;
 
-        const allowOnPlatform = onWeb
-          ? ad.show_on_web !== false
-          : ad.show_on_mobile !== false;
-        if (!allowOnPlatform) return false;
+            const allowOnPlatform = onWeb
+              ? ad.show_on_web !== false
+              : ad.show_on_mobile !== false;
+            if (!allowOnPlatform) return false;
 
-        const startTs = ad.start_date
-          ? new Date(ad.start_date).getTime()
-          : null;
-        const endTs = ad.end_date ? new Date(ad.end_date).getTime() : null;
+            const startTs = ad.start_date
+              ? new Date(ad.start_date).getTime()
+              : null;
+            const endTs = ad.end_date ? new Date(ad.end_date).getTime() : null;
 
-        const afterStart =
-          startTs == null || Number.isNaN(startTs) || startTs <= now;
-        const beforeEnd = endTs == null || Number.isNaN(endTs) || endTs >= now;
+            const afterStart =
+              startTs == null || Number.isNaN(startTs) || startTs <= now;
+            const beforeEnd =
+              endTs == null || Number.isNaN(endTs) || endTs >= now;
 
-        return afterStart && beforeEnd;
-      });
+            return afterStart && beforeEnd;
+          }),
+        );
 
-      setAds(valid);
-      await saveAdsToCache(placement, valid);
-      return valid;
-    } catch (error) {
-      console.error("Error fetching ads:", error);
-      const cachedAds = await loadAdsFromCache(placement);
-      if (cachedAds.length > 0) {
-        setAds(cachedAds);
-      } else {
-        setAds([]);
+        setAds(valid);
+        await saveAdsToCache(placement, valid);
+        return valid;
+      } catch (error) {
+        console.error("Error fetching ads:", error);
+        const cachedAds = await loadAdsFromCache(placement);
+        if (cachedAds.length > 0) {
+          setAds(cachedAds);
+        } else {
+          setAds([]);
+        }
+        return cachedAds;
+      } finally {
+        if (!silent) setLoading(false);
       }
-      return cachedAds;
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, [loadAdsFromCache, saveAdsToCache]);
+    },
+    [loadAdsFromCache, saveAdsToCache],
+  );
 
   // Fetch ads by placement (cache-first + background sync)
   const fetchAdsByPlacement = useCallback(
@@ -201,6 +227,14 @@ export const AdsProvider = ({ children }) => {
     const column = eventType === "click" ? "clicks" : "impressions";
 
     try {
+      const { error: rpcError } = await supabase.rpc(
+        "increment_ad_engagement",
+        { ad_id: adId, event_type: eventType },
+      );
+
+      if (!rpcError) return;
+
+      // Keep older deployments working until the SQL function is deployed.
       const { data: row, error: readError } = await supabase
         .from("express_ads")
         .select(`id,${column}`)
@@ -211,12 +245,10 @@ export const AdsProvider = ({ children }) => {
       if (!row) throw new Error("Ad record not found");
 
       const nextValue = (Number(row[column]) || 0) + 1;
-
       const { error: updateError } = await supabase
         .from("express_ads")
         .update({ [column]: nextValue })
         .eq("id", adId);
-
       if (updateError) throw updateError;
     } catch (error) {
       console.error(`Error tracking ad ${eventType}:`, error);
