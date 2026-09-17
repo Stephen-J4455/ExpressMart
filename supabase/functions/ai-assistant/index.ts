@@ -47,7 +47,8 @@ const getOpenRouterModels = async (apiKey: string) => {
   const response = await fetch(OPENROUTER_MODELS_URL, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
-  if (!response.ok) throw new Error(`Could not check free vision models (${response.status})`);
+  if (!response.ok)
+    throw new Error(`Could not check free vision models (${response.status})`);
   const payload = await response.json();
   return Array.isArray(payload?.data) ? payload.data : [];
 };
@@ -76,7 +77,10 @@ const TOOLS = [
         type: "object",
         properties: {
           query: { type: "string", description: "Free-text search query." },
-          limit: { type: "integer", description: "Max products to return (1-8, default 5)." },
+          limit: {
+            type: "integer",
+            description: "Max products to return (1-8, default 5).",
+          },
         },
         required: ["query"],
       },
@@ -91,8 +95,15 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Optional text combined with the filters — tag-first ranking applies." },
-          category: { type: "string", description: "Category name, e.g. 'Electronics'." },
+          query: {
+            type: "string",
+            description:
+              "Optional text combined with the filters — tag-first ranking applies.",
+          },
+          category: {
+            type: "string",
+            description: "Category name, e.g. 'Electronics'.",
+          },
           maxPrice: { type: "number", description: "Maximum price in GHS." },
           minPrice: { type: "number", description: "Minimum price in GHS." },
           minRating: { type: "number", description: "Minimum rating (0-5)." },
@@ -101,7 +112,10 @@ const TOOLS = [
             enum: ["price_asc", "price_desc", "rating", "popular", "newest"],
             description: "Result sort order.",
           },
-          limit: { type: "integer", description: "Max products (1-8, default 5)." },
+          limit: {
+            type: "integer",
+            description: "Max products (1-8, default 5).",
+          },
         },
       },
     },
@@ -134,9 +148,24 @@ const TOOLS = [
           page: {
             type: "string",
             enum: [
-              "home", "feed", "chats", "cart", "account", "profile", "checkout",
-              "orders", "wishlist", "notifications", "addresses", "payments",
-              "settings", "security", "search", "categories", "stores", "help",
+              "home",
+              "feed",
+              "chats",
+              "cart",
+              "account",
+              "profile",
+              "checkout",
+              "orders",
+              "wishlist",
+              "notifications",
+              "addresses",
+              "payments",
+              "settings",
+              "security",
+              "search",
+              "categories",
+              "stores",
+              "help",
             ],
             description: "Destination page key.",
           },
@@ -186,7 +215,8 @@ const TOOLS = [
           },
           coords: {
             type: "object",
-            description: "Optional absolute window coordinates {x, y, w, h} for free-form targets.",
+            description:
+              "Optional absolute window coordinates {x, y, w, h} for free-form targets.",
             properties: {
               x: { type: "number" },
               y: { type: "number" },
@@ -256,7 +286,10 @@ const TOOLS = [
           minPrice: { type: "number" },
           minRating: { type: "number" },
           page: { type: "integer", description: "1-based page (default 1)." },
-          limit: { type: "integer", description: "Max products to return (1-8, default 5)." },
+          limit: {
+            type: "integer",
+            description: "Max products to return (1-8, default 5).",
+          },
         },
         required: ["seller_id"],
       },
@@ -271,11 +304,27 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Free-text query (matches name, description, store_description)." },
-          location: { type: "string", description: "Filter by city / region (e.g. 'Accra')." },
-          minRating: { type: "number", description: "Minimum store rating (0-5)." },
-          verifiedOnly: { type: "boolean", description: "Only show verified sellers." },
-          limit: { type: "integer", description: "Max stores to return (1-8, default 5)." },
+          query: {
+            type: "string",
+            description:
+              "Free-text query (matches name, description, store_description).",
+          },
+          location: {
+            type: "string",
+            description: "Filter by city / region (e.g. 'Accra').",
+          },
+          minRating: {
+            type: "number",
+            description: "Minimum store rating (0-5).",
+          },
+          verifiedOnly: {
+            type: "boolean",
+            description: "Only show verified sellers.",
+          },
+          limit: {
+            type: "integer",
+            description: "Max stores to return (1-8, default 5).",
+          },
         },
       },
     },
@@ -289,7 +338,10 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          seller_id: { type: "string", description: "The store / seller id to open." },
+          seller_id: {
+            type: "string",
+            description: "The store / seller id to open.",
+          },
         },
         required: ["seller_id"],
       },
@@ -304,7 +356,10 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          product_id: { type: "string", description: "The product id to open." },
+          product_id: {
+            type: "string",
+            description: "The product id to open.",
+          },
         },
         required: ["product_id"],
       },
@@ -323,9 +378,13 @@ const TOOLS = [
           region: {
             type: "string",
             enum: ["viewport", "all"],
-            description: "viewport = only items currently measured on screen (default). all = every registered item.",
+            description:
+              "viewport = only items currently measured on screen (default). all = every registered item.",
           },
-          max_items: { type: "integer", description: "Cap on items returned (default 30)." },
+          max_items: {
+            type: "integer",
+            description: "Cap on items returned (default 30).",
+          },
         },
       },
     },
@@ -356,7 +415,10 @@ const TOOLS = [
         type: "object",
         properties: {
           direction: { type: "string", enum: ["up", "down", "left", "right"] },
-          amount: { type: "string", description: "'page' | 'half' | number of px" },
+          amount: {
+            type: "string",
+            description: "'page' | 'half' | number of px",
+          },
           surface: { type: "string" },
         },
         required: ["direction"],
@@ -416,7 +478,10 @@ const TOOLS = [
         type: "object",
         properties: {
           product_id: { type: "string" },
-          sort: { type: "string", enum: ["newest", "helpful", "rating_high", "rating_low"] },
+          sort: {
+            type: "string",
+            enum: ["newest", "helpful", "rating_high", "rating_low"],
+          },
           min_rating: { type: "integer" },
           page: { type: "integer" },
           limit: { type: "integer" },
@@ -429,8 +494,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "get_store_reviews",
-      description:
-        "Aggregate reviews across all of a store's products.",
+      description: "Aggregate reviews across all of a store's products.",
       parameters: {
         type: "object",
         properties: {
@@ -447,7 +511,8 @@ const TOOLS = [
     type: "function",
     function: {
       name: "list_screens",
-      description: "List every navigable screen in the app. Filter by role or query.",
+      description:
+        "List every navigable screen in the app. Filter by role or query.",
       parameters: {
         type: "object",
         properties: {
@@ -461,7 +526,8 @@ const TOOLS = [
     type: "function",
     function: {
       name: "get_screen_info",
-      description: "Get the components, tap targets, and tools of a specific screen.",
+      description:
+        "Get the components, tap targets, and tools of a specific screen.",
       parameters: {
         type: "object",
         properties: { name: { type: "string" } },
@@ -497,7 +563,8 @@ const TOOLS = [
     type: "function",
     function: {
       name: "list_tap_targets",
-      description: "List every currently-registered tap target on the active screen.",
+      description:
+        "List every currently-registered tap target on the active screen.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -505,7 +572,8 @@ const TOOLS = [
     type: "function",
     function: {
       name: "dismiss_overlay",
-      description: "Dismiss the AI pointer overlay (or any open modal the agent opened).",
+      description:
+        "Dismiss the AI pointer overlay (or any open modal the agent opened).",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -580,16 +648,71 @@ const resolveModel = async (writeClient) => {
  * whose `tags` array contains a query token are returned first.
  */
 const CATALOG_STOPWORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-  "has", "have", "i", "in", "is", "it", "its", "of", "on", "or",
-  "that", "the", "this", "to", "was", "we", "were", "with", "you",
-  "your", "me", "my", "our", "some", "any", "do", "does", "can",
-  "could", "would", "should", "want", "need", "like", "look", "looking",
-  "find", "search", "show", "buy", "get", "recommend", "suggest",
-  "browse", "please", "cheap", "best", "top", "good", "great",
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "has",
+  "have",
+  "i",
+  "in",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "this",
+  "to",
+  "was",
+  "we",
+  "were",
+  "with",
+  "you",
+  "your",
+  "me",
+  "my",
+  "our",
+  "some",
+  "any",
+  "do",
+  "does",
+  "can",
+  "could",
+  "would",
+  "should",
+  "want",
+  "need",
+  "like",
+  "look",
+  "looking",
+  "find",
+  "search",
+  "show",
+  "buy",
+  "get",
+  "recommend",
+  "suggest",
+  "browse",
+  "please",
+  "cheap",
+  "best",
+  "top",
+  "good",
+  "great",
 ]);
 
-const tokenizeCatalogQuery = (rawQuery: unknown): { phrase: string; tokens: string[] } => {
+const tokenizeCatalogQuery = (
+  rawQuery: unknown,
+): { phrase: string; tokens: string[] } => {
   const phrase = String(rawQuery ?? "").trim();
   if (!phrase) return { phrase: "", tokens: [] };
   const tokens = Array.from(
@@ -618,7 +741,9 @@ const scoreProductForCatalogQuery = (
   const title = String(product.title || "").toLowerCase();
   const category = String(product.category || "").toLowerCase();
   const tags: string[] = Array.isArray(product.tags)
-    ? product.tags.map((t: unknown) => String(t || "").toLowerCase()).filter(Boolean)
+    ? product.tags
+        .map((t: unknown) => String(t || "").toLowerCase())
+        .filter(Boolean)
     : [];
 
   const matchedTags = new Set<string>();
@@ -702,9 +827,7 @@ const buildRichProductSummary = (product: any): string => {
   // ── Identity & pricing ────────────────────────────────────────────
   const price = Number(product.price || 0);
   const compareAt =
-    product.compare_at_price != null
-      ? Number(product.compare_at_price)
-      : null;
+    product.compare_at_price != null ? Number(product.compare_at_price) : null;
   const discount = Number(product.discount || 0);
   lines.push(
     `Title: ${product.title}` +
@@ -739,7 +862,8 @@ const buildRichProductSummary = (product: any): string => {
     stockBits.push(`Shipping: GH₵${shippingFee.toFixed(2)}`);
   } else if (seller.default_shipping_fee != null) {
     const dsf = Number(seller.default_shipping_fee);
-    if (dsf > 0) stockBits.push(`Shipping: GH₵${dsf.toFixed(2)} (store default)`);
+    if (dsf > 0)
+      stockBits.push(`Shipping: GH₵${dsf.toFixed(2)} (store default)`);
     else stockBits.push("Free shipping");
   } else {
     stockBits.push("Shipping: see store");
@@ -764,9 +888,7 @@ const buildRichProductSummary = (product: any): string => {
   const description = String(product.description || "").trim();
   if (description) {
     const truncated =
-      description.length > 600
-        ? `${description.slice(0, 600)}…`
-        : description;
+      description.length > 600 ? `${description.slice(0, 600)}…` : description;
     lines.push(`\nDescription:\n${truncated}`);
   }
 
@@ -863,7 +985,9 @@ const runCatalogTool = async (writeClient, args) => {
   if (hasTextQuery) {
     const orClauses: string[] = [];
     for (const tok of tokens) {
-      const safe = String(tok).replace(/[%(),]/g, " ").trim();
+      const safe = String(tok)
+        .replace(/[%(),]/g, " ")
+        .trim();
       if (!safe) continue;
       // `cs` is the array-contains operator on a text[] column — matches
       // when the array contains this exact token.
@@ -873,7 +997,8 @@ const runCatalogTool = async (writeClient, args) => {
     }
     if (orClauses.length) query = query.or(orClauses.join(","));
   }
-  if (args?.category) query = query.ilike("category", `%${String(args.category).trim()}%`);
+  if (args?.category)
+    query = query.ilike("category", `%${String(args.category).trim()}%`);
   if (Number.isFinite(Number(args?.maxPrice)))
     query = query.lte("price", Number(args.maxPrice));
   if (Number.isFinite(Number(args?.minPrice)))
@@ -944,7 +1069,8 @@ const runCatalogTool = async (writeClient, args) => {
           weight: p.weight != null ? Number(p.weight) : null,
           weight_unit: p.weight_unit || "kg",
           shipping_fee: Number(p.shipping_fee || 0),
-          compare_at_price: p.compare_at_price != null ? Number(p.compare_at_price) : null,
+          compare_at_price:
+            p.compare_at_price != null ? Number(p.compare_at_price) : null,
           sku: p.sku || null,
           vendor: p.vendor || null,
         }
@@ -1133,7 +1259,9 @@ const runSearchStores = async (writeClient, args) => {
     .limit(limit);
 
   if (args?.query) {
-    const safe = String(args.query).replace(/[%,()]/g, " ").trim();
+    const safe = String(args.query)
+      .replace(/[%,()]/g, " ")
+      .trim();
     if (safe) {
       query = query.or(
         `name.ilike.%${safe}%,store_description.ilike.%${safe}%,description.ilike.%${safe}%`,
@@ -1221,8 +1349,7 @@ const runGetProductReviews = async (writeClient, args) => {
       q = q.order("created_at", { ascending: false });
   }
   const { data, error } = await q;
-  if (error)
-    return { ok: false, status: "error", message: error.message };
+  if (error) return { ok: false, status: "error", message: error.message };
   const reviews = data || [];
 
   // Aggregate.
@@ -1272,8 +1399,7 @@ const runGetStoreReviews = async (writeClient, args) => {
     .select("id")
     .eq("seller_id", sellerId)
     .eq("status", "active");
-  if (prodErr)
-    return { ok: false, status: "error", message: prodErr.message };
+  if (prodErr) return { ok: false, status: "error", message: prodErr.message };
   const productIds = (products || []).map((p) => p.id);
   if (productIds.length === 0) {
     return {
@@ -1298,8 +1424,7 @@ const runGetStoreReviews = async (writeClient, args) => {
   q = q.order("created_at", { ascending: false });
 
   const { data, error } = await q;
-  if (error)
-    return { ok: false, status: "error", message: error.message };
+  if (error) return { ok: false, status: "error", message: error.message };
 
   // Aggregate
   const { data: agg } = await writeClient
@@ -1372,14 +1497,27 @@ serve(async (req) => {
     const body = await req.json();
     const message = String(body?.message || "").trim();
     const visionImage = String(body?.image || "").trim();
-    const hasVisionImage = /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(visionImage) ||
+    const isContentGeneration = body?.mode === "content_generation";
+    const hasVisionImage =
+      /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(visionImage) ||
       /^https:\/\//i.test(visionImage);
-    if (!message && !hasVisionImage) throw new Error("message or image is required");
+    if (!message && !hasVisionImage && !isContentGeneration) {
+      throw new Error("message or image is required");
+    }
     if (visionImage && !hasVisionImage) {
-      return serveCors({ success: false, error: "Vision input must be a data image or HTTPS image URL" }, 400);
+      return serveCors(
+        {
+          success: false,
+          error: "Vision input must be a data image or HTTPS image URL",
+        },
+        400,
+      );
     }
     if (visionImage.startsWith("data:") && visionImage.length > 8_000_000) {
-      return serveCors({ success: false, error: "Vision image is too large" }, 413);
+      return serveCors(
+        { success: false, error: "Vision image is too large" },
+        413,
+      );
     }
 
     const writeClient = createClient(supabaseUrl, serviceRoleKey);
@@ -1393,11 +1531,14 @@ serve(async (req) => {
       );
       const visionModel = configuredVisionModel || findFreeVisionModel(models);
       if (!visionModel?.id) {
-        return serveCors({
-          success: false,
-          error: `Configured model '${configuredModel}' does not support image input, and no free vision model is available`,
-          code: "VISION_MODEL_UNSUPPORTED",
-        }, 400);
+        return serveCors(
+          {
+            success: false,
+            error: `Configured model '${configuredModel}' does not support image input, and no free vision model is available`,
+            code: "VISION_MODEL_UNSUPPORTED",
+          },
+          400,
+        );
       }
       // Prefer the configured database model when it supports images. If it
       // does not, send the concrete free vision model selected from the
@@ -1422,6 +1563,79 @@ serve(async (req) => {
       return response;
     };
 
+    if (body?.mode === "content_generation") {
+      const contentType = String(body?.contentType || "").trim();
+      const brief = String(body?.brief || "")
+        .trim()
+        .slice(0, 2000);
+      if (!brief && !hasVisionImage) {
+        throw new Error("A content brief or image is required");
+      }
+      if (contentType !== "notification" && contentType !== "ad") {
+        throw new Error("Unsupported content type");
+      }
+
+      const schema =
+        contentType === "notification"
+          ? '{"title":"short push title, max 60 characters","body":"clear push message, max 180 characters"}'
+          : '{"title":"ad headline, max 70 characters","description":"ad description, max 180 characters","cta_text":"short CTA, max 24 characters","discount_badge":"optional short offer label","style":"banner|card|popup|carousel|story|fullscreen|sidebar|sticky_footer","placement":["home"],"use_image_as_bg":false,"background_color":"#FFFFFF","text_color":"#1E293B","accent_color":"#000000","discount_color":"#000000","border_radius":30,"show_on_web":true,"show_on_mobile":true,"is_active":true,"start_date":null,"end_date":null}';
+      const prompt = [
+        `Create a ${contentType} draft for tagit.`,
+        "Return JSON only, with no markdown or extra keys.",
+        `Use exactly this shape: ${schema}`,
+        "Do not invent URLs, image URLs, prices, dates, or product claims not present in the brief.",
+        ...(contentType === "ad"
+          ? [
+              "For ads, choose the best style, valid placement(s), design colors and targeting flags from the existing context.",
+              "Only set start_date or end_date when the brief includes a schedule; use ISO 8601 dates and null otherwise.",
+            ]
+          : []),
+        `Brief: ${brief || "Use the attached image as the campaign brief."}`,
+        `Existing context: ${JSON.stringify(body?.context || {})}`,
+        `Today: ${new Date().toISOString().slice(0, 10)}`,
+      ].join("\n");
+      const response = await callWithModelFallback([
+        {
+          role: "system",
+          content:
+            "You write concise, accurate marketing copy for an ecommerce app. Follow the requested JSON shape exactly.",
+        },
+        {
+          role: "user",
+          content: hasVisionImage
+            ? [
+                {
+                  type: "text",
+                  text: `${prompt}\nAnalyze the attached image and use only visible, reliable details.`,
+                },
+                { type: "image_url", image_url: { url: visionImage } },
+              ]
+            : prompt,
+        },
+      ]);
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        throw new Error(
+          `OpenRouter error (${response.status}): ${errText.slice(0, 300)}`,
+        );
+      }
+      const result = await response.json();
+      const content = result?.choices?.[0]?.message?.content || "{}";
+      const jsonText = content
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "");
+      let draft;
+      try {
+        draft = JSON.parse(jsonText);
+      } catch {
+        const objectMatch = jsonText.match(/\{[\s\S]*\}/);
+        if (!objectMatch)
+          throw new Error("AI returned an invalid content draft");
+        draft = JSON.parse(objectMatch[0]);
+      }
+      return serveCors({ success: true, draft, model });
+    }
+
     // Conversation so far (trimmed + role-normalised).
     const history = (Array.isArray(body?.history) ? body.history : [])
       .slice(-MAX_HISTORY_MESSAGES)
@@ -1438,7 +1652,10 @@ serve(async (req) => {
         role: "user",
         content: hasVisionImage
           ? [
-              { type: "text", text: message || "Find me a similar product to this image." },
+              {
+                type: "text",
+                text: message || "Find me a similar product to this image.",
+              },
               { type: "image_url", image_url: { url: visionImage } },
             ]
           : message,
@@ -1473,7 +1690,9 @@ serve(async (req) => {
       const choice = data?.choices?.[0]?.message;
       if (!choice) throw new Error("Empty response from OpenRouter");
 
-      const toolCalls = Array.isArray(choice.tool_calls) ? choice.tool_calls : [];
+      const toolCalls = Array.isArray(choice.tool_calls)
+        ? choice.tool_calls
+        : [];
 
       if (toolCalls.length === 0) {
         // Final text reply — turn complete.
@@ -1684,6 +1903,9 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("[ai-assistant] request.error", error);
-    return serveCors({ success: false, error: error?.message || String(error) });
+    return serveCors({
+      success: false,
+      error: error?.message || String(error),
+    });
   }
 });

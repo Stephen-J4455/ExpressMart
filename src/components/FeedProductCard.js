@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Image,
+  ImageBackground,
   Modal,
   Pressable,
   ScrollView,
@@ -49,6 +50,7 @@ const SELLER_BADGE_CONFIG = {
 };
 
 const SELLER_BADGE_PRIORITY = ["verified", "top_seller"];
+const DISABLE_FEED_CARD_IMAGE_FETCHING = false;
 
 // Memoized so the FlatList only re-renders a card when its `product` or
 // `onPress` identity changes (VirtualizedList performance best practice).
@@ -67,6 +69,8 @@ export const FeedProductCard = memo(function FeedProductCard({
 
   // --- Derived product data -------------------------------------------------
   const images = useMemo(() => {
+    if (DISABLE_FEED_CARD_IMAGE_FETCHING) return [];
+
     const values =
       product.thumbnails?.length > 0
         ? product.thumbnails
@@ -161,15 +165,9 @@ export const FeedProductCard = memo(function FeedProductCard({
     Image.getSize(
       uri,
       (width, height) => {
-        if (!width || !height) {
-          setSingleImageRatio(1);
-          return;
-        }
-        setSingleImageRatio(width / height);
+        setSingleImageRatio(width > 0 && height > 0 ? width / height : 1);
       },
-      () => {
-        setSingleImageRatio(1);
-      },
+      () => setSingleImageRatio(1),
     );
   }, [images]);
 
@@ -549,7 +547,7 @@ export const FeedProductCard = memo(function FeedProductCard({
       </Pressable>
 
       {/* ── Media block: 1 / 2 / 2+N image grid with badges & label pill ── */}
-      {images.length > 0 && (
+      {images.length > 0 ? (
         <Pressable onPress={openProduct} style={styles.mediaWrap}>
           <View
             style={
@@ -612,6 +610,14 @@ export const FeedProductCard = memo(function FeedProductCard({
             </View>
           )}
         </Pressable>
+      ) : (
+        <Pressable onPress={openProduct} style={styles.mediaWrap}>
+          <ImageBackground
+            source={require("../../assets/placeholder/placeholder.png")}
+            style={[styles.mediaGridSingle, styles.mediaSingle]}
+            resizeMode="cover"
+          />
+        </Pressable>
       )}
 
       {/* ── Price row beneath media ── */}
@@ -664,7 +670,7 @@ export const FeedProductCard = memo(function FeedProductCard({
             color={c.muted}
           />
           <Text style={styles.engagementLabel}>
-            {commentCount > 0 ? `${commentCount}` : "Q&A"}
+            {commentCount > 0 ? `${commentCount}` : "No comments"}
           </Text>
         </Pressable>
         <Pressable
@@ -1434,6 +1440,8 @@ const buildFeedCardStyles = (c) =>
     // neutral surface instead of being zoomed/cropped by "cover".
     mediaSingle: {
       width: "100%",
+      minHeight: 220,
+
       backgroundColor: c.surface,
       alignItems: "center",
       justifyContent: "center",

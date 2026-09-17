@@ -11,12 +11,14 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Animated,
   Easing,
   FlatList,
   Image,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -32,23 +34,24 @@ import { AppHeader } from "../components/AppHeader";
 import { FeedProductCard } from "../components/FeedProductCard";
 import { FeedCardPlaceholder } from "../components/FeedCardPlaceholder";
 import { ProductCard } from "../components/ProductCard";
+import { AdRenderer } from "../components/AdBanner";
 import { useShop } from "../context/ShopContext";
+import { useAds } from "../context/AdsContext";
 import { useAuth } from "../context/AuthContext";
-import { lazyScroll } from "../context/LazyScrollContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { radius } from "../theme/colors";
 import { supabase } from "../lib/supabase";
 import { flashSaleService } from "../services/flashSaleService";
-import {
-  loadHiddenSellers,
-} from "../utils/hiddenSellers";
+import { loadHiddenSellers } from "../utils/hiddenSellers";
+import { injectAdsIntoProducts } from "../utils/adPlacement";
 import { updateTabBarOnScroll, showTabBar } from "../utils/tabBarAutoHide";
 
 const FILTERS = ["For You", "Following", "Trending", "New Arrivals"];
 // Number of categories shown in the horizontal strip on Home — ranked by the
 // most active products. Tapping "See More" opens the full Categories tab.
 const TOP_CATEGORIES_LIMIT = 5;
+const HOME_CATEGORIES_CACHE_KEY = "expressmart.cache.home_categories";
 // Skeleton cards rendered in place of feed cards during the initial load.
 // Rendered through the same FlatList as the real cards so the loading state
 // keeps the page's full structure and is scrollable like the loaded feed.
@@ -61,6 +64,7 @@ export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
   const styles = useAppStyles(buildHomeStyles);
   const { user } = useAuth();
+  const { fetchAdsByPlacement } = useAds();
   const {
     products,
     loading,
@@ -80,7 +84,7 @@ export const HomeScreen = ({ navigation }) => {
   // array means "fetched and there are no live flash sales" (also renders
   // nothing); a non-empty array renders the row.
   const [flashSales, setFlashSales] = useState(null);
-
+  const [homeAds, setHomeAds] = useState([]);
   // Local mirror of the device-wide hidden-sellers list. Hydrated from
   // AsyncStorage on mount / focus so we don't show previously-hidden sellers
   // again on app launch (e.g. sellers the user hid from the feed in a prior
@@ -133,12 +137,6 @@ export const HomeScreen = ({ navigation }) => {
   // separate `feed-top-categories` edge function that reads the same
   // signal map and returns {id, name}[].
   const loadTopCategories = useCallback(async () => {
-    if (!supabase) {
-      setTopCategories([]);
-      setCategoriesLoading(false);
-      return;
-    }
-
     const toRanked = (rows) =>
       rows
         .map((cat) => ({
@@ -156,6 +154,43 @@ export const HomeScreen = ({ navigation }) => {
         )
         .slice(0, TOP_CATEGORIES_LIMIT);
 
+    let hasCachedCategories = false;
+    try {
+      const cached = await AsyncStorage.getItem(HOME_CATEGORIES_CACHE_KEY);
+      const parsed = cached ? JSON.parse(cached) : null;
+      if (Array.isArray(parsed?.data) && parsed.data.length > 0) {
+        setTopCategories(parsed.data);
+        setCategoriesLoading(false);
+        hasCachedCategories = true;
+      }
+    } catch (cacheError) {
+      console.warn(
+        "[HomeScreen] cached categories read failed:",
+        cacheError?.message,
+      );
+    }
+
+    const saveCategories = async (data) => {
+      if (!Array.isArray(data) || data.length === 0) return;
+      try {
+        await AsyncStorage.setItem(
+          HOME_CATEGORIES_CACHE_KEY,
+          JSON.stringify({ data, ts: Date.now() }),
+        );
+      } catch (cacheError) {
+        console.warn(
+          "[HomeScreen] cached categories write failed:",
+          cacheError?.message,
+        );
+      }
+    };
+
+    if (!supabase) {
+      if (!hasCachedCategories) setTopCategories([]);
+      setCategoriesLoading(false);
+      return;
+    }
+
     try {
       // Preferred: server-side count via an embedded aggregate. The FK hint
       // disambiguates between the two relationships products has with
@@ -172,7 +207,9 @@ export const HomeScreen = ({ navigation }) => {
 
       if (error) throw error;
       if (data) {
-        setTopCategories(toRanked(data));
+        const ranked = toRanked(data);
+        setTopCategories(ranked);
+        await saveCategories(ranked);
         setCategoriesLoading(false);
         return;
       }
@@ -192,7 +229,10 @@ export const HomeScreen = ({ navigation }) => {
           .select("id,name,icon,color,image_url")
           .eq("is_active", true)
           .order("sort_order"),
-        supabase.from("express_products").select("category").eq("status", "active"),
+        supabase
+          .from("express_products")
+          .select("category")
+          .eq("status", "active"),
       ]);
 
       const counts = new Map();
@@ -212,9 +252,13 @@ export const HomeScreen = ({ navigation }) => {
         .slice(0, TOP_CATEGORIES_LIMIT);
 
       setTopCategories(ranked);
+      await saveCategories(ranked);
     } catch (fallbackErr) {
-      console.warn("[HomeScreen] top categories load failed:", fallbackErr?.message);
-      setTopCategories([]);
+      console.warn(
+        "[HomeScreen] top categories load failed:",
+        fallbackErr?.message,
+      );
+      if (!hasCachedCategories) setTopCategories([]);
     } finally {
       setCategoriesLoading(false);
     }
@@ -261,6 +305,9 @@ export const HomeScreen = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       loadFlashSales();
+      fetchAdsByPlacement("home")
+        .then((ads) => setHomeAds(Array.isArray(ads) ? ads : []))
+        .catch(() => setHomeAds([]));
       // Hydrate the hidden-sellers list from disk every time we re-enter the
       // screen — covers the case where the user unhides a seller from a
       // future Settings screen, or where a sibling device syncs a different
@@ -268,7 +315,7 @@ export const HomeScreen = ({ navigation }) => {
       loadHiddenSellers()
         .then((list) => setHiddenSellers(Array.isArray(list) ? list : []))
         .catch(() => {});
-    }, [loadFlashSales]),
+    }, [fetchAdsByPlacement, loadFlashSales]),
   );
 
   // ── Feed items per filter ────────────────────────────────────────────────
@@ -335,9 +382,7 @@ export const HomeScreen = ({ navigation }) => {
     switch (activeFilter) {
       case "Following": {
         base = followedSellers.length
-          ? products.filter((p) =>
-              followedSellers.includes(p.seller?.id),
-            )
+          ? products.filter((p) => followedSellers.includes(p.seller?.id))
           : [];
         break;
       }
@@ -362,7 +407,16 @@ export const HomeScreen = ({ navigation }) => {
       default:
         base = products;
     }
-    return injectFlashSaleRow(dedupeFeedItems(filterHiddenSellers(base)));
+    const visibleProducts = dedupeFeedItems(filterHiddenSellers(base));
+    const withAds = injectAdsIntoProducts({
+      products: visibleProducts,
+      ads: homeAds,
+      seed: `home-${user?.id || "guest"}`,
+      minInterval: 5,
+      maxInterval: 9,
+      maxAds: 3,
+    });
+    return injectFlashSaleRow(withAds);
   }, [
     activeFilter,
     products,
@@ -370,19 +424,22 @@ export const HomeScreen = ({ navigation }) => {
     injectFlashSaleRow,
     filterHiddenSellers,
     dedupeFeedItems,
+    homeAds,
+    user?.id,
   ]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     showHeader();
-    await refresh({ silent: true });
-    loadTopCategories();
-    setRefreshing(false);
+    try {
+      await Promise.all([refresh({ silent: true }), loadTopCategories()]);
+    } finally {
+      setRefreshing(false);
+    }
   }, [refresh, loadTopCategories, showHeader]);
 
   const handleScroll = useCallback(
     (e) => {
-      lazyScroll.notify(e.nativeEvent.contentOffset.y);
       // Direction-aware tab bar auto-hide (hide on upward swipe, show on
       // downward swipe / near top).
       updateTabBarOnScroll(e.nativeEvent.contentOffset.y);
@@ -434,8 +491,8 @@ export const HomeScreen = ({ navigation }) => {
                 <View style={styles.flashSaleLiveDot} />
               </View>
               <Text style={styles.flashSaleCount}>
-                {item.sales.length}{" "}
-                {item.sales.length === 1 ? "deal" : "deals"} live
+                {item.sales.length} {item.sales.length === 1 ? "deal" : "deals"}{" "}
+                live
               </Text>
             </View>
             <ScrollView
@@ -462,6 +519,13 @@ export const HomeScreen = ({ navigation }) => {
                 </View>
               ))}
             </ScrollView>
+          </View>
+        );
+      }
+      if (item?.__type === "injected_ad") {
+        return (
+          <View style={styles.adWrap}>
+            <AdRenderer ad={item.ad} flush />
           </View>
         );
       }
@@ -547,7 +611,10 @@ export const HomeScreen = ({ navigation }) => {
                 style={[styles.filterPill, isActive && styles.filterPillActive]}
               >
                 <Text
-                  style={[styles.filterText, isActive && styles.filterTextActive]}
+                  style={[
+                    styles.filterText,
+                    isActive && styles.filterTextActive,
+                  ]}
                 >
                   {filter}
                 </Text>
@@ -615,9 +682,9 @@ export const HomeScreen = ({ navigation }) => {
               {/* Background: photo if one exists, otherwise brand color with
                   the category icon. Only ever one of the two renders, so the
                   card reads as a single surface. */}
-              {cat.image_url ? (
+              {String(cat.image_url || "").trim() ? (
                 <Image
-                  source={{ uri: cat.image_url }}
+                  source={{ uri: String(cat.image_url).trim() }}
                   style={styles.catImage}
                   resizeMode="cover"
                 />
@@ -639,7 +706,11 @@ export const HomeScreen = ({ navigation }) => {
               {/* Layer 3: bottom-weighted gradient — one continuous surface
                   under both the photo and the label, no seam */}
               <LinearGradient
-                colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.25)", "rgba(0,0,0,0.75)"]}
+                colors={[
+                  "rgba(0,0,0,0)",
+                  "rgba(0,0,0,0.25)",
+                  "rgba(0,0,0,0.75)",
+                ]}
                 locations={[0.45, 0.7, 1]}
                 style={styles.catScrim}
               />
@@ -717,6 +788,7 @@ export const HomeScreen = ({ navigation }) => {
         ListEmptyComponent={!loading ? renderEmpty : null}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.listContent,
@@ -730,8 +802,10 @@ export const HomeScreen = ({ navigation }) => {
           />
         }
         initialNumToRender={3}
-        maxToRenderPerBatch={4}
-        windowSize={5}
+        maxToRenderPerBatch={2}
+        updateCellsBatchingPeriod={50}
+        windowSize={3}
+        removeClippedSubviews={Platform.OS !== "web"}
       />
 
       {loadingMore ? (
@@ -748,7 +822,6 @@ const buildHomeStyles = (c) =>
     container: {
       flex: 1,
       backgroundColor: c.background,
-      
     },
     // Header floats above the feed; translateY slides it fully off-screen.
     headerOverlay: {
@@ -793,6 +866,10 @@ const buildHomeStyles = (c) =>
     },
     cardWrap: {
       marginBottom: 0,
+    },
+    adWrap: {
+      width: "100%",
+      padding: 0,
     },
     emptyState: {
       flex: 1,

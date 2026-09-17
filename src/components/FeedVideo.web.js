@@ -59,6 +59,9 @@ export const FeedVideo = forwardRef(function FeedVideo(props, forwardedRef) {
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
+    // Set the DOM property BEFORE play(): React's muted attribute alone is
+    // not reliable across browsers, and a rejected play was never retried.
+    el.muted = !!muted;
     if (paused) {
       try {
         el.pause();
@@ -66,11 +69,23 @@ export const FeedVideo = forwardRef(function FeedVideo(props, forwardedRef) {
         /* noop */
       }
     } else {
-      const p = el.play();
-      // Autoplay rejection (e.g. sound not allowed) must never crash the app.
-      if (p && typeof p.catch === "function") p.catch(() => {});
+      const play = () => {
+        try {
+          const p = el.play();
+          // Browsers may still block playback (e.g. low-power mode).
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        } catch {
+          // Some browsers throw synchronously while the source is loading.
+        }
+      };
+      el.addEventListener("canplay", play);
+      play();
+      return () => {
+        el.removeEventListener("canplay", play);
+        el.pause();
+      };
     }
-  }, [paused, source?.uri]);
+  }, [paused, source?.uri, muted]);
 
   // Mirror `muted`/`volume`/`rate` prop changes onto the DOM element so
   // gesture-driven changes (mute toggle, hold-to-fast-forward) work after
@@ -110,6 +125,7 @@ export const FeedVideo = forwardRef(function FeedVideo(props, forwardedRef) {
       {createElement("video", {
         ref: setRef,
         src: source?.uri || undefined,
+        autoPlay: !paused,
         playsInline: true,
         loop: !!repeat,
         muted: !!muted,
@@ -118,14 +134,30 @@ export const FeedVideo = forwardRef(function FeedVideo(props, forwardedRef) {
         disablePictureInPicture: true,
         onLoadedMetadata: (e) =>
           onLoad?.({ duration: e.target.duration || 0 }),
-        onLoadedData: () => {
+        onLoadedData: (e) => {
           onBuffer?.({ isBuffering: false });
           onReadyForDisplay?.();
+          if (!paused) {
+            e.target.muted = !!muted;
+            const playPromise = e.target.play();
+            if (playPromise && typeof playPromise.catch === "function") {
+              playPromise.catch(() => {});
+            }
+          }
         },
         onWaiting: () => onBuffer?.({ isBuffering: true }),
         onStalled: () => onBuffer?.({ isBuffering: true }),
         onPlaying: () => onBuffer?.({ isBuffering: false }),
-        onCanPlay: () => onBuffer?.({ isBuffering: false }),
+        onCanPlay: (e) => {
+          onBuffer?.({ isBuffering: false });
+          if (!paused) {
+            e.target.muted = !!muted;
+            const playPromise = e.target.play();
+            if (playPromise && typeof playPromise.catch === "function") {
+              playPromise.catch(() => {});
+            }
+          }
+        },
         onError: () => onError?.(new Error("Video failed to load")),
         onTimeUpdate: (e) => {
           const buffered = e.target.buffered;

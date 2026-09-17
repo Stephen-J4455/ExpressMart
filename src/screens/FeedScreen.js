@@ -792,67 +792,71 @@ export const FeedScreen = ({ route, navigation }) => {
               { width: reelWidth, height: reelHeight, marginLeft: reelLeft },
             ]}
           >
-            <FeedVideo
-              ref={videoRef}
-              source={source}
-              style={[styles.video, { width: reelWidth, height: reelHeight }]}
-              resizeMode="cover"
-              repeat
-              // CRITICAL (Android/Fabric): react-native-video is a LEGACY
-              // component rendered through the interop layer (no codegenConfig),
-              // and on the new architecture its native view participates in
-              // touch dispatch ABOVE Fabric siblings — swallowing every tap and
-              // press in the video's bounds no matter what zIndex the gesture
-              // layer uses. The video never needs touches (the invisible
-              // gesture layer below owns them), so disable its interactivity
-              // entirely.
-              pointerEvents="none"
-              muted={isMuted}
-              controls={false}
-              rate={playbackRate}
-              // Freeze REAL playback while reverse-scrubbing: otherwise the
-              // decoder keeps playing forward between our backward seeks, the
-              // picture appears stuck, and the seeks pile up into one big jump.
-              // Pausing lets every 1.5X-rate seek render its own frame, giving
-              // smooth visible reverse playback. On release the hold flag clears
-              // and playback resumes exactly where the rewind stopped.
-              paused={
-                !screenIsFocused ||
-                !isActive ||
-                paused ||
-                holdAction === "rewind"
-              }
-              onLoad={(meta) => logReel("onLoad", meta?.duration, source?.uri)}
-              onReadyForDisplay={() =>
-                logReel("onReadyForDisplay", source?.uri)
-              }
-              onBuffer={(event) =>
-                logReel("onBuffer", event?.isBuffering, source?.uri)
-              }
-              onError={(error) => logReel("onError", error, source?.uri)}
-              onProgress={(progress) => {
-                if (progress?.currentTime != null) {
-                  logReel(
-                    "onProgress",
-                    progress.currentTime,
-                    progress.playableDuration,
-                  );
+            {source?.uri ? (
+              <FeedVideo
+                ref={videoRef}
+                source={source?.uri ? source : undefined}
+                style={[styles.video, { width: reelWidth, height: reelHeight }]}
+                resizeMode="cover"
+                repeat
+                // CRITICAL (Android/Fabric): react-native-video is a LEGACY
+                // component rendered through the interop layer (no codegenConfig),
+                // and on the new architecture its native view participates in
+                // touch dispatch ABOVE Fabric siblings — swallowing every tap and
+                // press in the video's bounds no matter what zIndex the gesture
+                // layer uses. The video never needs touches (the invisible
+                // gesture layer below owns them), so disable its interactivity
+                // entirely.
+                pointerEvents="none"
+                muted={isMuted}
+                controls={false}
+                rate={playbackRate}
+                // Freeze REAL playback while reverse-scrubbing: otherwise the
+                // decoder keeps playing forward between our backward seeks, the
+                // picture appears stuck, and the seeks pile up into one big jump.
+                // Pausing lets every 1.5X-rate seek render its own frame, giving
+                // smooth visible reverse playback. On release the hold flag clears
+                // and playback resumes exactly where the rewind stopped.
+                paused={
+                  !screenIsFocused ||
+                  !isActive ||
+                  paused ||
+                  holdAction === "rewind"
                 }
-                // Keep the ref fresh for the hold-to-rewind stepper (no
-                // re-renders — there is no visible progress UI anymore).
-                if (progress?.currentTime != null) {
-                  currentTimeRef.current = progress.currentTime;
+                onLoad={(meta) =>
+                  logReel("onLoad", meta?.duration, source?.uri)
                 }
-              }}
-              // ABR: keep a modest forward buffer so rendition switches are
-              // smooth without over-fetching data on metered connections.
-              bufferConfig={{
-                minBufferMs: 10000,
-                maxBufferMs: 30000,
-                bufferForPlaybackMs: 2500,
-                bufferForPlaybackAfterRebufferMs: 5000,
-              }}
-            />
+                onReadyForDisplay={() =>
+                  logReel("onReadyForDisplay", source?.uri)
+                }
+                onBuffer={(event) =>
+                  logReel("onBuffer", event?.isBuffering, source?.uri)
+                }
+                onError={(error) => logReel("onError", error, source?.uri)}
+                onProgress={(progress) => {
+                  if (progress?.currentTime != null) {
+                    logReel(
+                      "onProgress",
+                      progress.currentTime,
+                      progress.playableDuration,
+                    );
+                  }
+                  // Keep the ref fresh for the hold-to-rewind stepper (no
+                  // re-renders — there is no visible progress UI anymore).
+                  if (progress?.currentTime != null) {
+                    currentTimeRef.current = progress.currentTime;
+                  }
+                }}
+                // ABR: keep a modest forward buffer so rendition switches are
+                // smooth without over-fetching data on metered connections.
+                bufferConfig={{
+                  minBufferMs: 10000,
+                  maxBufferMs: 30000,
+                  bufferForPlaybackMs: 2500,
+                  bufferForPlaybackAfterRebufferMs: 5000,
+                }}
+              />
+            ) : null}
 
             {/* Invisible touch layer rendered ABOVE the video. This is the key
               fix for "taps don't work": the native video surface (ExoPlayer on

@@ -134,7 +134,7 @@ export const openAdDestination = async (ad, trackClick) => {
   }
 };
 
-export const AdBanner = ({ ad, onClose }) => {
+export const AdBanner = ({ ad, onClose, flush = false }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
   const styles = useAppStyles((c) => buildAdStyles(c));
@@ -153,7 +153,7 @@ export const AdBanner = ({ ad, onClose }) => {
 
   const bannerStyle = {
     backgroundColor: ad.background_color || "#FFFFFF",
-    borderRadius: ad.border_radius || 12,
+    borderRadius: flush ? 0 : ad.border_radius || 12,
   };
 
   const textStyle = {
@@ -167,16 +167,20 @@ export const AdBanner = ({ ad, onClose }) => {
   if (ad.use_image_as_bg) {
     return (
       <ImageBackground
-        source={{ uri: ad.image_url }}
-        style={[styles.bannerContainer, bannerStyle]}
-        imageStyle={{ borderRadius: ad.border_radius || 12 }}
+        source={ad.image_url ? { uri: ad.image_url } : undefined}
+        style={[
+          styles.bannerContainer,
+          flush && styles.flushContainer,
+          bannerStyle,
+        ]}
+        imageStyle={{ borderRadius: flush ? 0 : ad.border_radius || 12 }}
       >
         <View style={styles.imageBgOverlay} />
         <Pressable style={styles.closeButton} onPress={onClose}>
           <Ionicons name="close" size={20} color="#fff" />
         </Pressable>
         <View style={[styles.bannerContent, { flex: 1 }]}>
-          {ad.discount_badge && (
+          {!!ad.discount_badge && (
             <View
               style={[
                 styles.discountBadge,
@@ -189,7 +193,7 @@ export const AdBanner = ({ ad, onClose }) => {
           <Text style={[styles.bannerTitle, { color: "#FFFFFF" }]}>
             {ad.title}
           </Text>
-          {ad.description && (
+          {!!ad.description && (
             <Text
               style={[
                 styles.bannerDescription,
@@ -212,15 +216,24 @@ export const AdBanner = ({ ad, onClose }) => {
   }
 
   return (
-    <View style={[styles.bannerContainer, bannerStyle]}>
+    <View
+      style={[
+        styles.bannerContainer,
+        flush && styles.flushContainer,
+        bannerStyle,
+      ]}
+    >
       <Pressable style={styles.closeButton} onPress={onClose}>
         <Ionicons name="close" size={20} color={ad.text_color || "#000000"} />
       </Pressable>
 
-      <Image source={{ uri: ad.image_url }} style={styles.bannerImage} />
+      <Image
+        source={ad.image_url ? { uri: ad.image_url } : undefined}
+        style={styles.bannerImage}
+      />
 
       <View style={styles.bannerContent}>
-        {ad.discount_badge && (
+        {!!ad.discount_badge && (
           <View
             style={[
               styles.discountBadge,
@@ -233,7 +246,7 @@ export const AdBanner = ({ ad, onClose }) => {
 
         <Text style={[styles.bannerTitle, textStyle]}>{ad.title}</Text>
 
-        {ad.description && (
+        {!!ad.description && (
           <Text style={[styles.bannerDescription, textStyle]}>
             {ad.description}
           </Text>
@@ -251,7 +264,7 @@ export const AdBanner = ({ ad, onClose }) => {
   );
 };
 
-export const AdCard = ({ ad }) => {
+export const AdCard = ({ ad, flush = false }) => {
   const { trackImpression, trackClick } = useAds();
   const isFocused = useIsFocused();
   const styles = useAppStyles((c) => buildAdStyles(c));
@@ -272,16 +285,20 @@ export const AdCard = ({ ad }) => {
     return (
       <Pressable onPress={handlePress}>
         <ImageBackground
-          source={{ uri: ad.image_url }}
+          source={ad.image_url ? { uri: ad.image_url } : undefined}
           style={[
             styles.card,
-            { borderRadius: ad.border_radius || 12, overflow: "hidden" },
+            flush && styles.flushCard,
+            {
+              borderRadius: flush ? 0 : ad.border_radius || 12,
+              overflow: "hidden",
+            },
           ]}
-          imageStyle={{ borderRadius: ad.border_radius || 12 }}
+          imageStyle={{ borderRadius: flush ? 0 : ad.border_radius || 12 }}
         >
           <View style={styles.imageBgOverlay} />
           <View style={[styles.cardContent, { justifyContent: "flex-end" }]}>
-            {ad.discount_badge && (
+            {!!ad.discount_badge && (
               <View
                 style={[
                   styles.cardBadge,
@@ -297,7 +314,7 @@ export const AdCard = ({ ad }) => {
             >
               {ad.title}
             </Text>
-            {ad.description && (
+            {!!ad.description && (
               <Text
                 style={[
                   styles.cardDescription,
@@ -328,17 +345,21 @@ export const AdCard = ({ ad }) => {
     <Pressable
       style={[
         styles.card,
+        flush && styles.flushCard,
         {
           backgroundColor: ad.background_color || "#FFFFFF",
-          borderRadius: ad.border_radius || 12,
+          borderRadius: flush ? 0 : ad.border_radius || 12,
         },
       ]}
       onPress={handlePress}
     >
-      <Image source={{ uri: ad.image_url }} style={styles.cardImage} />
+      <Image
+        source={ad.image_url ? { uri: ad.image_url } : undefined}
+        style={styles.cardImage}
+      />
 
       <View style={styles.cardContent}>
-        {ad.discount_badge && (
+        {!!ad.discount_badge && (
           <View
             style={[
               styles.cardBadge,
@@ -356,7 +377,7 @@ export const AdCard = ({ ad }) => {
           {ad.title}
         </Text>
 
-        {ad.description && (
+        {!!ad.description && (
           <Text
             style={[
               styles.cardDescription,
@@ -427,7 +448,7 @@ export const AdCarousel = ({ ads }) => {
             return (
               <ImageBackground
                 key={ad.id}
-                source={{ uri: ad.image_url }}
+                source={ad.image_url ? { uri: ad.image_url } : undefined}
                 style={[
                   styles.carouselGridItem,
                   { borderRadius: ad.border_radius || 12, overflow: "hidden" },
@@ -439,7 +460,7 @@ export const AdCarousel = ({ ads }) => {
                   style={styles.carouselContent}
                   onPress={handleAdPress}
                 >
-                  {ad.discount_badge && (
+                  {!!ad.discount_badge && (
                     <View
                       style={[
                         styles.carouselBadge,
@@ -457,7 +478,7 @@ export const AdCarousel = ({ ads }) => {
                   >
                     {ad.title}
                   </Text>
-                  {ad.description && (
+                  {!!ad.description && (
                     <Text
                       style={[
                         styles.carouselDescription,
@@ -497,11 +518,11 @@ export const AdCarousel = ({ ads }) => {
               onPress={handleAdPress}
             >
               <Image
-                source={{ uri: ad.image_url }}
+                source={ad.image_url ? { uri: ad.image_url } : undefined}
                 style={styles.carouselImage}
               />
               <View style={styles.carouselContent}>
-                {ad.discount_badge && (
+                {!!ad.discount_badge && (
                   <View
                     style={[
                       styles.carouselBadge,
@@ -522,7 +543,7 @@ export const AdCarousel = ({ ads }) => {
                 >
                   {ad.title}
                 </Text>
-                {ad.description && (
+                {!!ad.description && (
                   <Text
                     style={[
                       styles.carouselDescription,
@@ -627,7 +648,7 @@ export const AdCarousel = ({ ads }) => {
             return (
               <ImageBackground
                 key={key}
-                source={{ uri: ad.image_url }}
+                source={ad.image_url ? { uri: ad.image_url } : undefined}
                 style={[
                   ...slideStyle,
                   { borderRadius: ad.border_radius || 12, overflow: "hidden" },
@@ -639,7 +660,7 @@ export const AdCarousel = ({ ads }) => {
                   style={styles.carouselContent}
                   onPress={handleAdPress}
                 >
-                  {ad.discount_badge && (
+                  {!!ad.discount_badge && (
                     <View
                       style={[
                         styles.carouselBadge,
@@ -657,7 +678,7 @@ export const AdCarousel = ({ ads }) => {
                   >
                     {ad.title}
                   </Text>
-                  {ad.description && (
+                  {!!ad.description && (
                     <Text
                       style={[
                         styles.carouselDescription,
@@ -697,11 +718,11 @@ export const AdCarousel = ({ ads }) => {
               onPress={handleAdPress}
             >
               <Image
-                source={{ uri: ad.image_url }}
+                source={ad.image_url ? { uri: ad.image_url } : undefined}
                 style={[styles.carouselImage, { width: "100%" }]}
               />
               <View style={styles.carouselContent}>
-                {ad.discount_badge && (
+                {!!ad.discount_badge && (
                   <View
                     style={[
                       styles.carouselBadge,
@@ -722,7 +743,7 @@ export const AdCarousel = ({ ads }) => {
                 >
                   {ad.title}
                 </Text>
-                {ad.description && (
+                {!!ad.description && (
                   <Text
                     style={[
                       styles.carouselDescription,
@@ -840,13 +861,13 @@ export const AdPopup = ({ ad, onClose, visible = true }) => {
           </Pressable>
 
           <Image
-            source={{ uri: ad.image_url }}
+            source={ad.image_url ? { uri: ad.image_url } : undefined}
             style={styles.popupImage}
             resizeMode="cover"
           />
 
           <View style={styles.popupContent}>
-            {ad.discount_badge && (
+            {!!ad.discount_badge && (
               <View
                 style={[
                   styles.popupBadge,
@@ -863,7 +884,7 @@ export const AdPopup = ({ ad, onClose, visible = true }) => {
               {ad.title}
             </Text>
 
-            {ad.description && (
+            {!!ad.description && (
               <Text
                 style={[
                   styles.popupDescription,
@@ -922,13 +943,16 @@ export const AdStory = ({ ad, onClose }) => {
       ]}
       onPress={handlePress}
     >
-      <Image source={{ uri: ad.image_url }} style={styles.storyImage} />
+      <Image
+        source={ad.image_url ? { uri: ad.image_url } : undefined}
+        style={styles.storyImage}
+      />
       <LinearGradient
         colors={["transparent", "rgba(0,0,0,0.7)"]}
         style={styles.storyGradient}
       />
       <View style={styles.storyContent}>
-        {ad.discount_badge && (
+        {!!ad.discount_badge && (
           <View
             style={[
               styles.storyBadge,
@@ -939,7 +963,7 @@ export const AdStory = ({ ad, onClose }) => {
           </View>
         )}
         <Text style={styles.storyTitle}>{ad.title}</Text>
-        {ad.description && (
+        {!!ad.description && (
           <Text style={styles.storyDescription}>{ad.description}</Text>
         )}
         <View
@@ -1002,7 +1026,10 @@ export const AdFullscreen = ({ ad, onClose, visible = true }) => {
       onRequestClose={handleClose}
     >
       <View style={styles.fullscreenContainer}>
-        <Image source={{ uri: ad.image_url }} style={styles.fullscreenImage} />
+        <Image
+          source={ad.image_url ? { uri: ad.image_url } : undefined}
+          style={styles.fullscreenImage}
+        />
         <LinearGradient
           colors={["transparent", "rgba(0,0,0,0.8)"]}
           style={styles.fullscreenGradient}
@@ -1013,7 +1040,7 @@ export const AdFullscreen = ({ ad, onClose, visible = true }) => {
         </Pressable>
 
         <View style={styles.fullscreenContent}>
-          {ad.discount_badge && (
+          {!!ad.discount_badge && (
             <View
               style={[
                 styles.fullscreenBadge,
@@ -1028,7 +1055,7 @@ export const AdFullscreen = ({ ad, onClose, visible = true }) => {
 
           <Text style={styles.fullscreenTitle}>{ad.title}</Text>
 
-          {ad.description && (
+          {!!ad.description && (
             <Text style={styles.fullscreenDescription}>{ad.description}</Text>
           )}
 
@@ -1094,11 +1121,14 @@ export const AdStickyFooter = ({ ad, onClose, visible = true }) => {
         <Ionicons name="close" size={18} color={ad.text_color || "#000"} />
       </Pressable>
 
-      <Image source={{ uri: ad.image_url }} style={styles.stickyFooterImage} />
+      <Image
+        source={ad.image_url ? { uri: ad.image_url } : undefined}
+        style={styles.stickyFooterImage}
+      />
 
       <View style={styles.stickyFooterContent}>
         <View>
-          {ad.discount_badge && (
+          {!!ad.discount_badge && (
             <View
               style={[
                 styles.stickyFooterBadge,
@@ -1138,7 +1168,13 @@ export const AdStickyFooter = ({ ad, onClose, visible = true }) => {
 };
 
 // Smart AdRenderer - Picks the right component based on ad.style
-export const AdRenderer = ({ ad, ads, onClose, visible = true }) => {
+export const AdRenderer = ({
+  ad,
+  ads,
+  onClose,
+  visible = true,
+  flush = false,
+}) => {
   const { isWide } = useResponsive();
   const styles = useAppStyles((c) => buildAdStyles(c));
 
@@ -1167,7 +1203,12 @@ export const AdRenderer = ({ ad, ads, onClose, visible = true }) => {
         inlineNode = <AdCarousel ads={inlineAds} />;
       } else {
         inlineNode = (
-          <AdRenderer ad={firstInlineAd} onClose={onClose} visible={visible} />
+          <AdRenderer
+            ad={firstInlineAd}
+            onClose={onClose}
+            visible={visible}
+            flush={flush}
+          />
         );
       }
     }
@@ -1193,9 +1234,9 @@ export const AdRenderer = ({ ad, ads, onClose, visible = true }) => {
 
   switch (style) {
     case "banner":
-      return <AdBanner ad={ad} onClose={onClose} />;
+      return <AdBanner ad={ad} onClose={onClose} flush={flush} />;
     case "card":
-      return <AdCard ad={ad} />;
+      return <AdCard ad={ad} flush={flush} />;
     case "popup":
       return <AdPopup ad={ad} onClose={onClose} visible={visible} />;
     case "carousel":
@@ -1220,488 +1261,496 @@ export const AdRenderer = ({ ad, ads, onClose, visible = true }) => {
 
 const buildAdStyles = (c) =>
   StyleSheet.create({
-  // Shared overlay for use_image_as_bg mode
-  imageBgOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: c.overlay,
-  },
-  // Banner styles
-  sidebarAdSlot: {
-    width: 320,
-    maxWidth: "100%",
-    alignSelf: "flex-end",
-    marginRight: 12,
-  },
-  bannerContainer: {
-    marginHorizontal: 16,
-    marginVertical: 12,
-    padding: 16,
-    borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  closeButton: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    zIndex: 10,
-    padding: 4,
-  },
-  bannerImage: {
-    width: "100%",
-    height: 120,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  bannerContent: {
-    gap: 8,
-  },
-  bannerTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  bannerDescription: {
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  discountBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  discountText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  ctaButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    borderRadius: radius.md,
-    gap: 6,
-  },
-  ctaText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 13,
-  },
+    // Shared overlay for use_image_as_bg mode
+    imageBgOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: c.overlay,
+    },
+    // Banner styles
+    sidebarAdSlot: {
+      width: 320,
+      maxWidth: "100%",
+      alignSelf: "flex-end",
+      marginRight: 12,
+    },
+    bannerContainer: {
+      marginHorizontal: 16,
+      marginVertical: 12,
+      padding: 16,
+      borderRadius: 12,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    flushContainer: {
+      marginHorizontal: 0,
+      marginVertical: 0,
+    },
+    closeButton: {
+      position: "absolute",
+      top: 8,
+      right: 8,
+      zIndex: 10,
+      padding: 4,
+    },
+    bannerImage: {
+      width: "100%",
+      height: 120,
+      borderRadius: 8,
+      marginBottom: 12,
+    },
+    bannerContent: {
+      gap: 8,
+    },
+    bannerTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    bannerDescription: {
+      fontSize: 12,
+      opacity: 0.8,
+    },
+    discountBadge: {
+      alignSelf: "flex-start",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    discountText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    ctaButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 10,
+      borderRadius: radius.md,
+      gap: 6,
+    },
+    ctaText: {
+      color: "#FFFFFF",
+      fontWeight: "600",
+      fontSize: 13,
+    },
 
-  // Card styles
-  card: {
-    marginHorizontal: 16,
-    marginVertical: 12,
-    borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  cardImage: {
-    width: "100%",
-    height: 160,
-  },
-  cardContent: {
-    padding: 12,
-    gap: 8,
-  },
-  cardBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  cardBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  cardDescription: {
-    fontSize: 11,
-    opacity: 0.7,
-  },
-  cardCta: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: radius.md,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  cardCtaText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 12,
-  },
+    // Card styles
+    card: {
+      marginHorizontal: 16,
+      marginVertical: 12,
+      borderRadius: 12,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 2,
+    },
+    flushCard: {
+      marginHorizontal: 0,
+      marginVertical: 0,
+    },
+    cardImage: {
+      width: "100%",
+      height: 160,
+    },
+    cardContent: {
+      padding: 12,
+      gap: 8,
+    },
+    cardBadge: {
+      alignSelf: "flex-start",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 4,
+    },
+    cardBadgeText: {
+      color: "#FFFFFF",
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    cardTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    cardDescription: {
+      fontSize: 11,
+      opacity: 0.7,
+    },
+    cardCta: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: radius.md,
+      alignItems: "center",
+      marginTop: 4,
+    },
+    cardCtaText: {
+      color: "#FFFFFF",
+      fontWeight: "600",
+      fontSize: 12,
+    },
 
-  // Carousel styles
-  carouselContainer: {
-    marginHorizontal: 0,
-    paddingHorizontal: 16,
-    marginVertical: 12,
-    gap: 12,
-  },
-  carouselGridRow: {
-    flexDirection: "row",
-    marginHorizontal: 16,
-    marginVertical: 12,
-    gap: 12,
-  },
-  carouselGridItem: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  carouselSlide: {
-    borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  carouselImage: {
-    width: "100%",
-    height: 180,
-  },
-  carouselContent: {
-    padding: 16,
-    gap: 10,
-  },
-  carouselBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  carouselBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  carouselTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  carouselDescription: {
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  carouselCta: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: radius.xl,
-    alignItems: "center",
-    marginTop: 6,
-    alignSelf: "flex-start",
-  },
-  carouselCtaText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 12,
-  },
-  carouselDots: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 6,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
+    // Carousel styles
+    carouselContainer: {
+      marginHorizontal: 0,
+      paddingHorizontal: 16,
+      marginVertical: 12,
+      gap: 12,
+    },
+    carouselGridRow: {
+      flexDirection: "row",
+      marginHorizontal: 16,
+      marginVertical: 12,
+      gap: 12,
+    },
+    carouselGridItem: {
+      flex: 1,
+      borderRadius: 12,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    carouselSlide: {
+      borderRadius: 12,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    carouselImage: {
+      width: "100%",
+      height: 180,
+    },
+    carouselContent: {
+      padding: 16,
+      gap: 10,
+    },
+    carouselBadge: {
+      alignSelf: "flex-start",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6,
+    },
+    carouselBadgeText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    carouselTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    carouselDescription: {
+      fontSize: 12,
+      opacity: 0.8,
+    },
+    carouselCta: {
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: radius.xl,
+      alignItems: "center",
+      marginTop: 6,
+      alignSelf: "flex-start",
+    },
+    carouselCtaText: {
+      color: "#FFFFFF",
+      fontWeight: "600",
+      fontSize: 12,
+    },
+    carouselDots: {
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 6,
+    },
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
 
-  // Popup styles
-  popupOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1000,
-  },
-  popupContainer: {
-    width: width - 48,
-    maxWidth: 360,
-    maxHeight: "86%",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  popupClose: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    zIndex: 10,
-  },
-  popupImage: {
-    width: "100%",
-    height: 180,
-  },
-  popupContent: {
-    padding: 20,
-    gap: 12,
-  },
-  popupBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  popupBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  popupTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  popupDescription: {
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  popupCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    borderRadius: radius.lg,
-    gap: 8,
-    marginTop: 8,
-  },
-  popupCtaText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 15,
-  },
+    // Popup styles
+    popupOverlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1000,
+    },
+    popupContainer: {
+      width: width - 48,
+      maxWidth: 360,
+      maxHeight: "86%",
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.25,
+      shadowRadius: 20,
+      elevation: 10,
+    },
+    popupClose: {
+      position: "absolute",
+      top: 8,
+      right: 8,
+      zIndex: 10,
+    },
+    popupImage: {
+      width: "100%",
+      height: 180,
+    },
+    popupContent: {
+      padding: 20,
+      gap: 12,
+    },
+    popupBadge: {
+      alignSelf: "flex-start",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6,
+    },
+    popupBadgeText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    popupTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+    },
+    popupDescription: {
+      fontSize: 14,
+      opacity: 0.8,
+    },
+    popupCta: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 14,
+      borderRadius: radius.lg,
+      gap: 8,
+      marginTop: 8,
+    },
+    popupCtaText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      fontSize: 15,
+    },
 
-  // Story styles
-  storyContainer: {
-    marginHorizontal: 16,
-    marginVertical: 12,
-    height: 280,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  storyImage: {
-    width: "100%",
-    height: "100%",
-    position: "absolute",
-  },
-  storyGradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: "60%",
-  },
-  storyContent: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: 16,
-    gap: 8,
-  },
-  storyBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  storyBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  storyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  storyDescription: {
-    fontSize: 13,
-    color: "#FFFFFF",
-    opacity: 0.9,
-  },
-  storyCta: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: radius.md,
-    alignSelf: "flex-start",
-  },
-  storyCtaText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 13,
-  },
-  storyClose: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: c.overlay,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+    // Story styles
+    storyContainer: {
+      marginHorizontal: 16,
+      marginVertical: 12,
+      height: 280,
+      overflow: "hidden",
+      shadowColor: "#000",
+      shadowOpacity: 0.15,
+      shadowRadius: 10,
+      elevation: 5,
+    },
+    storyImage: {
+      width: "100%",
+      height: "100%",
+      position: "absolute",
+    },
+    storyGradient: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: "60%",
+    },
+    storyContent: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      padding: 16,
+      gap: 8,
+    },
+    storyBadge: {
+      alignSelf: "flex-start",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6,
+    },
+    storyBadgeText: {
+      color: "#FFFFFF",
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    storyTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: "#FFFFFF",
+    },
+    storyDescription: {
+      fontSize: 13,
+      color: "#FFFFFF",
+      opacity: 0.9,
+    },
+    storyCta: {
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: radius.md,
+      alignSelf: "flex-start",
+    },
+    storyCtaText: {
+      color: "#FFFFFF",
+      fontWeight: "600",
+      fontSize: 13,
+    },
+    storyClose: {
+      position: "absolute",
+      top: 12,
+      right: 12,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: c.overlay,
+      justifyContent: "center",
+      alignItems: "center",
+    },
 
-  // Fullscreen styles
-  fullscreenContainer: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  fullscreenImage: {
-    width: "100%",
-    height: "100%",
-    position: "absolute",
-  },
-  fullscreenGradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: "50%",
-  },
-  fullscreenClose: {
-    position: "absolute",
-    top: 50,
-    right: 20,
-    zIndex: 10,
-  },
-  fullscreenContent: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: 24,
-    paddingBottom: 40,
-    gap: 12,
-  },
-  fullscreenBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  fullscreenBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  fullscreenTitle: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  fullscreenDescription: {
-    fontSize: 16,
-    color: "#FFFFFF",
-    opacity: 0.9,
-  },
-  fullscreenCta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    borderRadius: radius.xl,
-    gap: 10,
-    marginTop: 12,
-  },
-  fullscreenCtaText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 17,
-  },
+    // Fullscreen styles
+    fullscreenContainer: {
+      flex: 1,
+      backgroundColor: "#000",
+    },
+    fullscreenImage: {
+      width: "100%",
+      height: "100%",
+      position: "absolute",
+    },
+    fullscreenGradient: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: "50%",
+    },
+    fullscreenClose: {
+      position: "absolute",
+      top: 50,
+      right: 20,
+      zIndex: 10,
+    },
+    fullscreenContent: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      padding: 24,
+      paddingBottom: 40,
+      gap: 12,
+    },
+    fullscreenBadge: {
+      alignSelf: "flex-start",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    fullscreenBadgeText: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    fullscreenTitle: {
+      fontSize: 28,
+      fontWeight: "700",
+      color: "#FFFFFF",
+    },
+    fullscreenDescription: {
+      fontSize: 16,
+      color: "#FFFFFF",
+      opacity: 0.9,
+    },
+    fullscreenCta: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 16,
+      borderRadius: radius.xl,
+      gap: 10,
+      marginTop: 12,
+    },
+    fullscreenCtaText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      fontSize: 17,
+    },
 
-  // Sticky Footer styles
-  stickyFooterContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    paddingLeft: 8,
-    gap: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: -2 },
-    elevation: 8,
-  },
-  stickyFooterClose: {
-    position: "absolute",
-    top: -10,
-    right: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  stickyFooterImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-  },
-  stickyFooterContent: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  stickyFooterBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: "flex-start",
-    marginBottom: 2,
-  },
-  stickyFooterBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "700",
-  },
-  stickyFooterTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  stickyFooterCta: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: radius.md,
-  },
-  stickyFooterCtaText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 12,
-  },
- });
+    // Sticky Footer styles
+    stickyFooterContainer: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      flexDirection: "row",
+      alignItems: "center",
+      padding: 12,
+      paddingLeft: 8,
+      gap: 10,
+      shadowColor: "#000",
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: -2 },
+      elevation: 8,
+    },
+    stickyFooterClose: {
+      position: "absolute",
+      top: -10,
+      right: 8,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: "#f0f0f0",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 10,
+    },
+    stickyFooterImage: {
+      width: 50,
+      height: 50,
+      borderRadius: 8,
+    },
+    stickyFooterContent: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    stickyFooterBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+      alignSelf: "flex-start",
+      marginBottom: 2,
+    },
+    stickyFooterBadgeText: {
+      color: "#FFFFFF",
+      fontSize: 9,
+      fontWeight: "700",
+    },
+    stickyFooterTitle: {
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    stickyFooterCta: {
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: radius.md,
+    },
+    stickyFooterCtaText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      fontSize: 12,
+    },
+  });

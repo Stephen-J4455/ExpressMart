@@ -46,6 +46,8 @@ const mapProduct = (product) => ({
   badges: product.badges || [],
   thumbnail: product.thumbnail,
   thumbnails: product.thumbnails || [],
+  video_url: product.video_url || null,
+  video_hls_url: product.video_hls_url || null,
   category: product.category,
   description: product.description,
   discount: product.discount || 0,

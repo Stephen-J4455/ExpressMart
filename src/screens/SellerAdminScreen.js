@@ -3341,7 +3341,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       source={{ uri: item.thumbnail_url }}
                       style={styles.reelThumbInner}
                     />
-                  ) : (
+                  ) : item.video_url ? (
                     <FeedVideo
                       source={{ uri: item.video_url }}
                       style={styles.reelThumbInner}
@@ -3349,7 +3349,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       paused
                       muted
                     />
-                  )}
+                  ) : null}
                   {item.video_url && (
                     <View style={styles.reelPlayBadge} pointerEvents="none">
                       <Ionicons name="play" size={20} color="#fff" />

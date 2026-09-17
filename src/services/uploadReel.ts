@@ -112,12 +112,9 @@ async function fetchPresignedUrl(
     throw new Error("Supabase client is not configured");
   }
 
-  const { data, error } = await supabase.functions.invoke(
-    UPLOAD_URL_FUNCTION,
-    {
-      body: { fileName, fileType, folder },
-    },
-  );
+  const { data, error } = await supabase.functions.invoke(UPLOAD_URL_FUNCTION, {
+    body: { fileName, fileType, folder },
+  });
 
   if (error) {
     console.error("get-r2-upload-url error:", error);
@@ -226,7 +223,11 @@ export async function uploadReel(
   const sellerId = sellerRes?.data?.id ?? null;
 
   // ── 1. Fetch a presigned PUT URL from the edge function ────────────────────
-  onProgress?.({ phase: "upload", progress: 0, message: "Uploading original video…" });
+  onProgress?.({
+    phase: "upload",
+    progress: 0,
+    message: "Uploading original video…",
+  });
   const { uploadUrl, publicUrl, key } = await fetchPresignedUrl(
     fileName,
     contentType,
@@ -356,7 +357,10 @@ export async function fetchReels(limit = 20): Promise<any[]> {
  * (`video_url`). Each product is normalised into the reel shape consumed by
  * FeedScreen so product videos can be browsed in the vertical reels feed.
  */
-export async function fetchProductReels(limit = 30): Promise<any[]> {
+export async function fetchProductReels(
+  limit = 30,
+  { includeEngagement = true } = {},
+): Promise<any[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("express_products")
@@ -364,7 +368,7 @@ export async function fetchProductReels(limit = 30): Promise<any[]> {
       "id, title, price, description, video_url, video_hls_url, thumbnail, thumbnails, category, tags, view_count, total_ratings, seller_id(id,name,avatar)",
     )
     .eq("status", "active")
-    .not("video_url", "is", null)
+    .or("video_url.not.is.null,video_hls_url.not.is.null")
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -379,7 +383,7 @@ export async function fetchProductReels(limit = 30): Promise<any[]> {
   let likesByProductId: Record<string, number> = {};
   let commentsByProductId: Record<string, number> = {};
 
-  if (productIds.length > 0) {
+  if (includeEngagement && productIds.length > 0) {
     const [{ data: wishlistRows }, { data: reviewRows }] = await Promise.all([
       supabase
         .from("express_wishlists")
@@ -402,7 +406,10 @@ export async function fetchProductReels(limit = 30): Promise<any[]> {
     );
 
     commentsByProductId = (reviewRows ?? []).reduce(
-      (acc: Record<string, number>, row: { product_id?: string | null; comment?: string | null }) => {
+      (
+        acc: Record<string, number>,
+        row: { product_id?: string | null; comment?: string | null },
+      ) => {
         if (!row?.product_id) return acc;
         if (!String(row.comment || "").trim()) return acc;
         acc[row.product_id] = (acc[row.product_id] || 0) + 1;
@@ -412,21 +419,27 @@ export async function fetchProductReels(limit = 30): Promise<any[]> {
     );
   }
 
-  return products.map((product: any) => ({
-    id: product.id,
-    video_url: product.video_url,
-    hls_url: product.video_hls_url || null,
-    thumbnail_url: product.thumbnail || product.thumbnails?.[0] || null,
-    title: product.title,
-    price: product.price,
-    description: product.description,
-    product_id: product.id,
-    seller: product.seller_id,
-    category: product.category || null,
-    tags: product.tags || [],
-    view_count: product.view_count || 0,
-    total_ratings: product.total_ratings || 0,
-    likes_count: likesByProductId[product.id] || 0,
-    comments_count: commentsByProductId[product.id] || 0,
-  }));
+  return products
+    .map((product: any) => ({
+      id: product.id,
+      video_url: String(product.video_url || "").trim(),
+      hls_url: String(product.video_hls_url || "").trim() || null,
+      thumbnail_url: product.thumbnail || product.thumbnails?.[0] || null,
+      title: product.title,
+      price: product.price,
+      description: product.description,
+      product_id: product.id,
+      seller: product.seller_id,
+      category: product.category || null,
+      tags: product.tags || [],
+      view_count: product.view_count || 0,
+      total_ratings: product.total_ratings || 0,
+      likes_count: likesByProductId[product.id] || 0,
+      comments_count: commentsByProductId[product.id] || 0,
+    }))
+    .filter(
+      (product: any) =>
+        String(product.video_url || "").trim() ||
+        String(product.hls_url || "").trim(),
+    );
 }
