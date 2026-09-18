@@ -7,8 +7,9 @@ import * as FileSystem from "expo-file-system/legacy";
 
 const MAX_IMAGE_DIMENSION = 1600;
 const IMAGE_QUALITY = 0.82;
-const VIDEO_MAX_DIMENSION = 720;
-const VIDEO_BITRATE = 1500000;
+// maxSize limits the longest edge: 1920 preserves 1080p landscape/portrait video.
+const VIDEO_MAX_DIMENSION = 1920;
+const VIDEO_BITRATE = 6000000;
 
 const verifyNativeImage = (uri) =>
   new Promise((resolve, reject) => {

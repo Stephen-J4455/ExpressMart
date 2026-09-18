@@ -37,16 +37,20 @@ const TagAIAssistantContext = createContext();
 export const useTagAIAssistant = () => {
   const ctx = useContext(TagAIAssistantContext);
   if (!ctx) {
-    throw new Error("useTagAIAssistant must be used within an TagAIAssistantProvider");
+    throw new Error(
+      "useTagAIAssistant must be used within an TagAIAssistantProvider",
+    );
   }
   return ctx;
 };
 
-const makeId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const makeId = () =>
+  `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 export const TagAIAssistantProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
   const [isThinking, setIsThinking] = useState(false);
+  const [thinkingTrail, setThinkingTrail] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   // ── Grounding state ──
@@ -121,7 +125,10 @@ export const TagAIAssistantProvider = ({ children }) => {
     groundingRefs.current.delete(key);
   }, []);
 
-  const getGroundingRef = useCallback((key) => groundingRefs.current.get(key), []);
+  const getGroundingRef = useCallback(
+    (key) => groundingRefs.current.get(key),
+    [],
+  );
 
   /** Trigger the pointer overlay. `extra` may carry { label, hint, shape,
    * direction, size, coords } for free-form targets. `coords` lets the agent
@@ -264,7 +271,8 @@ export const TagAIAssistantProvider = ({ children }) => {
   }, []);
 
   const setAppStateProvider = useCallback((provider) => {
-    appStateProviderRef.current = typeof provider === "function" ? provider : null;
+    appStateProviderRef.current =
+      typeof provider === "function" ? provider : null;
   }, []);
 
   /** Synchronous snapshot of what's currently visible on the active route.
@@ -302,11 +310,14 @@ export const TagAIAssistantProvider = ({ children }) => {
   const thinkingBuffer = useRef([]);
   const pushThinking = useCallback((text) => {
     if (!text) return;
-    thinkingBuffer.current.push({ ts: Date.now(), text: String(text) });
+    const entry = { ts: Date.now(), text: String(text) };
+    thinkingBuffer.current.push(entry);
+    setThinkingTrail((prev) => [...prev.slice(-4), entry]);
   }, []);
   const drainThinking = useCallback(() => {
     const out = thinkingBuffer.current.slice();
     thinkingBuffer.current = [];
+    setThinkingTrail([]);
     return out;
   }, []);
 
@@ -338,15 +349,59 @@ export const TagAIAssistantProvider = ({ children }) => {
       setIsThinking(true);
       // Reset thinking buffer for this turn.
       thinkingBuffer.current = [];
+      setThinkingTrail([]);
 
       try {
         // Small delay so the thinking indicator is perceivable even when the
         // planner resolves instantly (local rules).
         await new Promise((r) => setTimeout(r, 420));
-        pushThinking("Planning the next step…");
+        pushThinking("Checking model…");
 
-        const { reply, toolCalls, products: remoteProducts = [] } =
-          await planTurn(trimmed, messages, nav.image || null);
+        const {
+          reply,
+          toolCalls,
+          products: remoteProducts = [],
+          debug,
+        } = await planTurn(trimmed, messages, nav.image || null);
+
+        const formatDebugStatus = (debugInfo) => {
+          if (!debugInfo || typeof debugInfo !== "object") return null;
+          const requested =
+            debugInfo.requestedModel ||
+            debugInfo.selectedModel ||
+            debugInfo.model ||
+            "Not reported";
+          const selected =
+            debugInfo.selectedModel || debugInfo.model || requested;
+          const source =
+            debugInfo.selectionSource ||
+            debugInfo.modelSource ||
+            "Not reported";
+          const actual = debugInfo.actualModel || "Not reported";
+          const checked = Array.isArray(debugInfo.modelNames)
+            ? debugInfo.modelNames.filter(Boolean).join(", ") || "Not reported"
+            : Array.isArray(debugInfo.modelsUsed)
+              ? debugInfo.modelsUsed.filter(Boolean).join(", ") ||
+                "Not reported"
+              : "Not reported";
+          const attempted = Array.isArray(debugInfo.modelsUsed)
+            ? debugInfo.modelsUsed.filter(Boolean).join(", ") || "Not reported"
+            : "Not reported";
+
+          return [
+            `Database model: ${requested}`,
+            `Model used: ${selected}`,
+            `Model selector: ${source}`,
+            `Model names checked: ${checked}`,
+            `Models attempted: ${attempted}`,
+            `Actual response model: ${actual}`,
+          ].join("\n");
+        };
+
+        const nextDebugStatus = formatDebugStatus(debug);
+        if (nextDebugStatus) {
+          pushThinking(nextDebugStatus);
+        }
 
         // Execute tool calls sequentially (order matters: navigate before
         // point_to_element, search before add_to_cart, etc.)
@@ -426,7 +481,9 @@ export const TagAIAssistantProvider = ({ children }) => {
         });
       } catch (e) {
         console.warn("[TagAI] turn failed:", e);
-        pushThinking("Hit a snag while planning — falling back to a safe reply.");
+        pushThinking(
+          "Hit a snag while planning — falling back to a safe reply.",
+        );
         appendMessage({
           id: makeId(),
           role: "assistant",
@@ -458,6 +515,7 @@ export const TagAIAssistantProvider = ({ children }) => {
     () => ({
       messages,
       isThinking,
+      thinkingTrail,
       sendMessage,
       clearChat,
       groundingTarget,
@@ -490,6 +548,7 @@ export const TagAIAssistantProvider = ({ children }) => {
     [
       messages,
       isThinking,
+      thinkingTrail,
       sendMessage,
       clearChat,
       groundingTarget,

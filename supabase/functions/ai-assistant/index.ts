@@ -1522,29 +1522,64 @@ serve(async (req) => {
 
     const writeClient = createClient(supabaseUrl, serviceRoleKey);
     const configuredModel = await resolveModel(writeClient);
-    let model = hasVisionImage ? DEFAULT_MODEL : configuredModel;
+    const debug = {
+      requestedModel: configuredModel,
+      modelSource: "Database: express_settings.ai_model",
+      selectedModel: configuredModel,
+      selectionSource: "Database: express_settings.ai_model",
+      actualModel: null as string | null,
+      modelsUsed: [] as string[],
+      modelNames: [] as string[],
+      events: [] as { message: string; status: string }[],
+    };
+    const traceDebug = (message: string, status = "info") => {
+      debug.events.push({ message, status });
+    };
+
+    let model = configuredModel;
+    let modelSelectionSource = "Database: express_settings.ai_model";
     if (hasVisionImage) {
       const models = await getOpenRouterModels(apiKey);
       const configuredVisionModel = findConfiguredVisionModel(
         models,
         configuredModel,
       );
-      const visionModel = configuredVisionModel || findFreeVisionModel(models);
-      if (!visionModel?.id) {
-        return serveCors(
-          {
-            success: false,
-            error: `Configured model '${configuredModel}' does not support image input, and no free vision model is available`,
-            code: "VISION_MODEL_UNSUPPORTED",
-          },
-          400,
-        );
+      if (configuredVisionModel) {
+        model = configuredVisionModel.id;
+        modelSelectionSource = `Database image-capable model: ${configuredVisionModel.id}`;
+        debug.selectedModel = configuredVisionModel.id;
+        debug.selectionSource = modelSelectionSource;
+      } else {
+        const freeVisionModel = findFreeVisionModel(models);
+        if (!freeVisionModel?.id) {
+          return serveCors(
+            {
+              success: false,
+              error: `Configured model '${configuredModel}' does not support image input, and no free vision model is available`,
+              code: "VISION_MODEL_UNSUPPORTED",
+            },
+            400,
+          );
+        }
+        model = freeVisionModel.id;
+        modelSelectionSource = `Fallback: configured model does not support image input; using ${freeVisionModel.id}`;
+        debug.selectedModel = freeVisionModel.id;
+        debug.selectionSource = modelSelectionSource;
       }
-      // Prefer the configured database model when it supports images. If it
-      // does not, send the concrete free vision model selected from the
-      // OpenRouter catalog instead of using the router alias blindly.
-      model = visionModel.id;
+    } else if (model !== DEFAULT_MODEL) {
+      modelSelectionSource = `Database model: ${model}`;
+      debug.selectedModel = model;
+      debug.selectionSource = modelSelectionSource;
     }
+    debug.modelSource =
+      configuredModel === DEFAULT_MODEL
+        ? "OpenRouter free router"
+        : "Database: express_settings.ai_model";
+    debug.modelNames = [...new Set([configuredModel, model].filter(Boolean))];
+    debug.modelsUsed = [...new Set([configuredModel, model].filter(Boolean))];
+    traceDebug(`Requested model: ${configuredModel}`);
+    traceDebug(`Selected model: ${model}`);
+    traceDebug(`Selection source: ${modelSelectionSource}`);
 
     // Text turns honor the model selected by the user/admin. If that model is
     // unavailable, retry once with OpenRouter's free router. Vision turns use
@@ -1624,6 +1659,11 @@ serve(async (req) => {
       const jsonText = content
         .replace(/^```(?:json)?\s*/i, "")
         .replace(/\s*```$/, "");
+      debug.actualModel =
+        typeof result?.model === "string" ? result.model : null;
+      traceDebug(
+        `Actual response model: ${debug.actualModel || "not reported"}`,
+      );
       let draft;
       try {
         draft = JSON.parse(jsonText);
@@ -1696,12 +1736,17 @@ serve(async (req) => {
 
       if (toolCalls.length === 0) {
         // Final text reply — turn complete.
+        debug.actualModel = typeof data?.model === "string" ? data.model : null;
+        traceDebug(
+          `Actual response model: ${debug.actualModel || "not reported"}`,
+        );
         return serveCors({
           success: true,
           reply: (choice.content || "").trim() || "Here's what I found!",
           toolCalls: clientToolCalls,
           products,
           model,
+          debug,
         });
       }
 
@@ -1894,12 +1939,15 @@ serve(async (req) => {
       data?.choices?.[0]?.message?.content?.trim() ||
       "I put together some results for you — take a look!";
 
+    debug.actualModel = typeof data?.model === "string" ? data.model : null;
+    traceDebug(`Actual response model: ${debug.actualModel || "not reported"}`);
     return serveCors({
       success: true,
       reply,
       toolCalls: clientToolCalls,
       products,
       model,
+      debug,
     });
   } catch (error) {
     console.error("[ai-assistant] request.error", error);

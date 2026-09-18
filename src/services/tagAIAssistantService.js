@@ -21,8 +21,16 @@ export const PAGE_ROUTES = {
   feed: { route: "Main", params: { screen: "Feed" }, label: "Feed" },
   chats: { route: "Main", params: { screen: "Chats" }, label: "Chats" },
   cart: { route: "Main", params: { screen: "Cart" }, label: "Cart" },
-  account: { route: "Main", params: { screen: "Account" }, label: "your Account" },
-  profile: { route: "Main", params: { screen: "Account" }, label: "your profile" },
+  account: {
+    route: "Main",
+    params: { screen: "Account" },
+    label: "your Account",
+  },
+  profile: {
+    route: "Main",
+    params: { screen: "Account" },
+    label: "your profile",
+  },
   checkout: { route: "Checkout", params: {}, label: "Checkout" },
   orders: { route: "Orders", params: {}, label: "your Orders" },
   wishlist: { route: "Collections", params: {}, label: "your Collections" },
@@ -94,7 +102,8 @@ export const ASSISTANT_TOOLS = [
         properties: {
           query: {
             type: "string",
-            description: "Free-text search query, e.g. 'wireless headphones' or 'flash-sale shoes'.",
+            description:
+              "Free-text search query, e.g. 'wireless headphones' or 'flash-sale shoes'.",
           },
           limit: {
             type: "integer",
@@ -114,18 +123,31 @@ export const ASSISTANT_TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Optional text to combine with the filters — tag-first ranking applies." },
-          category: { type: "string", description: "Category name, e.g. 'Electronics'." },
+          query: {
+            type: "string",
+            description:
+              "Optional text to combine with the filters — tag-first ranking applies.",
+          },
+          category: {
+            type: "string",
+            description: "Category name, e.g. 'Electronics'.",
+          },
           maxPrice: { type: "number", description: "Maximum effective price." },
           minPrice: { type: "number", description: "Minimum effective price." },
           minRating: { type: "number", description: "Minimum rating (0-5)." },
-          tag: { type: "string", description: "A single tag to require, e.g. 'flash-sale'." },
+          tag: {
+            type: "string",
+            description: "A single tag to require, e.g. 'flash-sale'.",
+          },
           sort: {
             type: "string",
             enum: ["price_asc", "price_desc", "rating", "popular", "newest"],
             description: "Sort order for results.",
           },
-          limit: { type: "integer", description: "Max number of products (1-8)." },
+          limit: {
+            type: "integer",
+            description: "Max number of products (1-8).",
+          },
         },
       },
     },
@@ -140,7 +162,10 @@ export const ASSISTANT_TOOLS = [
         type: "object",
         properties: {
           product_id: { type: "string", description: "The product id." },
-          quantity: { type: "integer", description: "Quantity to add (default 1)." },
+          quantity: {
+            type: "integer",
+            description: "Quantity to add (default 1).",
+          },
         },
         required: ["product_id"],
       },
@@ -416,7 +441,10 @@ export const ASSISTANT_TOOLS = [
         type: "object",
         properties: {
           item_id: { type: "string" },
-          screen: { type: "string", description: "Optional screen to navigate to first." },
+          screen: {
+            type: "string",
+            description: "Optional screen to navigate to first.",
+          },
         },
         required: ["item_id"],
       },
@@ -434,7 +462,8 @@ export const ASSISTANT_TOOLS = [
     type: "function",
     function: {
       name: "list_tap_targets",
-      description: "List every currently-registered tap target on the active screen.",
+      description:
+        "List every currently-registered tap target on the active screen.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -480,7 +509,10 @@ export const ASSISTANT_TOOLS = [
         type: "object",
         properties: {
           direction: { type: "string", enum: ["up", "down", "left", "right"] },
-          amount: { type: "string", description: "'page' | 'half' | number of px" },
+          amount: {
+            type: "string",
+            description: "'page' | 'half' | number of px",
+          },
           surface: { type: "string" },
         },
         required: ["direction"],
@@ -534,7 +566,8 @@ export const ASSISTANT_TOOLS = [
     type: "function",
     function: {
       name: "dismiss_overlay",
-      description: "Dismiss the AI pointer overlay (or any open modal the agent opened).",
+      description:
+        "Dismiss the AI pointer overlay (or any open modal the agent opened).",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -550,13 +583,66 @@ const PRODUCT_SELECT =
 // Tokens we strip from a free-text query before turning it into tag/search
 // candidates. Keeps the ranker focused on real product attributes.
 const QUERY_STOPWORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-  "has", "have", "i", "in", "is", "it", "its", "of", "on", "or",
-  "that", "the", "this", "to", "was", "we", "were", "with", "you",
-  "your", "me", "my", "our", "some", "any", "do", "does", "can",
-  "could", "would", "should", "want", "need", "like", "look", "looking",
-  "find", "search", "show", "buy", "get", "recommend", "suggest",
-  "browse", "please", "cheap", "best", "top", "good", "great",
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "has",
+  "have",
+  "i",
+  "in",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "this",
+  "to",
+  "was",
+  "we",
+  "were",
+  "with",
+  "you",
+  "your",
+  "me",
+  "my",
+  "our",
+  "some",
+  "any",
+  "do",
+  "does",
+  "can",
+  "could",
+  "would",
+  "should",
+  "want",
+  "need",
+  "like",
+  "look",
+  "looking",
+  "find",
+  "search",
+  "show",
+  "buy",
+  "get",
+  "recommend",
+  "suggest",
+  "browse",
+  "please",
+  "cheap",
+  "best",
+  "top",
+  "good",
+  "great",
 ]);
 
 /**
@@ -612,9 +698,12 @@ const scoreProductForQuery = (product, phrase, tokens) => {
     }
   }
   let score = matchedTags.size * 10;
-  if (tokens.length > 0 && tokens.every((t) =>
-    tags.some((tag) => tag === t || tag.includes(t) || t.includes(tag)),
-  )) {
+  if (
+    tokens.length > 0 &&
+    tokens.every((t) =>
+      tags.some((tag) => tag === t || tag.includes(t) || t.includes(tag)),
+    )
+  ) {
     score += 5;
   }
 
@@ -725,7 +814,8 @@ const buildRichProductSummary = (product) => {
     stockBits.push(`Shipping: GH₵${shippingFee.toFixed(2)}`);
   } else if (seller.default_shipping_fee != null) {
     const dsf = Number(seller.default_shipping_fee);
-    if (dsf > 0) stockBits.push(`Shipping: GH₵${dsf.toFixed(2)} (store default)`);
+    if (dsf > 0)
+      stockBits.push(`Shipping: GH₵${dsf.toFixed(2)} (store default)`);
     else stockBits.push("Free shipping");
   } else {
     stockBits.push("Shipping: see store");
@@ -834,7 +924,9 @@ export const queryCatalog = async (args = {}) => {
   if (hasTextQuery) {
     const orClauses = [];
     for (const tok of tokens) {
-      const safe = String(tok).replace(/[%(),]/g, " ").trim();
+      const safe = String(tok)
+        .replace(/[%(),]/g, " ")
+        .trim();
       if (!safe) continue;
       // `cs` is the array-contains operator on a text[] column — matches
       // when the array contains a single-element array with this token.
@@ -877,9 +969,7 @@ export const queryCatalog = async (args = {}) => {
       }))
       // Stable sort: primary by score DESC, secondary by original index ASC
       // (i.e. the DB's chosen order).
-      .sort((a, b) =>
-        b.score !== a.score ? b.score - a.score : a.idx - b.idx,
-      )
+      .sort((a, b) => (b.score !== a.score ? b.score - a.score : a.idx - b.idx))
       .map((x) => x.p);
     products = scored.slice(0, safeLimit);
   } else {
@@ -955,7 +1045,8 @@ export const getStoreDetails = async (sellerId) => {
 export const getStoreProducts = async (args = {}) => {
   if (!supabase) return { products: [], count: 0 };
   const { seller_id: sellerId, sort = "newest", page = 1, limit = 5 } = args;
-  if (!sellerId) return { products: [], count: 0, error: "seller_id is required" };
+  if (!sellerId)
+    return { products: [], count: 0, error: "seller_id is required" };
   const safeLimit = clampLimit(limit);
   const safePage = Math.max(1, parseInt(page, 10) || 1);
   const offset = (safePage - 1) * safeLimit;
@@ -998,13 +1089,7 @@ export const getStoreProducts = async (args = {}) => {
  */
 export const searchStores = async (args = {}) => {
   if (!supabase) return { stores: [], count: 0 };
-  const {
-    query,
-    location,
-    minRating,
-    verifiedOnly = false,
-    limit = 5,
-  } = args;
+  const { query, location, minRating, verifiedOnly = false, limit = 5 } = args;
   const safeLimit = clampLimit(limit);
   let q = supabase
     .from("express_sellers")
@@ -1252,7 +1337,8 @@ export const executePointTo = (args = {}, ctx = {}) => {
           return {
             ok: true,
             mode: "item",
-            message: args?.description || `Pointing at ${item.text || args.item_id}.`,
+            message:
+              args?.description || `Pointing at ${item.text || args.item_id}.`,
             element: elementKey || args.item_id,
             label: args?.label || item.text || args.item_id,
             hint: args?.description || "",
@@ -1353,7 +1439,11 @@ const matchPageKey = (text) => {
   if (/\bpay(ment)?s?\b/.test(t) && !/\bmethod\b/.test(t)) return "payments";
   if (/\bmy (order|orders)\b|\border (history|status)\b|\btrack\b/.test(t))
     return "orders";
-  if (/\bwish ?list\b|\bsaved (items|products)\b|\bfavourites\b|\bfavorites\b|\bcollection(s)?\b/.test(t))
+  if (
+    /\bwish ?list\b|\bsaved (items|products)\b|\bfavourites\b|\bfavorites\b|\bcollection(s)?\b/.test(
+      t,
+    )
+  )
     return "collections";
   if (/\bnotif(ication|ications|s)\b/.test(t)) return "notifications";
   if (/\baddress(es)?\b/.test(t)) return "addresses";
@@ -1435,8 +1525,10 @@ const parseFilters = (text) => {
     filters.sort = "price_desc";
   else if (/\bbest rated\b|\btop rated\b|\bhighest rated\b/i.test(text))
     filters.sort = "rating";
-  else if (/\bnew(est)? arrivals\b|\bnewest\b/i.test(text)) filters.sort = "newest";
-  else if (/\bpopular\b|\btrending\b|\bbest.?sell/i.test(text)) filters.sort = "popular";
+  else if (/\bnew(est)? arrivals\b|\bnewest\b/i.test(text))
+    filters.sort = "newest";
+  else if (/\bpopular\b|\btrending\b|\bbest.?sell/i.test(text))
+    filters.sort = "popular";
   const limit = text.match(LIMIT_RE);
   if (limit) filters.limit = parseInt(limit[1], 10);
   return filters;
@@ -1446,7 +1538,8 @@ const GREETING_RE =
   /^(hi|hello|hey|yo|good (morning|afternoon|evening)|how far|sup|what'?s up)\b[\s!.,]*$/i;
 const HELP_RE =
   /\b(what can you do|help me|how do (you|i) work|capabilities|who are you)\b/i;
-const DEALS_RE = /\b(deals?|discounts?|on sale|sale items?|offers?|cheap things)\b/i;
+const DEALS_RE =
+  /\b(deals?|discounts?|on sale|sale items?|offers?|cheap things)\b/i;
 const CART_ADD_RE = /\b(add|put|drop)\b[^.?!]*\bcart\b/i;
 // Intents for the new product/store detail tools.
 const PRODUCT_DETAILS_RE =
@@ -1548,7 +1641,9 @@ export const planLocalTurn = (text, ctx = {}) => {
         .map((p) => ({
           p,
           score: words.filter((w) =>
-            String(p.title || "").toLowerCase().includes(w),
+            String(p.title || "")
+              .toLowerCase()
+              .includes(w),
           ).length,
         }))
         .sort((a, b) => b.score - a.score);
@@ -1598,12 +1693,13 @@ export const planLocalTurn = (text, ctx = {}) => {
     const recents = Array.isArray(ctx.recentProducts)
       ? ctx.recentProducts.filter((p) => p?.id)
       : [];
-    const sellerId =
-      recents[0]?.seller_id?.id || recents[0]?.seller_id || null;
+    const sellerId = recents[0]?.seller_id?.id || recents[0]?.seller_id || null;
     if (sellerId) {
       return {
         reply: `Let me pull up the store's profile. 🏪`,
-        toolCalls: [{ name: "get_store_details", args: { seller_id: sellerId } }],
+        toolCalls: [
+          { name: "get_store_details", args: { seller_id: sellerId } },
+        ],
       };
     }
     return {
@@ -1646,7 +1742,9 @@ export const planLocalTurn = (text, ctx = {}) => {
     }
     const args = { product_id: recents[0].id };
     // "Show me the bad reviews" → filter to 1-2 stars.
-    if (/\b(bad|negative|worst|low|1-star|2-star|1 star|2 star)\b/i.test(lower)) {
+    if (
+      /\b(bad|negative|worst|low|1-star|2-star|1 star|2 star)\b/i.test(lower)
+    ) {
       args.min_rating = 1;
     }
     return {
@@ -1660,8 +1758,7 @@ export const planLocalTurn = (text, ctx = {}) => {
     const recents = Array.isArray(ctx.recentProducts)
       ? ctx.recentProducts.filter((p) => p?.id)
       : [];
-    const sellerId =
-      recents[0]?.seller_id?.id || recents[0]?.seller_id || null;
+    const sellerId = recents[0]?.seller_id?.id || recents[0]?.seller_id || null;
     if (sellerId) {
       const args = { seller_id: sellerId };
       if (/\b(bad|negative|worst|low|1-star|2-star)\b/i.test(lower)) {
@@ -1746,7 +1843,10 @@ export const planLocalTurn = (text, ctx = {}) => {
     return {
       reply: "Here are some great deals I found for you. 🏷️",
       toolCalls: [
-        { name: "filter_catalog", args: { sort: "popular", maxPrice: 50, limit: 4 } },
+        {
+          name: "filter_catalog",
+          args: { sort: "popular", maxPrice: 50, limit: 4 },
+        },
       ],
     };
   }
@@ -1756,7 +1856,9 @@ export const planLocalTurn = (text, ctx = {}) => {
   if (READ_SCREEN_RE.test(lower)) {
     return {
       reply: "Taking a look at what's on screen… 👀",
-      toolCalls: [{ name: "read_screen", args: { region: "viewport", max_items: 30 } }],
+      toolCalls: [
+        { name: "read_screen", args: { region: "viewport", max_items: 30 } },
+      ],
     };
   }
 
@@ -1768,7 +1870,8 @@ export const planLocalTurn = (text, ctx = {}) => {
     const up = /\b(up|back|previous|top)\b/i.test(lower);
     const direction = down && !up ? "down" : up && !down ? "up" : "down";
     return {
-      reply: direction === "up" ? "Scrolling back up. ⬆️" : "Scrolling down. ⬇️",
+      reply:
+        direction === "up" ? "Scrolling back up. ⬆️" : "Scrolling down. ⬇️",
       toolCalls: [{ name: "scroll", args: { direction, amount: "page" } }],
     };
   }
@@ -1813,29 +1916,76 @@ export const planLocalTurn = (text, ctx = {}) => {
  * deployed, OpenRouter is not configured, or the request fails — so the
  * assistant never hard-fails.
  */
+const buildFallbackDebug = (source = "Local planner fallback") => ({
+  requestedModel: "Not reported",
+  selectedModel: "Not reported",
+  modelSource: source,
+  selectionSource: source,
+  actualModel: "Not reported",
+  modelNames: [source],
+  modelsUsed: [source],
+  events: [{ message: source, status: "info" }],
+});
+
+const callAiAssistantWithRetry = async (body, maxAttempts = 5) => {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const data = await callEdgeFunction("ai-assistant", body);
+      if (data?.success && typeof data.reply === "string") {
+        return data;
+      }
+      lastError = new Error(data?.error || "AI service unavailable");
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (attempt < maxAttempts) {
+      const waitMs = 350 * attempt;
+      console.warn(
+        `[TagAI] ai-assistant attempt ${attempt} failed; retrying in ${waitMs}ms`,
+        lastError?.message || lastError,
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      continue;
+    }
+  }
+
+  throw lastError || new Error("AI service unavailable");
+};
+
 export const planTurn = async (text, history = [], image = null) => {
   try {
-    const data = await callEdgeFunction("ai-assistant", {
+    const data = await callAiAssistantWithRetry({
       message: text,
       image: image || null,
-      history: (Array.isArray(history) ? history : [])
-        .slice(-8)
-        .map((m) => ({
-          role: m?.role === "assistant" ? "assistant" : "user",
-          text: m?.text || "",
-        })),
+      history: (Array.isArray(history) ? history : []).slice(-8).map((m) => ({
+        role: m?.role === "assistant" ? "assistant" : "user",
+        text: m?.text || "",
+      })),
     });
 
-    if (data?.success && typeof data.reply === "string") {
-      return {
-        reply: data.reply,
-        toolCalls: data.toolCalls || [],
-        // Server-executed catalog searches return their results here — the
-        // chat UI renders them as interactive product cards.
-        products: Array.isArray(data.products) ? data.products : [],
-      };
-    }
-    throw new Error(data?.error || "AI service unavailable");
+    return {
+      reply: data.reply,
+      toolCalls: data.toolCalls || [],
+      // Server-executed catalog searches return their results here — the
+      // chat UI renders them as interactive product cards.
+      products: Array.isArray(data.products) ? data.products : [],
+      debug:
+        data.debug && typeof data.debug === "object"
+          ? data.debug
+          : {
+              requestedModel: data.model || "Not reported",
+              selectedModel: data.model || "Not reported",
+              modelSource: "Model response",
+              selectionSource: "Model response",
+              actualModel: data.model || "Not reported",
+              modelNames: [data.model || "Not reported"],
+              modelsUsed: [data.model || "Not reported"],
+              events: [{ message: "Model response", status: "info" }],
+            },
+    };
   } catch (e) {
     console.warn(
       "[TagAI] remote planner unavailable, using local rules:",
@@ -1847,11 +1997,14 @@ export const planTurn = async (text, history = [], image = null) => {
       recentProducts:
         [...(Array.isArray(history) ? history : [])]
           .reverse()
-          .find(
-            (m) => m?.role === "assistant" && Array.isArray(m.products),
-          )?.products || [],
+          .find((m) => m?.role === "assistant" && Array.isArray(m.products))
+          ?.products || [],
     });
-    return { ...local, products: [] };
+    return {
+      ...local,
+      products: [],
+      debug: buildFallbackDebug(),
+    };
   }
 };
 
@@ -1879,7 +2032,9 @@ export const executeToolCall = async (call, ctx) => {
           name,
           status: "done",
           label:
-            name === "search_products" ? "Searched catalog" : "Filtered catalog",
+            name === "search_products"
+              ? "Searched catalog"
+              : "Filtered catalog",
           products,
           note,
         };
@@ -2192,7 +2347,12 @@ export const executeToolCall = async (call, ctx) => {
     }
   } catch (e) {
     console.warn(`[TagAI] tool ${name} failed:`, e);
-    return { name, status: "error", label: name, message: "That action failed." };
+    return {
+      name,
+      status: "error",
+      label: name,
+      message: "That action failed.",
+    };
   }
 };
 

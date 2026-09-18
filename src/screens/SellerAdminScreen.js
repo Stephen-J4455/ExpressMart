@@ -22,6 +22,7 @@ import {
   Easing,
 } from "react-native";
 import { FeedVideo } from "../components/FeedVideo";
+import { ProductVideoPreview } from "../components/ProductVideoPreview";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -42,7 +43,10 @@ import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
 import { colors as brandColors, getTheme, radius } from "../theme/colors";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { getImageContentType } from "../utils/webUpload";
-import { compressProductImage, compressProductVideo } from "../utils/compressImage";
+import {
+  compressProductImage,
+  compressProductVideo,
+} from "../utils/compressImage";
 import { showTabBar, updateTabBarOnScroll } from "../utils/tabBarAutoHide";
 import {
   R2_FOLDERS,
@@ -54,6 +58,7 @@ import {
 import { CustomerLoadingAnimation } from "../components/CustomerLoadingAnimation";
 import { ProductCardPlaceholder } from "../components/ProductCardPlaceholder";
 import { quickActions } from "../data/quickActions";
+import { runProductCreationAgent } from "../services/productCreationAgent";
 
 const DEFAULT_CATEGORIES = [
   { id: "default-fashion", name: "Fashion", icon: "shirt-outline" },
@@ -77,7 +82,11 @@ const PRODUCT_FILTERS = [
 
 const SORT_OPTIONS = [
   { key: "recent", label: "Most Recent", icon: "time-outline" },
-  { key: "price-desc", label: "Price: High to Low", icon: "arrow-down-outline" },
+  {
+    key: "price-desc",
+    label: "Price: High to Low",
+    icon: "arrow-down-outline",
+  },
   { key: "price-asc", label: "Price: Low to High", icon: "arrow-up-outline" },
   { key: "alpha", label: "Alphabetical (A-Z)", icon: "text-outline" },
 ];
@@ -248,8 +257,7 @@ const storageSegment = (value, fallback = "unnamed") => {
 // Compact count formatting for the profile stats line ("3.6K followers").
 const formatCount = (value) => {
   const n = Number(value || 0);
-  if (n >= 1000000)
-    return `${(n / 1000000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1).replace(/\.0$/, "")}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}K`;
   return String(n);
 };
@@ -434,10 +442,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         const parsed = parseFloat(data.value);
         if (Number.isFinite(parsed)) setServiceFeePercent(parsed);
       } catch (e) {
-        console.warn(
-          "Failed to load service_fee_percentage:",
-          e?.message || e,
-        );
+        console.warn("Failed to load service_fee_percentage:", e?.message || e);
       }
     })();
     return () => {
@@ -457,6 +462,35 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [imageCompression, setImageCompression] = useState({});
   const [generatingProduct, setGeneratingProduct] = useState(false);
   const [agentActivity, setAgentActivity] = useState([]);
+  const [agentDebug, setAgentDebug] = useState(null);
+  const [agentPriceInput, setAgentPriceInput] = useState("");
+  const [agentQuantityInput, setAgentQuantityInput] = useState("");
+  const [agentPromptVisible, setAgentPromptVisible] = useState(false);
+  const agentPromptResolverRef = useRef(null);
+  const agentRunRef = useRef(null);
+  const cancelProductAgent = useCallback(() => {
+    if (agentRunRef.current) {
+      agentRunRef.current.abort();
+      setAgentActivity((previous) => [
+        ...previous.slice(-99),
+        {
+          id: `cancel-${Date.now()}`,
+          time: new Date().toLocaleTimeString(),
+          message:
+            "Cancelled. No more retries; late responses will be ignored.",
+          status: "cancelled",
+        },
+      ]);
+    }
+    agentRunRef.current = null;
+    setGeneratingProduct(false);
+  }, []);
+  useEffect(() => {
+    if (!modalVisible) cancelProductAgent();
+    return () => {
+      agentRunRef.current?.abort();
+    };
+  }, [modalVisible, cancelProductAgent]);
   const [existingImageUrls, setExistingImageUrls] = useState([]);
   const [removingImageUrl, setRemovingImageUrl] = useState(null);
   const [selectedSizes, setSelectedSizes] = useState([]);
@@ -870,7 +904,16 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     } finally {
       setTogglingLive(false);
     }
-  }, [supabase, sellerId, isLive, togglingLive, canGoLive, seller, toast, navigation]);
+  }, [
+    supabase,
+    sellerId,
+    isLive,
+    togglingLive,
+    canGoLive,
+    seller,
+    toast,
+    navigation,
+  ]);
 
   // Paystack payout-account state drives the "not live yet" banner + badge:
   //   unlinked → no subaccount yet
@@ -879,37 +922,36 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const paystackState = !seller
     ? "loading"
     : !(seller.payment_account || "").trim()
-    ? "unlinked"
-    : !seller.account_verified
-    ? "pending"
-    : "verified";
+      ? "unlinked"
+      : !seller.account_verified
+        ? "pending"
+        : "verified";
 
-  const notLiveUi =
-    {
-      unlinked: {
-        icon: "link-outline",
-        tint: themeColors.muted,
-        sub: "Link a Paystack account to go live.",
-        badge: "Paystack · Not linked",
-      },
-      pending: {
-        icon: "time-outline",
-        tint: brandColors.accentYellow,
-        sub: "Paystack is verifying your payout account.",
-        badge: "Paystack · Awaiting verification",
-      },
-      verified: {
-        icon: "rocket-outline",
-        tint: brandColors.success,
-        sub: "You're all set — tap to publish your store.",
-        badge: "Paystack · Verified",
-      },
-    }[paystackState] || {
-      icon: "time-outline",
+  const notLiveUi = {
+    unlinked: {
+      icon: "link-outline",
       tint: themeColors.muted,
-      sub: "",
-      badge: "",
-    };
+      sub: "Link a Paystack account to go live.",
+      badge: "Paystack · Not linked",
+    },
+    pending: {
+      icon: "time-outline",
+      tint: brandColors.accentYellow,
+      sub: "Paystack is verifying your payout account.",
+      badge: "Paystack · Awaiting verification",
+    },
+    verified: {
+      icon: "rocket-outline",
+      tint: brandColors.success,
+      sub: "You're all set — tap to publish your store.",
+      badge: "Paystack · Verified",
+    },
+  }[paystackState] || {
+    icon: "time-outline",
+    tint: themeColors.muted,
+    sub: "",
+    badge: "",
+  };
 
   // Trigger the edge function that pulls this store's Meta catalog into
   // express_products. Only live stores' products appear in the buyer feed.
@@ -957,7 +999,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // development mode without verification.
   const waFallbackRef = useRef(false);
   const connectWhatsAppCatalog = useCallback(
-    (mode?: "login") => {
+    (mode) => {
       if (!sellerId || waConnecting) return;
       // Fresh user-initiated attempts always start with Embedded Signup;
       // only the automatic retry passes mode="login" (and keeps the flag).
@@ -1140,10 +1182,25 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       //      these FKs without ON DELETE actions). Cleanup steps are
       //      best-effort: a failed step is logged but never blocks the rest.
       const detachSteps = [
-        ["cart items", () => supabase.from("express_cart_items").delete().eq("product_id", id)],
-        ["wishlist entries", () => supabase.from("express_wishlists").delete().eq("product_id", id)],
-        ["reviews", () => supabase.from("express_reviews").delete().eq("product_id", id)],
-        ["flash sale", () => supabase.from("express_flash_sales").delete().eq("product_id", id)],
+        [
+          "cart items",
+          () =>
+            supabase.from("express_cart_items").delete().eq("product_id", id),
+        ],
+        [
+          "wishlist entries",
+          () =>
+            supabase.from("express_wishlists").delete().eq("product_id", id),
+        ],
+        [
+          "reviews",
+          () => supabase.from("express_reviews").delete().eq("product_id", id),
+        ],
+        [
+          "flash sale",
+          () =>
+            supabase.from("express_flash_sales").delete().eq("product_id", id),
+        ],
         // Order history and reels must survive the product — they only lose
         // the (now-dead) product link.
         [
@@ -1156,7 +1213,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         ],
         [
           "reel links",
-          () => supabase.from("reels").update({ product_id: null }).eq("product_id", id),
+          () =>
+            supabase
+              .from("reels")
+              .update({ product_id: null })
+              .eq("product_id", id),
         ],
       ];
       onStep?.("refs", "active");
@@ -1164,7 +1225,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         detachSteps.map(async ([label, run]) => {
           try {
             const { error } = await run();
-            if (error) console.warn(`[deleteProduct] clearing ${label} failed:`, error.message);
+            if (error)
+              console.warn(
+                `[deleteProduct] clearing ${label} failed:`,
+                error.message,
+              );
           } catch (e) {
             console.warn(`[deleteProduct] clearing ${label} failed:`, e);
           }
@@ -1207,7 +1272,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               body: { key: videoKey },
             });
           } catch (e) {
-            console.warn("[deleteProduct] R2 video delete failed (continuing)", e);
+            console.warn(
+              "[deleteProduct] R2 video delete failed (continuing)",
+              e,
+            );
           }
         }
         onStep?.("video", "done");
@@ -1340,6 +1408,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
   // ── Product form ────────────────────────────────────────────────────────
   const resetProductFormState = () => {
+    cancelProductAgent();
+    setAgentDebug(null);
+    setAgentPromptVisible(false);
+    setAgentPriceInput("");
+    setAgentQuantityInput("");
+    agentPromptResolverRef.current = null;
     setTitle("");
     setPrice("");
     setShippingFee("");
@@ -1383,6 +1457,22 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     resetProductFormState();
     setModalVisible(true);
   };
+
+  const promptForAutoCreatePricing = useCallback(() => {
+    return new Promise((resolve) => {
+      setAgentPriceInput(price || "");
+      setAgentQuantityInput(quantity || "");
+      setAgentPromptVisible(true);
+      agentPromptResolverRef.current = resolve;
+    });
+  }, [price, quantity]);
+
+  const resolveAutoCreatePrompt = useCallback((payload) => {
+    const resolve = agentPromptResolverRef.current;
+    agentPromptResolverRef.current = null;
+    setAgentPromptVisible(false);
+    if (resolve) resolve(payload ?? { cancelled: true });
+  }, []);
 
   const openEditModal = (product) => {
     setEditingProduct(product);
@@ -1629,10 +1719,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         setVideoFile({
           file: asset.file || null,
           type,
-          name:
-            asset.fileName ||
-            asset.uri?.split("/").pop() ||
-            "video.mp4",
+          name: asset.fileName || asset.uri?.split("/").pop() || "video.mp4",
         });
       } else {
         setVideoFile(null);
@@ -1672,7 +1759,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       });
       setVideoUri(finalVideoUri);
       if (Platform.OS === "web") {
-        const type = compressedVideo.contentType || normalizePickedVideoType(asset);
+        const type =
+          compressedVideo.contentType || normalizePickedVideoType(asset);
         setVideoFile({
           file: compressedVideo.pickedFile || asset.file || null,
           type,
@@ -1777,15 +1865,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // the raw file bytes are streamed straight to R2 (the reliable React Native
   // path — reading a local file into a Blob via fetch/XHR is unsupported and was
   // silently storing empty/garbage objects). On web we PUT the picked Blob.
-  const uploadVideoToR2 = async (
-    uri,
-    pickedFile,
-    productTitle,
-    onProgress,
-  ) => {
-    const compressedVideo = await compressProductVideo(uri, pickedFile);
-    const sourceUri = compressedVideo.uri || uri;
-    const sourceFile = compressedVideo.pickedFile || pickedFile;
+  const uploadVideoToR2 = async (uri, pickedFile, productTitle, onProgress) => {
+    // Selection already prepared this file; upload those exact bytes without
+    // another lossy encode.
+    const sourceUri = uri;
+    const sourceFile = pickedFile;
     const { contentType, extension } = getVideoUploadDetails(
       sourceUri,
       sourceFile,
@@ -1826,7 +1910,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     try {
       if (Platform.OS === "web") {
         const body =
-          sourceFile instanceof Blob ? sourceFile : await getBlobFromUri(sourceUri);
+          sourceFile instanceof Blob
+            ? sourceFile
+            : await getBlobFromUri(sourceUri);
         if (!body) throw new Error("Could not read the selected video file");
 
         await new Promise((resolve, reject) => {
@@ -1901,81 +1987,143 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   };
 
   const generateProductFromImage = async () => {
+    if (agentRunRef.current || submitting) return;
     const firstUri = imageUris[0];
     const compressed = firstUri ? imageCompression?.[firstUri] : null;
     const storedImageReference = existingImageUrls[0];
-    const existingImageUrl = /^https:\/\//i.test(String(storedImageReference || ""))
+    const existingImageUrl = /^https:\/\//i.test(
+      String(storedImageReference || ""),
+    )
       ? String(storedImageReference)
       : /^http:\/\//i.test(String(storedImageReference || ""))
         ? String(storedImageReference).replace(/^http:\/\//i, "https://")
         : resolveMediaUrl(storedImageReference, R2_FOLDERS.PRODUCTS);
     if ((!firstUri || !compressed) && !existingImageUrl) {
-      toast.warning("Add a photo first", "Choose a product photo to generate details.");
+      toast.warning(
+        "Add a photo first",
+        "Choose a product photo to generate details.",
+      );
       return;
     }
 
-    const addAgentActivity = (message, status = "done") => {
+    const requestedPriceAndQuantity = await promptForAutoCreatePricing();
+    if (!requestedPriceAndQuantity || requestedPriceAndQuantity.cancelled) {
+      return;
+    }
+    const requestedPrice =
+      requestedPriceAndQuantity.price != null &&
+      requestedPriceAndQuantity.price !== ""
+        ? Number(requestedPriceAndQuantity.price)
+        : null;
+    const requestedQuantity =
+      requestedPriceAndQuantity.quantity != null &&
+      requestedPriceAndQuantity.quantity !== ""
+        ? Number(requestedPriceAndQuantity.quantity)
+        : null;
+
+    const controller = new AbortController();
+    agentRunRef.current = controller;
+    const isCurrent = () =>
+      agentRunRef.current === controller && !controller.signal.aborted;
+    const addAgentActivity = (message, status = "info", attempt) => {
+      if (!isCurrent()) return;
       setAgentActivity((previous) => [
-        ...previous.slice(-5),
-        { id: `${Date.now()}-${Math.random()}`, message, status },
+        ...previous.slice(-99),
+        {
+          id: `${Date.now()}-${Math.random()}`,
+          time: new Date().toLocaleTimeString(),
+          message,
+          status,
+          attempt,
+        },
       ]);
     };
 
     setGeneratingProduct(true);
     setAgentActivity([]);
+    setAgentDebug(null);
     addAgentActivity(
-      compressed ? "Reading compressed product image" : "Reading published product image URL",
+      compressed
+        ? "Reading compressed product image"
+        : "Reading published product image URL",
       "active",
     );
     try {
-      let image;
-      if (compressed) {
-        let base64;
-        if (Platform.OS === "web") {
-          const blob = compressed.pickedFile;
-          if (!blob) throw new Error("Compressed image is not ready");
-          const buffer = await blob.arrayBuffer();
-          const bytes = new Uint8Array(buffer);
-          let binary = "";
-          for (let index = 0; index < bytes.length; index += 1) {
-            binary += String.fromCharCode(bytes[index]);
+      const generated = await runProductCreationAgent({
+        signal: controller.signal,
+        onEvent: ({ message, status, attempt }) =>
+          addAgentActivity(message, status, attempt),
+        onDebug: (debug) => {
+          if (isCurrent()) setAgentDebug(debug);
+        },
+        prepare: async () => {
+          let image;
+          if (compressed) {
+            let base64;
+            if (Platform.OS === "web") {
+              const blob = compressed.pickedFile;
+              if (!blob) throw new Error("Compressed image is not ready");
+              const buffer = await blob.arrayBuffer();
+              const bytes = new Uint8Array(buffer);
+              let binary = "";
+              for (let index = 0; index < bytes.length; index += 1) {
+                binary += String.fromCharCode(bytes[index]);
+              }
+              base64 = btoa(binary);
+            } else {
+              base64 = await FileSystem.readAsStringAsync(compressed.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+            }
+            image = `data:image/jpeg;base64,${base64}`;
+          } else {
+            image = existingImageUrl;
           }
-          base64 = btoa(binary);
-        } else {
-          base64 = await FileSystem.readAsStringAsync(compressed.uri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-        }
-        image = `data:image/jpeg;base64,${base64}`;
-      } else {
-        image = existingImageUrl;
-      }
 
-      addAgentActivity("Sending image to product vision agent", "active");
-      const result = await callEdgeFunction("product-vision", {
-        image,
-        category: category || null,
-        categories: categories.map((item) => item.name).filter(Boolean),
+          return image;
+        },
+        request: async (image, signal) => {
+          const { data, error } = await supabase.functions.invoke(
+            "product-vision",
+            {
+              body: {
+                image,
+                category: category || null,
+                categories: categories.map((item) => item.name).filter(Boolean),
+                price: requestedPrice,
+                quantity: requestedQuantity,
+              },
+              signal,
+            },
+          );
+          if (error) {
+            if (error.context?.clone) {
+              const payload = await error.context.clone().json();
+              if (payload?.error) return payload;
+            }
+            throw new Error(error.message || "Vision request failed");
+          }
+          return data;
+        },
       });
-      if (!result?.success || !result.product) {
-        throw new Error(result?.error || "AI could not identify this product");
-      }
-
-      const generated = result.product;
+      if (!isCurrent()) return;
       addAgentActivity("Navigating to Basics", "active");
       setProductFormStep(2);
-      await new Promise((resolve) => setTimeout(resolve, 250));
       if (generated.category) {
         const suggestedCategory = categories.find(
           (item) =>
-            String(item.name || "").trim().toLowerCase() ===
+            String(item.name || "")
+              .trim()
+              .toLowerCase() ===
             String(generated.category).trim().toLowerCase(),
         );
         if (suggestedCategory) {
           setCategory(suggestedCategory.name);
           addAgentActivity(`Selected category: ${suggestedCategory.name}`);
         } else {
-          addAgentActivity(`Category suggestion needs review: ${String(generated.category)}`);
+          addAgentActivity(
+            `Category suggestion needs review: ${String(generated.category)}`,
+          );
         }
       }
       if (generated.title) {
@@ -1986,13 +2134,38 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         addAgentActivity("Inserting product description");
         setDescription(String(generated.description));
       }
-      addAgentActivity("Navigating to Inventory", "active");
-      setProductFormStep(3);
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      addAgentActivity("Inventory left for you: price and stock are seller-specific");
-      addAgentActivity("Navigating to Details", "active");
+      if (generated.price != null && Number.isFinite(Number(generated.price))) {
+        const nextPrice = Number(generated.price);
+        setPrice(String(nextPrice));
+        addAgentActivity(`Set suggested price: GH₵${nextPrice.toFixed(2)}`);
+      } else if (requestedPrice != null && Number.isFinite(requestedPrice)) {
+        setPrice(String(requestedPrice));
+        addAgentActivity(
+          `Set confirmed price: GH₵${requestedPrice.toFixed(2)}`,
+        );
+      }
+      if (
+        generated.quantity != null &&
+        Number.isFinite(Number(generated.quantity))
+      ) {
+        const nextQuantity = Math.max(
+          0,
+          Math.round(Number(generated.quantity)),
+        );
+        setQuantity(String(nextQuantity));
+        addAgentActivity(`Set suggested quantity: ${nextQuantity}`);
+      } else if (
+        requestedQuantity != null &&
+        Number.isFinite(requestedQuantity)
+      ) {
+        setQuantity(String(Math.max(0, Math.round(requestedQuantity))));
+        addAgentActivity(
+          `Set confirmed quantity: ${Math.max(0, Math.round(requestedQuantity))}`,
+        );
+      }
+      addAgentActivity("Inventory values set; review and publish when ready.");
+      addAgentActivity("Applying specifications and tags");
       setProductFormStep(4);
-      await new Promise((resolve) => setTimeout(resolve, 250));
       if (Array.isArray(generated.specifications)) {
         setSpecifications(
           generated.specifications
@@ -2002,25 +2175,44 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             }))
             .filter((spec) => spec.key && spec.value),
         );
-        addAgentActivity(`Inserted ${generated.specifications.length} specifications`);
+        addAgentActivity(
+          `Inserted ${generated.specifications.length} specifications`,
+        );
       }
       if (Array.isArray(generated.tags)) {
-        setTags(generated.tags.map((tag) => String(tag).trim()).filter(Boolean));
+        setTags(
+          generated.tags.map((tag) => String(tag).trim()).filter(Boolean),
+        );
         addAgentActivity(`Typed ${generated.tags.length} search tags`);
       }
-      addAgentActivity("Draft ready for your review");
-      toast.success("Product details generated", "Review the suggestions before publishing.");
+      addAgentActivity("Draft ready for your review", "done");
+      toast.success(
+        "Product details generated",
+        "Review the suggestions before publishing.",
+      );
     } catch (error) {
-      console.error("[product-vision] generation failed:", error);
-      toast.error("AI generation failed", error?.message || "Try another image.");
+      if (isCurrent()) {
+        addAgentActivity(error?.message || "Could not apply draft", "error");
+        toast.error("Could not apply draft", "Please try Auto-create again.");
+      }
     } finally {
-      setGeneratingProduct(false);
+      if (agentRunRef.current === controller) {
+        agentRunRef.current = null;
+        setGeneratingProduct(false);
+      }
     }
   };
 
   const goToNextProductStep = () => {
-    if (productFormStep === 1 && imageUris.length === 0 && existingImageUrls.length === 0) {
-      toast.warning("Add media first", "Choose at least one product image before continuing.");
+    if (
+      productFormStep === 1 &&
+      imageUris.length === 0 &&
+      existingImageUrls.length === 0
+    ) {
+      toast.warning(
+        "Add media first",
+        "Choose at least one product image before continuing.",
+      );
       return;
     }
 
@@ -2200,12 +2392,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       });
 
       try {
-        const compressedVideo = await compressProductVideo(uri, pickedFile);
-        const finalUri = compressedVideo.uri || uri;
-        const finalPickedFile = compressedVideo.pickedFile || pickedFile;
+        // Both product creation and attachment compress once, during selection.
+        const finalUri = uri;
+        const finalPickedFile = pickedFile;
         const sizeBytes = Number(
-          compressedVideo.compressedSize ||
-            (await getVideoSizeBytes(finalUri, finalPickedFile)),
+          await getVideoSizeBytes(finalUri, finalPickedFile),
         );
         if (sizeBytes > MAX_VIDEO_UPLOAD_BYTES) {
           throw new Error(
@@ -2693,8 +2884,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               {formatPrice(flashSale ? flashSale.flash_price : p.price)}
             </Text>
             {flashSale &&
-            Number(flashSale.original_price) >
-              Number(flashSale.flash_price) ? (
+            Number(flashSale.original_price) > Number(flashSale.flash_price) ? (
               <Text style={styles.catalogCardOriginal}>
                 {formatPrice(flashSale.original_price)}
               </Text>
@@ -3538,9 +3728,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               controls
             />
           ) : (
-            <View
-              style={[styles.reelPlayerSurface, styles.reelPlayerFallback]}
-            >
+            <View style={[styles.reelPlayerSurface, styles.reelPlayerFallback]}>
               <Ionicons name="alert-circle-outline" size={28} color="#fff" />
               <Text style={styles.reelPlayerFallbackText}>
                 No video available for this item.
@@ -3889,7 +4077,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               color={themeColors.primary}
             />
             <Text style={styles.couponSheetTitle}>Store Coupons</Text>
-            <Pressable onPress={() => setCouponManagerVisible(false)} hitSlop={8}>
+            <Pressable
+              onPress={() => setCouponManagerVisible(false)}
+              hitSlop={8}
+            >
               <Ionicons name="close" size={22} color={themeColors.muted} />
             </Pressable>
           </View>
@@ -3958,7 +4149,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                         hitSlop={6}
                         style={{ padding: 6 }}
                       >
-                        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                        <Ionicons
+                          name="trash-outline"
+                          size={20}
+                          color="#EF4444"
+                        />
                       </Pressable>
                     </View>
                   ))
@@ -4018,7 +4213,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   setCouponForm((f) => ({ ...f, discountValue: t }))
                 }
                 placeholder={
-                  couponForm.discountType === "percentage" ? "e.g. 15" : "e.g. 20.00"
+                  couponForm.discountType === "percentage"
+                    ? "e.g. 15"
+                    : "e.g. 20.00"
                 }
                 keyboardType="decimal-pad"
                 placeholderTextColor={themeColors.muted}
@@ -4027,7 +4224,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               <TextInput
                 style={styles.couponInput}
                 value={couponForm.minOrder}
-                onChangeText={(t) => setCouponForm((f) => ({ ...f, minOrder: t }))}
+                onChangeText={(t) =>
+                  setCouponForm((f) => ({ ...f, minOrder: t }))
+                }
                 placeholder="Blank = no minimum"
                 keyboardType="decimal-pad"
                 placeholderTextColor={themeColors.muted}
@@ -4047,7 +4246,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               <TextInput
                 style={styles.couponInput}
                 value={couponForm.maxUses}
-                onChangeText={(t) => setCouponForm((f) => ({ ...f, maxUses: t }))}
+                onChangeText={(t) =>
+                  setCouponForm((f) => ({ ...f, maxUses: t }))
+                }
                 placeholder="Blank = unlimited"
                 keyboardType="number-pad"
                 placeholderTextColor={themeColors.muted}
@@ -4125,7 +4326,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setDeleteSteps([
       { key: "refs", label: "Clearing linked records", status: "pending" },
       ...(hasImages
-        ? [{ key: "images", label: "Removing images from storage", status: "pending" }]
+        ? [
+            {
+              key: "images",
+              label: "Removing images from storage",
+              status: "pending",
+            },
+          ]
         : []),
       ...(hasVideo
         ? [{ key: "video", label: "Removing video from R2", status: "pending" }]
@@ -4147,7 +4354,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       // Keep the dialog open on failure so the user sees where it stopped,
       // but re-enable Cancel so they can back out.
       setDeleteSteps((prev) =>
-        prev.map((s) => (s.status === "active" ? { ...s, status: "pending" } : s)),
+        prev.map((s) =>
+          s.status === "active" ? { ...s, status: "pending" } : s,
+        ),
       );
     } finally {
       setDeletingProduct(false);
@@ -4181,7 +4390,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               {deleteSteps.map((step) => (
                 <View key={step.key} style={styles.progressRow}>
                   {step.status === "done" ? (
-                    <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color="#10B981"
+                    />
                   ) : step.status === "active" ? (
                     <ActivityIndicator size="small" color="#EF4444" />
                   ) : (
@@ -4306,6 +4519,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           {pendingVideo && (
             <View style={styles.attachVideoSelection}>
               <Text style={styles.attachVideoLabel}>Selected video</Text>
+              <ProductVideoPreview
+                key={pendingVideo.uri}
+                uri={pendingVideo.uri}
+                ready={pendingVideo.status === "compressed"}
+                active={productSelectModalVisible}
+                style={{ width: "100%", height: 200, marginTop: 8 }}
+              />
               <Text style={styles.attachVideoMeta}>
                 {getVideoCompressionSummary(pendingVideo)}
               </Text>
@@ -4379,10 +4599,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       <Animated.View style={[styles.drawerOverlay, { opacity: drawerAnim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={closeMenu} />
         <Animated.View
-          style={[
-            styles.drawer,
-            { transform: [{ translateX: drawerSlide }] },
-          ]}
+          style={[styles.drawer, { transform: [{ translateX: drawerSlide }] }]}
           onStartShouldSetResponder={() => true}
         >
           <View style={styles.drawerHeader}>
@@ -4545,7 +4762,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       ].filter(Boolean)
     : [];
   const detailSpecifications =
-    viewingProduct?.specifications && typeof viewingProduct.specifications === "object"
+    viewingProduct?.specifications &&
+    typeof viewingProduct.specifications === "object"
       ? Object.entries(viewingProduct.specifications)
       : [];
   const detailTags = Array.isArray(viewingProduct?.tags)
@@ -4560,7 +4778,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     ? viewingProduct.sizes.filter(Boolean)
     : [];
   const detailValue = (value, fallback = "Not set") =>
-    value === null || value === undefined || value === "" ? fallback : String(value);
+    value === null || value === undefined || value === ""
+      ? fallback
+      : String(value);
 
   return (
     <View style={styles.container}>
@@ -4570,7 +4790,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           the cover; the rest stays the page background. */}
       <View pointerEvents="none" style={styles.bounceWrap}>
         <View
-          style={[styles.bounceTop, { backgroundColor: themeColors.gradientStart }]}
+          style={[
+            styles.bounceTop,
+            { backgroundColor: themeColors.gradientStart },
+          ]}
         />
       </View>
       <ScrollView
@@ -4616,11 +4839,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
           {/* Floating top action row — menu / edit / search / refresh */}
           <View style={[styles.topBar, { top: insets.top + 8 }]}>
-            <Pressable
-              style={styles.topBarBtn}
-              onPress={openMenu}
-              hitSlop={10}
-            >
+            <Pressable style={styles.topBarBtn} onPress={openMenu} hitSlop={10}>
               <Ionicons name="menu-outline" size={24} color="#fff" />
             </Pressable>
             <View style={styles.topBarRight}>
@@ -4699,7 +4918,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 </Pressable>
               </View>
               <Text style={styles.statLine} numberOfLines={1}>
-                <Text style={styles.statBold}>{formatCount(followerCount)}</Text>
+                <Text style={styles.statBold}>
+                  {formatCount(followerCount)}
+                </Text>
                 {" followers"}
                 <Text style={styles.statDot}>{" · "}</Text>
                 <Text style={styles.statBold}>
@@ -4799,7 +5020,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     size={11}
                     color={notLiveUi.tint}
                   />
-                  <Text style={[styles.payBadgeText, { color: notLiveUi.tint }]}>
+                  <Text
+                    style={[styles.payBadgeText, { color: notLiveUi.tint }]}
+                  >
                     {notLiveUi.badge}
                   </Text>
                 </View>
@@ -4814,120 +5037,136 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
           {controlsExpanded && (
             <>
-          {/* Go Live toggle — only enabled when a verified Paystack account exists */}
-          <Pressable
-            style={[
-              styles.goLiveRow,
-              isLive && styles.goLiveRowActive,
-              !canGoLive() && !isLive && styles.goLiveRowDisabled,
-            ]}
-            onPress={toggleGoLive}
-            disabled={togglingLive}
-          >
-            <View style={styles.goLiveLeft}>
-              <Ionicons
-                name={isLive ? "radio-button-on" : "radio-button-off"}
-                size={20}
-                color={isLive ? "#fff" : themeColors.muted}
-              />
-              <View style={styles.goLiveTextWrap}>
-                <Text
-                  style={[
-                    styles.goLiveTitle,
-                    isLive && styles.goLiveTitleActive,
-                  ]}
-                >
-                  {isLive ? "Store is Live" : "Go Live"}
-                </Text>
-                <Text
-                  style={[styles.goLiveSub, isLive && styles.goLiveSubActive]}
-                >
-                  {isLive
-                    ? "Customers can browse and buy"
-                    : canGoLive()
-                      ? "Tap to publish your store"
-                      : "Link a verified Paystack account"}
-                </Text>
-              </View>
-            </View>
-            {togglingLive ? (
-              <ActivityIndicator
-                size="small"
-                color={isLive ? "#fff" : accent}
-              />
-            ) : (
-              <View
-                style={[styles.goLiveSwitch, isLive && styles.goLiveSwitchOn]}
+              {/* Go Live toggle — only enabled when a verified Paystack account exists */}
+              <Pressable
+                style={[
+                  styles.goLiveRow,
+                  isLive && styles.goLiveRowActive,
+                  !canGoLive() && !isLive && styles.goLiveRowDisabled,
+                ]}
+                onPress={toggleGoLive}
+                disabled={togglingLive}
               >
-                <View style={styles.goLiveKnob} />
-              </View>
-            )}
-          </Pressable>
+                <View style={styles.goLiveLeft}>
+                  <Ionicons
+                    name={isLive ? "radio-button-on" : "radio-button-off"}
+                    size={20}
+                    color={isLive ? "#fff" : themeColors.muted}
+                  />
+                  <View style={styles.goLiveTextWrap}>
+                    <Text
+                      style={[
+                        styles.goLiveTitle,
+                        isLive && styles.goLiveTitleActive,
+                      ]}
+                    >
+                      {isLive ? "Store is Live" : "Go Live"}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.goLiveSub,
+                        isLive && styles.goLiveSubActive,
+                      ]}
+                    >
+                      {isLive
+                        ? "Customers can browse and buy"
+                        : canGoLive()
+                          ? "Tap to publish your store"
+                          : "Link a verified Paystack account"}
+                    </Text>
+                  </View>
+                </View>
+                {togglingLive ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={isLive ? "#fff" : accent}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.goLiveSwitch,
+                      isLive && styles.goLiveSwitchOn,
+                    ]}
+                  >
+                    <View style={styles.goLiveKnob} />
+                  </View>
+                )}
+              </Pressable>
 
-          {/* WhatsApp catalog sync — import products from a Meta catalog.
+              {/* WhatsApp catalog sync — import products from a Meta catalog.
               Hidden behind FEATURE_WHATSAPP_CATALOG for now; ships in a
               later update. */}
-          {FEATURE_WHATSAPP_CATALOG && (
-          <>
-          <Pressable
-            style={[styles.waRow, waConnected && styles.waRowActive]}
-            onPress={() =>
-              waConnected ? setWaModalVisible(true) : connectWhatsAppCatalog()
-            }
-            disabled={waConnecting}
-          >
-            <View style={styles.waLeft}>
-              <Ionicons
-                name="logo-whatsapp"
-                size={20}
-                color={waConnected ? "#fff" : "#25D366"}
-              />
-              <View style={styles.waTextWrap}>
-                <Text
-                  style={[styles.waTitle, waConnected && styles.waTitleActive]}
-                >
-                  {waConnected
-                    ? "WhatsApp Catalog Linked"
-                    : "Link WhatsApp Catalog"}
-                </Text>
-                <Text style={[styles.waSub, waConnected && styles.waSubActive]}>
-                  {waConnected
-                    ? waCatalogName
-                      ? `Synced from ${waCatalogName}`
-                      : "Import products from your Meta catalog"
-                    : "Connect a WABA catalog to auto-import products"}
-                </Text>
-              </View>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={waConnected ? "#fff" : themeColors.muted}
-            />
-          </Pressable>
+              {FEATURE_WHATSAPP_CATALOG && (
+                <>
+                  <Pressable
+                    style={[styles.waRow, waConnected && styles.waRowActive]}
+                    onPress={() =>
+                      waConnected
+                        ? setWaModalVisible(true)
+                        : connectWhatsAppCatalog()
+                    }
+                    disabled={waConnecting}
+                  >
+                    <View style={styles.waLeft}>
+                      <Ionicons
+                        name="logo-whatsapp"
+                        size={20}
+                        color={waConnected ? "#fff" : "#25D366"}
+                      />
+                      <View style={styles.waTextWrap}>
+                        <Text
+                          style={[
+                            styles.waTitle,
+                            waConnected && styles.waTitleActive,
+                          ]}
+                        >
+                          {waConnected
+                            ? "WhatsApp Catalog Linked"
+                            : "Link WhatsApp Catalog"}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.waSub,
+                            waConnected && styles.waSubActive,
+                          ]}
+                        >
+                          {waConnected
+                            ? waCatalogName
+                              ? `Synced from ${waCatalogName}`
+                              : "Import products from your Meta catalog"
+                            : "Connect a WABA catalog to auto-import products"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color={waConnected ? "#fff" : themeColors.muted}
+                    />
+                  </Pressable>
 
-          {waConnected && (
-            <Pressable
-              style={styles.waSyncButton}
-              onPress={syncWhatsAppCatalog}
-              disabled={waSyncing}
-            >
-              {waSyncing ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="refresh" size={16} color="#fff" />
+                  {waConnected && (
+                    <Pressable
+                      style={styles.waSyncButton}
+                      onPress={syncWhatsAppCatalog}
+                      disabled={waSyncing}
+                    >
+                      {waSyncing ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Ionicons name="refresh" size={16} color="#fff" />
+                      )}
+                      <Text style={styles.waSyncText}>
+                        {waSyncing
+                          ? "Syncing…"
+                          : waLastSynced
+                            ? "Sync now"
+                            : "Sync catalog"}
+                      </Text>
+                    </Pressable>
+                  )}
+                </>
               )}
-              <Text style={styles.waSyncText}>
-                {waSyncing
-                  ? "Syncing…"
-                  : waLastSynced
-                    ? "Sync now"
-                    : "Sync catalog"}
-              </Text>
-            </Pressable>
-          )}
-          </>
-          )}
             </>
           )}
 
@@ -4969,29 +5208,26 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 onPress={() => setActiveTab(tab)}
               >
                 <Text
-                  style={[
-                    styles.tabPillText,
-                    isActive && { color: accent },
-                  ]}
+                  style={[styles.tabPillText, isActive && { color: accent }]}
                 >
                   {TAB_LABELS[tab]}
                 </Text>
-                  {tab === "orders" && processingOrderCount > 0 ? (
-                    <View
-                      style={[
-                        styles.tabCountBadge,
-                        {
-                          backgroundColor: isActive
-                            ? accent
-                            : themeColors.badgeDanger,
-                        },
-                      ]}
-                    >
-                      <Text style={styles.tabCountBadgeText}>
-                        {processingOrderCount > 99 ? "99+" : processingOrderCount}
-                      </Text>
-                    </View>
-                  ) : null}
+                {tab === "orders" && processingOrderCount > 0 ? (
+                  <View
+                    style={[
+                      styles.tabCountBadge,
+                      {
+                        backgroundColor: isActive
+                          ? accent
+                          : themeColors.badgeDanger,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.tabCountBadgeText}>
+                      {processingOrderCount > 99 ? "99+" : processingOrderCount}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
             );
           })}
@@ -5009,7 +5245,78 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       </ScrollView>
 
       {/* Product create/edit modal */}
-      <Modal visible={modalVisible} animationType="slide" statusBarTranslucent>
+      <Modal
+        visible={agentPromptVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => resolveAutoCreatePrompt({ cancelled: true })}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1, justifyContent: "flex-end", paddingBottom: 10 }}
+          behavior="padding"
+          keyboardVerticalOffset={0}
+        >
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={() => resolveAutoCreatePrompt({ cancelled: true })}
+          >
+            <Pressable style={[styles.confirmCard, { marginBottom: 0 }]} onPress={() => {}}>
+              <Text style={styles.confirmTitle}>Set price & stock</Text>
+              <Text style={styles.confirmMessage}>
+                The agent will use these values to fill the price and quantity
+                fields.
+              </Text>
+              <Text style={styles.label}>Price (GH₵)</Text>
+              <TextInput
+                style={styles.input}
+                value={agentPriceInput}
+                onChangeText={setAgentPriceInput}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 120.00"
+                placeholderTextColor={themeColors.muted}
+              />
+              <Text style={[styles.label, { marginTop: 12 }]}>Quantity</Text>
+              <TextInput
+                style={styles.input}
+                value={agentQuantityInput}
+                onChangeText={setAgentQuantityInput}
+                keyboardType="number-pad"
+                placeholder="e.g. 25"
+                placeholderTextColor={themeColors.muted}
+              />
+              <View style={styles.confirmButtonRow}>
+                <Pressable
+                  style={[styles.confirmButton, styles.confirmCancelButton]}
+                  onPress={() => resolveAutoCreatePrompt({ cancelled: true })}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.confirmButton, styles.confirmDeleteButton]}
+                  onPress={() =>
+                    resolveAutoCreatePrompt({
+                      price: agentPriceInput,
+                      quantity: agentQuantityInput,
+                    })
+                  }
+                >
+                  <Text style={styles.confirmDeleteText}>Use values</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => {
+          cancelProductAgent();
+          setModalVisible(false);
+        }}
+      >
         <KeyboardAvoidingView
           style={styles.modalContainer}
           behavior="padding"
@@ -5026,7 +5333,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           >
             <Pressable
               style={styles.modalHeaderBtn}
-              onPress={() => setModalVisible(false)}
+              onPress={() => {
+                cancelProductAgent();
+                setModalVisible(false);
+              }}
               hitSlop={8}
             >
               <Ionicons name="close" size={22} color={themeColors.dark} />
@@ -5097,7 +5407,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   <Text style={styles.cardTitle}>Product info</Text>
                   <Text style={styles.label}>Title *</Text>
                   <TextInput
-                    style={[styles.input, !title.trim() && styles.requiredEmpty]}
+                    style={[
+                      styles.input,
+                      !title.trim() && styles.requiredEmpty,
+                    ]}
                     value={title}
                     onChangeText={setTitle}
                     placeholder="e.g. Ankara two-piece set"
@@ -5109,7 +5422,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     <View style={styles.col}>
                       <Text style={styles.label}>Price (GH₵) *</Text>
                       <TextInput
-                        style={[styles.input, !price.trim() && styles.requiredEmpty]}
+                        style={[
+                          styles.input,
+                          !price.trim() && styles.requiredEmpty,
+                        ]}
                         value={price}
                         onChangeText={setPrice}
                         keyboardType="decimal-pad"
@@ -5144,14 +5460,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                         </Text>
                       </View>
                       <View style={styles.feeRow}>
-                        <Text
-                          style={[styles.feeLabel, styles.feeLabelStrong]}
-                        >
+                        <Text style={[styles.feeLabel, styles.feeLabelStrong]}>
                           You receive
                         </Text>
-                        <Text
-                          style={[styles.feeValue, styles.feeValueStrong]}
-                        >
+                        <Text style={[styles.feeValue, styles.feeValueStrong]}>
                           GH₵{(priceNum - platformFee).toFixed(2)}
                         </Text>
                       </View>
@@ -5169,7 +5481,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       </Text>
                     </View>
                   ) : null}
-
                 </View>
 
                 <View style={styles.card}>
@@ -5238,7 +5549,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     <View style={styles.col}>
                       <Text style={styles.label}>Quantity *</Text>
                       <TextInput
-                        style={[styles.input, !isPreorder && !quantity.trim() && styles.requiredEmpty]}
+                        style={[
+                          styles.input,
+                          !isPreorder &&
+                            !quantity.trim() &&
+                            styles.requiredEmpty,
+                        ]}
                         value={quantity}
                         onChangeText={setQuantity}
                         keyboardType="number-pad"
@@ -5454,7 +5770,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                           style={styles.imageRemove}
                           onPress={() =>
                             (() => {
-                              setImageUris((prev) => prev.filter((x) => x !== u));
+                              setImageUris((prev) =>
+                                prev.filter((x) => x !== u),
+                              );
                               setImageCompression((prev) => {
                                 const next = { ...prev };
                                 delete next[u];
@@ -5492,25 +5810,85 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   <Text style={styles.hintText}>
                     The first photo becomes the cover image.
                   </Text>
-                  {agentActivity.length > 0 && (
-                    <View style={styles.agentActivityPanel}>
-                      <View style={styles.agentActivityHeader}>
-                        <Ionicons name="sparkles" size={15} color={accent} />
-                        <Text style={[styles.agentActivityTitle, { color: accent }]}>Auto-create agent</Text>
-                      </View>
-                      {agentActivity.map((activity) => (
-                        <View key={activity.id} style={styles.agentActivityRow}>
-                          <Ionicons
-                            name={activity.status === "active" ? "radio-button-on" : "checkmark-circle"}
-                            size={13}
-                            color={activity.status === "active" ? accent : "#10B981"}
-                          />
-                          <Text style={styles.agentActivityText}>{activity.message}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
                 </View>
+
+                {agentActivity.length > 0 && (
+                  <View
+                    style={[styles.agentActivityPanel, { marginBottom: 8 }]}
+                  >
+                    <View style={styles.agentActivityHeader}>
+                      {generatingProduct && (
+                        <ActivityIndicator size="small" color={accent} />
+                      )}
+                      <Text
+                        style={[
+                          styles.agentActivityTitle,
+                          { color: accent, flex: 1 },
+                        ]}
+                      >
+                        Auto-create ·{" "}
+                        {generatingProduct ? "Running" : "Stopped"}
+                      </Text>
+                      {generatingProduct && (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Cancel auto-create agent"
+                          onPress={cancelProductAgent}
+                          style={{ padding: 8 }}
+                        >
+                          <Text style={{ color: "#EF4444", fontWeight: "700" }}>
+                            Cancel
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
+                    <Text
+                      selectable
+                      style={[styles.agentActivityText, { flex: 0 }]}
+                    >
+                      {agentDebug
+                        ? [
+                            `Database model: ${agentDebug.requestedModel || "Not reported"}`,
+                            `Model used: ${agentDebug.selectedModel || "Not reported"}`,
+                            `Model selector: ${agentDebug.selectionSource || "Not reported"}`,
+                            `Model names checked: ${Array.isArray(agentDebug.modelNames) && agentDebug.modelNames.length ? agentDebug.modelNames.join(", ") : Array.isArray(agentDebug.modelsUsed) && agentDebug.modelsUsed.length ? agentDebug.modelsUsed.join(", ") : "Not reported"}`,
+                            `Models attempted: ${Array.isArray(agentDebug.modelsUsed) && agentDebug.modelsUsed.length ? agentDebug.modelsUsed.join(", ") : "Not reported"}`,
+                            `Actual response model: ${agentDebug.actualModel || "Not reported"}`,
+                          ].join("\n")
+                        : "Model: awaiting server diagnostics (not yet confirmed)"}
+                    </Text>
+                    <Text style={styles.hintText}>
+                      Retries until a valid draft or cancellation. Server events
+                      arrive with each response. Latest 100 events.
+                    </Text>
+                    <ScrollView style={{ maxHeight: 120 }} nestedScrollEnabled>
+                      {agentActivity.map((activity) => (
+                        <Text
+                          selectable
+                          key={activity.id}
+                          style={[
+                            styles.agentActivityText,
+                            {
+                              flex: 0,
+                              fontFamily:
+                                Platform.OS === "ios" ? "Menlo" : "monospace",
+                              color:
+                                activity.status === "error"
+                                  ? "#EF4444"
+                                  : activity.status === "done"
+                                    ? "#10B981"
+                                    : themeColors.muted,
+                            },
+                          ]}
+                        >
+                          {activity.time}{" "}
+                          {activity.attempt ? `#${activity.attempt} ` : ""} [
+                          {activity.status}] {activity.message}
+                        </Text>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
 
                 <View style={styles.card}>
                   <View style={styles.cardTitleRow}>
@@ -5521,13 +5899,16 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     {existingVideoUrl || videoUri ? (
                       <View style={styles.videoItem}>
                         <View style={styles.videoWrap}>
-                          <FeedVideo
-                            source={{ uri: videoUri || existingVideoUrl }}
+                          <ProductVideoPreview
+                            key={videoUri || existingVideoUrl}
+                            uri={videoUri || existingVideoUrl}
                             style={styles.videoThumb}
-                            resizeMode="cover"
-                            repeat
-                            muted
-                            paused
+                            ready={
+                              !videoUri ||
+                              videoCompression[videoUri]?.status ===
+                                "compressed"
+                            }
+                            active={modalVisible && !submitting}
                           />
                           <Pressable
                             style={styles.videoRemove}
@@ -5560,12 +5941,24 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                           </View>
                         </View>
                         {videoUri && videoCompression[videoUri] && (
-                          <Text style={[styles.videoSizeText, { color: themeColors.muted }]}>
-                            {getVideoCompressionSummary(videoCompression[videoUri])}
+                          <Text
+                            style={[
+                              styles.videoSizeText,
+                              { color: themeColors.muted },
+                            ]}
+                          >
+                            {getVideoCompressionSummary(
+                              videoCompression[videoUri],
+                            )}
                           </Text>
                         )}
                         {videoUri && !videoCompression[videoUri] && (
-                          <Text style={[styles.videoSizeText, { color: themeColors.muted }]}>
+                          <Text
+                            style={[
+                              styles.videoSizeText,
+                              { color: themeColors.muted },
+                            ]}
+                          >
                             Compressing...
                           </Text>
                         )}
@@ -5690,8 +6083,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   </View>
                   {tags.length === 0 && (
                     <Text style={styles.tagHint}>
-                      Separate tags with commas (e.g. red, summer, linen).
-                      Each tag becomes its own pill below.
+                      Separate tags with commas (e.g. red, summer, linen). Each
+                      tag becomes its own pill below.
                     </Text>
                   )}
                   {tags.length > 0 && (
@@ -5846,7 +6239,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 ) : (
                   <Ionicons name="sparkles-outline" size={16} color={accent} />
                 )}
-                <Text style={[styles.stepButtonSecondaryText, { color: accent }]}> 
+                <Text
+                  style={[styles.stepButtonSecondaryText, { color: accent }]}
+                >
                   {generatingProduct ? "Working" : "Auto-create"}
                 </Text>
               </TouchableOpacity>
@@ -5858,7 +6253,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   { backgroundColor: accent, flex: 1 },
                 ]}
                 onPress={goToNextProductStep}
-                disabled={submitting || isMediaCompressionActive}
+                disabled={
+                  submitting || generatingProduct || isMediaCompressionActive
+                }
               >
                 <Text style={styles.stepButtonText}>Continue</Text>
                 <Ionicons
@@ -5875,7 +6272,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   submitting && { opacity: 0.6 },
                 ]}
                 onPress={submitProduct}
-                disabled={submitting}
+                disabled={submitting || generatingProduct}
               >
                 {submitting ? (
                   <>
@@ -6148,7 +6545,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               ) : (
                 <View style={styles.detailGalleryEmpty}>
                   <Ionicons name="cube-outline" size={42} color={accent} />
-                  <Text style={styles.detailGalleryEmptyText}>No product photos</Text>
+                  <Text style={styles.detailGalleryEmptyText}>
+                    No product photos
+                  </Text>
                 </View>
               )}
               <View style={styles.detailHeroBody}>
@@ -6164,7 +6563,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   <View
                     style={[
                       styles.detailStatusPill,
-                      { backgroundColor: CATALOG_STATUS_COLORS[viewingProduct?.status] || themeColors.muted },
+                      {
+                        backgroundColor:
+                          CATALOG_STATUS_COLORS[viewingProduct?.status] ||
+                          themeColors.muted,
+                      },
                     ]}
                   >
                     <Text style={styles.detailStatusPillText}>
@@ -6176,17 +6579,42 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   {formatPrice(viewingProduct?.price)}
                 </Text>
                 <Text style={styles.detailDescription}>
-                  {detailValue(viewingProduct?.description, "No description added.")}
+                  {detailValue(
+                    viewingProduct?.description,
+                    "No description added.",
+                  )}
                 </Text>
               </View>
             </View>
 
             <View style={styles.detailMetricGrid}>
               {[
-                { label: "In stock", value: viewingProduct?.is_preorder ? "Preorder" : detailValue(viewingProduct?.quantity, "0"), icon: "layers-outline" },
-                { label: "Sold", value: detailValue(viewingProduct?.sold_count, "0"), icon: "trending-up-outline" },
-                { label: "Shipping", value: viewingProduct?.shipping_fee ? formatPrice(viewingProduct.shipping_fee) : "Free", icon: "car-outline" },
-                { label: "Discount", value: viewingProduct?.discount ? `${viewingProduct.discount}%` : "None", icon: "pricetag-outline" },
+                {
+                  label: "In stock",
+                  value: viewingProduct?.is_preorder
+                    ? "Preorder"
+                    : detailValue(viewingProduct?.quantity, "0"),
+                  icon: "layers-outline",
+                },
+                {
+                  label: "Sold",
+                  value: detailValue(viewingProduct?.sold_count, "0"),
+                  icon: "trending-up-outline",
+                },
+                {
+                  label: "Shipping",
+                  value: viewingProduct?.shipping_fee
+                    ? formatPrice(viewingProduct.shipping_fee)
+                    : "Free",
+                  icon: "car-outline",
+                },
+                {
+                  label: "Discount",
+                  value: viewingProduct?.discount
+                    ? `${viewingProduct.discount}%`
+                    : "None",
+                  icon: "pricetag-outline",
+                },
               ].map((metric) => (
                 <View key={metric.label} style={styles.detailMetric}>
                   <Ionicons name={metric.icon} size={17} color={accent} />
@@ -6199,14 +6627,31 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <View style={styles.detailSection}>
               <View style={styles.detailSectionHeading}>
                 <Ionicons name="cash-outline" size={18} color={accent} />
-                <Text style={styles.detailSectionTitle}>Pricing & fulfillment</Text>
+                <Text style={styles.detailSectionTitle}>
+                  Pricing & fulfillment
+                </Text>
               </View>
               <View style={styles.detailTwoColumn}>
                 {[
                   ["Selling price", formatPrice(viewingProduct?.price)],
-                  ["Compare-at price", viewingProduct?.compare_at_price ? formatPrice(viewingProduct.compare_at_price) : "Not set"],
-                  ["Cost price", viewingProduct?.cost_price ? formatPrice(viewingProduct.cost_price) : "Not set"],
-                  ["Shipping fee", viewingProduct?.shipping_fee ? formatPrice(viewingProduct.shipping_fee) : "Free"],
+                  [
+                    "Compare-at price",
+                    viewingProduct?.compare_at_price
+                      ? formatPrice(viewingProduct.compare_at_price)
+                      : "Not set",
+                  ],
+                  [
+                    "Cost price",
+                    viewingProduct?.cost_price
+                      ? formatPrice(viewingProduct.cost_price)
+                      : "Not set",
+                  ],
+                  [
+                    "Shipping fee",
+                    viewingProduct?.shipping_fee
+                      ? formatPrice(viewingProduct.shipping_fee)
+                      : "Free",
+                  ],
                 ].map(([label, value]) => (
                   <View key={label} style={styles.detailField}>
                     <Text style={styles.detailFieldLabel}>{label}</Text>
@@ -6219,14 +6664,34 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             <View style={styles.detailSection}>
               <View style={styles.detailSectionHeading}>
                 <Ionicons name="cube-outline" size={18} color={accent} />
-                <Text style={styles.detailSectionTitle}>Inventory & variants</Text>
+                <Text style={styles.detailSectionTitle}>
+                  Inventory & variants
+                </Text>
               </View>
               <View style={styles.detailTwoColumn}>
                 {[
-                  ["Quantity", viewingProduct?.is_preorder ? "Preorder" : detailValue(viewingProduct?.quantity, "0")],
-                  ["Inventory tracking", viewingProduct?.track_inventory === false ? "Disabled" : "Enabled"],
-                  ["Backorders", viewingProduct?.allow_backorder ? "Allowed" : "Not allowed"],
-                  ["Weight", viewingProduct?.weight ? `${viewingProduct.weight} ${detailValue(viewingProduct.weight_unit, "kg")}` : "Not set"],
+                  [
+                    "Quantity",
+                    viewingProduct?.is_preorder
+                      ? "Preorder"
+                      : detailValue(viewingProduct?.quantity, "0"),
+                  ],
+                  [
+                    "Inventory tracking",
+                    viewingProduct?.track_inventory === false
+                      ? "Disabled"
+                      : "Enabled",
+                  ],
+                  [
+                    "Backorders",
+                    viewingProduct?.allow_backorder ? "Allowed" : "Not allowed",
+                  ],
+                  [
+                    "Weight",
+                    viewingProduct?.weight
+                      ? `${viewingProduct.weight} ${detailValue(viewingProduct.weight_unit, "kg")}`
+                      : "Not set",
+                  ],
                 ].map(([label, value]) => (
                   <View key={label} style={styles.detailField}>
                     <Text style={styles.detailFieldLabel}>{label}</Text>
@@ -6236,11 +6701,15 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </View>
               <View style={styles.detailVariantBlock}>
                 <Text style={styles.detailFieldLabel}>Sizes</Text>
-                <Text style={styles.detailFieldValue}>{detailSizes.length ? detailSizes.join(" · ") : "No sizes"}</Text>
+                <Text style={styles.detailFieldValue}>
+                  {detailSizes.length ? detailSizes.join(" · ") : "No sizes"}
+                </Text>
               </View>
               <View style={styles.detailVariantBlock}>
                 <Text style={styles.detailFieldLabel}>Colors</Text>
-                <Text style={styles.detailFieldValue}>{detailColors.length ? detailColors.join(" · ") : "No colors"}</Text>
+                <Text style={styles.detailFieldValue}>
+                  {detailColors.length ? detailColors.join(" · ") : "No colors"}
+                </Text>
               </View>
             </View>
 
@@ -6249,18 +6718,28 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 <Ionicons name="list-outline" size={18} color={accent} />
                 <Text style={styles.detailSectionTitle}>Specifications</Text>
               </View>
-              {detailSpecifications.length ? detailSpecifications.map(([label, value]) => (
-                <View key={label} style={styles.detailSpecRow}>
-                  <Text style={styles.detailSpecLabel}>{label}</Text>
-                  <Text style={styles.detailSpecValue}>{detailValue(value)}</Text>
-                </View>
-              )) : <Text style={styles.detailEmptyText}>No specifications added.</Text>}
+              {detailSpecifications.length ? (
+                detailSpecifications.map(([label, value]) => (
+                  <View key={label} style={styles.detailSpecRow}>
+                    <Text style={styles.detailSpecLabel}>{label}</Text>
+                    <Text style={styles.detailSpecValue}>
+                      {detailValue(value)}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.detailEmptyText}>
+                  No specifications added.
+                </Text>
+              )}
             </View>
 
             <View style={styles.detailSection}>
               <View style={styles.detailSectionHeading}>
                 <Ionicons name="barcode-outline" size={18} color={accent} />
-                <Text style={styles.detailSectionTitle}>Organization & discoverability</Text>
+                <Text style={styles.detailSectionTitle}>
+                  Organization & discoverability
+                </Text>
               </View>
               <View style={styles.detailTwoColumn}>
                 {[
@@ -6271,16 +6750,31 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 ].map(([label, value]) => (
                   <View key={label} style={styles.detailField}>
                     <Text style={styles.detailFieldLabel}>{label}</Text>
-                    <Text style={styles.detailFieldValue}>{detailValue(value)}</Text>
+                    <Text style={styles.detailFieldValue}>
+                      {detailValue(value)}
+                    </Text>
                   </View>
                 ))}
               </View>
-              <Text style={[styles.detailFieldLabel, { marginTop: 14 }]}>Search tags</Text>
+              <Text style={[styles.detailFieldLabel, { marginTop: 14 }]}>
+                Search tags
+              </Text>
               {detailTags.length ? (
                 <View style={styles.detailTagWrap}>
-                  {detailTags.map((tag) => <View key={tag} style={[styles.detailTag, { borderColor: accent }]}><Text style={[styles.detailTagText, { color: accent }]}>{tag}</Text></View>)}
+                  {detailTags.map((tag) => (
+                    <View
+                      key={tag}
+                      style={[styles.detailTag, { borderColor: accent }]}
+                    >
+                      <Text style={[styles.detailTagText, { color: accent }]}>
+                        {tag}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
-              ) : <Text style={styles.detailEmptyText}>No tags added.</Text>}
+              ) : (
+                <Text style={styles.detailEmptyText}>No tags added.</Text>
+              )}
             </View>
 
             <View style={styles.detailSection}>
@@ -6291,19 +6785,29 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               <View style={styles.detailTwoColumn}>
                 <View style={styles.detailField}>
                   <Text style={styles.detailFieldLabel}>Photos</Text>
-                  <Text style={styles.detailFieldValue}>{detailMedia.length}</Text>
+                  <Text style={styles.detailFieldValue}>
+                    {detailMedia.length}
+                  </Text>
                 </View>
                 <View style={styles.detailField}>
                   <Text style={styles.detailFieldLabel}>Video</Text>
-                  <Text style={styles.detailFieldValue}>{viewingProduct?.video_url ? "Attached" : "Not attached"}</Text>
+                  <Text style={styles.detailFieldValue}>
+                    {viewingProduct?.video_url ? "Attached" : "Not attached"}
+                  </Text>
                 </View>
                 <View style={styles.detailField}>
                   <Text style={styles.detailFieldLabel}>Product ID</Text>
-                  <Text style={styles.detailFieldValue} numberOfLines={1}>{detailValue(viewingProduct?.id)}</Text>
+                  <Text style={styles.detailFieldValue} numberOfLines={1}>
+                    {detailValue(viewingProduct?.id)}
+                  </Text>
                 </View>
                 <View style={styles.detailField}>
                   <Text style={styles.detailFieldLabel}>Created</Text>
-                  <Text style={styles.detailFieldValue}>{viewingProduct?.created_at ? new Date(viewingProduct.created_at).toLocaleDateString() : "Not available"}</Text>
+                  <Text style={styles.detailFieldValue}>
+                    {viewingProduct?.created_at
+                      ? new Date(viewingProduct.created_at).toLocaleDateString()
+                      : "Not available"}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -6898,7 +7402,12 @@ const buildSellerAdminStyles = (c) =>
       gap: 8,
       marginBottom: 12,
     },
-    couponSheetTitle: { fontSize: 16, fontWeight: "800", color: c.dark, flex: 1 },
+    couponSheetTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.dark,
+      flex: 1,
+    },
     couponItem: {
       flexDirection: "row",
       alignItems: "center",
@@ -7584,14 +8093,17 @@ const buildSellerAdminStyles = (c) =>
       borderRadius: radius.md,
       padding: 7,
     },
-    textArea: { height: 100, backgroundColor: c.background,
+    textArea: {
+      height: 100,
+      backgroundColor: c.background,
       borderWidth: 1,
       borderColor: c.border,
       borderRadius: radius.xl,
       paddingHorizontal: 12,
       paddingVertical: 11,
       fontSize: 14,
-      color: c.dark, },
+      color: c.dark,
+    },
     tagInputWrap: {
       flexDirection: "row",
       alignItems: "center",
@@ -7707,13 +8219,13 @@ const buildSellerAdminStyles = (c) =>
       marginTop: 10,
     },
     videoItem: {
-      width: 140,
+      width: 300,
       gap: 5,
     },
     videoWrap: {
       position: "relative",
-      width: 140,
-      height: 140,
+      width: 300,
+      height: 400,
       borderRadius: radius.md,
       overflow: "hidden",
       backgroundColor: c.dark,
@@ -7740,15 +8252,15 @@ const buildSellerAdminStyles = (c) =>
     },
     videoBadgeText: { color: c.light, fontSize: 10, fontWeight: "700" },
     videoSizeText: {
-      width: 140,
+      width: 200,
       fontSize: 9,
       lineHeight: 11,
       textAlign: "center",
       color: c.muted,
     },
     videoAdd: {
-      width: 140,
-      height: 140,
+      width: 300,
+      height: 400,
       borderRadius: radius.md,
       borderWidth: 1.5,
       borderStyle: "dashed",
@@ -7806,8 +8318,17 @@ const buildSellerAdminStyles = (c) =>
       marginBottom: 2,
     },
     agentActivityTitle: { fontSize: 12, fontWeight: "800" },
-    agentActivityRow: { flexDirection: "row", alignItems: "flex-start", gap: 7 },
-    agentActivityText: { flex: 1, color: c.muted, fontSize: 11.5, lineHeight: 16 },
+    agentActivityRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 7,
+    },
+    agentActivityText: {
+      flex: 1,
+      color: c.muted,
+      fontSize: 11.5,
+      lineHeight: 16,
+    },
     submitButton: {
       marginTop: 20,
       paddingVertical: 14,
@@ -7973,10 +8494,26 @@ const buildSellerAdminStyles = (c) =>
       borderBottomWidth: 1,
       borderBottomColor: c.surface,
     },
-    detailSpecLabel: { flex: 0.8, color: c.muted, fontSize: 13, fontWeight: "700" },
-    detailSpecValue: { flex: 1.2, color: c.dark, fontSize: 13, fontWeight: "800", textAlign: "right" },
+    detailSpecLabel: {
+      flex: 0.8,
+      color: c.muted,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    detailSpecValue: {
+      flex: 1.2,
+      color: c.dark,
+      fontSize: 13,
+      fontWeight: "800",
+      textAlign: "right",
+    },
     detailEmptyText: { color: c.muted, fontSize: 13, paddingTop: 12 },
-    detailTagWrap: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginTop: 8 },
+    detailTagWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+      marginTop: 8,
+    },
     detailTag: {
       borderWidth: 1,
       borderRadius: radius.full,
@@ -8637,7 +9174,11 @@ const buildSellerAdminStyles = (c) =>
       backgroundColor: c.primary,
       borderColor: c.primary,
     },
-    catalogCategoryChipText: { fontSize: 12, fontWeight: "600", color: c.muted },
+    catalogCategoryChipText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.muted,
+    },
     catalogCategoryChipTextActive: { color: c.light, fontWeight: "700" },
   });
 

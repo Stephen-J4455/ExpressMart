@@ -42,13 +42,9 @@ import { useAppStyles } from "../hooks/useAppStyles";
 import { useGrounding } from "../hooks/useGrounding";
 import { useTagAIAssistant } from "../context/TagAIAssistantContext";
 import { radius } from "../theme/colors";
-import {
-  TagAIProductCardRow,
-} from "../components/tagai/TagAIProductCard";
+import { TagAIProductCardRow } from "../components/tagai/TagAIProductCard";
 import { ThinkingTrace } from "../components/tagai/ThinkingTrace";
-import { ThinkingOrb } from '@mhaadi/thinking-orbs-native';
-
-
+import { ThinkingOrb } from "@mhaadi/thinking-orbs-native";
 
 const TOOL_META = {
   search_products: { icon: "search", label: "Searching products" },
@@ -95,6 +91,19 @@ const SUGGESTIONS = [
   },
 ];
 
+const sanitizeAssistantText = (rawText) => {
+  if (rawText == null) return "";
+  return String(rawText)
+    .replace(/<\s*\/\s*mm:think\s*>/gi, "")
+    .replace(/<\s*mm:think\s*>/gi, "")
+    .replace(/<\s*\/\s*think\s*>/gi, "")
+    .replace(/<\s*think\s*>/gi, "")
+    .replace(/<\s*\/\s*reasoning\s*>/gi, "")
+    .replace(/<\s*reasoning\s*>/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+};
+
 /** Animated thinking indicator. */
 const TypingDots = () => {
   const { colors } = useTheme();
@@ -106,6 +115,101 @@ const TypingDots = () => {
   );
 };
 
+const PROCESS_DEBUG_TEXTS = [
+  "Checking model…",
+  "Selecting model…",
+  "Planning request…",
+  "Running tools…",
+  "Reviewing response…",
+];
+
+const ThinkingStatusTicker = ({ items = [] }) => {
+  const { colors } = useTheme();
+  const styles = useAppStyles(buildStyles);
+  const [visibleText, setVisibleText] = useState(PROCESS_DEBUG_TEXTS[0]);
+  const translateY = useRef(new Animated.Value(16)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!items.length) {
+      const cycleIndex = setInterval(() => {
+        setVisibleText((prev) => {
+          const currentIndex = PROCESS_DEBUG_TEXTS.indexOf(prev);
+          const nextIndex =
+            currentIndex >= 0
+              ? (currentIndex + 1) % PROCESS_DEBUG_TEXTS.length
+              : 0;
+          return PROCESS_DEBUG_TEXTS[nextIndex];
+        });
+      }, 1200);
+      return () => clearInterval(cycleIndex);
+    }
+
+    const latestText = items[items.length - 1]?.text || PROCESS_DEBUG_TEXTS[0];
+    const isGenericStatus = PROCESS_DEBUG_TEXTS.includes(latestText);
+
+    if (isGenericStatus) {
+      const cycleIndex = setInterval(() => {
+        setVisibleText((prev) => {
+          const currentIndex = PROCESS_DEBUG_TEXTS.indexOf(prev);
+          const nextIndex =
+            currentIndex >= 0
+              ? (currentIndex + 1) % PROCESS_DEBUG_TEXTS.length
+              : 0;
+          return PROCESS_DEBUG_TEXTS[nextIndex];
+        });
+      }, 1200);
+      return () => clearInterval(cycleIndex);
+    }
+
+    if (latestText === visibleText) return;
+    Animated.sequence([
+      Animated.timing(translateY, {
+        toValue: -16,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setVisibleText(latestText);
+      translateY.setValue(16);
+      opacity.setValue(1);
+      Animated.parallel([
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  }, [items, visibleText, translateY, opacity]);
+
+  return (
+    <View style={styles.statusTickerWrap}>
+      <Animated.Text
+        style={[
+          styles.statusTickerText,
+          {
+            color: colors.muted,
+            opacity,
+            transform: [{ translateY }],
+          },
+        ]}
+      >
+        {visibleText}
+      </Animated.Text>
+    </View>
+  );
+};
 
 /** Tool-call chip row rendered above an assistant reply. */
 const ToolChips = ({ tools }) => {
@@ -115,7 +219,10 @@ const ToolChips = ({ tools }) => {
   return (
     <View style={styles.toolRow}>
       {tools.map((tool, i) => {
-        const meta = TOOL_META[tool.name] || { icon: "flash", label: tool.name };
+        const meta = TOOL_META[tool.name] || {
+          icon: "flash",
+          label: tool.name,
+        };
         const isError = tool.status === "error";
         return (
           <View
@@ -158,10 +265,11 @@ export const TagAIAssistantScreen = () => {
   const markdownStyles = useAppStyles(buildTagAIMarkdownStyles);
   const { user, profile } = useAuth();
   const { addToCart } = useCart();
-  const { messages, isThinking, sendMessage, clearChat } = useTagAIAssistant();
+  const { messages, isThinking, thinkingTrail, sendMessage, clearChat } =
+    useTagAIAssistant();
 
   const [input, setInput] = useState("");
-    const [visionImage, setVisionImage] = useState(null);
+  const [visionImage, setVisionImage] = useState(null);
   const listRef = useRef(null);
   // Register the input bar so the assistant can point at its own chat box.
   const inputBarRef = useGrounding("tagAI.inputBar");
@@ -219,17 +327,15 @@ export const TagAIAssistantScreen = () => {
     setVisionImage(`data:image/jpeg;base64,${base64}`);
   }, []);
 
-  // Inverted list: newest message at the bottom. The typing indicator is a
-  // synthetic item so it appears right where the reply will land.
+  // Inverted list: newest message at the bottom. The live status row sits
+  // outside the list so it stays visible above the input bar instead of being
+  // pushed down to the very end of the chat.
   const listData = useMemo(() => {
-    const data = [...messages].reverse();
-    if (isThinking) data.unshift({ id: "__typing__", role: "typing" });
-    return data;
-  }, [messages, isThinking]);
+    return [...messages].reverse();
+  }, [messages]);
 
   const renderItem = useCallback(
     ({ item }) => {
-      if (item.role === "typing") return <TypingDots />;
       if (item.role === "user") {
         return (
           <View style={styles.userRow}>
@@ -240,7 +346,10 @@ export const TagAIAssistantScreen = () => {
               style={styles.userBubble}
             >
               {item.image ? (
-                <Image source={{ uri: item.image }} style={styles.sentVisionImage} />
+                <Image
+                  source={{ uri: item.image }}
+                  style={styles.sentVisionImage}
+                />
               ) : null}
               <Text style={styles.userText}>{item.text}</Text>
             </LinearGradient>
@@ -262,23 +371,24 @@ export const TagAIAssistantScreen = () => {
           <View style={styles.assistantContent}>
             <ToolChips tools={item.tools} />
             <View
-              style={[styles.assistantBubble, { backgroundColor: colors.surface }]}
+              style={[
+                styles.assistantBubble,
+                { backgroundColor: colors.surface },
+              ]}
             >
               {/* Assistant replies arrive as markdown — render rich text
                   (bold, lists, code, links) instead of raw characters. */}
               <Markdown style={markdownStyles} onLinkPress={() => {}}>
-                {item.text}
+                {sanitizeAssistantText(item.text)}
               </Markdown>
             </View>
             {/* Generative UI — interactive product cards from tool results */}
             <TagAIProductCardRow products={item.products} />
-            {/* Why-I-did-this panel — shows the agent's reasoning steps. */}
-            <ThinkingTrace steps={item.thinking} />
           </View>
         </View>
       );
     },
-    [colors, styles, markdownStyles],
+    [colors, styles, markdownStyles, thinkingTrail],
   );
 
   const keyExtractor = useCallback((item) => item.id, []);
@@ -407,6 +517,13 @@ export const TagAIAssistantScreen = () => {
           />
         )}
 
+        {isThinking ? (
+          <View style={styles.thinkingStatusRow}>
+            <TypingDots />
+            <ThinkingStatusTicker items={thinkingTrail} />
+          </View>
+        ) : null}
+
         {/* Input bar (grounded as "tagAI.inputBar") */}
         <View
           ref={inputBarRef}
@@ -421,8 +538,14 @@ export const TagAIAssistantScreen = () => {
         >
           {visionImage ? (
             <View style={styles.visionPreviewWrap}>
-              <Image source={{ uri: visionImage }} style={styles.visionPreview} />
-              <Pressable onPress={() => setVisionImage(null)} style={styles.visionRemove}>
+              <Image
+                source={{ uri: visionImage }}
+                style={styles.visionPreview}
+              />
+              <Pressable
+                onPress={() => setVisionImage(null)}
+                style={styles.visionRemove}
+              >
                 <Ionicons name="close" size={12} color="#FFFFFF" />
               </Pressable>
             </View>
@@ -450,7 +573,9 @@ export const TagAIAssistantScreen = () => {
             disabled={(!input.trim() && !visionImage) || isThinking}
             style={({ pressed }) => [
               styles.sendButton,
-              ((!input.trim() && !visionImage) || isThinking) && { opacity: 0.4 },
+              ((!input.trim() && !visionImage) || isThinking) && {
+                opacity: 0.4,
+              },
               pressed && { transform: [{ scale: 0.94 }] },
             ]}
           >
@@ -653,6 +778,36 @@ const buildStyles = (c) =>
       paddingVertical: 12,
       marginBottom: 14,
       marginLeft: 0,
+    },
+    thinkingStatusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      alignSelf: "stretch",
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      paddingBottom: 6,
+      marginBottom: 4,
+      marginLeft: 0,
+      width: "100%",
+    },
+    statusTickerWrap: {
+      flex: 1,
+      minWidth: 0,
+      justifyContent: "center",
+      paddingRight: 8,
+      marginTop: -50,
+    },
+    statusTickerText: {
+      fontSize: 11.5,
+      lineHeight: 16,
+      fontWeight: "600",
+      letterSpacing: 0.15,
+      flexShrink: 1,
+      textAlign: "left",
+      includeFontPadding: false,
+      textAlignVertical: "center",
     },
     inputBar: {
       flexDirection: "row",
