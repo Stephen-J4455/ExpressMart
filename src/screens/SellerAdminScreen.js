@@ -42,6 +42,7 @@ import { notifyOrderStatusUpdate } from "../services/notificationService";
 import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
 import { colors as brandColors, getTheme, radius } from "../theme/colors";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { useResponsive } from "../hooks/useResponsive";
 import { getImageContentType } from "../utils/webUpload";
 import {
   compressProductImage,
@@ -364,6 +365,25 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     colors: themeColors,
   } = useTheme();
   const styles = useAppStyles((c) => buildSellerAdminStyles(c));
+  const drawerAnim = useRef(new Animated.Value(0)).current;
+  const {
+    width: viewportWidth,
+    isWide,
+    isDesktop,
+    gridColumns,
+    contentMaxWidth,
+  } = useResponsive();
+  const drawerWidth = Math.min(Math.round(viewportWidth * 0.78), 320);
+  const drawerSlide = drawerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-drawerWidth, 0],
+  });
+  const catalogContentWidth = isWide
+    ? Math.min(viewportWidth, contentMaxWidth) - 32
+    : viewportWidth - 32;
+  const catalogCardWidth = Math.floor(
+    (catalogContentWidth - 12 * (gridColumns - 1)) / gridColumns,
+  );
 
   // ── Seller data layer (mirrors Express-Store SellerContext) ──────────────
   const [seller, setSeller] = useState(null);
@@ -610,11 +630,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // Drawer slide-in animation — 0 = fully off-screen LEFT, 1 = fully open.
   // The modal itself renders instantly (animationType="none") so the drawer
   // glides in from the left edge instead of fading with the old fade/slide.
-  const drawerAnim = useRef(new Animated.Value(0)).current;
-  const drawerSlide = drawerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["-105%", "0%"],
-  });
   const openMenu = useCallback(() => setMenuVisible(true), []);
   useEffect(() => {
     if (!menuVisible) return;
@@ -2835,6 +2850,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         key={p.id}
         style={({ pressed }) => [
           styles.catalogCard,
+          { width: catalogCardWidth },
+          isDesktop && styles.catalogCardWide,
           pressed && { opacity: 0.85 },
         ]}
         onPress={() => {
@@ -2991,7 +3008,15 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
   // ── Catalog tab ─────────────────────────────────────────────────────────
   const renderCatalog = () => (
-    <View>
+    <View
+      style={[
+        styles.catalogContent,
+        isWide && {
+          maxWidth: contentMaxWidth - 32,
+          alignSelf: "center",
+        },
+      ]}
+    >
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitle}>Store Catalog</Text>
         <TouchableOpacity
@@ -3199,7 +3224,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         catalogViewMode === "grid" ? (
           <View style={styles.catalogGrid}>
             {Array.from({ length: 4 }).map((_, i) => (
-              <View key={`ph-${i}`} style={styles.catalogGridItem}>
+              <View
+                key={`ph-${i}`}
+                style={{ width: catalogCardWidth }}
+              >
                 <ProductCardPlaceholder />
               </View>
             ))}
@@ -4599,8 +4627,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       <Animated.View style={[styles.drawerOverlay, { opacity: drawerAnim }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={closeMenu} />
         <Animated.View
-          style={[styles.drawer, { transform: [{ translateX: drawerSlide }] }]}
-          onStartShouldSetResponder={() => true}
+          style={[
+            styles.drawer,
+            { width: drawerWidth, transform: [{ translateX: drawerSlide }] },
+          ]}
         >
           <View style={styles.drawerHeader}>
             <Text style={styles.drawerTitle}>Store Menu</Text>
@@ -8969,16 +8999,22 @@ const buildSellerAdminStyles = (c) =>
       justifyContent: "center",
     },
     catalogViewToggleBtnActive: { backgroundColor: c.dark },
+    catalogContent: { width: "100%" },
     catalogGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-    catalogGridItem: { width: "47%" },
     catalogList: { gap: 10 },
     catalogCard: {
-      width: "47%",
       backgroundColor: c.light,
       borderRadius: radius.md,
       overflow: "hidden",
       borderWidth: 1,
       borderColor: c.surface,
+    },
+    catalogCardWide: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 2,
     },
     catalogCardMedia: {
       width: "100%",

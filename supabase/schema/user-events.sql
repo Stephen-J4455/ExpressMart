@@ -36,12 +36,19 @@ CREATE TABLE IF NOT EXISTS public.express_user_events (
   seller_id     uuid          REFERENCES public.express_sellers(id) ON DELETE SET NULL,
   tag           text,
   query         text,
-  weight        numeric       NOT NULL DEFAULT 1 CHECK (weight >= 0),
+  weight        numeric       NOT NULL DEFAULT 1 CHECK (weight BETWEEN -100 AND 100),
   metadata      jsonb         NOT NULL DEFAULT '{}'::jsonb,
   created_at    timestamptz   NOT NULL DEFAULT now(),
 
   CONSTRAINT express_user_events_pkey PRIMARY KEY (id)
 );
+
+-- Reconcile existing installs with signed weights for unlike/unfollow events.
+ALTER TABLE public.express_user_events
+  DROP CONSTRAINT IF EXISTS express_user_events_weight_check;
+ALTER TABLE public.express_user_events
+  ADD CONSTRAINT express_user_events_weight_check
+  CHECK (weight BETWEEN -100 AND 100);
 
 -- ── 2. Indexes.
 -- The edge function reads the last 500 events for a user sorted by

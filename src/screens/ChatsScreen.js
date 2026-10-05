@@ -155,7 +155,7 @@ export const prefetchChatsScreenData = async ({
 };
 
 
-export const ChatsScreen = ({ navigation }) => {
+export const ChatsScreen = ({ navigation, route }) => {
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildChatsStyles(c));
   const insets = useSafeAreaInsets();
@@ -419,6 +419,23 @@ export const ChatsScreen = ({ navigation }) => {
       );
     });
   }, [conversations, sellerConversations, searchQuery]);
+
+  useEffect(() => {
+    if (!isWide || !route?.params?.initialConversationId) return;
+    const initialConversation = mergedConversations.find(
+      (conversation) =>
+        conversation.id === route.params.initialConversationId,
+    );
+    if (initialConversation) {
+      setSelectedConversation(initialConversation);
+      navigation.setParams({ initialConversationId: undefined });
+    }
+  }, [
+    isWide,
+    mergedConversations,
+    navigation,
+    route?.params?.initialConversationId,
+  ]);
 
   const renderMergedConversation = ({ item }) => {
     if (item.kind === "seller") {

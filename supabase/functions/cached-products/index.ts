@@ -262,7 +262,10 @@ serve(async (req) => {
         if (s.seller_id) {
           sellerScore.set(s.seller_id, (sellerScore.get(s.seller_id) || 0) + w);
         }
-        if (s.event_type === "like" && s.product_id) {
+        if (
+          (s.event_type === "like" || s.event_type === "unlike") &&
+          s.product_id
+        ) {
           likedProductScore.set(
             s.product_id,
             (likedProductScore.get(s.product_id) || 0) + w,

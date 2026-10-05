@@ -46,6 +46,7 @@ export const WebSidebar = ({
   state,
   navigation,
   sidebarWidth,
+  sidebarReservedWidth,
   expanded = false,
   onToggle,
   onHoverChange,
@@ -97,60 +98,74 @@ export const WebSidebar = ({
 
   return (
     <View
-      style={[
-        styles.container,
-        {
-          width: sidebarWidth,
-          paddingTop: insets.top,
-          zIndex: 20,
-          elevation: 20,
-        },
-      ]}
-      onMouseEnter={() => onHoverChange?.(true)}
-      onMouseLeave={() => onHoverChange?.(false)}
+      style={{
+        width: sidebarReservedWidth,
+        height: "100%",
+        zIndex: 20,
+        elevation: 20,
+      }}
     >
-      {/* Brand */}
-      <View style={styles.brandContainer}>
-        <LinearGradient
-          colors={[themeColors.primary, themeColors.accent]}
-          style={styles.brandIcon}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Ionicons name="flash" size={22} color="#fff" />
-        </LinearGradient>
-        {expanded && <Text style={styles.brandText}>tagit</Text>}
-        <Pressable
-          style={styles.toggleButton}
-          onPress={onToggle}
-          accessibilityRole="button"
-          accessibilityLabel={expanded ? "Collapse sidebar" : "Expand sidebar"}
-          hitSlop={8}
-        >
-          <Ionicons
-            name={expanded ? "chevron-back" : "chevron-forward"}
-            size={16}
-            color={themeColors.muted}
-          />
-        </Pressable>
-      </View>
-
-      {/* Nav Items */}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.navList}
+      <View
+        style={[
+          styles.container,
+          {
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            width: sidebarWidth,
+            height: "100%",
+            paddingTop: insets.top,
+          },
+        ]}
+        onMouseEnter={() => onHoverChange?.(true)}
+        onMouseLeave={() => onHoverChange?.(false)}
       >
-        {NAV_ITEMS.map((item) =>
-          renderNavItem(item, activeRoute === item.name),
-        )}
-      </ScrollView>
+        {/* Brand */}
+        <View style={styles.brandContainer}>
+          <LinearGradient
+            colors={[themeColors.primary, themeColors.accent]}
+            style={styles.brandIcon}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Ionicons name="flash" size={22} color="#fff" />
+          </LinearGradient>
+          {expanded && <Text style={styles.brandText}>tagit</Text>}
+          <Pressable
+            style={styles.toggleButton}
+            onPress={onToggle}
+            accessibilityRole="button"
+            accessibilityLabel={
+              expanded ? "Collapse sidebar" : "Expand sidebar"
+            }
+            hitSlop={8}
+          >
+            <Ionicons
+              name={expanded ? "chevron-back" : "chevron-forward"}
+              size={16}
+              color={themeColors.muted}
+            />
+          </Pressable>
+        </View>
 
-      {/* Bottom Actions */}
-      <View style={styles.bottomSection}>
-        <View style={styles.divider} />
-        {BOTTOM_ITEMS.map((item) =>
-          renderNavItem(item, activeRoute === item.name),
-        )}
+        {/* Nav Items */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.navList}
+        >
+          {NAV_ITEMS.map((item) =>
+            renderNavItem(item, activeRoute === item.name),
+          )}
+        </ScrollView>
+
+        {/* Bottom Actions */}
+        <View style={styles.bottomSection}>
+          <View style={styles.divider} />
+          {BOTTOM_ITEMS.map((item) =>
+            renderNavItem(item, activeRoute === item.name),
+          )}
+        </View>
       </View>
     </View>
   );

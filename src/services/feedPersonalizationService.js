@@ -24,6 +24,7 @@ import { supabase } from "../lib/supabase";
 
 const FLUSH_INTERVAL_MS = 5_000;
 const MAX_QUEUE_SIZE = 100; // cap so a misbehaving caller can't blow memory
+const MAX_EVENTS_PER_BATCH = 50; // must match track-user-event
 const EDGE_FUNCTION_NAME = "track-user-event";
 
 // In-memory queue. Module-singleton so it survives screen navigation.
@@ -52,12 +53,13 @@ const trimString = (value, max) => {
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 };
 
-const asPositiveInt = (value) => {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  const i = Math.trunc(n);
-  return i > 0 ? i : null;
-};
+const asUuid = (value) =>
+  typeof value === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  )
+    ? value
+    : null;
 
 // Public: enqueue an event. Safe to call from anywhere; failures are silent
 // because tracking should never break the user-facing app. Returns true if
@@ -75,10 +77,10 @@ export const trackEvent = (type, payload = {}) => {
   // Strip unknown / nullish fields, clamp strings to the server's limits.
   const clean = {
     event_type: eventType,
-    product_id: asPositiveInt(payload.productId ?? payload.product_id),
-    category_id: asPositiveInt(payload.categoryId ?? payload.category_id),
+    product_id: asUuid(payload.productId ?? payload.product_id),
+    category_id: asUuid(payload.categoryId ?? payload.category_id),
     category: trimString(payload.category, 64),
-    seller_id: asPositiveInt(payload.sellerId ?? payload.seller_id),
+    seller_id: asUuid(payload.sellerId ?? payload.seller_id),
     tag: trimString(payload.tag, 64),
     query: trimString(payload.query, 200),
     weight: typeof payload.weight === "number" ? payload.weight : undefined,
@@ -115,7 +117,7 @@ const flush = async () => {
   if (!supabase) return;
 
   isFlushing = true;
-  const batch = queue.splice(0, queue.length);
+  const batch = queue.splice(0, MAX_EVENTS_PER_BATCH);
   try {
     const { error } = await supabase.functions.invoke(EDGE_FUNCTION_NAME, {
       body: { events: batch },
@@ -123,16 +125,20 @@ const flush = async () => {
     if (error) {
       // Re-queue the batch at the head so we retry next flush.
       // Cap to MAX_QUEUE_SIZE so we don't grow unbounded.
-      const requeue = batch.slice(-MAX_QUEUE_SIZE);
-      queue.unshift(...requeue);
+      queue.unshift(...batch);
+      if (queue.length > MAX_QUEUE_SIZE) {
+        queue.length = MAX_QUEUE_SIZE;
+      }
       if (__DEV__) {
         // eslint-disable-next-line no-console
         console.warn("[feedPersonalization] flush failed:", error.message);
       }
     }
   } catch (e) {
-    const requeue = batch.slice(-MAX_QUEUE_SIZE);
-    queue.unshift(...requeue);
+    queue.unshift(...batch);
+    if (queue.length > MAX_QUEUE_SIZE) {
+      queue.length = MAX_QUEUE_SIZE;
+    }
     if (__DEV__) {
       // eslint-disable-next-line no-console
       console.warn("[feedPersonalization] flush threw:", e?.message);

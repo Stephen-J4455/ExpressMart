@@ -89,11 +89,11 @@ export const StoresScreen = () => {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <LinearGradient
-        colors={[themeColors.primary, themeColors.accent]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top + 18 }]}
+      <View
+        style={[
+          styles.header,
+          { paddingTop: insets.top + 18, backgroundColor: themeColors.primary },
+        ]}
       >
         <View style={styles.headerTop}>
           <Pressable
@@ -150,7 +150,7 @@ export const StoresScreen = () => {
             </Pressable>
           </View>
         )}
-      </LinearGradient>
+      </View>
 
      
       {/* Store Grid */}

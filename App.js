@@ -154,7 +154,7 @@ const TabNavigator = () => {
         tabBarPosition: isWide ? "left" : "bottom",
         tabBarStyle: isWide
           ? {
-              width: activeSidebarWidth,
+              width: COLLAPSED_SIDEBAR_WIDTH,
               borderRightWidth: 0,
             }
           : {
@@ -172,6 +172,7 @@ const TabNavigator = () => {
           <WebSidebar
             {...props}
             sidebarWidth={activeSidebarWidth}
+            sidebarReservedWidth={COLLAPSED_SIDEBAR_WIDTH}
             expanded={sidebarExpanded}
             onToggle={toggleSidebar}
             onHoverChange={handleSidebarHover}

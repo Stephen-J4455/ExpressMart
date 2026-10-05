@@ -69,11 +69,14 @@ const clampString = (value: unknown, max: number): string | null => {
   return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 };
 
-const toPositiveInt = (value: unknown): number | null => {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  const i = Math.trunc(n);
-  return i > 0 ? i : null;
+const toUuid = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const id = value.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    id,
+  )
+    ? id
+    : null;
 };
 
 const clampWeight = (value: unknown, fallback: number): number => {
@@ -158,9 +161,9 @@ serve(async (req) => {
         continue;
       }
 
-      const productId = toPositiveInt((raw as any).product_id);
-      const categoryId = toPositiveInt((raw as any).category_id);
-      const sellerId = toPositiveInt((raw as any).seller_id);
+      const productId = toUuid((raw as any).product_id);
+      const categoryId = toUuid((raw as any).category_id);
+      const sellerId = toUuid((raw as any).seller_id);
       const tag = clampString((raw as any).tag, 64);
       const query = clampString((raw as any).query, MAX_STRING_LEN);
       const category = clampString((raw as any).category, 64);

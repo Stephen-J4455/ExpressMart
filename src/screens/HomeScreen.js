@@ -24,9 +24,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { NativeViewGestureHandler } from "react-native-gesture-handler";
@@ -39,9 +42,15 @@ import { ProductCard } from "../components/ProductCard";
 import { AdRenderer } from "../components/AdBanner";
 import { StorefrontHomeScreen } from "./StorefrontHomeScreen";
 import { useShop } from "../context/ShopContext";
+import { useChat } from "../context/ChatContext";
+import { useCart } from "../context/CartContext";
+import { useTagAIAssistant } from "../context/TagAIAssistantContext";
+import { compressProductImage } from "../utils/compressImage";
+import { TagAIProductCardRow } from "../components/tagai/TagAIProductCard";
 import { useAds } from "../context/AdsContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { useResponsive } from "../hooks/useResponsive";
 import { radius } from "../theme/colors";
 import { supabase } from "../lib/supabase";
 import { flashSaleService } from "../services/flashSaleService";
@@ -61,11 +70,21 @@ const FEED_PLACEHOLDER_ITEMS = Array.from(
   { length: 6 },
   (_, i) => `feed-placeholder-${i}`,
 );
+const DESKTOP_RAIL_WIDTH = 400;
 
 export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
   const styles = useAppStyles(buildHomeStyles);
   const { width } = useWindowDimensions();
+  const { isDesktop: isWideScreen } = useResponsive();
+  const isDesktop = Platform.OS === "web" && isWideScreen;
+  const { conversations } = useChat();
+  const { addToCart } = useCart();
+  const { messages: aiMessages, isThinking: aiIsThinking, sendMessage } =
+    useTagAIAssistant();
+  const [miniAiInput, setMiniAiInput] = useState("");
+  const [miniAiVisionImage, setMiniAiVisionImage] = useState(null);
+  const [pagerWidth, setPagerWidth] = useState(width);
   const [pagerScrollEnabled, setPagerScrollEnabled] = useState(true);
   const pagerRef = useRef(null);
   const pagerOffsetRef = useRef(0);
@@ -98,7 +117,66 @@ export const HomeScreen = ({ navigation }) => {
     loadingMore,
     followedSellers,
   } = useShop();
-
+  const recentConversations = useMemo(
+    () =>
+      [...(conversations || [])]
+        .sort(
+          (a, b) =>
+            new Date(b.last_message_at || b.created_at || 0).getTime() -
+            new Date(a.last_message_at || a.created_at || 0).getTime(),
+        )
+        .slice(0, 3),
+    [conversations],
+  );
+  const handleMiniAiSend = useCallback(
+    (text = miniAiInput) => {
+      const prompt = text.trim();
+      if ((!prompt && !miniAiVisionImage) || aiIsThinking) return;
+      setMiniAiInput("");
+      sendMessage(prompt, {
+        image: miniAiVisionImage,
+        navigateTo: (route, params) => navigation.navigate(route, params),
+        addProductToCart: async (product, quantity) => {
+          await addToCart(product, quantity);
+        },
+      });
+      setMiniAiVisionImage(null);
+    },
+    [
+      addToCart,
+      aiIsThinking,
+      miniAiInput,
+      miniAiVisionImage,
+      navigation,
+      sendMessage,
+    ],
+  );
+  const pickMiniAiVisionImage = useCallback(async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    const compressed = await compressProductImage(
+      asset.uri,
+      Platform.OS === "web" ? asset.file || null : null,
+    );
+    if (Platform.OS === "web" && compressed.pickedFile) {
+      const bytes = new Uint8Array(await compressed.pickedFile.arrayBuffer());
+      let binary = "";
+      for (let index = 0; index < bytes.length; index += 1) {
+        binary += String.fromCharCode(bytes[index]);
+      }
+      setMiniAiVisionImage(`data:image/jpeg;base64,${btoa(binary)}`);
+      return;
+    }
+    const base64 = await FileSystem.readAsStringAsync(compressed.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    setMiniAiVisionImage(`data:image/jpeg;base64,${base64}`);
+  }, []);
   const [activeFilter, setActiveFilter] = useState("For You");
   const [refreshing, setRefreshing] = useState(false);
   const [topCategories, setTopCategories] = useState([]);
@@ -162,6 +240,10 @@ export const HomeScreen = ({ navigation }) => {
   );
 
   const showHeader = useCallback(() => animateHeader(false), [animateHeader]);
+
+  useEffect(() => {
+    if (isDesktop) showHeader();
+  }, [isDesktop, showHeader]);
 
   // ── Top categories: the 5 categories with the most active products ────────
   // Personalization note: when the signed-in user has enough event signal
@@ -512,6 +594,13 @@ export const HomeScreen = ({ navigation }) => {
     homeAds,
   ]);
 
+  const handlePagerLayout = useCallback((event) => {
+    const nextWidth = event.nativeEvent.layout.width;
+    setPagerWidth((currentWidth) =>
+      Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth,
+    );
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     showHeader();
@@ -528,17 +617,18 @@ export const HomeScreen = ({ navigation }) => {
       // downward swipe / near top).
       updateTabBarOnScroll(e.nativeEvent.contentOffset.y);
       const y = e.nativeEvent.contentOffset.y;
-      // Direction-aware header auto-hide (same convention as the tab bar:
-      // swipe up → hide, swipe down or near top → show). Animated directly
-      // here so it reacts instantly, no re-render round-trip.
-      const delta = y - lastScrollYRef.current;
-      lastScrollYRef.current = y;
-      if (y <= 60) {
-        animateHeader(false);
-      } else if (delta > 8) {
-        animateHeader(true);
-      } else if (delta < -8) {
-        animateHeader(false);
+      if (!isDesktop) {
+        // Direction-aware header auto-hide (same convention as the tab bar:
+        // swipe up → hide, swipe down or near top → show).
+        const delta = y - lastScrollYRef.current;
+        lastScrollYRef.current = y;
+        if (y <= 60) {
+          animateHeader(false);
+        } else if (delta > 8) {
+          animateHeader(true);
+        } else if (delta < -8) {
+          animateHeader(false);
+        }
       }
       const { contentSize, layoutMeasurement, contentOffset } = e.nativeEvent;
       const distanceFromBottom =
@@ -547,24 +637,26 @@ export const HomeScreen = ({ navigation }) => {
         loadMore();
       }
     },
-    [hasMore, loadingMore, loadMore, animateHeader],
+    [hasMore, loadingMore, loadMore, animateHeader, isDesktop],
   );
 
   const handleStorefrontScroll = useCallback(
     (e) => {
       const y = e.nativeEvent.contentOffset.y;
       updateTabBarOnScroll(y);
-      const delta = y - lastScrollYRef.current;
-      lastScrollYRef.current = y;
-      if (y <= 60) {
-        animateHeader(false);
-      } else if (delta > 8) {
-        animateHeader(true);
-      } else if (delta < -8) {
-        animateHeader(false);
+      if (!isDesktop) {
+        const delta = y - lastScrollYRef.current;
+        lastScrollYRef.current = y;
+        if (y <= 60) {
+          animateHeader(false);
+        } else if (delta > 8) {
+          animateHeader(true);
+        } else if (delta < -8) {
+          animateHeader(false);
+        }
       }
     },
-    [animateHeader],
+    [animateHeader, isDesktop],
   );
 
   // Renders one row in the FlatList. Regular products go through the standard
@@ -910,70 +1002,364 @@ export const HomeScreen = ({ navigation }) => {
           items so the page keeps its exact structure (filter pills →
           categories strip → feed-shaped skeletons) and the placeholders are
           scrollable exactly like the loaded feed. */}
-      <ScrollView
-        ref={pagerRef}
-        horizontal
-        pagingEnabled
-        directionalLockEnabled
-        disableIntervalMomentum
-        scrollEnabled={pagerScrollEnabled}
-        onScroll={handlePagerScroll}
-        scrollEventThrottle={1}
-        showsHorizontalScrollIndicator={false}
-        nestedScrollEnabled
-        style={styles.homePager}
-      >
-        <View style={{ width }}>
-          <FlatList
-            data={loading ? FEED_PLACEHOLDER_ITEMS : feedItems}
-            keyExtractor={(item) =>
-              loading ? String(item) : String(item?.id ?? item)
-            }
-            renderItem={loading ? renderPlaceholderItem : renderFeedItem}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            ListHeaderComponent={listHeader}
-            ListEmptyComponent={!loading ? renderEmpty : null}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              styles.listContent,
+      <View style={[styles.homeContent, isDesktop && styles.desktopContent]}>
+        <ScrollView
+          ref={pagerRef}
+          horizontal
+          pagingEnabled
+          directionalLockEnabled
+          disableIntervalMomentum
+          scrollEnabled={pagerScrollEnabled}
+          onScroll={handlePagerScroll}
+          onLayout={handlePagerLayout}
+          scrollEventThrottle={1}
+          showsHorizontalScrollIndicator={false}
+          nestedScrollEnabled
+          style={styles.homePager}
+        >
+          <View style={[styles.homePane, { width: pagerWidth }]}>
+            <FlatList
+              style={styles.homeList}
+              data={loading ? FEED_PLACEHOLDER_ITEMS : feedItems}
+              keyExtractor={(item) =>
+                loading ? String(item) : String(item?.id ?? item)
+              }
+              renderItem={loading ? renderPlaceholderItem : renderFeedItem}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              ListHeaderComponent={listHeader}
+              ListEmptyComponent={!loading ? renderEmpty : null}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={[
+                styles.listContent,
+                { paddingTop: headerHeight + 8 },
+              ]}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
+                  progressViewOffset={headerHeight}
+                />
+              }
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              updateCellsBatchingPeriod={16}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS !== "web"}
+            />
+
+            {loadingMore ? (
+              <View style={styles.footerLoader}>
+                <ActivityIndicator size="small" color={c.primary} />
+              </View>
+            ) : null}
+          </View>
+
+          <View style={[styles.homePane, { width: pagerWidth }]}>
+            <StorefrontHomeScreen
+              navigation={navigation}
+              width={pagerWidth}
+              topInset={headerHeight + 8}
+              onScroll={handleStorefrontScroll}
+              onHorizontalTouchStart={() => lockPager(true)}
+              onHorizontalTouchEnd={() => lockPager(false)}
+            />
+          </View>
+        </ScrollView>
+        {isDesktop ? (
+          <View
+            style={[
+              styles.desktopRail,
               { paddingTop: headerHeight + 8 },
             ]}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                progressViewOffset={headerHeight}
-              />
-            }
-            initialNumToRender={4}
-            maxToRenderPerBatch={4}
-            updateCellsBatchingPeriod={16}
-            windowSize={5}
-            removeClippedSubviews={Platform.OS !== "web"}
-          />
-
-          {loadingMore ? (
-            <View style={styles.footerLoader}>
-              <ActivityIndicator size="small" color={c.primary} />
+          >
+            <View style={styles.messagesPanel}>
+              <View style={styles.railHeading}>
+                <View style={styles.railIcon}>
+                  <Ionicons
+                    name="chatbubbles"
+                    size={17}
+                    color={c.primary}
+                  />
+                </View>
+                <Text style={styles.railTitle}>Messages</Text>
+                <Pressable
+                  onPress={() =>
+                    navigation.navigate("Chats", {
+                      initialConversationId: recentConversations[0]?.id,
+                    })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="View all messages"
+                  style={styles.railSeeAll}
+                >
+                  <Text style={styles.railSeeAllText}>See all</Text>
+                  <Ionicons
+                    name="arrow-forward"
+                    size={13}
+                    color={c.primary}
+                  />
+                </Pressable>
+              </View>
+              <ScrollView
+                style={styles.messagesList}
+                contentContainerStyle={styles.messagesListContent}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+              >
+                {recentConversations.length ? (
+                  recentConversations.map((conversation) => {
+                    const seller = conversation.seller;
+                    const name = seller?.name || "Seller";
+                    return (
+                      <Pressable
+                        key={conversation.id}
+                        style={styles.messagePreview}
+                        onPress={() =>
+                          navigation.navigate("Chats", {
+                            initialConversationId: conversation.id,
+                          })
+                        }
+                      >
+                        <View style={styles.messageAvatar}>
+                          {seller?.avatar ? (
+                            <Image
+                              source={{ uri: seller.avatar }}
+                              style={styles.messageAvatarImage}
+                            />
+                          ) : (
+                            <Ionicons
+                              name="storefront-outline"
+                              size={17}
+                              color={c.primary}
+                            />
+                          )}
+                        </View>
+                        <View style={styles.messageCopy}>
+                          <Text style={styles.messageName} numberOfLines={1}>
+                            {name}
+                          </Text>
+                          <Text style={styles.messageText} numberOfLines={1}>
+                            {conversation.last_message || "Start a conversation"}
+                          </Text>
+                        </View>
+                        {conversation.unread_count > 0 ? (
+                          <View style={styles.unreadDot} />
+                        ) : null}
+                      </Pressable>
+                    );
+                  })
+                ) : (
+                  <Text style={styles.emptyMessages}>
+                    Your recent conversations will appear here.
+                  </Text>
+                )}
+              </ScrollView>
             </View>
-          ) : null}
-        </View>
 
-        <View style={{ width }}>
-          <StorefrontHomeScreen
-            navigation={navigation}
-            width={width}
-            topInset={headerHeight + 8}
-            onScroll={handleStorefrontScroll}
-            onHorizontalTouchStart={() => lockPager(true)}
-            onHorizontalTouchEnd={() => lockPager(false)}
-          />
-        </View>
-      </ScrollView>
+            <View style={styles.aiPanel}>
+              <View style={styles.aiHeader}>
+                <LinearGradient
+                  colors={[c.gradientStart, c.accent]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.aiOrb}
+                >
+                  <Ionicons name="sparkles" size={16} color="#fff" />
+                </LinearGradient>
+                <View style={styles.aiHeaderCopy}>
+                  <Text style={styles.aiTitle}>Tag AI</Text>
+                  <View style={styles.aiStatusRow}>
+                    <View style={styles.aiOnlineDot} />
+                    <Text style={styles.aiStatus}>Ready to help</Text>
+                  </View>
+                </View>
+                <Pressable
+                  onPress={() => navigation.navigate("TagAI")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open full Tag AI chat"
+                  hitSlop={8}
+                >
+                  <Ionicons
+                    name="expand-outline"
+                    size={17}
+                    color={c.muted}
+                  />
+                </Pressable>
+              </View>
+              <ScrollView
+                style={styles.aiConversation}
+                contentContainerStyle={styles.aiConversationContent}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+              >
+                {aiMessages.length ? (
+                  aiMessages.map((message) => (
+                    <View key={message.id}>
+                      {message.role === "assistant" &&
+                      Array.isArray(message.tools) &&
+                      message.tools.length ? (
+                        <View style={styles.aiToolRow}>
+                          {message.tools.map((tool, index) => (
+                            <View
+                              key={`${tool.name}-${index}`}
+                              style={styles.aiToolChip}
+                            >
+                              <Ionicons
+                                name={
+                                  tool.status === "error"
+                                    ? "alert-circle"
+                                    : "checkmark-circle"
+                                }
+                                size={11}
+                                color={
+                                  tool.status === "error"
+                                    ? c.badgeDanger
+                                    : c.primary
+                                }
+                              />
+                              <Text
+                                numberOfLines={1}
+                                style={styles.aiToolText}
+                              >
+                                {tool.label || tool.name}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+                      <View
+                        style={[
+                          styles.aiMessageBubble,
+                          message.role === "user"
+                            ? styles.aiUserBubble
+                            : styles.aiReplyBubble,
+                        ]}
+                      >
+                        {message.image ? (
+                          <Image
+                            source={{ uri: message.image }}
+                            style={styles.aiAttachedImage}
+                            resizeMode="cover"
+                          />
+                        ) : null}
+                        {message.text ? (
+                          <Text
+                            numberOfLines={4}
+                            style={[
+                              styles.aiMessageText,
+                              message.role === "user" && styles.aiUserText,
+                            ]}
+                          >
+                            {message.text}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {message.role === "assistant" &&
+                      Array.isArray(message.products) ? (
+                        <TagAIProductCardRow products={message.products} />
+                      ) : null}
+                    </View>
+                  ))
+                ) : (
+                  <View style={[styles.aiMessageBubble, styles.aiReplyBubble]}>
+                    <Text style={styles.aiMessageText}>
+                      Hi! I can help you find products, compare options, or spot
+                      a great deal.
+                    </Text>
+                  </View>
+                )}
+                {aiIsThinking ? (
+                  <View style={[styles.aiMessageBubble, styles.aiReplyBubble]}>
+                    <Text style={styles.aiThinking}>Finding an answer…</Text>
+                  </View>
+                ) : null}
+              </ScrollView>
+              {!aiMessages.length ? (
+                <View style={styles.aiPromptRow}>
+                  {[
+                    "Find today's deals",
+                    "Shop headphones",
+                  ].map((prompt) => (
+                    <Pressable
+                      key={prompt}
+                      style={styles.aiPromptChip}
+                      onPress={() => handleMiniAiSend(prompt)}
+                      disabled={aiIsThinking}
+                    >
+                      <Text style={styles.aiPromptText}>{prompt}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              <View style={styles.aiComposer}>
+                {miniAiVisionImage ? (
+                  <View style={styles.aiImagePreview}>
+                    <Image
+                      source={{ uri: miniAiVisionImage }}
+                      style={styles.aiImagePreviewImage}
+                    />
+                    <Pressable
+                      onPress={() => setMiniAiVisionImage(null)}
+                      style={styles.aiImageRemove}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove attached image"
+                      hitSlop={6}
+                    >
+                      <Ionicons name="close" size={11} color="#fff" />
+                    </Pressable>
+                  </View>
+                ) : null}
+                <Pressable
+                  onPress={pickMiniAiVisionImage}
+                  disabled={aiIsThinking}
+                  style={styles.aiAttachButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Attach image to Tag AI message"
+                >
+                  <Ionicons
+                    name="image-outline"
+                    size={17}
+                    color={c.primary}
+                  />
+                </Pressable>
+                <TextInput
+                  value={miniAiInput}
+                  onChangeText={setMiniAiInput}
+                  onSubmitEditing={() => handleMiniAiSend()}
+                  placeholder="Message Tag AI…"
+                  placeholderTextColor={c.muted}
+                  returnKeyType="send"
+                  editable={!aiIsThinking}
+                  style={styles.aiInput}
+                  accessibilityLabel="Message Tag AI"
+                />
+                <Pressable
+                  style={[
+                    styles.aiSendButton,
+                    (!miniAiInput.trim() &&
+                      !miniAiVisionImage ||
+                      aiIsThinking) &&
+                      styles.aiSendDisabled,
+                  ]}
+                  onPress={() => handleMiniAiSend()}
+                  disabled={
+                    (!miniAiInput.trim() && !miniAiVisionImage) ||
+                    aiIsThinking
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Send message to Tag AI"
+                >
+                  <Ionicons name="arrow-up" size={16} color="#fff" />
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 };
@@ -983,6 +1369,327 @@ const buildHomeStyles = (c) =>
     container: {
       flex: 1,
       backgroundColor: c.background,
+    },
+    homeContent: {
+      flex: 1,
+      minHeight: 0,
+    },
+    desktopContent: {
+      flexDirection: "row",
+      alignSelf: "center",
+      width: "100%",
+      maxWidth: 1600,
+    },
+    homePager: {
+      flex: 1,
+      minWidth: 0,
+    },
+    homePane: {
+      flex: 1,
+      minHeight: 0,
+    },
+    homeList: {
+      flex: 1,
+      minHeight: 0,
+    },
+    desktopRail: {
+      width: DESKTOP_RAIL_WIDTH,
+      flexDirection: "column",
+      flexShrink: 0,
+      minHeight: 0,
+      overflow: "hidden",
+      gap: 10,
+      paddingHorizontal: 16,
+      paddingBottom: 16,
+      borderLeftWidth: 1,
+      borderLeftColor: c.border,
+      backgroundColor: c.background,
+    },
+    messagesPanel: {
+      maxHeight: "34%",
+      minHeight: 0,
+      flexShrink: 1,
+      overflow: "hidden",
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+      padding: 16,
+      gap: 8,
+    },
+    messagesList: {
+      minHeight: 0,
+      flexShrink: 1,
+    },
+    messagesListContent: {
+      gap: 8,
+    },
+    railHeading: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      marginBottom: 2,
+    },
+    railIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: radius.sm,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary + "12",
+    },
+    railTitle: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    railSeeAll: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 3,
+    },
+    railSeeAllText: {
+      color: c.primary,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    messagePreview: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    messageAvatar: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      overflow: "hidden",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary + "12",
+    },
+    messageAvatarImage: {
+      width: "100%",
+      height: "100%",
+    },
+    messageCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 3,
+    },
+    messageName: {
+      color: c.dark,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    messageText: {
+      color: c.muted,
+      fontSize: 12,
+    },
+    unreadDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: c.primary,
+    },
+    emptyMessages: {
+      color: c.muted,
+      fontSize: 12,
+      lineHeight: 18,
+      paddingVertical: 6,
+    },
+    aiPanel: {
+      flex: 1,
+      minHeight: 0,
+      flexShrink: 1,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: 14,
+      overflow: "hidden",
+      backgroundColor: c.surface,
+      gap: 8,
+    },
+    aiHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      flexShrink: 0,
+    },
+    aiOrb: {
+      width: 36,
+      height: 36,
+      borderRadius: 13,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    aiHeaderCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    aiTitle: {
+      color: c.dark,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    aiStatusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+    },
+    aiOnlineDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: "#22C55E",
+    },
+    aiStatus: {
+      color: c.muted,
+      fontSize: 10,
+      fontWeight: "600",
+    },
+    aiConversation: {
+      flex: 1,
+      minHeight: 0,
+    },
+    aiConversationContent: {
+      gap: 8,
+      paddingVertical: 2,
+    },
+    aiAttachedImage: {
+      width: 150,
+      height: 112,
+      borderRadius: radius.xs,
+      marginBottom: 6,
+    },
+    aiToolRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 5,
+      marginBottom: 5,
+    },
+    aiToolChip: {
+      maxWidth: "100%",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.full,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+    },
+    aiToolText: {
+      maxWidth: 170,
+      color: c.muted,
+      fontSize: 9,
+    },
+    aiMessageBubble: {
+      maxWidth: "92%",
+      borderRadius: radius.md,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    aiReplyBubble: {
+      alignSelf: "flex-start",
+      backgroundColor: c.background,
+    },
+    aiUserBubble: {
+      alignSelf: "flex-end",
+      backgroundColor: c.primary,
+    },
+    aiMessageText: {
+      color: c.dark,
+      fontSize: 11,
+      lineHeight: 16,
+    },
+    aiUserText: {
+      color: "#fff",
+    },
+    aiThinking: {
+      color: c.muted,
+      fontSize: 11,
+      fontStyle: "italic",
+    },
+    aiPromptRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      flexShrink: 0,
+    },
+    aiPromptChip: {
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.full,
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+    },
+    aiPromptText: {
+      color: c.primary,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    aiComposer: {
+      minHeight: 42,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      flexShrink: 0,
+      alignItems: "center",
+      gap: 6,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.md,
+      paddingLeft: 11,
+      paddingRight: 4,
+      backgroundColor: c.background,
+    },
+    aiAttachButton: {
+      width: 26,
+      height: 32,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    aiImagePreview: {
+      position: "relative",
+      width: 36,
+      height: 36,
+      marginVertical: 3,
+    },
+    aiImagePreviewImage: {
+      width: "100%",
+      height: "100%",
+      borderRadius: radius.xs,
+    },
+    aiImageRemove: {
+      position: "absolute",
+      top: -5,
+      right: -5,
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.dark,
+    },
+    aiInput: {
+      flex: 1,
+      minWidth: 0,
+      color: c.dark,
+      fontSize: 12,
+      paddingVertical: 8,
+      outlineStyle: "none",
+    },
+    aiSendButton: {
+      width: 30,
+      height: 30,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary,
+    },
+    aiSendDisabled: {
+      opacity: 0.45,
     },
     // Header floats above the feed; translateY slides it fully off-screen.
     headerOverlay: {
