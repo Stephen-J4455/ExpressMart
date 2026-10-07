@@ -1580,7 +1580,7 @@ const buildFeedCardStyles = (c) =>
       flexDirection: "row",
       gap: 0,
       width: "100%",
-      height: 200,
+      aspectRatio: 2,
     },
     mediaGridSingle: {
       width: "100%",

@@ -1326,9 +1326,12 @@ const DeepLinkHandler = () => {
 const ONBOARDING_SEEN_KEY = "expressmart.onboarding.completed";
 
 const OnboardingGate = ({ children }) => {
-  const [status, setStatus] = React.useState("loading"); // loading | show | done
+  const [status, setStatus] = React.useState(
+    Platform.OS === "web" ? "done" : "loading",
+  ); // loading | show | done
 
   React.useEffect(() => {
+    if (Platform.OS === "web") return;
     let mounted = true;
     AsyncStorage.getItem(ONBOARDING_SEEN_KEY)
       .then((seen) => {

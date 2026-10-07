@@ -71,6 +71,8 @@ const FEED_PLACEHOLDER_ITEMS = Array.from(
   (_, i) => `feed-placeholder-${i}`,
 );
 const DESKTOP_RAIL_WIDTH = 400;
+const CART_RAIL_BREAKPOINT = 1280;
+const CART_RAIL_WIDTH = 360;
 
 export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
@@ -78,8 +80,9 @@ export const HomeScreen = ({ navigation }) => {
   const { width } = useWindowDimensions();
   const { isDesktop: isWideScreen } = useResponsive();
   const isDesktop = Platform.OS === "web" && isWideScreen;
+  const showCartRail = isDesktop && width >= CART_RAIL_BREAKPOINT;
   const { conversations } = useChat();
-  const { addToCart } = useCart();
+  const { addToCart, items: cartItems, total: cartTotal, itemCount } = useCart();
   const { messages: aiMessages, isThinking: aiIsThinking, sendMessage } =
     useTagAIAssistant();
   const [miniAiInput, setMiniAiInput] = useState("");
@@ -1070,12 +1073,7 @@ export const HomeScreen = ({ navigation }) => {
           </View>
         </ScrollView>
         {isDesktop ? (
-          <View
-            style={[
-              styles.desktopRail,
-              { paddingTop: headerHeight + 8 },
-            ]}
-          >
+          <View style={[styles.desktopRail, { paddingTop: headerHeight + 8 }]}>
             <View style={styles.messagesPanel}>
               <View style={styles.railHeading}>
                 <View style={styles.railIcon}>
@@ -1359,6 +1357,106 @@ export const HomeScreen = ({ navigation }) => {
             </View>
           </View>
         ) : null}
+        {showCartRail ? (
+          <View style={[styles.cartRail, { paddingTop: headerHeight + 8 }]}>
+            <View style={styles.cartPanel}>
+              <View style={styles.railHeading}>
+                <View style={styles.railIcon}>
+                  <Ionicons name="cart-outline" size={17} color={c.primary} />
+                </View>
+                <Text style={styles.railTitle}>Your cart</Text>
+                <Text style={styles.cartCount}>{itemCount}</Text>
+              </View>
+              {cartItems.length ? (
+                <ScrollView
+                  style={styles.cartList}
+                  contentContainerStyle={styles.cartListContent}
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                >
+                  {cartItems.slice(0, 6).map((item) => {
+                    const { product, quantity, price } = item;
+                    const unitPrice =
+                      price ??
+                      (product.discount > 0
+                        ? product.price * (1 - product.discount / 100)
+                        : product.price);
+                    const imageUri =
+                      product.thumbnail || product.thumbnails?.[0];
+
+                    return (
+                      <Pressable
+                        key={item.id}
+                        style={styles.cartItem}
+                        onPress={() =>
+                          navigation.navigate("ProductDetail", { product })
+                        }
+                      >
+                        {imageUri ? (
+                          <Image
+                            source={{ uri: imageUri }}
+                            style={styles.cartItemImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={styles.cartItemImageFallback}>
+                            <Ionicons
+                              name="image-outline"
+                              size={17}
+                              color={c.muted}
+                            />
+                          </View>
+                        )}
+                        <View style={styles.cartItemCopy}>
+                          <Text style={styles.cartItemTitle} numberOfLines={2}>
+                            {product.title}
+                          </Text>
+                          <Text style={styles.cartItemMeta}>
+                            Qty {quantity}
+                          </Text>
+                        </View>
+                        <Text style={styles.cartItemPrice}>
+                          GH₵{Number(unitPrice || 0).toLocaleString()}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                  {cartItems.length > 6 ? (
+                    <Text style={styles.cartMore}>
+                      +{cartItems.length - 6} more items
+                    </Text>
+                  ) : null}
+                </ScrollView>
+              ) : (
+                <View style={styles.emptyCart}>
+                  <Ionicons
+                    name="bag-handle-outline"
+                    size={28}
+                    color={c.muted}
+                  />
+                  <Text style={styles.emptyCartText}>Your cart is empty</Text>
+                </View>
+              )}
+              <View style={styles.cartFooter}>
+                <View style={styles.cartSubtotalRow}>
+                  <Text style={styles.cartSubtotalLabel}>Subtotal</Text>
+                  <Text style={styles.cartSubtotal}>
+                    GH₵{Number(cartTotal || 0).toLocaleString()}
+                  </Text>
+                </View>
+                <Pressable
+                  style={styles.cartButton}
+                  onPress={() => navigation.navigate("Cart")}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View cart with ${itemCount} items`}
+                >
+                  <Text style={styles.cartButtonText}>View cart</Text>
+                  <Ionicons name="arrow-forward" size={14} color={c.onPrimary} />
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -1376,13 +1474,12 @@ const buildHomeStyles = (c) =>
     },
     desktopContent: {
       flexDirection: "row",
-      alignSelf: "center",
       width: "100%",
-      maxWidth: 1600,
     },
     homePager: {
       flex: 1,
       minWidth: 0,
+      maxWidth: 720,
     },
     homePane: {
       flex: 1,
@@ -1404,6 +1501,140 @@ const buildHomeStyles = (c) =>
       borderLeftWidth: 1,
       borderLeftColor: c.border,
       backgroundColor: c.background,
+    },
+    cartRail: {
+      width: CART_RAIL_WIDTH,
+      flexShrink: 0,
+      minHeight: 0,
+      overflow: "hidden",
+      paddingHorizontal: 16,
+      paddingBottom: 16,
+      borderLeftWidth: 1,
+      borderLeftColor: c.border,
+      backgroundColor: c.background,
+    },
+    cartPanel: {
+      flex: 1,
+      minHeight: 0,
+      overflow: "hidden",
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+      padding: 16,
+      gap: 12,
+    },
+    cartCount: {
+      minWidth: 24,
+      overflow: "hidden",
+      borderRadius: radius.full,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      backgroundColor: c.primary + "12",
+      color: c.primary,
+      fontSize: 11,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    cartList: {
+      flex: 1,
+      minHeight: 0,
+    },
+    cartListContent: {
+      gap: 12,
+    },
+    cartItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      minHeight: 54,
+    },
+    cartItemImage: {
+      width: 48,
+      height: 48,
+      borderRadius: radius.sm,
+      backgroundColor: c.borderAlpha,
+    },
+    cartItemImageFallback: {
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: radius.sm,
+      backgroundColor: c.borderAlpha,
+    },
+    cartItemCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 4,
+    },
+    cartItemTitle: {
+      color: c.dark,
+      fontSize: 12,
+      fontWeight: "700",
+      lineHeight: 16,
+    },
+    cartItemMeta: {
+      color: c.muted,
+      fontSize: 11,
+    },
+    cartItemPrice: {
+      color: c.dark,
+      fontSize: 11,
+      fontWeight: "800",
+    },
+    cartMore: {
+      color: c.muted,
+      fontSize: 11,
+      textAlign: "center",
+      paddingVertical: 4,
+    },
+    emptyCart: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+    },
+    emptyCartText: {
+      color: c.muted,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    cartFooter: {
+      gap: 12,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      paddingTop: 12,
+    },
+    cartSubtotalRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    cartSubtotalLabel: {
+      color: c.muted,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    cartSubtotal: {
+      color: c.dark,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    cartButton: {
+      minHeight: 40,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      borderRadius: radius.md,
+      paddingHorizontal: 12,
+      backgroundColor: c.primary,
+    },
+    cartButtonText: {
+      color: c.onPrimary,
+      fontSize: 12,
+      fontWeight: "800",
     },
     messagesPanel: {
       maxHeight: "34%",
@@ -1733,6 +1964,9 @@ const buildHomeStyles = (c) =>
       flexGrow: 1,
     },
     cardWrap: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "flex-start",
       marginBottom: 0,
     },
     adWrap: {
