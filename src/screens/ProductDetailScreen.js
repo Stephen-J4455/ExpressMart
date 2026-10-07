@@ -105,6 +105,43 @@ const normalizeColors = (raw) => {
 const REVIEW_STAR_COLOR = "#F97316";
 const productImageUrl = (value) => resolveMediaUrl(value, R2_FOLDERS.PRODUCTS);
 
+const ProductDetailImage = ({ imageUri, style, resizeMode = "cover" }) => {
+  const uri = productImageUrl(imageUri);
+  const [retryState, setRetryState] = useState({ uri, count: 0 });
+  const retryCount = retryState.uri === uri ? retryState.count : 0;
+  const retryTimerRef = useRef(null);
+
+  useEffect(
+    () => () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    },
+    [uri],
+  );
+
+  return (
+    <Image
+      key={`${uri}:${retryCount}`}
+      source={{ uri }}
+      style={style}
+      resizeMode={resizeMode}
+      fadeDuration={0}
+      onError={(error) => {
+        if (retryCount === 0 && uri) {
+          retryTimerRef.current = setTimeout(
+            () => setRetryState({ uri, count: 1 }),
+            300,
+          );
+          return;
+        }
+        console.warn(
+          "[ProductDetail] Failed to load product image:",
+          error?.nativeEvent?.error || uri,
+        );
+      }}
+    />
+  );
+};
+
 export const ProductDetailScreen = ({ route, navigation }) => {
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildProductDetailStyles(c));
@@ -1079,8 +1116,8 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                   setShowImagePreview(true);
                 }}
               >
-                <Image
-                  source={{ uri: productImageUrl(imageUri) }}
+                <ProductDetailImage
+                  imageUri={imageUri}
                   style={[styles.heroImage, { width: screenWidth - 32 }]}
                 />
               </Pressable>
@@ -1120,8 +1157,8 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                   activeImageIndex === index && styles.thumbActive,
                 ]}
               >
-                <Image
-                  source={{ uri: productImageUrl(imageUri) }}
+                <ProductDetailImage
+                  imageUri={imageUri}
                   style={styles.thumbImage}
                 />
               </Pressable>
@@ -1134,8 +1171,8 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                   setShowImagePreview(true);
                 }}
               >
-                <Image
-                  source={{ uri: productImageUrl(product.thumbnails[4]) }}
+                <ProductDetailImage
+                  imageUri={product.thumbnails[4]}
                   style={styles.thumbImage}
                 />
                 <View style={styles.thumbMoreOverlay}>
@@ -1852,8 +1889,8 @@ export const ProductDetailScreen = ({ route, navigation }) => {
               : [product.thumbnail]
             ).map((imageUri, index) => (
               <View key={index} style={styles.previewPage}>
-                <Image
-                  source={{ uri: productImageUrl(imageUri) }}
+                <ProductDetailImage
+                  imageUri={imageUri}
                   style={styles.previewImage}
                   resizeMode="contain"
                 />

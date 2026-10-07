@@ -20,6 +20,17 @@ const CACHE_KEYS = {
   settings: "expressmart.cache.settings",
 };
 const PAGE_SIZE = 24;
+const sampleProducts = (products, limit) => {
+  const shuffled = [...products];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[randomIndex]] = [
+      shuffled[randomIndex],
+      shuffled[index],
+    ];
+  }
+  return shuffled.slice(0, limit);
+};
 const isOfflineNetworkError = (error) => {
   const message = String(error?.message || error || "");
   return /(UnknownHostException|No address associated with hostname|fetch failed|Network request failed|Failed to fetch|ERR_NETWORK|ERR_INTERNET_DISCONNECTED|resolve host|offline|timed out)/i.test(
@@ -69,6 +80,9 @@ export const ShopProvider = ({ children }) => {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState(null);
   const [followedSellers, setFollowedSellers] = useState([]);
+  const preserveCachedProductsRef = useRef(false);
+  const nextProductsOffsetRef = useRef(null);
+  const loadingMoreRef = useRef(false);
 
   // Guard so the initial bootstrap (loadCache + first fetchProducts) runs
   // exactly once. Without this, the effect re-runs whenever a dependency's
@@ -77,7 +91,7 @@ export const ShopProvider = ({ children }) => {
   // produces a visible flicker.
   const bootstrappedRef = useRef(false);
 
-  const loadCache = useCallback(async () => {
+  const loadCache = useCallback(async ({ productLimit = null } = {}) => {
     try {
       const [cachedProducts, cachedCategories, cachedSellers, cachedSettings] =
         await Promise.all([
@@ -89,7 +103,14 @@ export const ShopProvider = ({ children }) => {
 
       if (cachedProducts) {
         const { data } = JSON.parse(cachedProducts);
-        if (Array.isArray(data) && data.length > 0) setProducts(data);
+        if (Array.isArray(data) && data.length > 0) {
+          const cachedProductsToShow =
+            productLimit === null ? data : sampleProducts(data, productLimit);
+          setProducts(cachedProductsToShow);
+          if (productLimit !== null) {
+            preserveCachedProductsRef.current = cachedProductsToShow.length > 0;
+          }
+        }
       }
       if (cachedCategories) {
         const { data } = JSON.parse(cachedCategories);
@@ -225,6 +246,7 @@ export const ShopProvider = ({ children }) => {
 
         let productsData = [];
         let fromLocalCache = false;
+        let fromUpstash = false;
         try {
           const cachedData = await fetchFromUpstash(0, PAGE_SIZE, {
             userId: user?.id || null,
@@ -235,6 +257,7 @@ export const ShopProvider = ({ children }) => {
             `[ShopContext] Network sync fetched products through cached-products (${cacheSource})${personalized ? " (personalized)" : ""}`,
           );
           productsData = cachedData?.products || [];
+          fromUpstash = true;
         } catch (upstashErr) {
           console.warn(
             "[ShopContext] cached-products fetch failed, falling back to local cache:",
@@ -251,8 +274,31 @@ export const ShopProvider = ({ children }) => {
         const mappedProducts = fromLocalCache
           ? productsData || []
           : (productsData || []).map(mapProduct);
-        setProducts(mappedProducts);
-        setHasMore(mappedProducts.length === PAGE_SIZE);
+        if (preserveCachedProductsRef.current) {
+          if (fromUpstash) {
+            setProducts((cachedProducts) => {
+              const cachedIds = new Set(
+                cachedProducts.map((product) => product.id),
+              );
+              const seenIds = new Set(cachedIds);
+              return [
+                ...cachedProducts,
+                ...mappedProducts.filter((product) => {
+                  if (seenIds.has(product.id)) return false;
+                  seenIds.add(product.id);
+                  return true;
+                }),
+              ];
+            });
+          }
+          preserveCachedProductsRef.current = false;
+        } else {
+          setProducts(mappedProducts);
+        }
+        if (fromUpstash) {
+          nextProductsOffsetRef.current = productsData.length;
+        }
+        setHasMore(fromUpstash && mappedProducts.length === PAGE_SIZE);
 
         // Calculate seller ratings from actual reviews
         const sellerRatings = {};
@@ -312,6 +358,12 @@ export const ShopProvider = ({ children }) => {
           );
         }
 
+        if (preserveCachedProductsRef.current) {
+          preserveCachedProductsRef.current = false;
+          setHasMore(false);
+          return;
+        }
+
         // OFFLINE FALLBACK — when the whole network sync fails before anything
         // is on screen, hydrate the feed from the last snapshot persisted in
         // AsyncStorage instead of leaving the home page blank until
@@ -354,10 +406,12 @@ export const ShopProvider = ({ children }) => {
   );
 
   const loadMore = useCallback(async () => {
-    if (!hasMore || loadingMore || loading) return;
+    if (!hasMore || loadingMoreRef.current || loadingMore || loading) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const start = products.length;
+      const offset = nextProductsOffsetRef.current ?? start;
 
       // Resolve the current user id for the personalization layer. The
       // server only re-ranks on page 0 (offset < PAGE_SIZE), so the id
@@ -377,29 +431,39 @@ export const ShopProvider = ({ children }) => {
 
       let rows = [];
       try {
-        const cachedData = await fetchFromUpstash(start, PAGE_SIZE, {
+        const cachedData = await fetchFromUpstash(offset, PAGE_SIZE, {
           userId: loadMoreUserId,
         });
         const cacheSource = cachedData?.cache?.source || "redis";
         console.info(
-          `[ShopContext] loadMore products fetched through cached-products (${cacheSource}, offset=${start})`,
+          `[ShopContext] loadMore products fetched through cached-products (${cacheSource}, offset=${offset})`,
         );
         rows = cachedData?.products || [];
+        nextProductsOffsetRef.current = offset + rows.length;
       } catch (upstashErr) {
         console.warn(
-          `[ShopContext] loadMore failed through cached-products (offset=${start}); keeping current feed`,
+          `[ShopContext] loadMore failed through cached-products (offset=${offset}); keeping current feed`,
           upstashErr?.message || JSON.stringify(upstashErr),
         );
       }
 
       const newProducts = rows.map(mapProduct);
-      const allProducts = [...products, ...newProducts];
+      const existingIds = new Set(products.map((product) => product.id));
+      const allProducts = [
+        ...products,
+        ...newProducts.filter((product) => {
+          if (existingIds.has(product.id)) return false;
+          existingIds.add(product.id);
+          return true;
+        }),
+      ];
       setProducts(allProducts);
-      setHasMore(newProducts.length === PAGE_SIZE);
+      setHasMore(rows.length === PAGE_SIZE);
       saveCache(CACHE_KEYS.products, allProducts);
     } catch (err) {
       console.warn("loadMore error:", err);
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   }, [hasMore, loadingMore, loading, products, saveCache, fetchFromUpstash]);
@@ -468,13 +532,11 @@ export const ShopProvider = ({ children }) => {
     if (bootstrappedRef.current) return;
     bootstrappedRef.current = true;
     const bootstrap = async () => {
-      // Categories/sellers/settings are pre-hydrated from local cache for a
-      // fast first paint, but PRODUCTS are NOT — the "For You" feed must load
-      // from Upstash first, with the local cache only used as a fallback when
-      // Upstash fails (handled inside fetchProducts).
-      await loadCache();
+      // Hydrate categories/sellers/settings and a random five-product sample
+      // for the first paint, then let the Upstash response extend that feed.
+      await loadCache({ productLimit: 5 });
       console.info(
-        "[ShopContext] Bootstrap order: Upstash Redis first -> local cache fallback",
+        "[ShopContext] Bootstrap order: random local product sample -> Upstash Redis",
       );
       await fetchProducts();
     };

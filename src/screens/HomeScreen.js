@@ -958,6 +958,8 @@ export const HomeScreen = ({ navigation }) => {
     </View>
   );
 
+  const showFeedPlaceholders = loading && products.length === 0;
+
   return (
     // NOTE: no LazyScrollContext here — LazyImage's measureLayout-based lazy
     // hydration only works inside a plain ScrollView (Home). Inside a
@@ -1023,15 +1025,24 @@ export const HomeScreen = ({ navigation }) => {
           <View style={[styles.homePane, { width: pagerWidth }]}>
             <FlatList
               style={styles.homeList}
-              data={loading ? FEED_PLACEHOLDER_ITEMS : feedItems}
+              data={showFeedPlaceholders ? FEED_PLACEHOLDER_ITEMS : feedItems}
               keyExtractor={(item) =>
-                loading ? String(item) : String(item?.id ?? item)
+                showFeedPlaceholders ? String(item) : String(item?.id ?? item)
               }
-              renderItem={loading ? renderPlaceholderItem : renderFeedItem}
+              renderItem={
+                showFeedPlaceholders ? renderPlaceholderItem : renderFeedItem
+              }
               onViewableItemsChanged={onViewableItemsChanged}
               viewabilityConfig={viewabilityConfig}
               ListHeaderComponent={listHeader}
-              ListEmptyComponent={!loading ? renderEmpty : null}
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={styles.footerLoader}>
+                    <ActivityIndicator size="small" color={c.primary} />
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={!showFeedPlaceholders ? renderEmpty : null}
               onScroll={handleScroll}
               scrollEventThrottle={16}
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
@@ -1051,14 +1062,8 @@ export const HomeScreen = ({ navigation }) => {
               maxToRenderPerBatch={4}
               updateCellsBatchingPeriod={16}
               windowSize={5}
-              removeClippedSubviews={Platform.OS !== "web"}
+              removeClippedSubviews={false}
             />
-
-            {loadingMore ? (
-              <View style={styles.footerLoader}>
-                <ActivityIndicator size="small" color={c.primary} />
-              </View>
-            ) : null}
           </View>
 
           <View style={[styles.homePane, { width: pagerWidth }]}>
@@ -1999,9 +2004,10 @@ const buildHomeStyles = (c) =>
       fontWeight: "700",
     },
     footerLoader: {
-      position: "absolute",
-      bottom: 130,
-      alignSelf: "center",
+      minHeight: 64,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 20,
     },
     // ── Flash Sale strip (horizontal ProductCards, only when live deals) ───
     flashSaleSection: {
