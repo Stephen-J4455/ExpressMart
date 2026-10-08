@@ -1,4 +1,4 @@
-import { Animated, View, Image, StyleSheet } from "react-native";
+import { View, Image, Platform, StyleSheet } from "react-native";
 import { useContext, useEffect, useRef, useState, useCallback } from "react";
 import { LazyScrollContext, lazyScroll } from "../context/LazyScrollContext";
 
@@ -6,9 +6,8 @@ import { LazyScrollContext, lazyScroll } from "../context/LazyScrollContext";
 const PLACEHOLDER = require("../../assets/placeholder/placeholder.png");
 
 // The local placeholder is always shown immediately. The real product image
-// (a network request) is lazy: it is only mounted once the element scrolls
-// near the viewport. When no LazyScrollContext is provided, the product image
-// is shown eagerly (no lazy behavior).
+// is lazy on web; native mounts images eagerly to avoid blank spaces during
+// fast scrolling in virtualized lists.
 export const LazyImage = ({
   source,
   placeholderSource = PLACEHOLDER,
@@ -21,17 +20,12 @@ export const LazyImage = ({
   const ctx = useContext(LazyScrollContext);
   const ref = useRef(null);
   const topRef = useRef(null);
-  const [visible, setVisible] = useState(false);
-  const imageOpacity = useRef(new Animated.Value(0)).current;
-  const placeholderOpacity = useRef(new Animated.Value(1)).current;
+  const [visible, setVisible] = useState(
+    () => Platform.OS !== "web" || eager || !ctx,
+  );
 
   useEffect(() => {
-    imageOpacity.setValue(0);
-    placeholderOpacity.setValue(1);
-  }, [imageOpacity, placeholderOpacity, source?.uri]);
-
-  useEffect(() => {
-    if (!eager || !source?.uri) return;
+    if (Platform.OS !== "web" || !eager || !source?.uri) return;
     setVisible(true);
     Image.prefetch(source.uri).catch(() => {});
   }, [eager, source?.uri]);
@@ -43,7 +37,7 @@ export const LazyImage = ({
     const next =
       topRef.current < scrollY + vh + offset &&
       topRef.current + 400 > scrollY - offset;
-    setVisible((prev) => (prev === next ? prev : next));
+    if (next) setVisible(true);
   }, []);
 
   const measure = useCallback(() => {
@@ -70,7 +64,7 @@ export const LazyImage = ({
   }, [ctx, updateVisibility]);
 
   useEffect(() => {
-    if (eager || !ctx) {
+    if (Platform.OS !== "web" || eager || !ctx) {
       setVisible(true);
       return;
     }
@@ -90,41 +84,49 @@ export const LazyImage = ({
       ref={ref}
       style={[style, { backgroundColor: placeholderColor, overflow: "hidden" }]}
     >
-      {/* Real product image — lazy: only mounted when near the viewport */}
-      {visible && (
-        <Animated.Image
+      {Platform.OS !== "web" ? (
+        <Image
           source={source}
-          style={[styles.imageLayer, { opacity: imageOpacity }]}
+          defaultSource={placeholderSource}
+          style={styles.nativeImage}
           resizeMode={resizeMode}
-          onLoad={() => {
-            Animated.parallel([
-              Animated.timing(imageOpacity, {
-                toValue: 1,
-                duration: 260,
-                useNativeDriver: true,
-              }),
-              Animated.timing(placeholderOpacity, {
-                toValue: 0,
-                duration: 260,
-                useNativeDriver: true,
-              }),
-            ]).start();
-          }}
         />
+      ) : (
+        <>
+          <Image
+            source={placeholderSource}
+            style={styles.placeholderLayer}
+            resizeMode={placeholderResizeMode}
+          />
+          {visible && (
+            <Image
+              source={source}
+              style={styles.productLayer}
+              resizeMode={resizeMode}
+            />
+          )}
+        </>
       )}
-      <Animated.Image
-        source={placeholderSource}
-        style={[styles.imageLayer, { opacity: placeholderOpacity }]}
-        resizeMode={placeholderResizeMode}
-      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  imageLayer: {
+  nativeImage: {
     ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "100%",
+  },
+  placeholderLayer: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+    zIndex: 0,
+  },
+  productLayer: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+    zIndex: 1,
   },
 });

@@ -62,6 +62,7 @@ const FILTERS = ["For You", "Following", "Trending", "New Arrivals"];
 // Number of categories shown in the horizontal strip on Home — ranked by the
 // most active products. Tapping "See More" opens the full Categories tab.
 const TOP_CATEGORIES_LIMIT = 5;
+const NATIVE_FEED_PREFETCH_VIEWPORTS = 20;
 const HOME_CATEGORIES_CACHE_KEY = "expressmart.cache.home_categories";
 // Skeleton cards rendered in place of feed cards during the initial load.
 // Rendered through the same FlatList as the real cards so the loading state
@@ -636,7 +637,11 @@ export const HomeScreen = ({ navigation }) => {
       const { contentSize, layoutMeasurement, contentOffset } = e.nativeEvent;
       const distanceFromBottom =
         contentSize.height - layoutMeasurement.height - contentOffset.y;
-      if (distanceFromBottom < 400 && hasMore && !loadingMore) {
+      const prefetchDistance =
+        Platform.OS === "web"
+          ? 400
+          : layoutMeasurement.height * NATIVE_FEED_PREFETCH_VIEWPORTS;
+      if (distanceFromBottom < prefetchDistance && hasMore && !loadingMore) {
         loadMore();
       }
     },
@@ -1058,10 +1063,10 @@ export const HomeScreen = ({ navigation }) => {
                   progressViewOffset={headerHeight}
                 />
               }
-              initialNumToRender={4}
-              maxToRenderPerBatch={4}
-              updateCellsBatchingPeriod={16}
-              windowSize={5}
+              initialNumToRender={Platform.OS === "web" ? 4 : 6}
+              maxToRenderPerBatch={Platform.OS === "web" ? 4 : 8}
+              updateCellsBatchingPeriod={Platform.OS === "web" ? 16 : 32}
+              windowSize={Platform.OS === "web" ? 5 : 9}
               removeClippedSubviews={false}
             />
           </View>

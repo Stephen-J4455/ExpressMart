@@ -710,6 +710,7 @@ export const FeedProductCard = memo(function FeedProductCard({
                   style={styles.mediaTile}
                   resizeMode="cover"
                   placeholderResizeMode="contain"
+                  eager
                 />
                 <Pressable
                   style={styles.mediaTile}
@@ -726,6 +727,7 @@ export const FeedProductCard = memo(function FeedProductCard({
                     style={StyleSheet.absoluteFill}
                     resizeMode="cover"
                     placeholderResizeMode="contain"
+                    eager
                   />
                   {images.length > 2 && (
                     <View style={styles.moreOverlay}>
