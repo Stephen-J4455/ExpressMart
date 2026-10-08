@@ -14,6 +14,7 @@ import {
   Image,
   ImageBackground,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -682,12 +683,20 @@ export const FeedProductCard = memo(function FeedProductCard({
             }
           >
             {images.length === 1 ? (
-              singleImageRatio && !DISABLE_PRODUCT_IMAGE_RENDERING ? (
+              (Platform.OS !== "web" || singleImageRatio) &&
+              !DISABLE_PRODUCT_IMAGE_RENDERING ? (
                 <Image
                   source={{ uri: images[0] }}
+                  defaultSource={
+                    Platform.OS !== "web"
+                      ? isDark
+                        ? DARK_PLACEHOLDER
+                        : LIGHT_PLACEHOLDER
+                      : undefined
+                  }
                   style={[
                     styles.mediaSingle,
-                    { aspectRatio: singleImageRatio },
+                    { aspectRatio: singleImageRatio || 1 },
                   ]}
                   resizeMode="contain"
                 />
@@ -702,16 +711,27 @@ export const FeedProductCard = memo(function FeedProductCard({
               )
             ) : (
               <>
-                <LazyImage
-                  source={{ uri: images[0] }}
-                  placeholderSource={
-                    isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
-                  }
-                  style={styles.mediaTile}
-                  resizeMode="cover"
-                  placeholderResizeMode="contain"
-                  eager
-                />
+                {Platform.OS === "web" ? (
+                  <LazyImage
+                    source={{ uri: images[0] }}
+                    placeholderSource={
+                      isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
+                    }
+                    style={styles.mediaTile}
+                    resizeMode="cover"
+                    placeholderResizeMode="contain"
+                    eager
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: images[0] }}
+                    defaultSource={
+                      isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
+                    }
+                    style={styles.mediaTile}
+                    resizeMode="cover"
+                  />
+                )}
                 <Pressable
                   style={styles.mediaTile}
                   onPress={() => {
@@ -719,16 +739,27 @@ export const FeedProductCard = memo(function FeedProductCard({
                     setGalleryVisible(true);
                   }}
                 >
-                  <LazyImage
-                    source={{ uri: images[1] }}
-                    placeholderSource={
-                      isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
-                    }
-                    style={StyleSheet.absoluteFill}
-                    resizeMode="cover"
-                    placeholderResizeMode="contain"
-                    eager
-                  />
+                  {Platform.OS === "web" ? (
+                    <LazyImage
+                      source={{ uri: images[1] }}
+                      placeholderSource={
+                        isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
+                      }
+                      style={StyleSheet.absoluteFill}
+                      resizeMode="cover"
+                      placeholderResizeMode="contain"
+                      eager
+                    />
+                  ) : (
+                    <Image
+                      source={{ uri: images[1] }}
+                      defaultSource={
+                        isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
+                      }
+                      style={StyleSheet.absoluteFill}
+                      resizeMode="cover"
+                    />
+                  )}
                   {images.length > 2 && (
                     <View style={styles.moreOverlay}>
                       <Text style={styles.moreOverlayText}>

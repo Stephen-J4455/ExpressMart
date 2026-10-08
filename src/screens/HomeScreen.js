@@ -183,6 +183,7 @@ export const HomeScreen = ({ navigation }) => {
   }, []);
   const [activeFilter, setActiveFilter] = useState("For You");
   const [refreshing, setRefreshing] = useState(false);
+  const [showMorePlaceholder, setShowMorePlaceholder] = useState(false);
   const [topCategories, setTopCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   // Active flash sales surfaced as a horizontally-scrolling row on the home
@@ -637,6 +638,11 @@ export const HomeScreen = ({ navigation }) => {
       const { contentSize, layoutMeasurement, contentOffset } = e.nativeEvent;
       const distanceFromBottom =
         contentSize.height - layoutMeasurement.height - contentOffset.y;
+      const placeholderDistance =
+        Platform.OS === "web" ? 400 : layoutMeasurement.height;
+      setShowMorePlaceholder(
+        distanceFromBottom <= placeholderDistance && hasMore,
+      );
       const prefetchDistance =
         Platform.OS === "web"
           ? 400
@@ -1029,6 +1035,7 @@ export const HomeScreen = ({ navigation }) => {
         >
           <View style={[styles.homePane, { width: pagerWidth }]}>
             <FlatList
+              key={showFeedPlaceholders ? "home-feed-loading" : "home-feed"}
               style={styles.homeList}
               data={showFeedPlaceholders ? FEED_PLACEHOLDER_ITEMS : feedItems}
               keyExtractor={(item) =>
@@ -1041,9 +1048,9 @@ export const HomeScreen = ({ navigation }) => {
               viewabilityConfig={viewabilityConfig}
               ListHeaderComponent={listHeader}
               ListFooterComponent={
-                loadingMore ? (
-                  <View style={styles.footerLoader}>
-                    <ActivityIndicator size="small" color={c.primary} />
+                hasMore && showMorePlaceholder ? (
+                  <View style={[styles.cardWrap, { width: "100%" }]}>
+                    <FeedCardPlaceholder />
                   </View>
                 ) : null
               }
@@ -1063,10 +1070,17 @@ export const HomeScreen = ({ navigation }) => {
                   progressViewOffset={headerHeight}
                 />
               }
-              initialNumToRender={Platform.OS === "web" ? 4 : 6}
-              maxToRenderPerBatch={Platform.OS === "web" ? 4 : 8}
-              updateCellsBatchingPeriod={Platform.OS === "web" ? 16 : 32}
-              windowSize={Platform.OS === "web" ? 5 : 9}
+              initialNumToRender={
+                Platform.OS === "web"
+                  ? 4
+                  : Math.max(feedItems.length, FEED_PLACEHOLDER_ITEMS.length)
+              }
+              maxToRenderPerBatch={
+                Platform.OS === "web" ? 4 : Math.max(feedItems.length, 10)
+              }
+              updateCellsBatchingPeriod={16}
+              windowSize={Platform.OS === "web" ? 5 : 15}
+              disableVirtualization={Platform.OS !== "web"}
               removeClippedSubviews={false}
             />
           </View>
@@ -2007,12 +2021,6 @@ const buildHomeStyles = (c) =>
       color: c.onPrimary,
       fontSize: 13,
       fontWeight: "700",
-    },
-    footerLoader: {
-      minHeight: 64,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingVertical: 20,
     },
     // ── Flash Sale strip (horizontal ProductCards, only when live deals) ───
     flashSaleSection: {
