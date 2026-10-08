@@ -4622,6 +4622,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       visible={menuVisible}
       transparent
       animationType="none"
+      statusBarTranslucent={Platform.OS === "android"}
+      navigationBarTranslucent={Platform.OS === "android"}
       onRequestClose={closeMenu}
     >
       <Animated.View style={[styles.drawerOverlay, { opacity: drawerAnim }]}>
@@ -4629,7 +4631,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         <Animated.View
           style={[
             styles.drawer,
-            { width: drawerWidth, transform: [{ translateX: drawerSlide }] },
+            {
+              width: drawerWidth,
+              paddingTop: insets.top + 12,
+              paddingBottom: insets.bottom + 12,
+              transform: [{ translateX: drawerSlide }],
+            },
           ]}
         >
           <View style={styles.drawerHeader}>
@@ -8584,12 +8591,11 @@ const buildSellerAdminStyles = (c) =>
       backgroundColor: c.overlay,
     },
     drawer: {
+      flex: 1,
       borderRadius: radius.lg,
       width: "78%",
       maxWidth: 320,
       backgroundColor: c.light,
-      paddingTop: 12,
-      paddingBottom: 24,
       shadowColor: "#000",
       shadowOpacity: 0.2,
       shadowRadius: 12,

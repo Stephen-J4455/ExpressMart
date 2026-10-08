@@ -26,7 +26,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Markdown from "react-native-markdown-display";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { KeyboardStickyView } from "react-native-keyboard-controller";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { FlashSaleBadge } from "./FlashSaleBadge";
 import { ReportListingModal } from "./ReportListingModal";
 import { CollectionsPickerModal } from "./CollectionsPickerModal";
@@ -1150,130 +1150,135 @@ export const FeedProductCard = memo(function FeedProductCard({
             style={styles.commentModalBackdrop}
             onPress={() => setCommentModalVisible(false)}
           />
-          <View style={styles.commentModalSheet}>
-            <View style={styles.commentModalHandle} />
-            <View style={styles.commentModalHeader}>
-              <Text style={styles.commentModalTitle}>
-                Comments ({commentCount})
-              </Text>
-              <Pressable
-                onPress={() => setCommentModalVisible(false)}
-                hitSlop={8}
-              >
-                <Ionicons name="close" size={22} color={c.dark} />
-              </Pressable>
-            </View>
-
-            {commentsLoading ? (
-              <View style={styles.commentModalLoading}>
-                <ActivityIndicator color={c.primary} />
+          <KeyboardAvoidingView
+            behavior="padding"
+            style={styles.commentModalKeyboardArea}
+          >
+            <View style={styles.commentModalSheet}>
+              <View style={styles.commentModalHandle} />
+              <View style={styles.commentModalHeader}>
+                <Text style={styles.commentModalTitle}>
+                  Comments ({commentCount})
+                </Text>
+                <Pressable
+                  onPress={() => setCommentModalVisible(false)}
+                  hitSlop={8}
+                >
+                  <Ionicons name="close" size={22} color={c.dark} />
+                </Pressable>
               </View>
-            ) : (
-              <ScrollView
-                style={styles.commentList}
-                contentContainerStyle={styles.commentListContent}
-                keyboardShouldPersistTaps="handled"
-              >
-                {comments.length === 0 ? (
-                  <Text style={styles.commentEmpty}>
-                    No comments yet. Be the first!
-                  </Text>
-                ) : (
-                  comments.map((cm) => (
-                    <View key={cm.id} style={styles.commentItem}>
-                      <View style={styles.commentAvatarWrap}>
-                        {cm.author_avatar ? (
-                          <Image
-                            source={{ uri: cm.author_avatar }}
-                            style={styles.commentAvatar}
-                          />
-                        ) : (
-                          <View style={styles.commentAvatarFallback}>
-                            <Ionicons
-                              name="person"
-                              size={14}
-                              color={c.primary}
+
+              {commentsLoading ? (
+                <View style={styles.commentModalLoading}>
+                  <ActivityIndicator color={c.primary} />
+                </View>
+              ) : (
+                <ScrollView
+                  style={styles.commentList}
+                  contentContainerStyle={styles.commentListContent}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {comments.length === 0 ? (
+                    <Text style={styles.commentEmpty}>
+                      No comments yet. Be the first!
+                    </Text>
+                  ) : (
+                    comments.map((cm) => (
+                      <View key={cm.id} style={styles.commentItem}>
+                        <View style={styles.commentAvatarWrap}>
+                          {cm.author_avatar ? (
+                            <Image
+                              source={{ uri: cm.author_avatar }}
+                              style={styles.commentAvatar}
                             />
-                          </View>
-                        )}
-                      </View>
-                      <View style={styles.commentBody}>
-                        <View style={styles.commentAuthorRow}>
-                          <Text style={styles.commentAuthor}>
-                            {cm.author_name}
-                          </Text>
-                          {cm.rating ? (
-                            <View style={styles.commentStars}>
-                              {[1, 2, 3, 4, 5].map((s) => (
-                                <Ionicons
-                                  key={s}
-                                  name={
-                                    s <= cm.rating ? "star" : "star-outline"
-                                  }
-                                  size={11}
-                                  color={REVIEW_STAR_COLOR}
-                                />
-                              ))}
+                          ) : (
+                            <View style={styles.commentAvatarFallback}>
+                              <Ionicons
+                                name="person"
+                                size={14}
+                                color={c.primary}
+                              />
                             </View>
-                          ) : null}
+                          )}
                         </View>
-                        <Text style={styles.commentText}>{cm.comment}</Text>
+                        <View style={styles.commentBody}>
+                          <View style={styles.commentAuthorRow}>
+                            <Text style={styles.commentAuthor}>
+                              {cm.author_name}
+                            </Text>
+                            {cm.rating ? (
+                              <View style={styles.commentStars}>
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                  <Ionicons
+                                    key={s}
+                                    name={
+                                      s <= cm.rating ? "star" : "star-outline"
+                                    }
+                                    size={11}
+                                    color={REVIEW_STAR_COLOR}
+                                  />
+                                ))}
+                              </View>
+                            ) : null}
+                          </View>
+                          <Text style={styles.commentText}>{cm.comment}</Text>
+                        </View>
                       </View>
-                    </View>
-                  ))
-                )}
-              </ScrollView>
-            )}
+                    ))
+                  )}
+                </ScrollView>
+              )}
 
-            {/* Star rating selector for the new comment */}
-            <View style={styles.commentRatingRow}>
-              <Text style={styles.commentRatingLabel}>Your rating</Text>
-              <View style={styles.commentRatingStars}>
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <Pressable
-                    key={s}
-                    onPress={() => setCommentRating(s)}
-                    hitSlop={4}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${s} star${s > 1 ? "s" : ""}`}
-                  >
-                    <Ionicons
-                      name={s <= commentRating ? "star" : "star-outline"}
-                      size={24}
-                      color={REVIEW_STAR_COLOR}
-                    />
-                  </Pressable>
-                ))}
+              {/* Star rating selector for the new comment */}
+              <View style={styles.commentRatingRow}>
+                <Text style={styles.commentRatingLabel}>Your rating</Text>
+                <View style={styles.commentRatingStars}>
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Pressable
+                      key={s}
+                      onPress={() => setCommentRating(s)}
+                      hitSlop={4}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${s} star${s > 1 ? "s" : ""}`}
+                    >
+                      <Ionicons
+                        name={s <= commentRating ? "star" : "star-outline"}
+                        size={24}
+                        color={REVIEW_STAR_COLOR}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.commentInputRow}>
+                <TextInput
+                  style={styles.commentInput}
+                  placeholder="Add a comment…"
+                  placeholderTextColor={c.muted}
+                  value={commentText}
+                  onChangeText={setCommentText}
+                  multiline
+                  editable={!commentPosting}
+                />
+                <Pressable
+                  style={[
+                    styles.commentSendBtn,
+                    (!commentText.trim() || commentPosting) &&
+                      styles.commentSendBtnDisabled,
+                  ]}
+                  onPress={submitComment}
+                  disabled={!commentText.trim() || commentPosting}
+                >
+                  {commentPosting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="send" size={18} color="#fff" />
+                  )}
+                </Pressable>
               </View>
             </View>
-
-            <KeyboardStickyView style={styles.commentInputRow}>
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Add a comment…"
-                placeholderTextColor={c.muted}
-                value={commentText}
-                onChangeText={setCommentText}
-                multiline
-                editable={!commentPosting}
-              />
-              <Pressable
-                style={[
-                  styles.commentSendBtn,
-                  (!commentText.trim() || commentPosting) &&
-                    styles.commentSendBtnDisabled,
-                ]}
-                onPress={submitComment}
-                disabled={!commentText.trim() || commentPosting}
-              >
-                {commentPosting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Ionicons name="send" size={18} color="#fff" />
-                )}
-              </Pressable>
-            </KeyboardStickyView>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -2018,6 +2023,10 @@ const buildFeedCardStyles = (c) =>
     commentModalBackdrop: {
       flex: 1,
       backgroundColor: c.overlay,
+      justifyContent: "flex-end",
+    },
+    commentModalKeyboardArea: {
+      flex: 1,
       justifyContent: "flex-end",
     },
     commentModalSheet: {
