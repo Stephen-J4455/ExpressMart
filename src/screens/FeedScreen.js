@@ -92,7 +92,7 @@ export const FeedScreen = ({ route, navigation }) => {
   const reelLeft = isWide
     ? sidebarWidth + Math.max((availableWidth - reelWidth) / 2, 0)
     : 0;
-  const { colors: themeColors } = useTheme();
+  const { colors: themeColors, isDark } = useTheme();
   const { user } = useAuth();
   const styles = useAppStyles((c) => buildFeedStyles(c));
   const logFeed = useCallback((...args) => {
@@ -1329,10 +1329,9 @@ export const FeedScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.wrapper}>
-      {/* The feed is always a dark video canvas — status bar content stays
-          LIGHT regardless of app theme. Unmounting restores the theme-driven
-          bar set by App.js (expo-status-bar / RN StatusBar stack). */}
-      <StatusBar style="light" />
+      {/* Keep light icons over the video, but restore theme contrast as soon as
+          this tab loses focus (tab screens remain mounted while inactive). */}
+      <StatusBar style={screenIsFocused || isDark ? "light" : "dark"} />
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={themeColors.primary} />

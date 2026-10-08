@@ -54,6 +54,7 @@ export const AuthScreen = ({ navigation, route }) => {
   const toast = useToast();
   const redirectHandledRef = useRef(false);
   const oauthCallbackInFlightRef = useRef(false);
+  const handledOAuthCallbackUrlRef = useRef(null);
 
   const navigateAfterLogin = useCallback(() => {
     const redirectTo = route?.params?.redirectTo;
@@ -140,8 +141,10 @@ export const AuthScreen = ({ navigation, route }) => {
 
   const completeOAuthFromUrl = useCallback(
     async (callbackUrl) => {
-      if (!callbackUrl || oauthCallbackInFlightRef.current) return false;
+      if (!callbackUrl) return false;
       if (!isOAuthCallbackUrl(callbackUrl)) return false;
+      if (handledOAuthCallbackUrlRef.current === callbackUrl) return true;
+      if (oauthCallbackInFlightRef.current) return false;
       oauthCallbackInFlightRef.current = true;
       try {
         const urlObj = new URL(callbackUrl);
@@ -161,6 +164,7 @@ export const AuthScreen = ({ navigation, route }) => {
           const { error: exchangeError } =
             await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
+          handledOAuthCallbackUrlRef.current = callbackUrl;
           toast.success("Successfully signed in!");
           return true;
         }
@@ -182,6 +186,7 @@ export const AuthScreen = ({ navigation, route }) => {
         });
         if (setError) throw setError;
 
+        handledOAuthCallbackUrlRef.current = callbackUrl;
         toast.success("Successfully signed in!");
         return true;
       } finally {
@@ -290,16 +295,27 @@ export const AuthScreen = ({ navigation, route }) => {
   useEffect(() => {
     if (Platform.OS === "web") return;
 
-    const subscription = Linking.addEventListener("url", async ({ url }) => {
+    const handleNativeOAuthCallback = async (url) => {
+      if (!isOAuthCallbackUrl(url)) return;
       try {
         await completeOAuthFromUrl(url);
       } catch (error) {
         toast.error(error.message || "Failed to complete sign-in");
       }
+    };
+
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      void handleNativeOAuthCallback(url);
     });
 
+    Linking.getInitialURL()
+      .then(handleNativeOAuthCallback)
+      .catch((error) => {
+        console.error("Unable to read the initial OAuth callback URL:", error);
+      });
+
     return () => subscription.remove();
-  }, [completeOAuthFromUrl, toast]);
+  }, [completeOAuthFromUrl, isOAuthCallbackUrl, toast]);
 
   const getOAuthRedirectUrl = () => {
     if (Platform.OS === "web" && typeof window !== "undefined") {

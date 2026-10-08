@@ -15,12 +15,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Image, Platform } from "react-native";
+import { Image, Modal, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { compressProductImage } from "../utils/compressImage";
 import {
   Animated,
+  ActivityIndicator,
   Easing,
   FlatList,
   Pressable,
@@ -41,6 +42,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useGrounding } from "../hooks/useGrounding";
 import { useTagAIAssistant } from "../context/TagAIAssistantContext";
+import { useToast } from "../context/ToastContext";
 import { radius } from "../theme/colors";
 import { TagAIProductCardRow } from "../components/tagai/TagAIProductCard";
 import { ThinkingTrace } from "../components/tagai/ThinkingTrace";
@@ -116,47 +118,42 @@ const TypingDots = () => {
 };
 
 const PROCESS_DEBUG_TEXTS = [
-  "Checking model…",
-  "Selecting model…",
+  "Understanding your request…",
+  "Finding products…",
   "Planning request…",
-  "Running tools…",
-  "Reviewing response…",
+  "Checking the best matches…",
+  "Preparing results…",
 ];
 
-const ThinkingStatusTicker = ({ items = [] }) => {
+const IMAGE_PROCESS_TEXTS = [
+  "Checking image…",
+  "Finding products…",
+  "Looking for similar items…",
+  "Comparing product matches…",
+  "Preparing results…",
+];
+
+const ThinkingStatusTicker = ({ items = [], hasImage = false }) => {
   const { colors } = useTheme();
   const styles = useAppStyles(buildStyles);
-  const [visibleText, setVisibleText] = useState(PROCESS_DEBUG_TEXTS[0]);
+  const statusTexts = hasImage ? IMAGE_PROCESS_TEXTS : PROCESS_DEBUG_TEXTS;
+  const [visibleText, setVisibleText] = useState(statusTexts[0]);
   const translateY = useRef(new Animated.Value(16)).current;
   const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    if (!items.length) {
+    const latestText = items[items.length - 1]?.text;
+    const isGenericStatus = !latestText || statusTexts.includes(latestText);
+
+    if (isGenericStatus || hasImage) {
       const cycleIndex = setInterval(() => {
         setVisibleText((prev) => {
-          const currentIndex = PROCESS_DEBUG_TEXTS.indexOf(prev);
+          const currentIndex = statusTexts.indexOf(prev);
           const nextIndex =
             currentIndex >= 0
-              ? (currentIndex + 1) % PROCESS_DEBUG_TEXTS.length
+              ? (currentIndex + 1) % statusTexts.length
               : 0;
-          return PROCESS_DEBUG_TEXTS[nextIndex];
-        });
-      }, 1200);
-      return () => clearInterval(cycleIndex);
-    }
-
-    const latestText = items[items.length - 1]?.text || PROCESS_DEBUG_TEXTS[0];
-    const isGenericStatus = PROCESS_DEBUG_TEXTS.includes(latestText);
-
-    if (isGenericStatus) {
-      const cycleIndex = setInterval(() => {
-        setVisibleText((prev) => {
-          const currentIndex = PROCESS_DEBUG_TEXTS.indexOf(prev);
-          const nextIndex =
-            currentIndex >= 0
-              ? (currentIndex + 1) % PROCESS_DEBUG_TEXTS.length
-              : 0;
-          return PROCESS_DEBUG_TEXTS[nextIndex];
+          return statusTexts[nextIndex];
         });
       }, 1200);
       return () => clearInterval(cycleIndex);
@@ -191,7 +188,7 @@ const ThinkingStatusTicker = ({ items = [] }) => {
         }),
       ]).start();
     });
-  }, [items, visibleText, translateY, opacity]);
+  }, [items, hasImage, statusTexts, visibleText, translateY, opacity]);
 
   return (
     <View style={styles.statusTickerWrap}>
@@ -265,11 +262,14 @@ export const TagAIAssistantScreen = () => {
   const markdownStyles = useAppStyles(buildTagAIMarkdownStyles);
   const { user, profile } = useAuth();
   const { addToCart } = useCart();
+  const toast = useToast();
   const { messages, isThinking, thinkingTrail, sendMessage, clearChat } =
     useTagAIAssistant();
 
   const [input, setInput] = useState("");
   const [visionImage, setVisionImage] = useState(null);
+  const [imageSourceModalVisible, setImageSourceModalVisible] = useState(false);
+  const [processingImage, setProcessingImage] = useState(false);
   const listRef = useRef(null);
   // Register the input bar so the assistant can point at its own chat box.
   const inputBarRef = useGrounding("tagAI.inputBar");
@@ -283,7 +283,7 @@ export const TagAIAssistantScreen = () => {
   const handleSend = useCallback(
     (text) => {
       const trimmed = (text ?? input).trim();
-      if ((!trimmed && !visionImage) || isThinking) return;
+      if ((!trimmed && !visionImage) || isThinking || processingImage) return;
       setInput("");
       sendMessage(trimmed, {
         image: visionImage,
@@ -296,36 +296,76 @@ export const TagAIAssistantScreen = () => {
       });
       setVisionImage(null);
     },
-    [input, isThinking, navigation, addToCart, sendMessage, visionImage],
+    [
+      input,
+      isThinking,
+      navigation,
+      addToCart,
+      sendMessage,
+      visionImage,
+      processingImage,
+    ],
   );
 
-  const pickVisionImage = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    const compressed = await compressProductImage(
-      asset.uri,
-      Platform.OS === "web" ? asset.file || null : null,
-    );
-    if (Platform.OS === "web" && compressed.pickedFile) {
-      const buffer = await compressed.pickedFile.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let binary = "";
-      for (let index = 0; index < bytes.length; index += 1) {
-        binary += String.fromCharCode(bytes[index]);
+  const pickVisionImage = useCallback(
+    async (source) => {
+      setImageSourceModalVisible(false);
+      setProcessingImage(true);
+      try {
+        if (source === "camera") {
+          const permission = await ImagePicker.requestCameraPermissionsAsync();
+          if (permission.status !== "granted") {
+            toast.error("Camera permission is required");
+            return;
+          }
+        } else {
+          const permission =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (permission.status !== "granted") {
+            toast.error("Photo library permission is required");
+            return;
+          }
+        }
+
+        const pickerOptions = {
+          mediaTypes: ["images"],
+          allowsEditing: true,
+          quality: 1,
+        };
+        const result =
+          source === "camera"
+            ? await ImagePicker.launchCameraAsync(pickerOptions)
+            : await ImagePicker.launchImageLibraryAsync(pickerOptions);
+        if (result.canceled || !result.assets?.[0]) return;
+
+        const asset = result.assets[0];
+        const compressed = await compressProductImage(
+          asset.uri,
+          Platform.OS === "web" ? asset.file || null : null,
+        );
+        if (Platform.OS === "web" && compressed.pickedFile) {
+          const buffer = await compressed.pickedFile.arrayBuffer();
+          const bytes = new Uint8Array(buffer);
+          let binary = "";
+          for (let index = 0; index < bytes.length; index += 1) {
+            binary += String.fromCharCode(bytes[index]);
+          }
+          setVisionImage(`data:image/jpeg;base64,${btoa(binary)}`);
+          return;
+        }
+        const base64 = await FileSystem.readAsStringAsync(compressed.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        setVisionImage(`data:image/jpeg;base64,${base64}`);
+      } catch (error) {
+        console.error("[TagAIAssistantScreen] image selection failed:", error);
+        toast.error("Could not attach image", error?.message || "Please try again.");
+      } finally {
+        setProcessingImage(false);
       }
-      setVisionImage(`data:image/jpeg;base64,${btoa(binary)}`);
-      return;
-    }
-    const base64 = await FileSystem.readAsStringAsync(compressed.uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    setVisionImage(`data:image/jpeg;base64,${base64}`);
-  }, []);
+    },
+    [toast],
+  );
 
   // Inverted list: newest message at the bottom. The live status row sits
   // outside the list so it stays visible above the input bar instead of being
@@ -520,7 +560,10 @@ export const TagAIAssistantScreen = () => {
         {isThinking ? (
           <View style={styles.thinkingStatusRow}>
             <TypingDots />
-            <ThinkingStatusTicker items={thinkingTrail} />
+            <ThinkingStatusTicker
+              items={thinkingTrail}
+              hasImage={Boolean(messages[messages.length - 1]?.image)}
+            />
           </View>
         ) : null}
 
@@ -551,12 +594,19 @@ export const TagAIAssistantScreen = () => {
             </View>
           ) : null}
           <Pressable
-            onPress={pickVisionImage}
-            disabled={isThinking}
-            style={[styles.attachButton, isThinking && { opacity: 0.4 }]}
+            onPress={() => setImageSourceModalVisible(true)}
+            disabled={isThinking || processingImage}
+            style={[
+              styles.attachButton,
+              (isThinking || processingImage) && { opacity: 0.4 },
+            ]}
             accessibilityLabel="Attach image for TagAI vision"
           >
-            <Ionicons name="image-outline" size={19} color={colors.primary} />
+            {processingImage ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name="image-outline" size={19} color={colors.primary} />
+            )}
           </Pressable>
           <TextInput
             style={[styles.input, { color: colors.dark }]}
@@ -570,10 +620,14 @@ export const TagAIAssistantScreen = () => {
           />
           <Pressable
             onPress={() => handleSend()}
-            disabled={(!input.trim() && !visionImage) || isThinking}
+            disabled={
+              (!input.trim() && !visionImage) || isThinking || processingImage
+            }
             style={({ pressed }) => [
               styles.sendButton,
-              ((!input.trim() && !visionImage) || isThinking) && {
+              ((!input.trim() && !visionImage) ||
+                isThinking ||
+                processingImage) && {
                 opacity: 0.4,
               },
               pressed && { transform: [{ scale: 0.94 }] },
@@ -590,6 +644,109 @@ export const TagAIAssistantScreen = () => {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+      <Modal
+        visible={imageSourceModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImageSourceModalVisible(false)}
+      >
+        <Pressable
+          style={styles.imageSourceBackdrop}
+          onPress={() => setImageSourceModalVisible(false)}
+        >
+          <Pressable
+            style={[
+              styles.imageSourceSheet,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                marginBottom: insets.bottom + 12,
+              },
+            ]}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View
+              style={[
+                styles.imageSourceHandle,
+                { backgroundColor: colors.border },
+              ]}
+            />
+            <Text style={[styles.imageSourceTitle, { color: colors.dark }]}>
+              Add a photo
+            </Text>
+            <Text style={[styles.imageSourceSubtitle, { color: colors.muted }]}>
+              Choose an image for TagAI to inspect.
+            </Text>
+            <Pressable
+              onPress={() => pickVisionImage("library")}
+              style={({ pressed }) => [
+                styles.imageSourceOption,
+                { borderColor: colors.border },
+                pressed && { backgroundColor: colors.surfaceAlpha },
+              ]}
+              accessibilityRole="button"
+            >
+              <View
+                style={[
+                  styles.imageSourceIcon,
+                  { backgroundColor: colors.surfaceAlpha },
+                ]}
+              >
+                <Ionicons
+                  name="images-outline"
+                  size={20}
+                  color={colors.primary}
+                />
+              </View>
+              <View style={styles.imageSourceText}>
+                <Text style={[styles.imageSourceOptionTitle, { color: colors.dark }]}>
+                  Choose from device
+                </Text>
+                <Text style={[styles.imageSourceOptionSubtitle, { color: colors.muted }]}>
+                  Select a photo from your library
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Pressable>
+            <Pressable
+              onPress={() => pickVisionImage("camera")}
+              style={({ pressed }) => [
+                styles.imageSourceOption,
+                { borderColor: colors.border },
+                pressed && { backgroundColor: colors.surfaceAlpha },
+              ]}
+              accessibilityRole="button"
+            >
+              <View
+                style={[
+                  styles.imageSourceIcon,
+                  { backgroundColor: colors.surfaceAlpha },
+                ]}
+              >
+                <Ionicons name="camera-outline" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.imageSourceText}>
+                <Text style={[styles.imageSourceOptionTitle, { color: colors.dark }]}>
+                  Take a photo
+                </Text>
+                <Text style={[styles.imageSourceOptionSubtitle, { color: colors.muted }]}>
+                  Open your camera
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Pressable>
+            <Pressable
+              onPress={() => setImageSourceModalVisible(false)}
+              style={styles.imageSourceCancel}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.imageSourceCancelText, { color: colors.muted }]}>
+                Cancel
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -834,6 +991,80 @@ const buildStyles = (c) =>
       height: 32,
       alignItems: "center",
       justifyContent: "center",
+    },
+    imageSourceBackdrop: {
+      flex: 1,
+      justifyContent: "flex-end",
+      backgroundColor: "rgba(8, 15, 25, 0.48)",
+      paddingHorizontal: 12,
+    },
+    imageSourceSheet: {
+      borderWidth: 1,
+      borderRadius: radius.xl,
+      paddingHorizontal: 18,
+      paddingTop: 10,
+      paddingBottom: 10,
+      shadowColor: "#000",
+      shadowOpacity: 0.16,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: -8 },
+      elevation: 12,
+    },
+    imageSourceHandle: {
+      alignSelf: "center",
+      width: 38,
+      height: 4,
+      borderRadius: radius.full,
+      marginBottom: 18,
+    },
+    imageSourceTitle: {
+      fontSize: 19,
+      fontWeight: "800",
+      letterSpacing: -0.3,
+    },
+    imageSourceSubtitle: {
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 4,
+      marginBottom: 16,
+    },
+    imageSourceOption: {
+      minHeight: 68,
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1,
+      borderRadius: radius.lg,
+      paddingHorizontal: 10,
+      marginBottom: 9,
+      gap: 12,
+    },
+    imageSourceIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: radius.md,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    imageSourceText: {
+      flex: 1,
+      gap: 3,
+    },
+    imageSourceOptionTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    imageSourceOptionSubtitle: {
+      fontSize: 12,
+    },
+    imageSourceCancel: {
+      height: 44,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 2,
+    },
+    imageSourceCancelText: {
+      fontSize: 14,
+      fontWeight: "700",
     },
     visionPreviewWrap: {
       position: "absolute",

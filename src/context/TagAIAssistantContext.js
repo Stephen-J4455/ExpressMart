@@ -355,53 +355,15 @@ export const TagAIAssistantProvider = ({ children }) => {
         // Small delay so the thinking indicator is perceivable even when the
         // planner resolves instantly (local rules).
         await new Promise((r) => setTimeout(r, 420));
-        pushThinking("Checking model…");
+        pushThinking(
+          nav.image ? "Checking image…" : "Understanding your request…",
+        );
 
         const {
           reply,
           toolCalls,
           products: remoteProducts = [],
-          debug,
         } = await planTurn(trimmed, messages, nav.image || null);
-
-        const formatDebugStatus = (debugInfo) => {
-          if (!debugInfo || typeof debugInfo !== "object") return null;
-          const requested =
-            debugInfo.requestedModel ||
-            debugInfo.selectedModel ||
-            debugInfo.model ||
-            "Not reported";
-          const selected =
-            debugInfo.selectedModel || debugInfo.model || requested;
-          const source =
-            debugInfo.selectionSource ||
-            debugInfo.modelSource ||
-            "Not reported";
-          const actual = debugInfo.actualModel || "Not reported";
-          const checked = Array.isArray(debugInfo.modelNames)
-            ? debugInfo.modelNames.filter(Boolean).join(", ") || "Not reported"
-            : Array.isArray(debugInfo.modelsUsed)
-              ? debugInfo.modelsUsed.filter(Boolean).join(", ") ||
-                "Not reported"
-              : "Not reported";
-          const attempted = Array.isArray(debugInfo.modelsUsed)
-            ? debugInfo.modelsUsed.filter(Boolean).join(", ") || "Not reported"
-            : "Not reported";
-
-          return [
-            `Database model: ${requested}`,
-            `Model used: ${selected}`,
-            `Model selector: ${source}`,
-            `Model names checked: ${checked}`,
-            `Models attempted: ${attempted}`,
-            `Actual response model: ${actual}`,
-          ].join("\n");
-        };
-
-        const nextDebugStatus = formatDebugStatus(debug);
-        if (nextDebugStatus) {
-          pushThinking(nextDebugStatus);
-        }
 
         // Execute tool calls sequentially (order matters: navigate before
         // point_to_element, search before add_to_cart, etc.)

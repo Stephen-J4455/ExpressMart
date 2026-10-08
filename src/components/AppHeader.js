@@ -146,7 +146,7 @@ export const AppHeader = ({
             />
           ) : (
             <Ionicons
-              name="person-outline"
+              name="person"
               size={20}
               color={themeColors.primary}
             />
@@ -167,7 +167,7 @@ export const AppHeader = ({
             accessibilityRole="button"
             accessibilityLabel="Search"
           >
-            <Ionicons name="search-outline" size={20} color={themeColors.primary} />
+            <Ionicons name="search" size={20} color={themeColors.primary} />
           </Pressable>
           <Pressable
             style={styles.iconButton}
@@ -175,11 +175,11 @@ export const AppHeader = ({
             accessibilityRole="button"
             accessibilityLabel="Browse stores"
           >
-            <Ionicons name="storefront-outline" size={20} color={themeColors.primary} />
+            <Ionicons name="storefront" size={20} color={themeColors.primary} />
           </Pressable>
           <Pressable style={styles.iconButton} onPress={onNotificationsPress}>
             <Ionicons
-              name="notifications-outline"
+              name="notifications"
               size={20}
               color={themeColors.primary}
             />

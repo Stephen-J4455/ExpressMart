@@ -214,7 +214,7 @@ const TabNavigator = () => {
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
-              name={focused ? "compass" : "compass-outline"}
+              name={focused ? "flash" : "flash-outline"}
               size={size}
               color={color}
             />
@@ -344,6 +344,18 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
   const [hidden, setHidden] = React.useState(false);
   // 1 = fully visible, 0 = fully hidden (drives slide + fade together)
   const visibility = useRef(new Animated.Value(1)).current;
+  const selectedTabScale = useRef(new Animated.Value(1)).current;
+  const focusedKey = state.routes[state.index]?.key;
+
+  useEffect(() => {
+    selectedTabScale.setValue(0.82);
+    Animated.spring(selectedTabScale, {
+      toValue: 1,
+      speed: 24,
+      bounciness: 7,
+      useNativeDriver: true,
+    }).start();
+  }, [focusedKey, selectedTabScale]);
 
   useEffect(() => {
     const unsubscribe = subscribeTabBarVisibility((shouldHide) => {
@@ -360,7 +372,6 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
 
   // Account is rendered in the Home header — keep the route, drop the tab.
   const tabs = state.routes.filter((route) => route.name !== "Account");
-  const focusedKey = state.routes[state.index]?.key;
   // Theme-aware pill surface: near-white glass in light mode; in dark mode the
   // app theme's DARK BACKGROUND token (colors.background = #070B14) instead of
   // a hard-coded charcoal. Shared by the tab pill and the AI button.
@@ -439,7 +450,14 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
                 accessibilityState={{ selected: isFocused }}
                 accessibilityLabel={route.name}
               >
-                <View style={tabStyles.iconWrap}>
+                <Animated.View
+                  style={[
+                    tabStyles.iconWrap,
+                    isFocused && {
+                      transform: [{ scale: selectedTabScale }],
+                    },
+                  ]}
+                >
                   {options.tabBarIcon({ color, size: 24, focused: isFocused })}
                   {route.name === "Cart" && cartCount > 0 && (
                     <View
@@ -455,7 +473,7 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
                       <Text style={tabStyles.badgeText}>{cartCount}</Text>
                     </View>
                   )}
-                </View>
+                </Animated.View>
               </Pressable>
             );
           })}
