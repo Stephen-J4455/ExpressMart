@@ -59,11 +59,14 @@ const DISABLE_FEED_CARD_IMAGE_FETCHING = false;
 const DISABLE_PRODUCT_IMAGE_RENDERING = false;
 const VIDEO_SOUND_PREFERENCE_KEY = "expressmart.feed.videoSoundEnabled";
 
-const NativeFeedImage = memo(function NativeFeedImage({
+// Feed image component with retry logic
+const FeedCardImage = memo(function FeedCardImage({
   uri,
   placeholder,
   style,
   resizeMode,
+  eager = false,
+  loadSource = true,
 }) {
   const [retryState, setRetryState] = useState({ uri, count: 0 });
   const retryTimerRef = useRef(null);
@@ -78,29 +81,34 @@ const NativeFeedImage = memo(function NativeFeedImage({
   );
 
   const retryCount = retryState.uri === uri ? retryState.count : 0;
+  const handleImageError = useCallback(
+    (error) => {
+      if (retryCount === 0 && uri) {
+        retryTimerRef.current = setTimeout(() => {
+          if (currentUriRef.current === uri) {
+            setRetryState({ uri, count: 1 });
+          }
+        }, 300);
+        return;
+      }
+      console.warn(
+        "[FeedProductCard] Failed to load product image:",
+        error?.nativeEvent?.error || uri,
+      );
+    },
+    [retryCount, uri],
+  );
 
   return (
-    <Image
+    <LazyImage
       key={`${uri}:${retryCount}`}
       source={{ uri }}
-      defaultSource={placeholder}
+      placeholderSource={placeholder}
       style={style}
       resizeMode={resizeMode}
-      fadeDuration={0}
-      onError={(error) => {
-        if (retryCount === 0 && uri) {
-          retryTimerRef.current = setTimeout(() => {
-            if (currentUriRef.current === uri) {
-              setRetryState({ uri, count: 1 });
-            }
-          }, 300);
-          return;
-        }
-        console.warn(
-          "[FeedProductCard] Failed to load product image:",
-          error?.nativeEvent?.error || uri,
-        );
-      }}
+      eager={Platform.OS !== "web" || eager}
+      loadSource={loadSource}
+      onError={handleImageError}
     />
   );
 });
@@ -182,6 +190,7 @@ export const FeedProductCard = memo(function FeedProductCard({
   onPress,
   isVideoActive = false,
   showVideo = true,
+  loadImages = true,
 }) {
   const { colors: c, isDark } = useTheme();
   const styles = useAppStyles(buildFeedCardStyles);
@@ -256,7 +265,12 @@ export const FeedProductCard = memo(function FeedProductCard({
   const [variantVisible, setVariantVisible] = useState(false);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
-  const [singleImageRatio, setSingleImageRatio] = useState(null);
+  const [singleImageSize, setSingleImageSize] = useState({
+    uri: null,
+    ratio: 1,
+  });
+  const singleImageRatio =
+    singleImageSize.uri === images[0] ? singleImageSize.ratio : 1;
   const [videoMuted, setVideoMuted] = useGlobalVideoMuted();
 
   // Sub-modals opened from the overflow menu. Kept outside the main menu
@@ -281,20 +295,27 @@ export const FeedProductCard = memo(function FeedProductCard({
   const [commentsLoading, setCommentsLoading] = useState(false);
 
   useEffect(() => {
-    if (images.length !== 1 || !images[0]) {
-      setSingleImageRatio(null);
-      return;
-    }
+    if (!loadImages || images.length !== 1 || !images[0]) return undefined;
 
+    let cancelled = false;
     const uri = images[0];
     Image.getSize(
       uri,
       (width, height) => {
-        setSingleImageRatio(width > 0 && height > 0 ? width / height : 1);
+        if (cancelled) return;
+        setSingleImageSize({
+          uri,
+          ratio: width > 0 && height > 0 ? width / height : 1,
+        });
       },
-      () => setSingleImageRatio(1),
+      () => {
+        if (!cancelled) setSingleImageSize({ uri, ratio: 1 });
+      },
     );
-  }, [images]);
+    return () => {
+      cancelled = true;
+    };
+  }, [images, loadImages]);
 
   const openProduct = () => {
     if (onPress) return onPress();
@@ -729,9 +750,8 @@ export const FeedProductCard = memo(function FeedProductCard({
             }
           >
             {images.length === 1 ? (
-              (Platform.OS !== "web" || singleImageRatio) &&
               !DISABLE_PRODUCT_IMAGE_RENDERING ? (
-                <NativeFeedImage
+                <FeedCardImage
                   uri={images[0]}
                   placeholder={
                     Platform.OS !== "web"
@@ -745,6 +765,7 @@ export const FeedProductCard = memo(function FeedProductCard({
                     { aspectRatio: singleImageRatio || 1 },
                   ]}
                   resizeMode="contain"
+                  loadSource={loadImages}
                 />
               ) : (
                 <View style={styles.singleImagePlaceholder}>
@@ -758,22 +779,21 @@ export const FeedProductCard = memo(function FeedProductCard({
             ) : (
               <>
                 {Platform.OS === "web" ? (
-                  <LazyImage
-                    source={{ uri: images[0] }}
-                    placeholderSource={
-                      isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
-                    }
-                    style={styles.mediaTile}
-                    resizeMode="cover"
-                    placeholderResizeMode="contain"
-                    eager
-                  />
-                ) : (
-                  <NativeFeedImage
+                  <FeedCardImage
                     uri={images[0]}
                     placeholder={isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER}
                     style={styles.mediaTile}
                     resizeMode="cover"
+                    eager
+                    loadSource={loadImages}
+                  />
+                ) : (
+                  <FeedCardImage
+                    uri={images[0]}
+                    placeholder={isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER}
+                    style={styles.mediaTile}
+                    resizeMode="cover"
+                    loadSource={loadImages}
                   />
                 )}
                 <Pressable
@@ -784,24 +804,25 @@ export const FeedProductCard = memo(function FeedProductCard({
                   }}
                 >
                   {Platform.OS === "web" ? (
-                    <LazyImage
-                      source={{ uri: images[1] }}
-                      placeholderSource={
-                        isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
-                      }
-                      style={StyleSheet.absoluteFill}
-                      resizeMode="cover"
-                      placeholderResizeMode="contain"
-                      eager
-                    />
-                  ) : (
-                    <NativeFeedImage
+                    <FeedCardImage
                       uri={images[1]}
                       placeholder={
                         isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
                       }
                       style={StyleSheet.absoluteFill}
                       resizeMode="cover"
+                      eager
+                      loadSource={loadImages}
+                    />
+                  ) : (
+                    <FeedCardImage
+                      uri={images[1]}
+                      placeholder={
+                        isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
+                      }
+                      style={StyleSheet.absoluteFill}
+                      resizeMode="cover"
+                      loadSource={loadImages}
                     />
                   )}
                   {images.length > 2 && (

@@ -16,6 +16,8 @@ export const LazyImage = ({
   placeholderResizeMode = "contain",
   placeholderColor = "#F1F5F9",
   eager = false,
+  loadSource = true,
+  onError,
 }) => {
   const ctx = useContext(LazyScrollContext);
   const ref = useRef(null);
@@ -25,10 +27,10 @@ export const LazyImage = ({
   );
 
   useEffect(() => {
-    if (Platform.OS !== "web" || !eager || !source?.uri) return;
+    if (Platform.OS !== "web" || !eager || !loadSource || !source?.uri) return;
     setVisible(true);
     Image.prefetch(source.uri).catch(() => {});
-  }, [eager, source?.uri]);
+  }, [eager, loadSource, source?.uri]);
 
   const updateVisibility = useCallback((scrollY) => {
     if (topRef.current == null) return;
@@ -86,10 +88,12 @@ export const LazyImage = ({
     >
       {Platform.OS !== "web" ? (
         <Image
-          source={source}
+          source={loadSource ? source : placeholderSource}
           defaultSource={placeholderSource}
           style={styles.nativeImage}
-          resizeMode={resizeMode}
+          resizeMode={loadSource ? resizeMode : placeholderResizeMode}
+          resizeMethod={Platform.OS === "android" ? "resize" : undefined}
+          onError={loadSource ? onError : undefined}
         />
       ) : (
         <>
@@ -98,11 +102,12 @@ export const LazyImage = ({
             style={styles.placeholderLayer}
             resizeMode={placeholderResizeMode}
           />
-          {visible && (
+          {visible && loadSource && (
             <Image
               source={source}
               style={styles.productLayer}
               resizeMode={resizeMode}
+              onError={onError}
             />
           )}
         </>

@@ -10,14 +10,7 @@
 //   New Arrivals  — most recently added active products
 // ---------------------------------------------------------------------------
 
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
@@ -82,9 +75,16 @@ const DESKTOP_RAIL_WIDTH = 400;
 const CART_RAIL_BREAKPOINT = 1280;
 const CART_RAIL_WIDTH = 360;
 
+const getFeedProductId = (item) => {
+  if (item?.__type === "product_video") return item.product?.id;
+  if (item?.__type) return null;
+  return item?.id;
+};
+
 const HomeFeedItem = memo(function HomeFeedItem({
   item,
   isVideoActive,
+  loadImages,
   navigation,
   styles,
 }) {
@@ -105,7 +105,8 @@ const HomeFeedItem = memo(function HomeFeedItem({
             <View style={styles.flashSaleLiveDot} />
           </View>
           <Text style={styles.flashSaleCount}>
-            {item.sales.length} {item.sales.length === 1 ? "deal" : "deals"} live
+            {item.sales.length} {item.sales.length === 1 ? "deal" : "deals"}{" "}
+            live
           </Text>
         </View>
         <ScrollView
@@ -150,6 +151,7 @@ const HomeFeedItem = memo(function HomeFeedItem({
         <FeedProductCard
           product={item.product}
           isVideoActive={isVideoActive}
+          loadImages={loadImages}
         />
       </View>
     );
@@ -157,7 +159,11 @@ const HomeFeedItem = memo(function HomeFeedItem({
 
   return (
     <View style={[styles.cardWrap, { width: "100%" }]}>
-      <FeedProductCard product={item} showVideo={false} />
+      <FeedProductCard
+        product={item}
+        showVideo={false}
+        loadImages={loadImages}
+      />
     </View>
   );
 });
@@ -170,9 +176,17 @@ export const HomeScreen = ({ navigation }) => {
   const isDesktop = Platform.OS === "web" && isWideScreen;
   const showCartRail = isDesktop && width >= CART_RAIL_BREAKPOINT;
   const { conversations } = useChat();
-  const { addToCart, items: cartItems, total: cartTotal, itemCount } = useCart();
-  const { messages: aiMessages, isThinking: aiIsThinking, sendMessage } =
-    useTagAIAssistant();
+  const {
+    addToCart,
+    items: cartItems,
+    total: cartTotal,
+    itemCount,
+  } = useCart();
+  const {
+    messages: aiMessages,
+    isThinking: aiIsThinking,
+    sendMessage,
+  } = useTagAIAssistant();
   const [miniAiInput, setMiniAiInput] = useState("");
   const [miniAiVisionImage, setMiniAiVisionImage] = useState(null);
   const [pagerWidth, setPagerWidth] = useState(width);
@@ -279,15 +293,35 @@ export const HomeScreen = ({ navigation }) => {
   const [flashSales, setFlashSales] = useState(null);
   const [homeAds, setHomeAds] = useState([]);
   const [visibleVideoId, setVisibleVideoId] = useState(null);
+  const [loadedImageIds, setLoadedImageIds] = useState(() => new Set());
+  const feedItemsRef = useRef([]);
   const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 60,
-    minimumViewTime: 120,
+    itemVisiblePercentThreshold: 1,
+    minimumViewTime: 0,
   }).current;
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     const visibleVideo = viewableItems.find(
       (entry) => entry?.isViewable && entry.item?.__type === "product_video",
     );
     setVisibleVideoId(visibleVideo ? String(visibleVideo.item.id) : null);
+    const imageIds = new Set();
+    viewableItems.forEach((entry) => {
+      if (!entry?.isViewable) return;
+      const productId = getFeedProductId(entry.item);
+      if (productId != null) imageIds.add(String(productId));
+
+      const nextProductId = getFeedProductId(
+        feedItemsRef.current[entry.index + 1],
+      );
+      if (nextProductId != null) imageIds.add(String(nextProductId));
+    });
+    if (imageIds.size > 0) {
+      setLoadedImageIds((previous) => {
+        const next = new Set(previous);
+        imageIds.forEach((id) => next.add(id));
+        return next.size === previous.size ? previous : next;
+      });
+    }
   }).current;
   // Local mirror of the device-wide hidden-sellers list. Hydrated from
   // AsyncStorage on mount / focus so we don't show previously-hidden sellers
@@ -684,6 +718,7 @@ export const HomeScreen = ({ navigation }) => {
     mixProductVideoItems,
     homeAds,
   ]);
+  feedItemsRef.current = feedItems;
 
   const handlePagerLayout = useCallback((event) => {
     const nextWidth = event.nativeEvent.layout.width;
@@ -765,11 +800,12 @@ export const HomeScreen = ({ navigation }) => {
       <HomeFeedItem
         item={item}
         isVideoActive={visibleVideoId === String(item?.id)}
+        loadImages={loadedImageIds.has(String(getFeedProductId(item) ?? ""))}
         navigation={navigation}
         styles={styles}
       />
     ),
-    [navigation, styles, visibleVideoId],
+    [loadedImageIds, navigation, styles, visibleVideoId],
   );
 
   // Skeleton rows for the initial load — same wrapper as renderFeedItem so
@@ -783,201 +819,253 @@ export const HomeScreen = ({ navigation }) => {
     [styles],
   );
 
-  const renderEmpty = () => (
-    <View style={styles.emptyState}>
-      <Ionicons
-        name={
-          activeFilter === "Following"
-            ? "people-outline"
+  const renderEmpty = useCallback(
+    () => (
+      <View style={styles.emptyState}>
+        <Ionicons
+          name={
+            activeFilter === "Following"
+              ? "people-outline"
+              : activeFilter === "New Arrivals"
+                ? "flower-outline"
+                : "sparkles-outline"
+          }
+          size={40}
+          color={c.muted}
+        />
+        <Text style={styles.emptyTitle}>
+          {activeFilter === "Following"
+            ? "No listings from sellers you follow yet"
             : activeFilter === "New Arrivals"
-              ? "flower-outline"
-              : "sparkles-outline"
-        }
-        size={40}
-        color={c.muted}
-      />
-      <Text style={styles.emptyTitle}>
-        {activeFilter === "Following"
-          ? "No listings from sellers you follow yet"
-          : activeFilter === "New Arrivals"
-            ? "No new arrivals yet"
-            : "Nothing trending right now"}
-      </Text>
-      {activeFilter === "Following" && !followedSellers.length && (
-        <Pressable
-          style={styles.emptyAction}
-          onPress={() => navigation.navigate("Stores")}
-        >
-          <Text style={styles.emptyActionText}>Discover stores</Text>
-        </Pressable>
-      )}
-    </View>
+              ? "No new arrivals yet"
+              : "Nothing trending right now"}
+        </Text>
+        {activeFilter === "Following" && !followedSellers.length && (
+          <Pressable
+            style={styles.emptyAction}
+            onPress={() => navigation.navigate("Stores")}
+          >
+            <Text style={styles.emptyActionText}>Discover stores</Text>
+          </Pressable>
+        )}
+      </View>
+    ),
+    [activeFilter, c.muted, followedSellers.length, navigation, styles],
   );
 
   // Categories strip rendered as the FlatList's header so it scrolls away
   // together with the feed cards.
-  const listHeader = (
-    <View style={styles.catSection}>
-      {/* Filter pills — scroll with the feed: hide as you read down, come
+  const listHeader = useMemo(
+    () => (
+      <View style={styles.catSection}>
+        {/* Filter pills — scroll with the feed: hide as you read down, come
           back when you scroll up. */}
-      <View style={styles.filterBar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {FILTERS.map((filter) => {
-            const isActive = filter === activeFilter;
-            return (
-              <Pressable
-                key={filter}
-                onPress={() => {
-                  setActiveFilter(filter);
-                  // Content resets on filter switch — keep bars visible.
-                  showTabBar();
-                  showHeader();
-                }}
-                style={[styles.filterPill, isActive && styles.filterPillActive]}
-              >
-                <Text
+        <View style={styles.filterBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+          >
+            {FILTERS.map((filter) => {
+              const isActive = filter === activeFilter;
+              return (
+                <Pressable
+                  key={filter}
+                  onPress={() => {
+                    setActiveFilter(filter);
+                    // Content resets on filter switch — keep bars visible.
+                    showTabBar();
+                    showHeader();
+                  }}
                   style={[
-                    styles.filterText,
-                    isActive && styles.filterTextActive,
+                    styles.filterPill,
+                    isActive && styles.filterPillActive,
                   ]}
                 >
-                  {filter}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
+                  <Text
+                    style={[
+                      styles.filterText,
+                      isActive && styles.filterTextActive,
+                    ]}
+                  >
+                    {filter}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
 
-      {/* ── Flash Sale strip (inline-injected into the FlatList data, NOT here).
+        {/* ── Flash Sale strip (inline-injected into the FlatList data, NOT here).
           Kept out of `listHeader` so it appears only after the user has
           scrolled past 10 feed products, matching the "show after 10" rule.
           See `injectFlashSaleRow` in `feedItems` memo below. */}
 
-      <View style={styles.catHeaderRow}>
-        <Text style={styles.catSectionTitle}>Categories</Text>
-        <Pressable
-          hitSlop={8}
-          style={styles.seeMoreBtn}
-          onPress={() => navigation.navigate("Categories")}
-          accessibilityRole="button"
-          accessibilityLabel="See more categories"
-        >
-          <Text style={styles.seeMoreText}>See More</Text>
-          <Ionicons name="chevron-forward" size={14} color={c.primary} />
-        </Pressable>
-      </View>
+        <View style={styles.catHeaderRow}>
+          <Text style={styles.catSectionTitle}>Categories</Text>
+          <Pressable
+            hitSlop={8}
+            style={styles.seeMoreBtn}
+            onPress={() => navigation.navigate("Categories")}
+            accessibilityRole="button"
+            accessibilityLabel="See more categories"
+          >
+            <Text style={styles.seeMoreText}>See More</Text>
+            <Ionicons name="chevron-forward" size={14} color={c.primary} />
+          </Pressable>
+        </View>
 
-      {categoriesLoading && !topCategories.length ? (
-        // Skeleton cards shaped like the category cards
-        <NativeViewGestureHandler>
-          <ScrollView
-            horizontal
-            directionalLockEnabled
-            nestedScrollEnabled
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.catRow}
-            onTouchStart={() => lockPager(true)}
-            onTouchMove={() => lockPager(true)}
-            onTouchEnd={() => lockPager(false)}
-            onTouchCancel={() => lockPager(false)}
-          >
-            {Array.from({ length: TOP_CATEGORIES_LIMIT }).map((_, i) => (
-              <View key={i} style={styles.catCard}>
-                <View style={[styles.catImageFallback, styles.catSkeletonBg]} />
-                <View style={styles.catInfo}>
-                  <View style={[styles.catSkeletonLine, { width: 80 }]} />
-                  <View style={[styles.catSkeletonLine, { width: 44 }]} />
+        {categoriesLoading && !topCategories.length ? (
+          // Skeleton cards shaped like the category cards
+          <NativeViewGestureHandler>
+            <ScrollView
+              horizontal
+              directionalLockEnabled
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.catRow}
+              onTouchStart={() => lockPager(true)}
+              onTouchMove={() => lockPager(true)}
+              onTouchEnd={() => lockPager(false)}
+              onTouchCancel={() => lockPager(false)}
+            >
+              {Array.from({ length: TOP_CATEGORIES_LIMIT }).map((_, i) => (
+                <View key={i} style={styles.catCard}>
+                  <View
+                    style={[styles.catImageFallback, styles.catSkeletonBg]}
+                  />
+                  <View style={styles.catInfo}>
+                    <View style={[styles.catSkeletonLine, { width: 80 }]} />
+                    <View style={[styles.catSkeletonLine, { width: 44 }]} />
+                  </View>
                 </View>
-              </View>
-            ))}
-          </ScrollView>
-        </NativeViewGestureHandler>
-      ) : topCategories.length ? (
-        <NativeViewGestureHandler>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            directionalLockEnabled
-            nestedScrollEnabled
-            contentContainerStyle={styles.catRow}
-            onTouchStart={() => lockPager(true)}
-            onTouchMove={() => lockPager(true)}
-            onTouchEnd={() => lockPager(false)}
-            onTouchCancel={() => lockPager(false)}
-          >
-            {topCategories.map((cat) => (
-              <Pressable
-                key={cat.id}
-                style={({ pressed }) => [
-                  styles.catCard,
-                  pressed && styles.catCardPressed,
-                ]}
-                onPress={() =>
-                  navigation.navigate("CategoryProducts", {
-                    category: { id: cat.id, name: cat.name },
-                  })
-                }
-              >
-                {/* Background: photo if one exists, otherwise brand color with
+              ))}
+            </ScrollView>
+          </NativeViewGestureHandler>
+        ) : topCategories.length ? (
+          <NativeViewGestureHandler>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              directionalLockEnabled
+              nestedScrollEnabled
+              contentContainerStyle={styles.catRow}
+              onTouchStart={() => lockPager(true)}
+              onTouchMove={() => lockPager(true)}
+              onTouchEnd={() => lockPager(false)}
+              onTouchCancel={() => lockPager(false)}
+            >
+              {topCategories.map((cat) => (
+                <Pressable
+                  key={cat.id}
+                  style={({ pressed }) => [
+                    styles.catCard,
+                    pressed && styles.catCardPressed,
+                  ]}
+                  onPress={() =>
+                    navigation.navigate("CategoryProducts", {
+                      category: { id: cat.id, name: cat.name },
+                    })
+                  }
+                >
+                  {/* Background: photo if one exists, otherwise brand color with
                   the category icon. Only ever one of the two renders, so the
                   card reads as a single surface. */}
-                {String(cat.image_url || "").trim() ? (
-                  <Image
-                    source={{ uri: String(cat.image_url).trim() }}
-                    style={styles.catImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.catImageFallback,
-                      cat.color ? { backgroundColor: cat.color } : null,
-                    ]}
-                  >
-                    <Ionicons
-                      name={cat.icon || "apps"}
-                      size={40}
-                      color="rgba(255,255,255,0.9)"
+                  {String(cat.image_url || "").trim() ? (
+                    <Image
+                      source={{ uri: String(cat.image_url).trim() }}
+                      style={styles.catImage}
+                      resizeMode="cover"
                     />
-                  </View>
-                )}
+                  ) : (
+                    <View
+                      style={[
+                        styles.catImageFallback,
+                        cat.color ? { backgroundColor: cat.color } : null,
+                      ]}
+                    >
+                      <Ionicons
+                        name={cat.icon || "apps"}
+                        size={40}
+                        color="rgba(255,255,255,0.9)"
+                      />
+                    </View>
+                  )}
 
-                {/* Layer 3: bottom-weighted gradient — one continuous surface
+                  {/* Layer 3: bottom-weighted gradient — one continuous surface
                   under both the photo and the label, no seam */}
-                <LinearGradient
-                  colors={[
-                    "rgba(0,0,0,0)",
-                    "rgba(0,0,0,0.25)",
-                    "rgba(0,0,0,0.75)",
-                  ]}
-                  locations={[0.45, 0.7, 1]}
-                  style={styles.catScrim}
-                />
+                  <LinearGradient
+                    colors={[
+                      "rgba(0,0,0,0)",
+                      "rgba(0,0,0,0.25)",
+                      "rgba(0,0,0,0.75)",
+                    ]}
+                    locations={[0.45, 0.7, 1]}
+                    style={styles.catScrim}
+                  />
 
-                {/* Layer 4: label overlaid on the gradient */}
-                <View style={styles.catInfo}>
-                  <Text style={styles.catName} numberOfLines={1}>
-                    {cat.name}
-                  </Text>
-                  <Text style={styles.catCount}>
-                    {cat.productCount}{" "}
-                    {cat.productCount === 1 ? "item" : "items"}
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </NativeViewGestureHandler>
-      ) : null}
-    </View>
+                  {/* Layer 4: label overlaid on the gradient */}
+                  <View style={styles.catInfo}>
+                    <Text style={styles.catName} numberOfLines={1}>
+                      {cat.name}
+                    </Text>
+                    <Text style={styles.catCount}>
+                      {cat.productCount}{" "}
+                      {cat.productCount === 1 ? "item" : "items"}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </NativeViewGestureHandler>
+        ) : null}
+      </View>
+    ),
+    [
+      activeFilter,
+      categoriesLoading,
+      c.primary,
+      lockPager,
+      navigation,
+      showHeader,
+      showTabBar,
+      styles,
+      topCategories,
+    ],
   );
 
   const showFeedPlaceholders = loading && products.length === 0;
+  const feedKeyExtractor = useCallback(
+    (item) => (showFeedPlaceholders ? String(item) : String(item?.id ?? item)),
+    [showFeedPlaceholders],
+  );
+  const listFooter = useMemo(
+    () =>
+      hasMore && !showFeedPlaceholders ? (
+        <View style={[styles.cardWrap, { width: "100%" }]}>
+          <FeedCardPlaceholder />
+        </View>
+      ) : null,
+    [hasMore, showFeedPlaceholders, styles],
+  );
+  const listContentStyle = useMemo(
+    () => [styles.listContent, { paddingTop: headerHeight + 8 }],
+    [headerHeight, styles],
+  );
+  const listRefreshControl = useMemo(
+    () => (
+      <RefreshControl
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
+        progressViewOffset={headerHeight}
+      />
+    ),
+    [handleRefresh, headerHeight, refreshing],
+  );
+  const maintainVisibleContentPosition = useMemo(
+    () => ({ minIndexForVisible: 0 }),
+    [],
+  );
 
   return (
     // NOTE: no LazyScrollContext here — LazyImage's measureLayout-based lazy
@@ -1046,48 +1134,26 @@ export const HomeScreen = ({ navigation }) => {
               key={showFeedPlaceholders ? "home-feed-loading" : "home-feed"}
               style={styles.homeList}
               data={showFeedPlaceholders ? FEED_PLACEHOLDER_ITEMS : feedItems}
-              keyExtractor={(item) =>
-                showFeedPlaceholders ? String(item) : String(item?.id ?? item)
-              }
+              keyExtractor={feedKeyExtractor}
               renderItem={
                 showFeedPlaceholders ? renderPlaceholderItem : renderFeedItem
               }
               onViewableItemsChanged={onViewableItemsChanged}
               viewabilityConfig={viewabilityConfig}
               ListHeaderComponent={listHeader}
-              ListFooterComponent={
-                hasMore && !showFeedPlaceholders ? (
-                  <View style={[styles.cardWrap, { width: "100%" }]}>
-                    <FeedCardPlaceholder />
-                  </View>
-                ) : null
-              }
+              ListFooterComponent={listFooter}
               ListEmptyComponent={!showFeedPlaceholders ? renderEmpty : null}
               onScroll={handleScroll}
               scrollEventThrottle={16}
-              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+              decelerationRate={Platform.OS === "android" ? "normal" : "normal"}
+              maintainVisibleContentPosition={maintainVisibleContentPosition}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={[
-                styles.listContent,
-                { paddingTop: headerHeight + 8 },
-              ]}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={handleRefresh}
-                  progressViewOffset={headerHeight}
-                />
-              }
-              initialNumToRender={
-                Platform.OS === "web"
-                  ? 4
-                  : Math.max(6, FEED_PLACEHOLDER_ITEMS.length)
-              }
-              maxToRenderPerBatch={
-                Platform.OS === "web" ? 4 : 6
-              }
-              updateCellsBatchingPeriod={32}
-              windowSize={Platform.OS === "web" ? 5 : 9}
+              contentContainerStyle={listContentStyle}
+              refreshControl={listRefreshControl}
+              initialNumToRender={Platform.OS === "web" ? 4 : 6}
+              maxToRenderPerBatch={Platform.OS === "web" ? 4 : 8}
+              updateCellsBatchingPeriod={16}
+              windowSize={Platform.OS === "web" ? 5 : 15}
               disableVirtualization={false}
               removeClippedSubviews={false}
             />
@@ -1109,11 +1175,7 @@ export const HomeScreen = ({ navigation }) => {
             <View style={styles.messagesPanel}>
               <View style={styles.railHeading}>
                 <View style={styles.railIcon}>
-                  <Ionicons
-                    name="chatbubbles"
-                    size={17}
-                    color={c.primary}
-                  />
+                  <Ionicons name="chatbubbles" size={17} color={c.primary} />
                 </View>
                 <Text style={styles.railTitle}>Messages</Text>
                 <Pressable
@@ -1127,11 +1189,7 @@ export const HomeScreen = ({ navigation }) => {
                   style={styles.railSeeAll}
                 >
                   <Text style={styles.railSeeAllText}>See all</Text>
-                  <Ionicons
-                    name="arrow-forward"
-                    size={13}
-                    color={c.primary}
-                  />
+                  <Ionicons name="arrow-forward" size={13} color={c.primary} />
                 </Pressable>
               </View>
               <ScrollView
@@ -1173,7 +1231,8 @@ export const HomeScreen = ({ navigation }) => {
                             {name}
                           </Text>
                           <Text style={styles.messageText} numberOfLines={1}>
-                            {conversation.last_message || "Start a conversation"}
+                            {conversation.last_message ||
+                              "Start a conversation"}
                           </Text>
                         </View>
                         {conversation.unread_count > 0 ? (
@@ -1213,11 +1272,7 @@ export const HomeScreen = ({ navigation }) => {
                   accessibilityLabel="Open full Tag AI chat"
                   hitSlop={8}
                 >
-                  <Ionicons
-                    name="expand-outline"
-                    size={17}
-                    color={c.muted}
-                  />
+                  <Ionicons name="expand-outline" size={17} color={c.muted} />
                 </Pressable>
               </View>
               <ScrollView
@@ -1251,10 +1306,7 @@ export const HomeScreen = ({ navigation }) => {
                                     : c.primary
                                 }
                               />
-                              <Text
-                                numberOfLines={1}
-                                style={styles.aiToolText}
-                              >
+                              <Text numberOfLines={1} style={styles.aiToolText}>
                                 {tool.label || tool.name}
                               </Text>
                             </View>
@@ -1310,10 +1362,7 @@ export const HomeScreen = ({ navigation }) => {
               </ScrollView>
               {!aiMessages.length ? (
                 <View style={styles.aiPromptRow}>
-                  {[
-                    "Find today's deals",
-                    "Shop headphones",
-                  ].map((prompt) => (
+                  {["Find today's deals", "Shop headphones"].map((prompt) => (
                     <Pressable
                       key={prompt}
                       style={styles.aiPromptChip}
@@ -1350,11 +1399,7 @@ export const HomeScreen = ({ navigation }) => {
                   accessibilityRole="button"
                   accessibilityLabel="Attach image to Tag AI message"
                 >
-                  <Ionicons
-                    name="image-outline"
-                    size={17}
-                    color={c.primary}
-                  />
+                  <Ionicons name="image-outline" size={17} color={c.primary} />
                 </Pressable>
                 <TextInput
                   value={miniAiInput}
@@ -1370,15 +1415,13 @@ export const HomeScreen = ({ navigation }) => {
                 <Pressable
                   style={[
                     styles.aiSendButton,
-                    (!miniAiInput.trim() &&
-                      !miniAiVisionImage ||
+                    ((!miniAiInput.trim() && !miniAiVisionImage) ||
                       aiIsThinking) &&
                       styles.aiSendDisabled,
                   ]}
                   onPress={() => handleMiniAiSend()}
                   disabled={
-                    (!miniAiInput.trim() && !miniAiVisionImage) ||
-                    aiIsThinking
+                    (!miniAiInput.trim() && !miniAiVisionImage) || aiIsThinking
                   }
                   accessibilityRole="button"
                   accessibilityLabel="Send message to Tag AI"
@@ -1483,7 +1526,11 @@ export const HomeScreen = ({ navigation }) => {
                   accessibilityLabel={`View cart with ${itemCount} items`}
                 >
                   <Text style={styles.cartButtonText}>View cart</Text>
-                  <Ionicons name="arrow-forward" size={14} color={c.onPrimary} />
+                  <Ionicons
+                    name="arrow-forward"
+                    size={14}
+                    color={c.onPrimary}
+                  />
                 </Pressable>
               </View>
             </View>
