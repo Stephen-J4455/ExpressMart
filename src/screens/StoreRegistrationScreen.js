@@ -102,6 +102,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
   // One-time store registration fee (GHS) — admin-configurable via
   // express_settings.key = "store_registration_fee" (falls back to 150).
   const [registrationFee, setRegistrationFee] = useState(150);
+  const [registrationFeeLoaded, setRegistrationFeeLoaded] = useState(false);
 
   // Pull the admin-configured registration fee (no-op fallback to 150).
   useEffect(() => {
@@ -117,6 +118,8 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
         if (!isNaN(fee) && fee >= 0) setRegistrationFee(fee);
       } catch (e) {
         console.warn("[StoreRegistration] fee fetch failed, using default:", e);
+      } finally {
+        setRegistrationFeeLoaded(true);
       }
     })();
   }, []);
@@ -506,26 +509,28 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
         }
       }
 
-      // Step 1 — verify the registration payment.
-      let verify;
-      try {
-        verify = await callEdgeFunction("payment", {
-          action: "verify-store-registration",
-          reference,
-        });
-      } catch (verifyErr) {
-        throw new Error(
-          `Payment verification failed: ${
-            verifyErr?.message || "unknown error"
-          }`,
-        );
-      }
-      if (!verify || !verify.verified) {
-        throw new Error(
-          `Payment was not completed successfully${
-            verify?.error ? ` (${verify.error})` : ""
-          }`,
-        );
+      if (reference) {
+        // Paid registrations must be verified before creating the store.
+        let verify;
+        try {
+          verify = await callEdgeFunction("payment", {
+            action: "verify-store-registration",
+            reference,
+          });
+        } catch (verifyErr) {
+          throw new Error(
+            `Payment verification failed: ${
+              verifyErr?.message || "unknown error"
+            }`,
+          );
+        }
+        if (!verify || !verify.verified) {
+          throw new Error(
+            `Payment was not completed successfully${
+              verify?.error ? ` (${verify.error})` : ""
+            }`,
+          );
+        }
       }
 
       // Step 2 — create the (dormant) seller record.
@@ -575,6 +580,8 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
   };
 
   const handlePay = async () => {
+    if (!registrationFeeLoaded) return;
+
     const normalizedAccount = String(accountNumber || "").replace(/\D/g, "").trim();
     if (!normalizedAccount) {
       toast.error(
@@ -596,6 +603,23 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
       normalizedAccount.length > 13
     ) {
       toast.error("Mobile money number must be 10 to 13 digits");
+      return;
+    }
+
+    const registrationData = {
+      name: name.trim(),
+      phone: normalizePhone(phone),
+      description: description.trim(),
+      payType,
+      bankCode,
+      mobileProvider,
+      accountNumber: normalizedAccount,
+      avatarUrl: null,
+    };
+
+    if (registrationFee === 0) {
+      setFinalizing(true);
+      await completeRegistration(null, registrationData);
       return;
     }
 
@@ -623,16 +647,7 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
       if (init && init.success && init.data && init.data.authorization_url) {
         // Pass all registration data through orderData so it can be restored
         // when this screen re-mounts after the payment callback.
-        const registrationData = {
-          name: name.trim(),
-          phone: normalizePhone(phone),
-          description: description.trim(),
-          payType,
-          bankCode,
-          mobileProvider,
-          accountNumber: normalizedAccount,
-          avatarUrl,
-        };
+        registrationData.avatarUrl = avatarUrl;
 
         navigation.navigate("PaymentWebView", {
           authorization_url: init.data.authorization_url,
@@ -721,7 +736,9 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
               <Text
                 style={[styles.stepLabel, active && styles.stepLabelActive]}
               >
-                {s.label}
+                {registrationFee === 0 && s.key === "pay"
+                  ? "Finish"
+                  : s.label}
               </Text>
             </View>
           </React.Fragment>
@@ -1071,10 +1088,13 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
               focusedField === "account" && styles.inputFocused,
             ]}
             value={accountNumber}
-            onChangeText={setAccountNumber}
+            onChangeText={(value) =>
+              setAccountNumber(value.replace(/\D/g, "").slice(0, 13))
+            }
             onFocus={handleFieldFocus("account")}
             onBlur={handleFieldBlur("account")}
             keyboardType={payType === "bank" ? "numeric" : "phone-pad"}
+            maxLength={13}
             placeholder={
               payType === "bank" ? "13-digit account number" : "e.g. 024..."
             }
@@ -1089,7 +1109,9 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
       <View style={styles.card}>
         <Text style={styles.reviewTitle}>Review your store</Text>
         <Text style={styles.subLabel}>
-          Confirm everything looks good before you pay.
+          {registrationFee === 0
+            ? "Confirm your details to complete your free registration."
+            : "Confirm everything looks good before you pay."}
         </Text>
 
         <View style={styles.summaryCard}>
@@ -1126,17 +1148,37 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={styles.feeTitle}>Store Registration Fee</Text>
             <Text style={styles.feeSub}>
-              One-time fee to activate your store
+              {registrationFee === 0
+                ? "No payment required to get started"
+                : "One-time fee to activate your store"}
             </Text>
           </View>
-          <Text style={styles.feeAmount}>GH₵{registrationFee}</Text>
+          {registrationFee === 0 ? (
+            <View style={styles.freeBadge}>
+              <Ionicons
+                name="checkmark-circle"
+                size={14}
+                color={themeColors.success}
+              />
+              <Text style={styles.freeBadgeText}>FREE</Text>
+            </View>
+          ) : (
+            <Text style={styles.feeAmount}>GH₵{registrationFee}</Text>
+          )}
         </View>
 
-        <Text style={styles.payNote}>
-          You'll be redirected to Paystack to complete a secure payment of GH₵
-          {registrationFee}. Your store is created right away — you can go
-          live whenever you're ready.
-        </Text>
+        {registrationFee === 0 ? (
+          <Text style={styles.payNote}>
+            Complete your registration now—there’s no Paystack payment for this
+            offer. You can go live whenever you’re ready.
+          </Text>
+        ) : (
+          <Text style={styles.payNote}>
+            You'll be redirected to Paystack to complete a secure payment of
+            GH₵{registrationFee}. Your store is created right away — you can go
+            live whenever you're ready.
+          </Text>
+        )}
       </View>
     );
   };
@@ -1224,15 +1266,27 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
         <GradientAction
           style={styles.footerPrimary}
           onPress={handlePay}
-          disabled={busy}
+          disabled={busy || !registrationFeeLoaded}
         >
           {busy ? (
             <ActivityIndicator color="#fff" />
+          ) : !registrationFeeLoaded ? (
+            <Text style={styles.primaryBtnText}>Checking fee…</Text>
           ) : (
             <>
-              <Ionicons name="lock-closed" size={16} color="#fff" />
+              <Ionicons
+                name={
+                  registrationFee === 0
+                    ? "checkmark-circle"
+                    : "lock-closed"
+                }
+                size={16}
+                color="#fff"
+              />
               <Text style={styles.primaryBtnText}>
-                Pay GH₵{registrationFee}
+                {registrationFee === 0
+                  ? "Complete Free Registration"
+                  : `Pay GH₵${registrationFee}`}
               </Text>
             </>
           )}
@@ -1261,7 +1315,9 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
           <ActivityIndicator size="large" color="#fff" />
           <Text style={styles.finalTitle}>Setting up your store</Text>
           <Text style={styles.finalSub}>
-            Verifying your payment and creating your space on Tagit.
+            {registrationFee === 0
+              ? "Completing your registration and creating your space on Tagit."
+              : "Verifying your payment and creating your space on Tagit."}
           </Text>
         </LinearGradient>
       </View>
@@ -2002,6 +2058,23 @@ const buildStoreRegStyles = (c) =>
       fontWeight: "800",
       color: c.primary,
     },
+    freeBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: radius.pill,
+      backgroundColor: `${c.success}18`,
+      borderWidth: 1,
+      borderColor: `${c.success}35`,
+    },
+    freeBadgeText: {
+      color: c.success,
+      fontSize: 12,
+      fontWeight: "900",
+      letterSpacing: 0.5,
+    },
     payNote: {
       marginTop: 16,
       fontSize: 13,
@@ -2024,6 +2097,7 @@ const buildStoreRegStyles = (c) =>
     },
     primaryBtn: {
       paddingVertical: 15,
+      paddingHorizontal: 24,
       borderRadius: radius.pill,
       alignItems: "center",
       justifyContent: "center",

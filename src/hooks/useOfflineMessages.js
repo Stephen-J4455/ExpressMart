@@ -29,6 +29,7 @@ export const useOfflineMessages = ({
   user,
   senderType = "user",
   onIncoming,
+  onSent,
   onSyncStatusChange,
 }) => {
   const [messages, setMessages] = useState([]);
@@ -192,6 +193,7 @@ export const useOfflineMessages = ({
           return merged;
         });
         onSyncStatusChange?.(data);
+        onSent?.(data);
         return data;
       } catch (e) {
         console.warn("sendMessage failed:", e);
@@ -209,7 +211,7 @@ export const useOfflineMessages = ({
         return null;
       }
     },
-    [conversationId, user?.id, senderType, onSyncStatusChange],
+    [conversationId, user?.id, senderType, onSent, onSyncStatusChange],
   );
 
   // Retry a previously-failed optimistic message.
@@ -242,6 +244,7 @@ export const useOfflineMessages = ({
           saveCachedMessages(conversationId, merged);
           return merged;
         });
+        onSent?.(data);
       } catch (e) {
         setMessages((prev) => {
           const patched = patchTempMessage(prev, clientTempId, {
@@ -252,7 +255,7 @@ export const useOfflineMessages = ({
         });
       }
     },
-    [conversationId, messages, senderType, user?.id],
+    [conversationId, messages, onSent, senderType, user?.id],
   );
 
   // Append a locally-built message (e.g. a product-card share) to both state

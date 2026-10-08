@@ -153,7 +153,11 @@ export const notifySellerNewOrder = async (sellerId, orderId, orderNumber, amoun
  */
 export const notifyNewMessage = async (userId, senderName, messagePreview, chatId, appType = 'customer') => {
     return sendNotificationToUser(userId, `Message from ${senderName}`, messagePreview.substring(0, 100), {
-        data: { chatId, screen: 'Chat' },
+        data: {
+            chatId: String(chatId),
+            screen: 'Chats',
+            params: JSON.stringify({ initialConversationId: String(chatId) }),
+        },
         notificationType: 'chat',
         appType,
         channelId: 'chat',

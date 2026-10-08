@@ -24,6 +24,7 @@ import { useToast } from "../context/ToastContext";
 import { getTheme, radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
+import { notifyNewMessage } from "../services/notificationService";
 
 const CARD_WIDTH = Math.min(Dimensions.get("window").width * 0.65, 260);
 
@@ -241,7 +242,7 @@ export const SellerChatScreen = ({
     // fresh, unsubscribed channel. Reusing a channel name that is already
     // subscribed throws "cannot add presence callbacks ... after subscribe()".
     const channel = supabase.channel(
-      `presence:user:${customerId}:${instanceIdRef.current}`,
+      `presence:user:${customerId}`,
     );
     const syncCustomerPresence = () => {
       const state = channel.presenceState();
@@ -325,6 +326,16 @@ export const SellerChatScreen = ({
         message: messageText,
       });
       if (error) throw error;
+      const recipientId = conversation?.user?.id || conversation?.user_id;
+      if (!customerOnline && recipientId) {
+        void notifyNewMessage(
+          recipientId,
+          seller?.name || user?.user_metadata?.full_name || user?.email || "Seller",
+          messageText,
+          conversation.id,
+          "all",
+        );
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       setNewMessage(messageText);

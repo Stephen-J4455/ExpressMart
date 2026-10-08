@@ -421,18 +421,29 @@ export const ChatsScreen = ({ navigation, route }) => {
   }, [conversations, sellerConversations, searchQuery]);
 
   useEffect(() => {
-    if (!isWide || !route?.params?.initialConversationId) return;
+    if (!route?.params?.initialConversationId) return;
     const initialConversation = mergedConversations.find(
       (conversation) =>
         conversation.id === route.params.initialConversationId,
     );
     if (initialConversation) {
-      setSelectedConversation(initialConversation);
+      if (isWide) {
+        setSelectedConversation(initialConversation);
+      } else if (initialConversation.kind === "seller") {
+        navigation.navigate("SellerChat", {
+          conversationId: initialConversation.id,
+          customer: initialConversation.customer,
+        });
+      } else {
+        navigation.navigate("Chat", {
+          seller: initialConversation.seller,
+        });
+      }
       navigation.setParams({ initialConversationId: undefined });
     }
   }, [
-    isWide,
     mergedConversations,
+    isWide,
     navigation,
     route?.params?.initialConversationId,
   ]);

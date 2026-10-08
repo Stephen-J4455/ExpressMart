@@ -1,4 +1,11 @@
-import { useEffect, useState, useRef, useMemo, Fragment } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useRef,
+  useMemo,
+  Fragment,
+} from "react";
 import {
   View,
   Text,
@@ -29,6 +36,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useOfflineMessages } from "../hooks/useOfflineMessages";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { radius } from "../theme/colors";
+import { notifyNewMessage } from "../services/notificationService";
 
 const getDateLabel = (dateStr) => {
   const date = new Date(dateStr);
@@ -78,6 +86,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   const [sending, setSending] = useState(false);
   const [conversation, setConversation] = useState(null);
   const [sellerOnline, setSellerOnline] = useState(false);
+  const [sellerUserId, setSellerUserId] = useState(sellerData?.user_id || null);
   const [sellerLastSeenAt, setSellerLastSeenAt] = useState(
     sellerData?.last_seen_at || null,
   );
@@ -98,6 +107,36 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   // Entrance animation — mirrors HomeScreen's fade + slide
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
+  const notifySellerOfSentMessage = useCallback(
+    (message) => {
+      if (
+        sellerOnline ||
+        !sellerUserId ||
+        !message?.message ||
+        !conversation?.id
+      ) {
+        return;
+      }
+      void notifyNewMessage(
+        sellerUserId,
+        user?.user_metadata?.full_name || user?.email || "Customer",
+        message.message,
+        conversation.id,
+        "all",
+      );
+    },
+    [
+      conversation?.id,
+      sellerOnline,
+      sellerUserId,
+      user?.email,
+      user?.user_metadata?.full_name,
+    ],
+  );
+
+  useEffect(() => {
+    setSellerUserId(sellerData?.user_id || null);
+  }, [sellerData?.id, sellerData?.user_id]);
 
   useEffect(() => {
     Animated.parallel([
@@ -149,6 +188,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     conversationId: conversation?.id,
     user,
     senderType: "user",
+    onSent: notifySellerOfSentMessage,
     onIncoming: (incoming) => {
       if (incoming.sender_id !== user?.id) markAsRead();
     },
@@ -182,19 +222,15 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     }
 
     return () => {
-      if (presenceChannelRef.current) {
-        supabase.removeChannel(presenceChannelRef.current);
-        presenceChannelRef.current = null;
-      }
+      presenceChannelRef.current = null;
     };
   }, [user, sellerData]);
 
   useEffect(() => {
     if (conversation) {
       const cleanup = setupRealtimeSubscription();
-      fetchSellerLastSeen();
+      void fetchSellerLastSeen();
       setupSellerLastSeenSubscription();
-      setupPresence();
       return () => {
         cleanup?.();
         if (sellerLastSeenChannelRef.current) {
@@ -204,6 +240,37 @@ export const ChatScreen = ({ route, navigation, seller }) => {
       };
     }
   }, [conversation]);
+
+  useEffect(() => {
+    if (!conversation || !sellerUserId) return undefined;
+
+    const channel = supabase.channel(`presence:user:${sellerUserId}`);
+    const syncSellerPresence = () => {
+      const state = channel.presenceState();
+      const isSellerCurrentlyOnline = Object.values(state).some((presences) =>
+        presences.some((presence) => presence.actor_type === "user"),
+      );
+      setSellerOnline(isSellerCurrentlyOnline);
+      if (!isSellerCurrentlyOnline) void fetchSellerLastSeen();
+    };
+
+    channel
+      .on("presence", { event: "sync" }, syncSellerPresence)
+      .on("presence", { event: "join" }, syncSellerPresence)
+      .on("presence", { event: "leave" }, syncSellerPresence)
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") syncSellerPresence();
+      });
+
+    presenceChannelRef.current = channel;
+    return () => {
+      supabase.removeChannel(channel);
+      if (presenceChannelRef.current === channel) {
+        presenceChannelRef.current = null;
+      }
+      setSellerOnline(false);
+    };
+  }, [conversation?.id, sellerUserId]);
 
   // Keyboard listeners to track keyboard height and adjust layout
   useEffect(() => {
@@ -230,51 +297,23 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     };
   }, []);
 
-  const setupPresence = () => {
-    if (!sellerData?.id) return;
-
-    const channel = supabase.channel(
-      `presence:seller:${sellerData.id}-${instanceIdRef.current}`,
-    );
-
-    const syncSellerPresence = () => {
-      const state = channel.presenceState();
-      const isSellerCurrentlyOnline = Object.values(state).some((presences) =>
-        presences.some((presence) => presence.actor_type === "seller"),
-      );
-      setSellerOnline(isSellerCurrentlyOnline);
-      if (!isSellerCurrentlyOnline) {
-        fetchSellerLastSeen();
-      }
-    };
-
-    channel
-      .on("presence", { event: "sync" }, syncSellerPresence)
-      .on("presence", { event: "join" }, syncSellerPresence)
-      .on("presence", { event: "leave" }, syncSellerPresence)
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          syncSellerPresence();
-        }
-      });
-
-    presenceChannelRef.current = channel;
-  };
-
   const fetchSellerLastSeen = async () => {
     if (!sellerData?.id) return;
 
     try {
       const { data, error } = await supabase
         .from("express_sellers")
-        .select("last_seen_at")
+        .select("user_id,last_seen_at")
         .eq("id", sellerData.id)
         .single();
 
       if (error) throw error;
+      if (data?.user_id) setSellerUserId(data.user_id);
       setSellerLastSeenAt(data?.last_seen_at || null);
+      return data?.user_id || null;
     } catch (error) {
       console.error("Error fetching seller last seen:", error);
+      return null;
     }
   };
 
@@ -452,6 +491,15 @@ export const ChatScreen = ({ route, navigation, seller }) => {
           message: cardText,
         });
         if (error) throw error;
+        if (!sellerOnline && sellerUserId) {
+          void notifyNewMessage(
+            sellerUserId,
+            user?.user_metadata?.full_name || user?.email || "Customer",
+            "Shared a product",
+            conversation.id,
+            "all",
+          );
+        }
         updateConversation({
           ...conversation,
           last_message: "Shared a product",

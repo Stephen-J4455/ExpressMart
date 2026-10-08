@@ -17,7 +17,6 @@ import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
-import { useOrder } from "../context/OrderContext";
 import { useAds } from "../context/AdsContext";
 import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
@@ -74,7 +73,6 @@ export const AccountScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { user, profile, isAuthenticated, loading, signOut, updateProfile } =
     useAuth();
-  const { orders } = useOrder();
   const { fetchAdsByPlacement } = useAds();
   const toast = useToast();
   const {
@@ -189,14 +187,6 @@ export const AccountScreen = ({ navigation }) => {
       active = false;
     };
   }, [isAuthenticated, user, profile?.role, sellerRecord]);
-
-  const totalOrders = orders.length;
-  const activeOrders = orders.filter((o) =>
-    ["processing", "packed", "shipped"].includes(o.status),
-  ).length;
-  const totalSpent = orders
-    .filter((o) => o.payment_status === "success")
-    .reduce((sum, o) => sum + Number(o.total || 0), 0);
 
   if (loading) {
     return (
@@ -358,24 +348,6 @@ export const AccountScreen = ({ navigation }) => {
             </Pressable>
           </View>
 
-          <View style={styles.heroStats}>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>{totalOrders}</Text>
-              <Text style={styles.heroStatLabel}>Orders</Text>
-            </View>
-            <View style={styles.heroStatDivider} />
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>{activeOrders}</Text>
-              <Text style={styles.heroStatLabel}>Active</Text>
-            </View>
-            <View style={styles.heroStatDivider} />
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>
-                GH₵{Math.round(totalSpent).toLocaleString()}
-              </Text>
-              <Text style={styles.heroStatLabel}>Spent</Text>
-            </View>
-          </View>
         </LinearGradient>
 
         {profileAds.length > 0 && (
@@ -755,36 +727,6 @@ const buildAccountStyles = (c) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    heroStats: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: "rgba(255,255,255,0.16)",
-      borderRadius: 18,
-      paddingVertical: 16,
-    },
-    heroStat: {
-      flex: 1,
-      alignItems: "center",
-    },
-    heroStatValue: {
-      fontSize: 19,
-      fontWeight: "800",
-      color: c.light,
-    },
-    heroStatLabel: {
-      fontSize: 11,
-      color: "rgba(255,255,255,0.85)",
-      marginTop: 4,
-      fontWeight: "600",
-      textTransform: "uppercase",
-      letterSpacing: 0.4,
-    },
-    heroStatDivider: {
-      width: 1,
-      height: 32,
-      backgroundColor: "rgba(255,255,255,0.25)",
-    },
-
     // Membership Card
     memberCard: {
       borderRadius: 20,
