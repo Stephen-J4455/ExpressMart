@@ -35,19 +35,35 @@ export const CategoriesScreen = ({ navigation }) => {
     Math.floor((contentWidth - hPad * 2 + gap) / (targetMinCardWidth + gap)),
   );
   const cardWidth = getItemWidth(categoryGridColumns, hPad, gap, contentWidth);
-  const sortedCategories = useMemo(
-    () =>
-      [...categories].sort((a, b) =>
-        String(a?.name || "").localeCompare(String(b?.name || ""), undefined, {
-          sensitivity: "base",
-        }),
-      ),
-    [categories],
-  );
+  const sortedCategories = useMemo(() => {
+    const availableCategories = loading
+      ? categories
+      : categories.filter((category) =>
+          products.some(
+            (product) =>
+              product.category_id === category.id ||
+              product.category === category.id ||
+              (typeof product.category === "string" &&
+                product.category.trim().toLowerCase() ===
+                  String(category.name || "")
+                    .trim()
+                    .toLowerCase()),
+          ),
+        );
+
+    return [...availableCategories].sort((a, b) =>
+      String(a?.name || "").localeCompare(String(b?.name || ""), undefined, {
+        sensitivity: "base",
+      }),
+    );
+  }, [categories, loading, products]);
 
   // Initialize selection
   useEffect(() => {
-    if (sortedCategories.length > 0 && !selectedCategoryId) {
+    if (
+      sortedCategories.length > 0 &&
+      !sortedCategories.some((category) => category.id === selectedCategoryId)
+    ) {
       setSelectedCategoryId(sortedCategories[0].id);
     }
   }, [selectedCategoryId, sortedCategories]);
@@ -63,10 +79,12 @@ export const CategoriesScreen = ({ navigation }) => {
 
     return products.filter(
       (p) =>
+        p.category_id === selectedCategoryId ||
         p.category === selectedCategoryId ||
         // Some implementations store category name string instead of ID
         (typeof p.category === "string" &&
-          p.category.toLowerCase() === categoryName.toLowerCase()),
+          p.category.trim().toLowerCase() ===
+            categoryName.trim().toLowerCase()),
     );
   }, [products, selectedCategoryId, sortedCategories]);
 

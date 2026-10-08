@@ -242,7 +242,10 @@ export const AdsProvider = ({ children }) => {
         .maybeSingle();
 
       if (readError) throw readError;
-      if (!row) throw new Error("Ad record not found");
+      // A cached ad can be rendered briefly after it has been deleted from
+      // the database. Engagement tracking is best-effort, so skip that stale
+      // cache entry instead of surfacing a console error.
+      if (!row) return;
 
       const nextValue = (Number(row[column]) || 0) + 1;
       const { error: updateError } = await supabase

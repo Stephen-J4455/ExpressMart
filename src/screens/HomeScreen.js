@@ -10,7 +10,14 @@
 //   New Arrivals  — most recently added active products
 // ---------------------------------------------------------------------------
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
@@ -74,6 +81,86 @@ const FEED_PLACEHOLDER_ITEMS = Array.from(
 const DESKTOP_RAIL_WIDTH = 400;
 const CART_RAIL_BREAKPOINT = 1280;
 const CART_RAIL_WIDTH = 360;
+
+const HomeFeedItem = memo(function HomeFeedItem({
+  item,
+  isVideoActive,
+  navigation,
+  styles,
+}) {
+  if (item?.__type === "flash_sale_row") {
+    return (
+      <View style={styles.flashSaleSection}>
+        <View style={styles.flashSaleHeaderRow}>
+          <View style={styles.flashSaleTitleGroup}>
+            <LinearGradient
+              colors={["#EF4444", "#DC2626"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.flashSaleIconBadge}
+            >
+              <Ionicons name="flash" size={14} color="#fff" />
+            </LinearGradient>
+            <Text style={styles.flashSaleTitle}>Flash Sale</Text>
+            <View style={styles.flashSaleLiveDot} />
+          </View>
+          <Text style={styles.flashSaleCount}>
+            {item.sales.length} {item.sales.length === 1 ? "deal" : "deals"} live
+          </Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.flashSaleRow}
+        >
+          {item.sales.map((fs) => (
+            <View
+              key={fs.id || `${fs.product_id}-${fs.start_time}`}
+              style={styles.flashSaleCardWrap}
+            >
+              <ProductCard
+                product={fs.product}
+                compact
+                hideCta
+                flashSale={fs}
+                onPress={() =>
+                  navigation.navigate("ProductDetail", {
+                    product: fs.product,
+                  })
+                }
+              />
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  }
+
+  if (item?.__type === "injected_ad") {
+    return (
+      <View style={styles.adWrap}>
+        <AdRenderer ad={item.ad} flush />
+      </View>
+    );
+  }
+
+  if (item?.__type === "product_video") {
+    return (
+      <View style={[styles.cardWrap, { width: "100%" }]}>
+        <FeedProductCard
+          product={item.product}
+          isVideoActive={isVideoActive}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.cardWrap, { width: "100%" }]}>
+      <FeedProductCard product={item} showVideo={false} />
+    </View>
+  );
+});
 
 export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
@@ -183,7 +270,6 @@ export const HomeScreen = ({ navigation }) => {
   }, []);
   const [activeFilter, setActiveFilter] = useState("For You");
   const [refreshing, setRefreshing] = useState(false);
-  const [showMorePlaceholder, setShowMorePlaceholder] = useState(false);
   const [topCategories, setTopCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   // Active flash sales surfaced as a horizontally-scrolling row on the home
@@ -638,11 +724,6 @@ export const HomeScreen = ({ navigation }) => {
       const { contentSize, layoutMeasurement, contentOffset } = e.nativeEvent;
       const distanceFromBottom =
         contentSize.height - layoutMeasurement.height - contentOffset.y;
-      const placeholderDistance =
-        Platform.OS === "web" ? 400 : layoutMeasurement.height;
-      setShowMorePlaceholder(
-        distanceFromBottom <= placeholderDistance && hasMore,
-      );
       const prefetchDistance =
         Platform.OS === "web"
           ? 400
@@ -680,87 +761,14 @@ export const HomeScreen = ({ navigation }) => {
   // already shows its own countdown via the `flashSale` prop, so we don't
   // stack another timer on top of it.
   const renderFeedItem = useCallback(
-    ({ item }) => {
-      if (item?.__type === "flash_sale_row") {
-        return (
-          <View style={styles.flashSaleSection}>
-            <View style={styles.flashSaleHeaderRow}>
-              <View style={styles.flashSaleTitleGroup}>
-                <LinearGradient
-                  colors={["#EF4444", "#DC2626"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.flashSaleIconBadge}
-                >
-                  <Ionicons name="flash" size={14} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.flashSaleTitle}>Flash Sale</Text>
-                <View style={styles.flashSaleLiveDot} />
-              </View>
-              <Text style={styles.flashSaleCount}>
-                {item.sales.length} {item.sales.length === 1 ? "deal" : "deals"}{" "}
-                live
-              </Text>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.flashSaleRow}
-            >
-              {item.sales.map((fs) => (
-                <View
-                  key={fs.id || `${fs.product_id}-${fs.start_time}`}
-                  style={styles.flashSaleCardWrap}
-                >
-                  <ProductCard
-                    product={fs.product}
-                    compact
-                    hideCta
-                    flashSale={fs}
-                    onPress={() =>
-                      navigation.navigate("ProductDetail", {
-                        product: fs.product,
-                      })
-                    }
-                  />
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        );
-      }
-      if (item?.__type === "injected_ad") {
-        return (
-          <View style={styles.adWrap}>
-            <AdRenderer ad={item.ad} flush />
-          </View>
-        );
-      }
-      if (item?.__type === "product_video") {
-        return (
-          <View style={[styles.cardWrap, { width: "100%" }]}>
-            <FeedProductCard
-              product={item.product}
-              isVideoActive={visibleVideoId === String(item.id)}
-              onPress={() =>
-                navigation.navigate("ProductDetail", { product: item.product })
-              }
-            />
-          </View>
-        );
-      }
-      return (
-        <View style={[styles.cardWrap, { width: "100%" }]}>
-          <FeedProductCard
-            product={item}
-            showVideo={false}
-            onPress={() =>
-              navigation.navigate("ProductDetail", { product: item })
-            }
-          />
-        </View>
-      );
-    },
+    ({ item }) => (
+      <HomeFeedItem
+        item={item}
+        isVideoActive={visibleVideoId === String(item?.id)}
+        navigation={navigation}
+        styles={styles}
+      />
+    ),
     [navigation, styles, visibleVideoId],
   );
 
@@ -1048,7 +1056,7 @@ export const HomeScreen = ({ navigation }) => {
               viewabilityConfig={viewabilityConfig}
               ListHeaderComponent={listHeader}
               ListFooterComponent={
-                hasMore && showMorePlaceholder ? (
+                hasMore && !showFeedPlaceholders ? (
                   <View style={[styles.cardWrap, { width: "100%" }]}>
                     <FeedCardPlaceholder />
                   </View>
@@ -1073,14 +1081,14 @@ export const HomeScreen = ({ navigation }) => {
               initialNumToRender={
                 Platform.OS === "web"
                   ? 4
-                  : Math.max(feedItems.length, FEED_PLACEHOLDER_ITEMS.length)
+                  : Math.max(6, FEED_PLACEHOLDER_ITEMS.length)
               }
               maxToRenderPerBatch={
-                Platform.OS === "web" ? 4 : Math.max(feedItems.length, 10)
+                Platform.OS === "web" ? 4 : 6
               }
-              updateCellsBatchingPeriod={16}
-              windowSize={Platform.OS === "web" ? 5 : 15}
-              disableVirtualization={Platform.OS !== "web"}
+              updateCellsBatchingPeriod={32}
+              windowSize={Platform.OS === "web" ? 5 : 9}
+              disableVirtualization={false}
               removeClippedSubviews={false}
             />
           </View>

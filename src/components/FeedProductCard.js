@@ -59,6 +59,52 @@ const DISABLE_FEED_CARD_IMAGE_FETCHING = false;
 const DISABLE_PRODUCT_IMAGE_RENDERING = false;
 const VIDEO_SOUND_PREFERENCE_KEY = "expressmart.feed.videoSoundEnabled";
 
+const NativeFeedImage = memo(function NativeFeedImage({
+  uri,
+  placeholder,
+  style,
+  resizeMode,
+}) {
+  const [retryState, setRetryState] = useState({ uri, count: 0 });
+  const retryTimerRef = useRef(null);
+  const currentUriRef = useRef(uri);
+  currentUriRef.current = uri;
+
+  useEffect(
+    () => () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    },
+    [uri],
+  );
+
+  const retryCount = retryState.uri === uri ? retryState.count : 0;
+
+  return (
+    <Image
+      key={`${uri}:${retryCount}`}
+      source={{ uri }}
+      defaultSource={placeholder}
+      style={style}
+      resizeMode={resizeMode}
+      fadeDuration={0}
+      onError={(error) => {
+        if (retryCount === 0 && uri) {
+          retryTimerRef.current = setTimeout(() => {
+            if (currentUriRef.current === uri) {
+              setRetryState({ uri, count: 1 });
+            }
+          }, 300);
+          return;
+        }
+        console.warn(
+          "[FeedProductCard] Failed to load product image:",
+          error?.nativeEvent?.error || uri,
+        );
+      }}
+    />
+  );
+});
+
 let globalVideoMuted = true;
 let videoSoundHydrationPromise = null;
 const videoSoundListeners = new Set();
@@ -685,9 +731,9 @@ export const FeedProductCard = memo(function FeedProductCard({
             {images.length === 1 ? (
               (Platform.OS !== "web" || singleImageRatio) &&
               !DISABLE_PRODUCT_IMAGE_RENDERING ? (
-                <Image
-                  source={{ uri: images[0] }}
-                  defaultSource={
+                <NativeFeedImage
+                  uri={images[0]}
+                  placeholder={
                     Platform.OS !== "web"
                       ? isDark
                         ? DARK_PLACEHOLDER
@@ -723,11 +769,9 @@ export const FeedProductCard = memo(function FeedProductCard({
                     eager
                   />
                 ) : (
-                  <Image
-                    source={{ uri: images[0] }}
-                    defaultSource={
-                      isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
-                    }
+                  <NativeFeedImage
+                    uri={images[0]}
+                    placeholder={isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER}
                     style={styles.mediaTile}
                     resizeMode="cover"
                   />
@@ -751,9 +795,9 @@ export const FeedProductCard = memo(function FeedProductCard({
                       eager
                     />
                   ) : (
-                    <Image
-                      source={{ uri: images[1] }}
-                      defaultSource={
+                    <NativeFeedImage
+                      uri={images[1]}
+                      placeholder={
                         isDark ? DARK_PLACEHOLDER : LIGHT_PLACEHOLDER
                       }
                       style={StyleSheet.absoluteFill}

@@ -50,6 +50,7 @@ const mapProduct = (product) => ({
   video_url: product.video_url || null,
   video_hls_url: product.video_hls_url || null,
   category: product.category,
+  category_id: product.category_id || null,
   description: product.description,
   discount: product.discount || 0,
   quantity: product.quantity || 0,
