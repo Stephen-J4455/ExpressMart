@@ -43,6 +43,7 @@
     "expo-system-ui": "^57.0.4",
     "expo-web-browser": "~57.0.3",
     "fix": "^0.0.6",
+    "pnpm": "^11.28.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",

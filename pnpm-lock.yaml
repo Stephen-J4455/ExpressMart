@@ -107,6 +107,9 @@ importers:
       fix:
         specifier: ^0.0.6
         version: 0.0.6
+      pnpm:
+        specifier: ^11.28.5
+        version: 11.28.5
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -2388,6 +2391,11 @@ packages:
   pngjs@3.4.0:
     resolution: {integrity: sha512-NCrCHhWmnQklfH4MtJMRjZ2a8c80qXeMlQMv2uVp9ISJMTt562SbGd6n2oq0PaPgKm7Z6pL9E2UlLIhC+SHL3w==}
     engines: {node: '>=4.0.0'}
+
+  pnpm@11.28.5:
+    resolution: {integrity: sha512-SEVj0wtMKtJ8tIqpT/KzAtvOvI/2vyiBbCWJiG4UbOf3bzVPO8GkOOb16XaMMCqgpvet2CMpA81M+BQmy8FNng==}
+    engines: {node: '>=22.13'}
+    hasBin: true
 
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
@@ -5855,6 +5863,8 @@ snapshots:
       xmlbuilder: 15.1.1
 
   pngjs@3.4.0: {}
+
+  pnpm@11.28.5: {}
 
   possible-typed-array-names@1.1.0: {}
 
