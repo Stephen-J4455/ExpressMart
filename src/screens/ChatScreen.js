@@ -244,7 +244,9 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   useEffect(() => {
     if (!conversation || !sellerUserId) return undefined;
 
-    const channel = supabase.channel(`presence:user:${sellerUserId}`);
+    const channel = supabase.channel(
+      `presence:user:${sellerUserId}-${instanceIdRef.current}`,
+    );
     const syncSellerPresence = () => {
       const state = channel.presenceState();
       const isSellerCurrentlyOnline = Object.values(state).some((presences) =>

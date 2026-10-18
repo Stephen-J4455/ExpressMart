@@ -1850,14 +1850,11 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         visible={showImagePreview}
         transparent={false}
         animationType="fade"
-        statusBarTranslucent
         presentationStyle="fullScreen"
         onRequestClose={() => setShowImagePreview(false)}
       >
         <StatusBar
-          backgroundColor="#000"
           barStyle="light-content"
-          translucent
         />
         <View style={styles.previewOverlay}>
           {/* Close button — sits above everything */}

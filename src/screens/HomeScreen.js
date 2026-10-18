@@ -81,6 +81,13 @@ const getFeedProductId = (item) => {
   return item?.id;
 };
 
+const areHomeFeedItemPropsEqual = (previous, next) =>
+  previous.item === next.item &&
+  previous.isVideoActive === next.isVideoActive &&
+  previous.loadImages === next.loadImages &&
+  previous.navigation === next.navigation &&
+  previous.styles === next.styles;
+
 const HomeFeedItem = memo(function HomeFeedItem({
   item,
   isVideoActive,
@@ -166,7 +173,7 @@ const HomeFeedItem = memo(function HomeFeedItem({
       />
     </View>
   );
-});
+}, areHomeFeedItemPropsEqual);
 
 export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
@@ -1150,12 +1157,12 @@ export const HomeScreen = ({ navigation }) => {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={listContentStyle}
               refreshControl={listRefreshControl}
-              initialNumToRender={Platform.OS === "web" ? 4 : 6}
-              maxToRenderPerBatch={Platform.OS === "web" ? 4 : 8}
-              updateCellsBatchingPeriod={16}
-              windowSize={Platform.OS === "web" ? 5 : 15}
+              initialNumToRender={Platform.OS === "web" ? 4 : 4}
+              maxToRenderPerBatch={Platform.OS === "web" ? 4 : 4}
+              updateCellsBatchingPeriod={Platform.OS === "web" ? 16 : 50}
+              windowSize={Platform.OS === "web" ? 5 : 9}
               disableVirtualization={false}
-              removeClippedSubviews={false}
+              removeClippedSubviews={Platform.OS === "android"}
             />
           </View>
 

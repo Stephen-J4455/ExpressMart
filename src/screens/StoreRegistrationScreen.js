@@ -1303,7 +1303,6 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
     return (
       <View style={styles.container}>
         <StatusBar
-          backgroundColor={theme.gradientStart}
           barStyle="light-content"
         />
         <LinearGradient
@@ -1327,7 +1326,6 @@ export const StoreRegistrationScreen = ({ navigation, route }) => {
   return (
     <View style={styles.container}>
       <StatusBar
-        backgroundColor={theme.gradientStart}
         barStyle="light-content"
       />
 

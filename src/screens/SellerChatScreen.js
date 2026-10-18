@@ -238,11 +238,10 @@ export const SellerChatScreen = ({
   const setupPresence = () => {
     const customerId = conversation?.user?.id || conversation?.user_id;
     if (!customerId) return;
-    // Use a unique channel name per component instance so we always get a
-    // fresh, unsubscribed channel. Reusing a channel name that is already
-    // subscribed throws "cannot add presence callbacks ... after subscribe()".
+    // Include the component instance so Supabase never reuses an already
+    // subscribed channel when the conversation changes.
     const channel = supabase.channel(
-      `presence:user:${customerId}`,
+      `presence:user:${customerId}-${instanceIdRef.current}`,
     );
     const syncCustomerPresence = () => {
       const state = channel.presenceState();

@@ -13,6 +13,7 @@ import {
   Dimensions,
   Image,
   ImageBackground,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -26,7 +27,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Markdown from "react-native-markdown-display";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { FlashSaleBadge } from "./FlashSaleBadge";
 import { ReportListingModal } from "./ReportListingModal";
 import { CollectionsPickerModal } from "./CollectionsPickerModal";
@@ -587,6 +588,11 @@ export const FeedProductCard = memo(function FeedProductCard({
     route,
     toast,
   ]);
+
+  const handleSendComment = useCallback(() => {
+    Keyboard.dismiss();
+    submitComment();
+  }, [submitComment]);
 
   const description = String(product.description || "").trim();
 
@@ -1166,16 +1172,12 @@ export const FeedProductCard = memo(function FeedProductCard({
         animationType="slide"
         onRequestClose={() => setCommentModalVisible(false)}
       >
-        <View style={styles.commentModalBackdrop}>
-          <Pressable
-            style={styles.commentModalBackdrop}
-            onPress={() => setCommentModalVisible(false)}
-          />
-          <KeyboardAvoidingView
-            behavior="padding"
-            style={styles.commentModalKeyboardArea}
-          >
-            <View style={styles.commentModalSheet}>
+        <Pressable
+          style={styles.commentModalBackdrop}
+          onPress={() => setCommentModalVisible(false)}
+        >
+          <KeyboardStickyView>
+            <Pressable style={styles.commentModalSheet} onPress={() => {}}>
               <View style={styles.commentModalHandle} />
               <View style={styles.commentModalHeader}>
                 <Text style={styles.commentModalTitle}>
@@ -1197,12 +1199,24 @@ export const FeedProductCard = memo(function FeedProductCard({
                 <ScrollView
                   style={styles.commentList}
                   contentContainerStyle={styles.commentListContent}
-                  keyboardShouldPersistTaps="handled"
+                  keyboardShouldPersistTaps="always"
                 >
                   {comments.length === 0 ? (
-                    <Text style={styles.commentEmpty}>
-                      No comments yet. Be the first!
-                    </Text>
+                    <View style={styles.commentEmpty}>
+                      <View style={styles.commentEmptyIcon}>
+                        <Ionicons
+                          name="chatbubble-ellipses-outline"
+                          size={26}
+                          color={c.primary}
+                        />
+                      </View>
+                      <Text style={styles.commentEmptyTitle}>
+                        No comments yet
+                      </Text>
+                      <Text style={styles.commentEmptyText}>
+                        Be the first to share what you think.
+                      </Text>
+                    </View>
                   ) : (
                     comments.map((cm) => (
                       <View key={cm.id} style={styles.commentItem}>
@@ -1288,7 +1302,7 @@ export const FeedProductCard = memo(function FeedProductCard({
                     (!commentText.trim() || commentPosting) &&
                       styles.commentSendBtnDisabled,
                   ]}
-                  onPress={submitComment}
+                  onPress={handleSendComment}
                   disabled={!commentText.trim() || commentPosting}
                 >
                   {commentPosting ? (
@@ -1298,9 +1312,9 @@ export const FeedProductCard = memo(function FeedProductCard({
                   )}
                 </Pressable>
               </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
+            </Pressable>
+          </KeyboardStickyView>
+        </Pressable>
       </Modal>
 
       {/* ── Swipeable gallery modal (3+ images) ── */}
@@ -2046,16 +2060,12 @@ const buildFeedCardStyles = (c) =>
       backgroundColor: c.overlay,
       justifyContent: "flex-end",
     },
-    commentModalKeyboardArea: {
-      flex: 1,
-      justifyContent: "flex-end",
-    },
     commentModalSheet: {
       backgroundColor: c.light,
       borderTopLeftRadius: 18,
       borderTopRightRadius: 18,
-      maxHeight: "75%",
-      paddingBottom: 12,
+      maxHeight: "85%",
+      paddingBottom: 0,
     },
     commentModalHandle: {
       width: 40,
@@ -2085,16 +2095,36 @@ const buildFeedCardStyles = (c) =>
       alignItems: "center",
     },
     commentList: {
-      maxHeight: 320,
+      minHeight: 180,
+      maxHeight: 380,
     },
     commentListContent: {
       paddingHorizontal: 16,
       paddingVertical: 12,
     },
     commentEmpty: {
-      textAlign: "center",
+      alignItems: "center",
+      paddingVertical: 28,
+    },
+    commentEmptyIcon: {
+      width: 54,
+      height: 54,
+      borderRadius: 27,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary + "18",
+      marginBottom: 12,
+    },
+    commentEmptyTitle: {
+      color: c.dark,
+      fontSize: 15,
+      fontWeight: "800",
+      marginBottom: 4,
+    },
+    commentEmptyText: {
       color: c.muted,
-      paddingVertical: 24,
+      fontSize: 13,
+      textAlign: "center",
     },
     commentItem: {
       flexDirection: "row",
@@ -2149,6 +2179,8 @@ const buildFeedCardStyles = (c) =>
       gap: 8,
       paddingHorizontal: 16,
       paddingTop: 10,
+      paddingBottom: 12,
+      backgroundColor: c.light,
       borderTopWidth: 1,
       borderTopColor: c.border,
     },
@@ -2158,6 +2190,7 @@ const buildFeedCardStyles = (c) =>
       justifyContent: "space-between",
       paddingHorizontal: 16,
       paddingTop: 12,
+      paddingBottom: 8,
       borderTopWidth: 1,
       borderTopColor: c.border,
     },
@@ -2172,13 +2205,14 @@ const buildFeedCardStyles = (c) =>
     },
     commentInput: {
       flex: 1,
-      minHeight: 40,
-      maxHeight: 100,
+      minHeight: 44,
+      maxHeight: 110,
       borderWidth: 1,
       borderColor: c.border,
       borderRadius: radius.full,
-      paddingHorizontal: 14,
-      paddingVertical: 9,
+      paddingHorizontal: 16,
+      paddingVertical: 11,
+      backgroundColor: c.surface,
       fontSize: 14,
       color: c.dark,
     },

@@ -12,6 +12,7 @@ import {
   Image,
   Animated,
   Easing,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -751,6 +752,11 @@ export const FeedScreen = ({ route, navigation }) => {
           }
         }, [commentText, user, productId, toast]);
 
+        const handleSendComment = useCallback(() => {
+          Keyboard.dismiss();
+          submitComment();
+        }, [submitComment]);
+
         const handleComment = useCallback(() => {
           openCommentModal();
         }, [openCommentModal]);
@@ -1166,12 +1172,15 @@ export const FeedScreen = ({ route, navigation }) => {
               animationType="slide"
               onRequestClose={() => setCommentModalVisible(false)}
             >
-              <View style={styles.commentModalBackdrop}>
-                <Pressable
-                  style={styles.commentModalBackdrop}
-                  onPress={() => setCommentModalVisible(false)}
-                />
-                <View style={styles.commentModalSheet}>
+              <Pressable
+                style={styles.commentModalBackdrop}
+                onPress={() => setCommentModalVisible(false)}
+              >
+                <KeyboardStickyView>
+                  <Pressable
+                    style={styles.commentModalSheet}
+                    onPress={() => {}}
+                  >
                   <View style={styles.commentModalHandle} />
                   <View style={styles.commentModalHeader}>
                     <Text style={styles.commentModalTitle}>
@@ -1197,12 +1206,24 @@ export const FeedScreen = ({ route, navigation }) => {
                     <ScrollView
                       style={styles.commentList}
                       contentContainerStyle={styles.commentListContent}
-                      keyboardShouldPersistTaps="handled"
+                      keyboardShouldPersistTaps="always"
                     >
                       {comments.length === 0 ? (
-                        <Text style={styles.commentEmpty}>
-                          No comments yet. Be the first!
-                        </Text>
+                        <View style={styles.commentEmpty}>
+                          <View style={styles.commentEmptyIcon}>
+                            <Ionicons
+                              name="chatbubble-ellipses-outline"
+                              size={26}
+                              color={themeColors.primary}
+                            />
+                          </View>
+                          <Text style={styles.commentEmptyTitle}>
+                            No comments yet
+                          </Text>
+                          <Text style={styles.commentEmptyText}>
+                            Be the first to share what you think.
+                          </Text>
+                        </View>
                       ) : (
                         comments.map((c) => (
                           <View key={c.id} style={styles.commentItem}>
@@ -1254,7 +1275,7 @@ export const FeedScreen = ({ route, navigation }) => {
                     </ScrollView>
                   )}
 
-                  <KeyboardStickyView style={styles.commentInputRow}>
+                  <View style={styles.commentInputRow}>
                     <TextInput
                       style={styles.commentInput}
                       placeholder="Add a comment…"
@@ -1270,7 +1291,7 @@ export const FeedScreen = ({ route, navigation }) => {
                         (!commentText.trim() || commentPosting) &&
                           styles.commentSendBtnDisabled,
                       ]}
-                      onPress={submitComment}
+                      onPress={handleSendComment}
                       disabled={!commentText.trim() || commentPosting}
                     >
                       {commentPosting ? (
@@ -1279,9 +1300,10 @@ export const FeedScreen = ({ route, navigation }) => {
                         <Ionicons name="send" size={18} color="#fff" />
                       )}
                     </Pressable>
-                  </KeyboardStickyView>
-                </View>
-              </View>
+                  </View>
+                  </Pressable>
+                </KeyboardStickyView>
+              </Pressable>
             </Modal>
           </View>
         );
@@ -1695,8 +1717,8 @@ const buildFeedStyles = (c) =>
       backgroundColor: c.light,
       borderTopLeftRadius: 18,
       borderTopRightRadius: 18,
-      maxHeight: "75%",
-      paddingBottom: Platform.OS === "ios" ? 24 : 12,
+      maxHeight: "85%",
+      paddingBottom: 0,
     },
     commentModalHandle: {
       width: 40,
@@ -1726,16 +1748,36 @@ const buildFeedStyles = (c) =>
       alignItems: "center",
     },
     commentList: {
-      maxHeight: 320,
+      minHeight: 180,
+      maxHeight: 380,
     },
     commentListContent: {
       paddingHorizontal: 16,
       paddingVertical: 12,
     },
     commentEmpty: {
-      textAlign: "center",
+      alignItems: "center",
+      paddingVertical: 28,
+    },
+    commentEmptyIcon: {
+      width: 54,
+      height: 54,
+      borderRadius: 27,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.primary + "18",
+      marginBottom: 12,
+    },
+    commentEmptyTitle: {
+      color: c.dark,
+      fontSize: 15,
+      fontWeight: "800",
+      marginBottom: 4,
+    },
+    commentEmptyText: {
       color: c.muted,
-      paddingVertical: 24,
+      fontSize: 13,
+      textAlign: "center",
     },
     commentItem: {
       flexDirection: "row",
@@ -1790,18 +1832,21 @@ const buildFeedStyles = (c) =>
       gap: 8,
       paddingHorizontal: 16,
       paddingTop: 10,
+      paddingBottom: 12,
+      backgroundColor: c.light,
       borderTopWidth: 1,
       borderTopColor: c.border,
     },
     commentInput: {
       flex: 1,
-      minHeight: 40,
-      maxHeight: 100,
+      minHeight: 44,
+      maxHeight: 110,
       borderWidth: 1,
       borderColor: c.border,
       borderRadius: radius.full,
-      paddingHorizontal: 14,
-      paddingVertical: 9,
+      paddingHorizontal: 16,
+      paddingVertical: 11,
+      backgroundColor: c.surface,
       fontSize: 14,
       color: c.dark,
     },

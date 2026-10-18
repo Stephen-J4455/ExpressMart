@@ -27,6 +27,8 @@ import { useToast } from "../context/ToastContext";
 
 WebBrowser.maybeCompleteAuthSession();
 
+const AUTH_PRIMARY_PINK = "#FF5A79";
+
 export const AuthScreen = ({ navigation, route }) => {
   const getInitialIsLogin = useCallback(() => {
     const mode = route?.params?.mode;
@@ -808,7 +810,7 @@ const buildAuthStyles = (c) =>
   submitButton: {
     borderRadius: radius.full,
     overflow: "hidden",
-    backgroundColor: c.primary,
+    backgroundColor: AUTH_PRIMARY_PINK,
     marginTop: 8,
     shadowColor: c.primary,
     shadowOffset: { width: 0, height: 6 },

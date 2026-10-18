@@ -634,7 +634,7 @@ const buildSellerProfileStyles = (c) =>
     paddingVertical: 13,
     fontSize: 15,
     color: c.dark,
-    backgroundColor: "#FAFBFC",
+    backgroundColor: c.surface,
     marginTop: 8,
     ...(Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0 } : { }),
   },

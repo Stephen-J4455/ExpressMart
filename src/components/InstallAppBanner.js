@@ -4,7 +4,7 @@ import { radius } from "../theme/colors";
 
 const APP_STORE_URL = "https://apps.apple.com/app/tagit"; // TODO: real App Store ID
 const PLAY_STORE_URL =
-  "https://play.google.com/store/apps/details?id=com.stephenj.expressmart";
+  "https://play.google.com/store/apps/details?id=com.stephenj.tagit";
 
 /**
  * Mobile-web install prompt shown on the web fallback PDP. When a user taps a

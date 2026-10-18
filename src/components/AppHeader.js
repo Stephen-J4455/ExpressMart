@@ -49,9 +49,7 @@ export const AppHeader = ({
 
   // Profile photo for customers, store logo for store accounts, null → icon.
   const avatarUri = isStoreAccount ? storeLogo : profile?.avatar_url || null;
-  // The tagit logo always keeps its home (light) theme look — brand "tag" in
-  // white, "it" in warm coral — regardless of light/dark mode. Only the
-  // surrounding header adapts to the active theme.
+  // Keep the full tagit wordmark in one consistent brand color.
   const logoNeutrals = resolveNeutrals("light");
   const styles = useAppStyles((c) =>
     StyleSheet.create({ 
@@ -75,7 +73,7 @@ export const AppHeader = ({
         justifyContent: "center",
       },
       brandTag: {
-        color: colors.light,
+        color: colors.primary,
         fontSize: 30,
         fontWeight: "900",
         letterSpacing: 0.5,
@@ -84,7 +82,7 @@ export const AppHeader = ({
         textShadowRadius: 3,
       },
       brandTagAccent: {
-        color: colors.warmCoral,
+        color: colors.primary,
         fontSize: 30,
         fontWeight: "900",
         letterSpacing: 0.5,
@@ -96,6 +94,7 @@ export const AppHeader = ({
         width: 44,
         height: 44,
         borderRadius: radius.full,
+        overflow: "hidden",
         alignItems: "center",
         justifyContent: "center",
         // Match the FeedProductCard "Add to Cart" button: soft primary tint
@@ -108,11 +107,10 @@ export const AppHeader = ({
         flexDirection: "row",
         gap: 8,
       },
-      // Profile photo / store logo rendered inside the account button — sized
-      // to leave the tinted ring of the button visible around it.
+      // Profile photo / store logo fills the account button.
       avatarImage: {
-        width: 32,
-        height: 32,
+        width: "100%",
+        height: "100%",
         borderRadius: radius.full,
       },
      }),

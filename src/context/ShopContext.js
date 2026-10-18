@@ -217,7 +217,7 @@ export const ShopProvider = ({ children }) => {
             .limit(10),
           supabase
             .from("express_reviews")
-            .select("product_id, rating")
+            .select("product_id, rating, comment")
             .eq("is_approved", true),
           supabase.from("express_settings").select("key, value"),
           user
@@ -272,23 +272,40 @@ export const ShopProvider = ({ children }) => {
         }
 
         // Local cache already stores mapped products, so skip re-mapping there.
-        const mappedProducts = fromLocalCache
+        const mappedProductsWithoutCommentCounts = fromLocalCache
           ? productsData || []
           : (productsData || []).map(mapProduct);
+        const commentCounts = (reviewsData || []).reduce((counts, review) => {
+          if (!review?.product_id || !String(review.comment || "").trim()) {
+            return counts;
+          }
+          counts[review.product_id] = (counts[review.product_id] || 0) + 1;
+          return counts;
+        }, {});
+        const mappedProducts = mappedProductsWithoutCommentCounts.map(
+          (product) => ({
+            ...product,
+            comments_count:
+              commentCounts[product.id] ??
+              Number(product.comments_count || 0),
+          }),
+        );
         if (preserveCachedProductsRef.current) {
-          if (fromUpstash) {
+          if (fromUpstash || fromLocalCache) {
             setProducts((cachedProducts) => {
-              const cachedIds = new Set(
-                cachedProducts.map((product) => product.id),
+              const freshById = new Map(
+                mappedProducts.map((product) => [product.id, product]),
               );
-              const seenIds = new Set(cachedIds);
+              const cachedIds = new Set();
+              const mergedProducts = cachedProducts.map((cachedProduct) => {
+                cachedIds.add(cachedProduct.id);
+                return freshById.get(cachedProduct.id) || cachedProduct;
+              });
               return [
-                ...cachedProducts,
-                ...mappedProducts.filter((product) => {
-                  if (seenIds.has(product.id)) return false;
-                  seenIds.add(product.id);
-                  return true;
-                }),
+                ...mergedProducts,
+                ...mappedProducts.filter(
+                  (product) => !cachedIds.has(product.id),
+                ),
               ];
             });
           }

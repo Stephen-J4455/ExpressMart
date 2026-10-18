@@ -3,7 +3,6 @@
     "name": "tagit",
     "slug": "tagit",
     "version": "1.0.2",
-    "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "expressmart",
@@ -110,7 +109,14 @@
       "expo-apple-authentication",
       "expo-web-browser",
       "expo-asset",
-      "expo-build-properties",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -126,9 +132,7 @@
       [
         "expo-status-bar",
         {
-          "style": "dark",
-          "backgroundColor": "#B7B8BF",
-          "translucent": true
+          "style": "dark"
         }
       ],
       "expo-audio",

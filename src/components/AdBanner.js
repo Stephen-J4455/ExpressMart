@@ -931,7 +931,6 @@ export const AdPopup = ({ ad, onClose, visible = true }) => {
       visible={isVisible}
       transparent
       animationType="fade"
-      statusBarTranslucent
       onRequestClose={handleClose}
     >
       <View style={styles.popupOverlay}>
@@ -1114,7 +1113,6 @@ export const AdFullscreen = ({ ad, onClose, visible = true }) => {
       visible={isVisible}
       transparent={false}
       animationType="fade"
-      statusBarTranslucent
       onRequestClose={handleClose}
     >
       <View style={styles.fullscreenContainer}>

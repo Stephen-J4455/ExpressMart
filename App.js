@@ -18,7 +18,6 @@ import {
   Pressable,
   Platform,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import {
   SafeAreaProvider,
@@ -632,14 +631,12 @@ const LoginRequiredScreen = ({
         maxWidth: 360,
       },
       button: {
-        borderRadius: 14,
-        overflow: "hidden",
-        marginTop: 24,
-      },
-      buttonGradient: {
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
+        borderRadius: 14,
+        marginTop: 24,
+        backgroundColor: "#FF5A79",
         paddingHorizontal: 20,
         paddingVertical: 14,
       },
@@ -664,13 +661,8 @@ const LoginRequiredScreen = ({
           })
         }
       >
-        <LinearGradient
-          colors={[colors.primary, colors.accent]}
-          style={styles.buttonGradient}
-        >
-          <Ionicons name="log-in-outline" size={18} color="#fff" />
-          <Text style={styles.buttonText}>Login to continue</Text>
-        </LinearGradient>
+        <Ionicons name="log-in-outline" size={18} color="#fff" />
+        <Text style={styles.buttonText}>Login to continue</Text>
       </Pressable>
     </View>
   );

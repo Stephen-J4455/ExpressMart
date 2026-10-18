@@ -4622,8 +4622,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       visible={menuVisible}
       transparent
       animationType="none"
-      statusBarTranslucent={Platform.OS === "android"}
-      navigationBarTranslucent={Platform.OS === "android"}
       onRequestClose={closeMenu}
     >
       <Animated.View style={[styles.drawerOverlay, { opacity: drawerAnim }]}>
@@ -5348,7 +5346,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       <Modal
         visible={modalVisible}
         animationType="slide"
-        statusBarTranslucent
         onRequestClose={() => {
           cancelProductAgent();
           setModalVisible(false);
@@ -6344,7 +6341,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       <Modal
         visible={waModalVisible}
         animationType="slide"
-        statusBarTranslucent
       >
         <KeyboardAvoidingView
           style={styles.modalContainer}
