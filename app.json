@@ -1,4 +1,4 @@
-{
+   {
   "expo": {
     "name": "tagit",
     "slug": "tagit",
@@ -20,7 +20,9 @@
         "applinks:expressmart.me"
       ],
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -41,7 +43,10 @@
               "scheme": "expressmart"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "VIEW",
@@ -78,7 +83,10 @@
               "pathPrefix": "/wa/callback"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -88,6 +96,7 @@
     },
     "plugins": [
       "./plugins/withMedia3Fix",
+      "./plugins/withCmakeObjectPathMax",
       [
         "expo-notifications",
         {
@@ -107,8 +116,8 @@
         {
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#B7B8BF",
-          "darkMode": {
+          "backgroundColor": "#FFFFFF",
+          "dark": {
             "image": "./assets/splash-icon.png",
             "backgroundColor": "#000000"
           }
@@ -122,7 +131,8 @@
           "translucent": true
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "react-native-compressor"
     ],
     "extra": {
       "eas": {

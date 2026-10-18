@@ -221,15 +221,10 @@ export const AccountScreen = ({ navigation }) => {
               })
             }
           >
-            <LinearGradient
-              colors={[themeColors.primary, themeColors.accent]}
-              style={styles.signInGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
+            <View style={styles.signInContent}>
               <Ionicons name="log-in-outline" size={20} color="#fff" />
               <Text style={styles.signInText}>Sign In</Text>
-            </LinearGradient>
+            </View>
           </Pressable>
           <Pressable
             style={styles.createAccountButton}
@@ -601,6 +596,7 @@ const buildAccountStyles = (c) =>
       marginTop: 32,
       borderRadius: radius.lg,
       overflow: "hidden",
+      backgroundColor: c.primary,
       width: "100%",
       shadowColor: c.primary,
       shadowOpacity: 0.3,
@@ -608,7 +604,7 @@ const buildAccountStyles = (c) =>
       shadowOffset: { width: 0, height: 6 },
       elevation: 6,
     },
-    signInGradient: {
+    signInContent: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",

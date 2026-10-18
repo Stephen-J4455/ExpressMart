@@ -1,5 +1,7 @@
 allowBuilds:
-  "@shopify/react-native-skia": true
+  '@shopify/react-native-skia': true
+nodeLinker: hoisted
+autoInstallPeers: true
 
 # pnpm workspace & settings
 # Allow the build environment to use its installed pnpm without signature verification

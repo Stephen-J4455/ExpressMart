@@ -12,7 +12,6 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { radius } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -594,12 +593,7 @@ export const AuthScreen = ({ navigation, route }) => {
               onPress={handleSubmit}
               disabled={loading}
             >
-              <LinearGradient
-                colors={[themeColors.primary, themeColors.accent]}
-                style={styles.buttonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
+              <View style={styles.buttonContent}>
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
@@ -614,7 +608,7 @@ export const AuthScreen = ({ navigation, route }) => {
                     </Text>
                   </>
                 )}
-              </LinearGradient>
+              </View>
             </Pressable>
 
             <View style={styles.divider}>
@@ -814,6 +808,7 @@ const buildAuthStyles = (c) =>
   submitButton: {
     borderRadius: radius.full,
     overflow: "hidden",
+    backgroundColor: c.primary,
     marginTop: 8,
     shadowColor: c.primary,
     shadowOffset: { width: 0, height: 6 },
@@ -824,7 +819,7 @@ const buildAuthStyles = (c) =>
   buttonDisabled: {
     opacity: 0.6,
   },
-  buttonGradient: {
+  buttonContent: {
     height: 56,
     flexDirection: "row",
     alignItems: "center",
