@@ -57,6 +57,7 @@ import { flashSaleService } from "../services/flashSaleService";
 import { loadHiddenSellers } from "../utils/hiddenSellers";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 import { updateTabBarOnScroll, showTabBar } from "../utils/tabBarAutoHide";
+import { useNavigationPreferences } from "../context/NavigationPreferencesContext";
 
 const FILTERS = ["For You", "Following", "Trending", "New Arrivals"];
 // Number of categories shown in the horizontal strip on Home — ranked by the
@@ -177,6 +178,7 @@ const HomeFeedItem = memo(function HomeFeedItem({
 
 export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
+  const { homeStyle } = useNavigationPreferences();
   const styles = useAppStyles(buildHomeStyles);
   const { width } = useWindowDimensions();
   const { isDesktop: isWideScreen } = useResponsive();
@@ -733,6 +735,13 @@ export const HomeScreen = ({ navigation }) => {
       Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth,
     );
   }, []);
+
+  useEffect(() => {
+    if (!pagerWidth || !pagerRef.current) return;
+    const initialPane = homeStyle === "classic" ? 1 : 0;
+    pagerRef.current.scrollTo({ x: initialPane * pagerWidth, animated: false });
+    pagerOffsetRef.current = initialPane * pagerWidth;
+  }, [homeStyle, pagerWidth]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

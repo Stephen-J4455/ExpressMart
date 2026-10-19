@@ -442,7 +442,7 @@ const buildStorefrontStyles = (c) => {
       fontWeight: "800",
       letterSpacing: 1.4,
     },
-    pageTitle: { color: c.text, fontSize: 27, fontWeight: "900", marginTop: 5 },
+    pageTitle: { color: c.dark, fontSize: 27, fontWeight: "900", marginTop: 5 },
     pageSubtitle: {
       color: c.muted,
       fontSize: 14,
@@ -527,7 +527,7 @@ const buildStorefrontStyles = (c) => {
       paddingHorizontal: 3,
     },
     serviceCopy: { flex: 1 },
-    serviceTitle: { color: c.text, fontSize: 10, fontWeight: "800" },
+    serviceTitle: { color: c.dark, fontSize: 10, fontWeight: "800" },
     serviceDetail: { color: c.muted, fontSize: 9, marginTop: 2 },
     section: { marginTop: 25 },
     sectionHeading: {
@@ -544,7 +544,7 @@ const buildStorefrontStyles = (c) => {
       letterSpacing: 1.2,
       marginBottom: 3,
     },
-    sectionTitle: { color: c.text, fontSize: 21, fontWeight: "900" },
+    sectionTitle: { color: c.dark, fontSize: 21, fontWeight: "900" },
     seeAllButton: {
       flexDirection: "row",
       alignItems: "center",
@@ -564,7 +564,7 @@ const buildStorefrontStyles = (c) => {
     },
     categoryImage: { width: "100%", height: "100%", resizeMode: "cover" },
     categoryName: {
-      color: c.text,
+      color: c.dark,
       fontSize: 13,
       fontWeight: "800",
       marginTop: 8,
@@ -599,7 +599,7 @@ const buildStorefrontStyles = (c) => {
       letterSpacing: 1.1,
     },
     collectionTitle: {
-      color: c.text,
+      color: c.dark,
       fontSize: 16,
       fontWeight: "900",
       marginTop: 3,

@@ -35,6 +35,7 @@ import { useAppStyles } from "./src/hooks/useAppStyles";
 import { WebSidebar } from "./src/components/WebSidebar";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
+import { NavigationPreferencesProvider, useNavigationPreferences } from "./src/context/NavigationPreferencesContext";
 import { CartProvider, useCart } from "./src/context/CartContext";
 import { ShopProvider } from "./src/context/ShopContext";
 import { OrderProvider } from "./src/context/OrderContext";
@@ -116,6 +117,7 @@ const TabNavigator = () => {
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const { isWide, sidebarWidth } = useResponsive();
   const { colors, isDark } = useTheme();
+  const { homeFirst } = useNavigationPreferences();
   const [sidebarExpanded, setSidebarExpanded] = React.useState(false);
   const [sidebarPinned, setSidebarPinned] = React.useState(false);
 
@@ -145,6 +147,18 @@ const TabNavigator = () => {
   const activeSidebarWidth = sidebarExpanded
     ? sidebarWidth
     : COLLAPSED_SIDEBAR_WIDTH;
+
+  const tabScreens = [
+    homeFirst === "feed"
+      ? { name: "Feed", component: TransitionedFeedScreen, icon: "flash" }
+      : { name: "Home", component: TransitionedHomeScreen, icon: "home" },
+    homeFirst === "feed"
+      ? { name: "Home", component: TransitionedHomeScreen, icon: "home" }
+      : { name: "Feed", component: TransitionedFeedScreen, icon: "flash" },
+    { name: "Chats", component: TransitionedChatsScreen, icon: "chatbubbles" },
+    { name: "Cart", component: TransitionedCartScreen, icon: "cart" },
+    { name: "Account", component: TransitionedAccountScreen, icon: "person" },
+  ];
 
   return (
     <Tab.Navigator
@@ -183,71 +197,22 @@ const TabNavigator = () => {
         )
       }
     >
-      <Tab.Screen
-        name="Home"
-        component={TransitionedHomeScreen}
-        options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "home" : "home-outline"}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Chats"
-        component={TransitionedChatsScreen}
-        options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "chatbubbles" : "chatbubbles-outline"}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Feed"
-        component={TransitionedFeedScreen}
-        options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "flash" : "flash-outline"}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Cart"
-        component={TransitionedCartScreen}
-        options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "cart" : "cart-outline"}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Account"
-        component={TransitionedAccountScreen}
-        options={{
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "person" : "person-outline"}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
+      {tabScreens.map((screen) => (
+        <Tab.Screen
+          key={screen.name}
+          name={screen.name}
+          component={screen.component}
+          options={{
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? screen.icon : `${screen.icon}-outline`}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+      ))}
     </Tab.Navigator>
   );
 };
@@ -341,11 +306,17 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = insets.bottom > 0 ? insets.bottom : 0;
   const { colors, isDark } = useTheme();
+  const { bottomNavMode } = useNavigationPreferences();
+  const isDocked = bottomNavMode === "docked";
 
   const [hidden, setHidden] = React.useState(false);
   // 1 = fully visible, 0 = fully hidden (drives slide + fade together)
   const visibility = useRef(new Animated.Value(1)).current;
   const selectedTabScale = useRef(new Animated.Value(1)).current;
+  const activeIndicatorX = useRef(new Animated.Value(0)).current;
+  const floatingBubbleX = useRef(new Animated.Value(0)).current;
+  const floatingBubbleStretch = useRef(new Animated.Value(1)).current;
+  const [pillWidth, setPillWidth] = React.useState(0);
   const focusedKey = state.routes[state.index]?.key;
 
   useEffect(() => {
@@ -373,6 +344,54 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
 
   // Account is rendered in the Home header — keep the route, drop the tab.
   const tabs = state.routes.filter((route) => route.name !== "Account");
+  const dockedItemCount = tabs.length + 1;
+  const focusedTabIndex = Math.max(
+    0,
+    tabs.findIndex((route) => route.key === focusedKey),
+  );
+  const dockedItemWidth = pillWidth > 0 ? (pillWidth - 8) / dockedItemCount : 0;
+  const floatingTabWidth = pillWidth > 0 ? (pillWidth - 12) / tabs.length : 0;
+
+  useEffect(() => {
+    if (!isDocked || !dockedItemWidth) return;
+    Animated.spring(activeIndicatorX, {
+      toValue: focusedTabIndex * dockedItemWidth,
+      speed: 18,
+      bounciness: 11,
+      useNativeDriver: true,
+    }).start();
+  }, [
+    activeIndicatorX,
+    dockedItemWidth,
+    focusedTabIndex,
+    isDocked,
+  ]);
+
+  useEffect(() => {
+    if (isDocked || !floatingTabWidth) return;
+    floatingBubbleStretch.setValue(1.16);
+    Animated.parallel([
+      Animated.spring(floatingBubbleX, {
+        toValue: focusedTabIndex * floatingTabWidth,
+        speed: 16,
+        bounciness: 12,
+        useNativeDriver: true,
+      }),
+      Animated.spring(floatingBubbleStretch, {
+        toValue: 1,
+        speed: 20,
+        bounciness: 10,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [
+    floatingBubbleStretch,
+    floatingBubbleX,
+    floatingTabWidth,
+    focusedTabIndex,
+    isDocked,
+  ]);
+
   // Theme-aware pill surface: near-white glass in light mode; in dark mode the
   // app theme's DARK BACKGROUND token (colors.background = #070B14) instead of
   // a hard-coded charcoal. Shared by the tab pill and the AI button.
@@ -404,8 +423,9 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
       <View
         style={[
           tabStyles.barRow,
+          isDocked && tabStyles.barRowDocked,
           {
-            paddingBottom: Math.max(bottomInset, MOBILE_TAB_BAR_PADDING_BOTTOM),
+            paddingBottom: isDocked ? bottomInset : Math.max(bottomInset, MOBILE_TAB_BAR_PADDING_BOTTOM),
           },
         ]}
       >
@@ -413,9 +433,41 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
         <View
           style={[
             tabStyles.pill,
+            isDocked && tabStyles.pillDocked,
             { backgroundColor: pillSurface, borderColor: pillBorder },
           ]}
+          onLayout={(event) => setPillWidth(event.nativeEvent.layout.width)}
         >
+          {isDocked && dockedItemWidth > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                tabStyles.dockedActiveIndicator,
+                {
+                  width: dockedItemWidth,
+                  transform: [{ translateX: activeIndicatorX }],
+                  backgroundColor: activeColor,
+                },
+              ]}
+            />
+          )}
+          {!isDocked && floatingTabWidth > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                tabStyles.floatingActiveBubble,
+                {
+                  width: floatingTabWidth,
+                  transform: [
+                    { translateX: floatingBubbleX },
+                    { scaleX: floatingBubbleStretch },
+                  ],
+                  backgroundColor: colors.primary + "18",
+                  borderColor: colors.primary + "35",
+                },
+              ]}
+            />
+          )}
           {tabs.map((route) => {
             const { options } = descriptors[route.key];
             const isFocused = route.key === focusedKey;
@@ -435,16 +487,22 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
                 onPress={onPress}
                 style={({ pressed }) => [
                   tabStyles.tab,
+                  isDocked && tabStyles.dockedTab,
                   // Active tab matches the header icon buttons: soft primary
                   // tint fill + primary border (same recipe as the FeedProduct
                   // "Add to Cart" pill).
                   isFocused && [
                     tabStyles.tabActive,
+                    isDocked && tabStyles.dockedTabActive,
                     {
-                      backgroundColor: colors.primary + "15",
-                      borderColor: colors.primary + "30",
+                      backgroundColor: "transparent",
+                      borderColor: "transparent",
                     },
                   ],
+                  isDocked && {
+                    backgroundColor: "transparent",
+                    borderColor: "transparent",
+                  },
                   pressed && tabStyles.tabPressed,
                 ]}
                 accessibilityRole="button"
@@ -459,7 +517,21 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
                     },
                   ]}
                 >
-                  {options.tabBarIcon({ color, size: 24, focused: isFocused })}
+                  {options.tabBarIcon({
+                    color,
+                    size: isDocked ? 19 : 24,
+                    focused: isFocused,
+                  })}
+                  {isDocked && (
+                    <Text
+                      style={[
+                        tabStyles.dockedLabel,
+                        { color: isFocused ? activeColor : inactiveColor },
+                      ]}
+                    >
+                      {route.name}
+                    </Text>
+                  )}
                   {route.name === "Cart" && cartCount > 0 && (
                     <View
                       style={[
@@ -478,10 +550,44 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
               </Pressable>
             );
           })}
+          {isDocked && (
+            <Pressable
+              onPress={() => navigation.navigate("TagAI")}
+              style={({ pressed }) => [
+                tabStyles.tab,
+                tabStyles.dockedTab,
+                tabStyles.dockedAiTab,
+                pressed && tabStyles.tabPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="TagAI"
+            >
+              <LinearGradient
+                colors={[colors.gradientStart, colors.accent]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={tabStyles.aiIconBackgroundDocked}
+              >
+                <Image
+                  source={
+                    isDark
+                      ? require("./assets/tagit_ai_dark.png")
+                      : require("./assets/tagit_ai_light.png")
+                  }
+                  style={[
+                    tabStyles.aiIcon,
+                    isDocked && tabStyles.aiIconDocked,
+                  ]}
+                  resizeMode="contain"
+                />
+              </LinearGradient>
+              <Text style={[tabStyles.dockedLabel, { color: activeColor }]}>TagAI</Text>
+            </Pressable>
+          )}
         </View>
 
-        {/* Detached circular TagAI button */}
-        <Pressable
+        {/* Detached circular TagAI button in floating mode */}
+        {!isDocked && <Pressable
           onPress={() => navigation.navigate("TagAI")}
           style={({ pressed }) => [
             tabStyles.aiButton,
@@ -495,7 +601,10 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
             colors={[colors.gradientStart, colors.accent]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={tabStyles.aiIconBackground}
+            style={[
+              tabStyles.aiIconBackground,
+              isDocked && tabStyles.aiIconBackgroundDocked,
+            ]}
           >
             <Image
               source={
@@ -507,7 +616,7 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
               resizeMode="contain"
             />
           </LinearGradient>
-        </Pressable>
+        </Pressable>}
       </View>
     </Animated.View>
   );
@@ -530,6 +639,12 @@ const tabStyles = StyleSheet.create({
     paddingTop: 8,
     gap: 10,
   },
+  barRowDocked: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    gap: 0,
+    alignItems: "stretch",
+  },
   pill: {
     flex: 1,
     flexDirection: "row",
@@ -544,6 +659,16 @@ const tabStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
+  pillDocked: {
+    borderRadius: 0,
+    borderWidth: 0,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(100, 116, 139, 0.18)",
+    paddingVertical: 0,
+    paddingHorizontal: 4,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   tab: {
     flex: 1,
     alignItems: "center",
@@ -555,11 +680,46 @@ const tabStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "transparent",
   },
+  dockedTab: {
+    minHeight: 56,
+    paddingVertical: 0,
+    borderRadius: 0,
+    borderWidth: 0,
+  },
+  dockedTabActive: {
+    backgroundColor: "transparent",
+  },
+  dockedAiTab: {
+    borderBottomWidth: 0,
+  },
+  dockedActiveIndicator: {
+    position: "absolute",
+    left: 4,
+    bottom: 0,
+    height: 3,
+    borderRadius: 3,
+    zIndex: 3,
+  },
+  floatingActiveBubble: {
+    position: "absolute",
+    left: 6,
+    top: 6,
+    bottom: 6,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    zIndex: 0,
+    overflow: "hidden",
+  },
   tabActive: {
     // backgroundColor applied inline from the theme (light/dark aware)
   },
   tabPressed: {
     opacity: 0.6,
+  },
+  dockedLabel: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "700",
   },
   iconWrap: {
     position: "relative",
@@ -583,10 +743,21 @@ const tabStyles = StyleSheet.create({
     width: 28,
     height: 28,
   },
+  aiIconDocked: {
+    width: 22,
+    height: 22,
+  },
   aiIconBackground: {
     width: 52,
     height: 52,
     borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  aiIconBackgroundDocked: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1459,7 +1630,8 @@ export default function App() {
       <SafeAreaProvider>
         <KeyboardProvider>
           <ThemeProvider>
-            <AuthProvider>
+            <NavigationPreferencesProvider>
+              <AuthProvider>
               <PaystackVerificationWatcher />
               <ToastProvider>
                 <CartProvider>
@@ -1476,7 +1648,8 @@ export default function App() {
                   </ShopProvider>
                 </CartProvider>
               </ToastProvider>
-            </AuthProvider>
+              </AuthProvider>
+            </NavigationPreferencesProvider>
           </ThemeProvider>
         </KeyboardProvider>
       </SafeAreaProvider>

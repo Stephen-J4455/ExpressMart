@@ -17,12 +17,21 @@ import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 import { radius } from "../theme/colors";
+import { useNavigationPreferences } from "../context/NavigationPreferencesContext";
 
 export const SettingsScreen = ({ navigation }) => {
   const { user, profile } = useAuth();
   const toast = useToast();
   const { isWide, horizontalPadding } = useResponsive();
   const { colors: themeColors } = useTheme();
+  const {
+    bottomNavMode,
+    setBottomNavMode,
+    homeFirst,
+    setHomeFirst,
+    homeStyle,
+    setHomeStyle,
+  } = useNavigationPreferences();
   const styles = useAppStyles((c) => buildSettingsStyles(c));
   const [notifications, setNotifications] = useState(true);
   const [emailUpdates, setEmailUpdates] = useState(true);
@@ -58,6 +67,24 @@ export const SettingsScreen = ({ navigation }) => {
       title: "Preferences",
       icon: "options-outline",
       items: [
+        {
+          icon: "albums-outline",
+          label: "Bottom Navigation",
+          description: "Choose a floating or docked navigation bar",
+          type: "bottomNavMode",
+        },
+        {
+          icon: "swap-horizontal-outline",
+          label: "First Home Tab",
+          description: "Choose Classic Home or Feed as the first tab",
+          type: "homeFirst",
+        },
+        {
+          icon: "layers-outline",
+          label: "Home Page Style",
+          description: "Choose which Home page appears first when swiping",
+          type: "homeStyle",
+        },
         {
           icon: "notifications-outline",
           label: "Push Notifications",
@@ -114,7 +141,13 @@ export const SettingsScreen = ({ navigation }) => {
       key={index}
       style={[styles.settingItem, isLast && styles.settingItemLast]}
       onPress={item.action || (() => {})}
-      disabled={item.type === "switch" || !item.action}
+      disabled={
+        item.type === "switch" ||
+        (!item.action &&
+          item.type !== "bottomNavMode" &&
+          item.type !== "homeFirst" &&
+          item.type !== "homeStyle")
+      }
     >
       <View style={styles.settingItemIconWrap}>
         <Ionicons name={item.icon} size={20} color={themeColors.primary} />
@@ -129,7 +162,59 @@ export const SettingsScreen = ({ navigation }) => {
         )}
       </View>
       <View style={styles.settingItemRight}>
-        {item.type === "switch" ? (
+        {item.type === "bottomNavMode" ||
+        item.type === "homeFirst" ||
+        item.type === "homeStyle" ? (
+          <View style={styles.navModeControl}>
+            {(item.type === "bottomNavMode"
+              ? [
+                  { key: "floating", label: "Float" },
+                  { key: "docked", label: "Dock" },
+                ]
+              : item.type === "homeFirst"
+                ? [
+                  { key: "classic", label: "Classic" },
+                  { key: "feed", label: "Feed" },
+                  ]
+                : [
+                    { key: "feed", label: "Feed" },
+                    { key: "classic", label: "Classic" },
+                  ]
+            ).map((option) => {
+              const selected =
+                item.type === "bottomNavMode"
+                  ? bottomNavMode === option.key
+                  : item.type === "homeFirst"
+                    ? homeFirst === option.key
+                    : homeStyle === option.key;
+              return (
+              <Pressable
+                key={option.key}
+                style={[
+                  styles.navModeOption,
+                  selected && styles.navModeOptionActive,
+                ]}
+                onPress={() =>
+                  item.type === "bottomNavMode"
+                    ? setBottomNavMode(option.key)
+                    : item.type === "homeFirst"
+                      ? setHomeFirst(option.key)
+                      : setHomeStyle(option.key)
+                }
+              >
+                <Text
+                  style={[
+                    styles.navModeOptionText,
+                    selected && styles.navModeOptionTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+              );
+            })}
+          </View>
+        ) : item.type === "switch" ? (
           <Switch
             value={item.value}
             onValueChange={item.onValueChange}
@@ -484,6 +569,33 @@ const buildSettingsStyles = (c) =>
   settingItemRight: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  navModeControl: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 3,
+    borderRadius: radius.full,
+    backgroundColor: c.background,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  navModeOption: {
+    minWidth: 52,
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+  },
+  navModeOptionActive: {
+    backgroundColor: c.primary,
+  },
+  navModeOptionText: {
+    color: c.muted,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  navModeOptionTextActive: {
+    color: "#fff",
   },
   settingValue: {
     fontSize: 13,

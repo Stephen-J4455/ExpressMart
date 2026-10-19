@@ -50,6 +50,11 @@ const menuSections = [
         label: "Privacy & Security",
         screen: "Security",
       },
+      {
+        icon: "settings-outline",
+        label: "Settings",
+        screen: "Settings",
+      },
     ],
   },
   {

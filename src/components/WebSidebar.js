@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
 import { useTheme } from "../context/ThemeContext";
+import { useNavigationPreferences } from "../context/NavigationPreferencesContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 
 const NAV_ITEMS = [
@@ -53,11 +54,16 @@ export const WebSidebar = ({
 }) => {
   const insets = useSafeAreaInsets();
   const { colors: themeColors, isDark } = useTheme();
+  const { homeFirst } = useNavigationPreferences();
   const styles = useAppStyles((c) => buildStyles(c));
   const { items } = useCart();
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
   const activeRoute = state?.routes?.[state.index]?.name;
+  const navItems =
+    homeFirst === "feed"
+      ? [NAV_ITEMS[2], NAV_ITEMS[0], NAV_ITEMS[1], NAV_ITEMS[3], NAV_ITEMS[4]]
+      : NAV_ITEMS;
 
   const renderNavItem = (item, isActive) => (
     <Pressable
@@ -164,7 +170,7 @@ export const WebSidebar = ({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.navList}
         >
-          {NAV_ITEMS.map((item) =>
+          {navItems.map((item) =>
             renderNavItem(item, activeRoute === item.name),
           )}
         </ScrollView>
