@@ -53,6 +53,7 @@ export const NotificationsScreen = ({ navigation }) => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const channelRef = useRef(null);
 
   const fetchNotifications = useCallback(async () => {
@@ -61,6 +62,7 @@ export const NotificationsScreen = ({ navigation }) => {
       return;
     }
     try {
+      setLoadError(null);
       const { data, error } = await supabase
         .from("express_notifications")
         .select("*")
@@ -71,6 +73,7 @@ export const NotificationsScreen = ({ navigation }) => {
       if (error) throw error;
       setNotifications(data || []);
     } catch (err) {
+      setLoadError(err?.message || "Could not load notifications");
       toast.error("Error", err.message);
     } finally {
       setLoading(false);
@@ -168,7 +171,8 @@ export const NotificationsScreen = ({ navigation }) => {
 
   const handleNotificationPress = (notification) => {
     markAsRead(notification.id);
-    if (notification.data?.order_id) {
+    const orderId = notification.data?.order_id || notification.data?.orderId;
+    if (orderId) {
       navigation.navigate("Orders");
     }
   };
@@ -199,7 +203,7 @@ export const NotificationsScreen = ({ navigation }) => {
             {!item.is_read && <View style={styles.unreadDot} />}
           </View>
           <Text style={styles.message} numberOfLines={2}>
-            {item.message}
+            {item.body || item.message || "You have a new notification"}
           </Text>
           <Text style={styles.time}>{formatTime(item.created_at)}</Text>
         </View>
@@ -271,6 +275,22 @@ export const NotificationsScreen = ({ navigation }) => {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={themeColors.primary} />
+        </View>
+      ) : loadError ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons
+            name="cloud-offline-outline"
+            size={64}
+            color={themeColors.muted}
+          />
+          <Text style={styles.emptyTitle}>Notifications unavailable</Text>
+          <Text style={styles.emptySubtitle}>{loadError}</Text>
+          <Pressable
+            style={styles.signInButton}
+            onPress={fetchNotifications}
+          >
+            <Text style={styles.signInText}>Try again</Text>
+          </Pressable>
         </View>
       ) : notifications.length === 0 ? (
         <View style={styles.emptyContainer}>

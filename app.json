@@ -91,7 +91,7 @@
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/icon.png"
+      "favicon": "./assets/ico.webp"
     },
     "plugins": [
       "./plugins/withMedia3Fix",
@@ -121,11 +121,12 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#FFFFFF",
+          "backgroundColor": "#FF5A79",
           "dark": {
-            "image": "./assets/splash-icon.png",
-            "backgroundColor": "#000000"
+            "image": "./assets/splash-icon-dark.png",
+            "backgroundColor": "#0F172A"
           }
         }
       ],

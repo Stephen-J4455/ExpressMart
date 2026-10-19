@@ -280,12 +280,6 @@ const buildStoresStyles = (c) =>
     header: {
       paddingHorizontal: 20,
       paddingBottom: 28,
-      borderBottomLeftRadius: 28,
-      borderBottomRightRadius: 28,
-      shadowColor: c.primary,
-      shadowOpacity: 0.18,
-      shadowRadius: 16,
-      elevation: 8,
     },
   headerTop: {
     flexDirection: "row",

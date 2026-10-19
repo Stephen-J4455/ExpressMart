@@ -72,6 +72,11 @@ export const AppHeader = ({
         alignItems: "center",
         justifyContent: "center",
       },
+      brandImage: {
+        width: 120,
+        height: 40,
+        resizeMode: "contain",
+      },
       brandTag: {
         color: colors.primary,
         fontSize: 30,
@@ -152,9 +157,11 @@ export const AppHeader = ({
         </Pressable>
 
         <View style={styles.brandWrap}>
-          <Text style={styles.brandTag}>
-            tag<Text style={styles.brandTagAccent}>it</Text>
-          </Text>
+          <Image
+            source={require("../../assets/splash-icon-dark.png")}
+            style={styles.brandImage}
+            accessibilityLabel="tagit"
+          />
         </View>
 
         {/* Search moved to the right, joining stores + notifications */}

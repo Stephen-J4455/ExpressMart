@@ -285,11 +285,14 @@ export const AccountScreen = ({ navigation }) => {
         }
       >
         {/* Hero Profile Header */}
-        <LinearGradient
-          colors={[themeColors.primary, themeColors.accent]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.heroHeader, { paddingTop: insets.top + 24 }]}
+        <View
+          style={[
+            styles.heroHeader,
+            {
+              paddingTop: insets.top + 24,
+              backgroundColor: themeColors.surface,
+            },
+          ]}
         >
           <View style={styles.heroTopRow}>
             <Pressable
@@ -334,16 +337,22 @@ export const AccountScreen = ({ navigation }) => {
                 {profile?.full_name || "tagit User"}
               </Text>
               <Text style={styles.profileEmail}>{user?.email}</Text>
+              <View style={styles.profileTag}>
+                <View style={styles.profileTagDot} />
+                <Text style={styles.profileTagText}>Personal account</Text>
+              </View>
             </View>
             <Pressable
               style={styles.editButton}
               onPress={() => navigation.navigate("ProfileEdit")}
+              accessibilityRole="button"
+              accessibilityLabel="Edit profile"
             >
-              <Ionicons name="create-outline" size={18} color="#fff" />
+              <Ionicons name="create-outline" size={18} color={themeColors.dark} />
             </Pressable>
           </View>
 
-        </LinearGradient>
+        </View>
 
         {profileAds.length > 0 && (
           <View style={styles.adSection}>
@@ -630,14 +639,9 @@ const buildAccountStyles = (c) =>
     // Hero Profile Header
     heroHeader: {
       paddingHorizontal: 20,
-      paddingBottom: 24,
-      borderBottomLeftRadius: 30,
-      borderBottomRightRadius: 30,
-      shadowColor: "#000",
-      shadowOpacity: 0.12,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 6 },
-      elevation: 8,
+      paddingBottom: 22,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
     },
     adSection: {
       paddingTop: 8,
@@ -659,19 +663,20 @@ const buildAccountStyles = (c) =>
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 2,
-      borderColor: "rgba(255,255,255,0.45)",
+      borderColor: c.border,
+      backgroundColor: c.primary,
     },
     avatarText: {
       fontSize: 26,
       fontWeight: "800",
-      color: c.light,
+      color: c.onPrimary,
     },
     avatarImage: {
       width: 64,
       height: 64,
       borderRadius: 22,
       borderWidth: 2,
-      borderColor: "rgba(255,255,255,0.45)",
+      borderColor: c.border,
     },
     avatarCameraBadge: {
       position: "absolute",
@@ -684,7 +689,7 @@ const buildAccountStyles = (c) =>
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 2,
-      borderColor: "#fff",
+      borderColor: c.surface,
     },
     avatarCameraUploading: {
       backgroundColor: "rgba(0,0,0,0.55)",
@@ -705,21 +710,40 @@ const buildAccountStyles = (c) =>
       justifyContent: "center",
     },
     profileName: {
-      fontSize: 20,
+      fontSize: 19,
       fontWeight: "800",
-      color: c.light,
+      color: c.dark,
       letterSpacing: -0.3,
     },
     profileEmail: {
       fontSize: 13,
-      color: "rgba(255,255,255,0.85)",
+      color: c.muted,
       marginTop: 3,
+    },
+    profileTag: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      marginTop: 6,
+    },
+    profileTagDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: c.success,
+    },
+    profileTagText: {
+      color: c.muted,
+      fontSize: 11,
+      fontWeight: "700",
     },
     editButton: {
       width: 42,
       height: 42,
       borderRadius: radius.xl,
-      backgroundColor: "rgba(255,255,255,0.22)",
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -848,29 +872,26 @@ const buildAccountStyles = (c) =>
       flexDirection: "row",
       justifyContent: "space-between",
       backgroundColor: c.surface,
-      borderRadius: radius.xl,
-      paddingVertical: 18,
+      borderRadius: radius.md,
+      paddingVertical: 14,
       paddingHorizontal: 12,
-      shadowColor: "#000",
-      shadowOpacity: 0.03,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
+      borderWidth: 1,
+      borderColor: c.border,
     },
     quickActionCard: {
       width: "23%",
       alignItems: "center",
     },
     quickActionIcon: {
-      width: 54,
-      height: 54,
-      borderRadius: radius.xl,
+      width: 46,
+      height: 46,
+      borderRadius: radius.md,
       alignItems: "center",
       justifyContent: "center",
       marginBottom: 8,
     },
     quickActionLabel: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: "600",
       color: c.dark,
     },
@@ -882,19 +903,16 @@ const buildAccountStyles = (c) =>
     },
     menuCard: {
       backgroundColor: c.surface,
-      borderRadius: 20,
+      borderRadius: radius.md,
       overflow: "hidden",
-      shadowColor: "#000",
-      shadowOpacity: 0.03,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
+      borderWidth: 1,
+      borderColor: c.border,
     },
     menuItem: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingVertical: 16,
+      paddingVertical: 14,
       paddingHorizontal: 16,
     },
     menuItemBorder: {
@@ -909,8 +927,8 @@ const buildAccountStyles = (c) =>
     menuIconContainer: {
       width: 38,
       height: 38,
-      borderRadius: 12,
-      backgroundColor: c.surface,
+      borderRadius: radius.sm,
+      backgroundColor: c.background,
       alignItems: "center",
       justifyContent: "center",
     },

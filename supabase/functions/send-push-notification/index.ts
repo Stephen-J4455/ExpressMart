@@ -458,6 +458,33 @@ serve(async (req) => {
       });
     }
 
+    // Keep an in-app notification history alongside push delivery. The
+    // service-role client bypasses user RLS here; the Notifications screen
+    // still only exposes rows matching the authenticated user.
+    const explicitRecipientIds = payload.userId
+      ? [payload.userId]
+      : payload.userIds || [];
+    const recipientUserIds = [
+      ...new Set([...explicitRecipientIds, ...userIdToTokenMap.keys()]),
+    ];
+    if (recipientUserIds.length > 0) {
+      const notificationRows = recipientUserIds.map((userId) => ({
+        user_id: userId,
+        type: payload.notificationType || "general",
+        title: payload.title,
+        body: payload.body,
+        data: payload.data || {},
+      }));
+      const { error: notificationError } = await supabase
+        .from("express_notifications")
+        .insert(notificationRows);
+      if (notificationError) {
+        // Push delivery should not fail because notification history is
+        // temporarily unavailable.
+        console.error("Failed to persist in-app notifications:", notificationError);
+      }
+    }
+
     if (tokens.length === 0) {
       return new Response(
         JSON.stringify({

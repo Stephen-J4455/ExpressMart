@@ -17,8 +17,10 @@ import {
   Easing,
   Pressable,
   Platform,
+  Image,
 } from "react-native";
 import { Ionicons, Octicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
@@ -489,7 +491,22 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
           accessibilityRole="button"
           accessibilityLabel="TagAI"
         >
-          <Ionicons name="sparkles" size={24} color={activeColor} />
+          <LinearGradient
+            colors={[colors.gradientStart, colors.accent]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={tabStyles.aiIconBackground}
+          >
+            <Image
+              source={
+                isDark
+                  ? require("./assets/tagit_ai_dark.png")
+                  : require("./assets/tagit_ai_light.png")
+              }
+              style={tabStyles.aiIcon}
+              resizeMode="contain"
+            />
+          </LinearGradient>
         </Pressable>
       </View>
     </Animated.View>
@@ -550,8 +567,8 @@ const tabStyles = StyleSheet.create({
     justifyContent: "center",
   },
   aiButton: {
-    width: 62,
-    height: 62,
+    width: 52,
+    height: 52,
     borderRadius: radius.full,
     borderWidth: 1,
     alignItems: "center",
@@ -561,6 +578,17 @@ const tabStyles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
+  },
+  aiIcon: {
+    width: 28,
+    height: 28,
+  },
+  aiIconBackground: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
   },
   badge: {
     position: "absolute",

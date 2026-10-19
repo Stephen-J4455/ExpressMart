@@ -466,7 +466,15 @@ export const TagAIAssistantScreen = () => {
             end={{ x: 1, y: 1 }}
             style={styles.headerAvatar}
           >
-            <Ionicons name="sparkles" size={16} color="#FFFFFF" />
+            <Image
+              source={
+                isDark
+                  ? require("../../assets/tagit_ai_dark.png")
+                  : require("../../assets/tagit_ai_light.png")
+              }
+              style={styles.headerAvatarIcon}
+              resizeMode="contain"
+            />
           </LinearGradient>
           <View>
             <Text style={[styles.headerTitle, { color: colors.dark }]}>
@@ -573,75 +581,103 @@ export const TagAIAssistantScreen = () => {
           style={[
             styles.inputBar,
             {
-              borderColor: colors.border,
-              backgroundColor: colors.surface,
               marginBottom: insets.bottom + 10,
             },
           ]}
         >
-          {visionImage ? (
-            <View style={styles.visionPreviewWrap}>
-              <Image
-                source={{ uri: visionImage }}
-                style={styles.visionPreview}
+          <LinearGradient
+            colors={[colors.gradientStart, colors.accent]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.inputBarFrame}
+          >
+            <View
+              style={[
+                styles.inputBarInner,
+                { backgroundColor: colors.surface },
+              ]}
+            >
+              {visionImage ? (
+                <View style={styles.visionPreviewWrap}>
+                  <Image
+                    source={{ uri: visionImage }}
+                    style={styles.visionPreview}
+                  />
+                  <Pressable
+                    onPress={() => setVisionImage(null)}
+                    style={styles.visionRemove}
+                  >
+                    <Ionicons name="close" size={12} color="#FFFFFF" />
+                  </Pressable>
+                </View>
+              ) : null}
+              <View style={styles.inputIdentity}>
+                <Image
+                  source={
+                    isDark
+                      ? require("../../assets/tagit_ai_dark.png")
+                      : require("../../assets/tagit_ai_light.png")
+                  }
+                  style={styles.inputIdentityIcon}
+                  resizeMode="contain"
+                />
+              </View>
+              <TextInput
+                style={[styles.input, { color: colors.dark }]}
+                placeholder="Ask TagAI anything..."
+                placeholderTextColor={colors.muted}
+                value={input}
+                onChangeText={setInput}
+                onSubmitEditing={() => handleSend()}
+                returnKeyType="send"
+                editable={!isThinking}
               />
               <Pressable
-                onPress={() => setVisionImage(null)}
-                style={styles.visionRemove}
+                onPress={() => setImageSourceModalVisible(true)}
+                disabled={isThinking || processingImage}
+                style={({ pressed }) => [
+                  styles.attachButton,
+                  (isThinking || processingImage) && { opacity: 0.4 },
+                  pressed && { transform: [{ scale: 0.94 }] },
+                ]}
+                accessibilityLabel="Attach image for TagAI vision"
               >
-                <Ionicons name="close" size={12} color="#FFFFFF" />
+                {processingImage ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons
+                    name="image-outline"
+                    size={19}
+                    color={colors.primary}
+                  />
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => handleSend()}
+                disabled={
+                  (!input.trim() && !visionImage) ||
+                  isThinking ||
+                  processingImage
+                }
+                style={({ pressed }) => [
+                  styles.sendButton,
+                  ((!input.trim() && !visionImage) ||
+                    isThinking ||
+                    processingImage) && { opacity: 0.4 },
+                  pressed && { transform: [{ scale: 0.94 }] },
+                ]}
+              >
+                <LinearGradient
+                  colors={[colors.gradientStart, colors.gradientEnd]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.sendGradient}
+                >
+                  <Ionicons name="arrow-up" size={17} color="#FFFFFF" />
+                </LinearGradient>
               </Pressable>
             </View>
-          ) : null}
-          <Pressable
-            onPress={() => setImageSourceModalVisible(true)}
-            disabled={isThinking || processingImage}
-            style={[
-              styles.attachButton,
-              (isThinking || processingImage) && { opacity: 0.4 },
-            ]}
-            accessibilityLabel="Attach image for TagAI vision"
-          >
-            {processingImage ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Ionicons name="image-outline" size={19} color={colors.primary} />
-            )}
-          </Pressable>
-          <TextInput
-            style={[styles.input, { color: colors.dark }]}
-            placeholder="Message TagAI…"
-            placeholderTextColor={colors.muted}
-            value={input}
-            onChangeText={setInput}
-            onSubmitEditing={() => handleSend()}
-            returnKeyType="send"
-            editable={!isThinking}
-          />
-          <Pressable
-            onPress={() => handleSend()}
-            disabled={
-              (!input.trim() && !visionImage) || isThinking || processingImage
-            }
-            style={({ pressed }) => [
-              styles.sendButton,
-              ((!input.trim() && !visionImage) ||
-                isThinking ||
-                processingImage) && {
-                opacity: 0.4,
-              },
-              pressed && { transform: [{ scale: 0.94 }] },
-            ]}
-          >
-            <LinearGradient
-              colors={[colors.gradientStart, colors.gradientEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.sendGradient}
-            >
-              <Ionicons name="arrow-up" size={17} color="#FFFFFF" />
-            </LinearGradient>
-          </Pressable>
+          </LinearGradient>
         </View>
       </KeyboardAvoidingView>
       <Modal
@@ -783,6 +819,10 @@ const buildStyles = (c) =>
       borderRadius: 17,
       alignItems: "center",
       justifyContent: "center",
+    },
+    headerAvatarIcon: {
+      width: 24,
+      height: 24,
     },
     headerTitle: {
       fontSize: 15,
@@ -967,28 +1007,44 @@ const buildStyles = (c) =>
       textAlignVertical: "center",
     },
     inputBar: {
-      flexDirection: "row",
-      alignItems: "center",
       marginHorizontal: 14,
       marginTop: 6,
       borderRadius: radius.full,
-      borderWidth: 1,
-      borderStyle: "solid",
-      paddingHorizontal: 6,
-      paddingVertical: 5,
-      gap: 6,
+      shadowColor: "#000",
+      shadowOpacity: 0.12,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 6,
     },
-    aiBadgeSmall: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+    inputBarFrame: {
+      borderRadius: radius.full,
+      padding: 1.5,
+    },
+    inputBarInner: {
+      minHeight: 52,
+      flexDirection: "row",
+      alignItems: "center",
+      borderRadius: radius.full,
+      paddingHorizontal: 7,
+      gap: 7,
+    },
+    inputIdentity: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: c.surfaceAlpha,
     },
+    inputIdentityIcon: {
+      width: 25,
+      height: 25,
+    },
     attachButton: {
       width: 32,
       height: 32,
+      borderRadius: 16,
+      backgroundColor: c.surfaceAlpha,
       alignItems: "center",
       justifyContent: "center",
     },
@@ -1091,7 +1147,8 @@ const buildStyles = (c) =>
     input: {
       flex: 1,
       fontSize: 14,
-      paddingVertical: 6,
+      minHeight: 40,
+      paddingVertical: 8,
     },
     sendButton: {
       width: 34,

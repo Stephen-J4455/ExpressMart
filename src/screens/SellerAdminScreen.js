@@ -33,6 +33,7 @@ import * as ImagePicker from "expo-image-picker";
 // exactly what we need to stream the raw video bytes to R2 via a binary PUT.
 import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "@expo/vector-icons";
+import { BarChart, LineChart } from "react-native-gifted-charts";
 import { WebView } from "react-native-webview";
 import { supabase, callEdgeFunction, supabaseUrl } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -716,17 +717,30 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [reels, setReels] = useState([]);
   const [reelsLoading, setReelsLoading] = useState(false);
   const [deletingReelId, setDeletingReelId] = useState(null);
+  const [statuses, setStatuses] = useState([]);
+  const [statusesLoading, setStatusesLoading] = useState(false);
+  const [deletingStatusId, setDeletingStatusId] = useState(null);
 
   // ── Tabs ────────────────────────────────────────────────────────────────
-  const TABS = ["catalog", "orders", "flash", "reels", "insights"];
+  const TABS = [
+    "catalog",
+    "orders",
+    "statuses",
+    "flash",
+    "reels",
+    "insights",
+  ];
   const TAB_LABELS = {
     catalog: "Catalog",
     orders: "Orders",
+    statuses: "Statuses",
     flash: "Flash",
     reels: "Reels",
     insights: "Insights",
   };
   const [activeTab, setActiveTab] = useState("catalog");
+  const [trendRange, setTrendRange] = useState("months");
+  const [focusedTrendPoint, setFocusedTrendPoint] = useState(null);
 
   useEffect(() => {
     // reserved
@@ -760,6 +774,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
   const loadData = useCallback(async () => {
     if (!supabase || !user) return;
+    setStatusesLoading(true);
     try {
       const s = await fetchSellerId();
       if (!s) {
@@ -769,6 +784,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       setSellerId(s.id);
       setSeller(s);
       setIsLive(Boolean(s.is_active));
+      setControlsExpanded(!s.is_active);
 
       try {
         const [{ count: fc }, { count: ingc }] = await Promise.all([
@@ -787,7 +803,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         console.warn("follow counts failed", e);
       }
 
-      const [catRes, prodRes, ordRes] = await Promise.all([
+      const [catRes, prodRes, ordRes, statusRes] = await Promise.all([
         supabase.from("express_categories").select("id,name,icon,color"),
         supabase
           .from("express_products")
@@ -804,15 +820,24 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           .eq("seller_id", s.id)
           .order("created_at", { ascending: false })
           .limit(100),
+        supabase
+          .from("express_seller_statuses")
+          .select(
+            "id, status_type, media_url, status_text, background_color, gradient_start, gradient_end, text_color, font_size, created_at, expires_at, is_active",
+          )
+          .eq("seller_id", s.id)
+          .order("created_at", { ascending: false }),
       ]);
 
       if (catRes.error) throw catRes.error;
       if (prodRes.error) throw prodRes.error;
       if (ordRes.error) throw ordRes.error;
+      if (statusRes.error) throw statusRes.error;
 
       setCategories(catRes.data?.length ? catRes.data : DEFAULT_CATEGORIES);
       setProducts(prodRes.data || []);
       setOrders(ordRes.data || []);
+      setStatuses(statusRes.data || []);
 
       // ── Load this seller's reels (stored on Cloudflare R2) ────────────────
       try {
@@ -845,6 +870,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       console.error("SellerAdmin load error:", err);
       toast.error("Failed to load", err.message || "Please try again");
     } finally {
+      setStatusesLoading(false);
       setLoading(false);
       setRefreshing(false);
     }
@@ -905,6 +931,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       if (error) throw error;
       setIsLive(next);
       setSeller((prev) => (prev ? { ...prev, is_active: next } : prev));
+      if (next) setControlsExpanded(false);
       setLiveStep("update", "done");
       // Let the finished checklist register before dismissing.
       await new Promise((resolve) => setTimeout(resolve, 550));
@@ -1090,7 +1117,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    const unsubscribe = navigation.addListener("focus", loadData);
+    return unsubscribe;
+  }, [loadData, navigation]);
 
   // ── CRUD helpers ────────────────────────────────────────────────────────
   const createProduct = useCallback(
@@ -3499,25 +3528,262 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     );
   };
 
+  const deleteStatus = async (statusId) => {
+    if (!statusId || deletingStatusId) return;
+    setDeletingStatusId(statusId);
+    try {
+      const { error } = await supabase
+        .from("express_seller_statuses")
+        .delete()
+        .eq("id", statusId)
+        .eq("seller_id", sellerId);
+      if (error) throw error;
+      setStatuses((previous) => previous.filter((status) => status.id !== statusId));
+      toast.success("Status removed");
+    } catch (error) {
+      console.error("Failed to delete status:", error);
+      toast.error("Could not remove status", error?.message || "Please try again");
+    } finally {
+      setDeletingStatusId(null);
+    }
+  };
+
+  const renderStatuses = () => {
+    const now = Date.now();
+    const activeStatuses = statuses.filter(
+      (status) => status.is_active !== false && new Date(status.expires_at).getTime() > now,
+    );
+    const expiredStatuses = statuses.filter(
+      (status) => status.is_active === false || new Date(status.expires_at).getTime() <= now,
+    );
+
+    const renderStatusCard = (status, expired = false) => (
+      <View key={status.id} style={[styles.statusAdminCard, expired && styles.statusAdminCardExpired]}>
+        <View style={styles.statusAdminPreview}>
+          {status.status_type === "text" ? (
+            <LinearGradient
+              colors={
+                status.gradient_start && status.gradient_end
+                  ? [status.gradient_start, status.gradient_end]
+                  : [status.background_color || themeColors.primary, status.background_color || themeColors.primary]
+              }
+              style={StyleSheet.absoluteFill}
+            >
+              <Text
+                style={[
+                  styles.statusAdminPreviewText,
+                  { color: status.text_color || "#fff", fontSize: Number(status.font_size) || 22 },
+                ]}
+              >
+                {status.status_text}
+              </Text>
+            </LinearGradient>
+          ) : status.media_url ? (
+            <Image
+              source={{ uri: status.media_url }}
+              style={styles.statusAdminPreviewImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.statusAdminPreviewFallback}>
+              <Ionicons name="image-outline" size={24} color={themeColors.muted} />
+            </View>
+          )}
+        </View>
+        <View style={styles.statusAdminBody}>
+          <View style={styles.statusAdminMeta}>
+            <Text style={styles.statusAdminType}>
+              {status.status_type === "text" ? "Text status" : "Image status"}
+            </Text>
+            <Text style={[styles.statusAdminExpiry, expired && { color: themeColors.badgeDanger }]}>
+              {expired ? "Expired" : `Expires ${new Date(status.expires_at).toLocaleDateString()}`}
+            </Text>
+          </View>
+          <Pressable
+            style={styles.statusDeleteButton}
+            onPress={() => deleteStatus(status.id)}
+            disabled={deletingStatusId === status.id}
+          >
+            {deletingStatusId === status.id ? (
+              <ActivityIndicator size="small" color={themeColors.badgeDanger} />
+            ) : (
+              <Ionicons name="trash-outline" size={17} color={themeColors.badgeDanger} />
+            )}
+            <Text style={styles.statusDeleteText}>Remove</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+
+    return (
+      <View>
+        <View style={styles.statusAdminHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Status management</Text>
+            <Text style={styles.statusAdminSubtitle}>Manage what customers see on your store.</Text>
+          </View>
+          <Pressable style={[styles.statusCreateButton, { backgroundColor: accent }]} onPress={() => nav.navigate("StatusCreator")}>
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.statusCreateText}>Create</Text>
+          </Pressable>
+        </View>
+        {statusesLoading ? <ActivityIndicator color={accent} /> : null}
+        {!statusesLoading && activeStatuses.length === 0 ? (
+          <View style={styles.statusEmptyState}>
+            <Ionicons name="albums-outline" size={28} color={themeColors.muted} />
+            <Text style={styles.emptyNote}>No active statuses yet.</Text>
+          </View>
+        ) : (
+          activeStatuses.map((status) => renderStatusCard(status))
+        )}
+        {expiredStatuses.length > 0 ? (
+          <>
+            <Text style={styles.statusArchivedTitle}>Expired statuses</Text>
+            {expiredStatuses.map((status) => renderStatusCard(status, true))}
+          </>
+        ) : null}
+      </View>
+    );
+  };
+
   // ── Insights tab ────────────────────────────────────────────────────────
-  const renderInsights = () => (
+  const renderInsights = () => {
+    const chartWidth = Math.max(260, Math.min(viewportWidth - 76, 560));
+    const now = new Date();
+    const rangeConfig = {
+      today: { count: 1, unit: "day", subtitle: "Paid orders today" },
+      week: { count: 7, unit: "day", subtitle: "Paid orders over the last 7 days" },
+      months: { count: 6, unit: "month", subtitle: "Paid orders over the last 6 months" },
+      years: { count: 5, unit: "year", subtitle: "Paid orders over the last 5 years" },
+    }[trendRange];
+    const rangeCount = rangeConfig.count;
+    const trendStart = new Date(now);
+    trendStart.setHours(0, 0, 0, 0);
+    if (rangeConfig.unit === "day") {
+      trendStart.setDate(now.getDate() - (rangeCount - 1));
+    } else if (rangeConfig.unit === "month") {
+      trendStart.setDate(1);
+      trendStart.setMonth(now.getMonth() - (rangeCount - 1));
+    } else {
+      trendStart.setMonth(0, 1);
+      trendStart.setFullYear(now.getFullYear() - (rangeCount - 1));
+    }
+    const trendOrders = orders.filter((order) => {
+      const created = new Date(order.created_at || 0);
+      return created >= trendStart && created <= now;
+    });
+    const trendRevenue = trendOrders
+      .filter((order) => order.payment_status === "success")
+      .reduce((total, order) => total + Number(order.total || 0), 0);
+    const trendInProgress = trendOrders.filter((order) =>
+      ["processing", "packed"].includes(order.status),
+    ).length;
+    const revenueByRange = Array.from({ length: rangeCount }, (_, index) => {
+      const date = new Date(now);
+      const offset = rangeCount - 1 - index;
+      if (rangeConfig.unit === "day") date.setDate(now.getDate() - offset);
+      if (rangeConfig.unit === "month") date.setMonth(now.getMonth() - offset);
+      if (rangeConfig.unit === "year") date.setFullYear(now.getFullYear() - offset);
+
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const day = date.getDate();
+      const revenue = orders
+        .filter((order) => {
+          const created = new Date(order.created_at || 0);
+          return (
+            created.getFullYear() === year &&
+            (rangeConfig.unit === "year" || created.getMonth() === month) &&
+            (rangeConfig.unit !== "day" || created.getDate() === day) &&
+            order.payment_status === "success"
+          );
+        })
+        .reduce((total, order) => total + Number(order.total || 0), 0);
+      const label =
+        rangeConfig.unit === "year"
+          ? String(year)
+          : rangeConfig.unit === "month"
+            ? new Intl.DateTimeFormat(undefined, { month: "short" }).format(date)
+            : new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date);
+      const paidOrders = orders.filter((order) => {
+        const created = new Date(order.created_at || 0);
+        return (
+          created.getFullYear() === year &&
+          (rangeConfig.unit === "year" || created.getMonth() === month) &&
+          (rangeConfig.unit !== "day" || created.getDate() === day) &&
+          order.payment_status === "success"
+        );
+      }).length;
+      return { label, value: revenue, paidOrders };
+    });
+    const revenueChartData = revenueByRange.map((item) => ({
+      value: item.value,
+      label: item.label,
+      dataPointText: item.value ? formatPrice(item.value).replace("GH₵", "") : "0",
+      paidOrders: item.paidOrders,
+    }));
+    const orderDistribution = ORDER_STATUS_FILTERS.map((status) => ({
+      status,
+      total: orders.filter((order) => order.status === status).length,
+    }));
+    const orderChartData = orderDistribution.map((item, index) => ({
+      value: item.total,
+      label: item.status.slice(0, 4),
+      frontColor: ["#F59E0B", "#8B5CF6", "#3B82F6", "#10B981", "#EF4444"][index],
+      topLabelComponent: () => (
+        <Text style={styles.chartBarValue}>{item.total}</Text>
+      ),
+    }));
+
+    return (
     <View>
       <Text style={styles.sectionTitle}>Insights</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.trendRangeContent}
+        style={styles.trendRangeBar}
+      >
+        {[
+          { key: "today", label: "Today" },
+          { key: "week", label: "Last 7 days" },
+          { key: "months", label: "Months" },
+          { key: "years", label: "Years" },
+        ].map((option) => (
+          <Pressable
+            key={option.key}
+            style={[
+              styles.trendRangePill,
+              trendRange === option.key && { backgroundColor: accent },
+            ]}
+            onPress={() => setTrendRange(option.key)}
+          >
+            <Text
+              style={[
+                styles.trendRangeText,
+                trendRange === option.key && styles.trendRangeTextActive,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
       <View style={styles.insightCards}>
         <View style={styles.insightCard}>
-          <Ionicons name="cash-outline" size={20} color="#10B981" />
+          <Ionicons name="cash-outline" size={16} color="#10B981" />
           <Text style={styles.insightValue}>
-            {formatPrice(metrics.revenue)}
+            {formatPrice(trendRevenue)}
           </Text>
           <Text style={styles.insightLabel}>Total Revenue</Text>
         </View>
         <View style={styles.insightCard}>
-          <Ionicons name="receipt-outline" size={20} color="#F59E0B" />
-          <Text style={styles.insightValue}>{metrics.inProgress}</Text>
+          <Ionicons name="receipt-outline" size={16} color="#F59E0B" />
+          <Text style={styles.insightValue}>{trendInProgress}</Text>
           <Text style={styles.insightLabel}>In Progress</Text>
         </View>
         <View style={styles.insightCard}>
-          <Ionicons name="cube-outline" size={20} color={accent} />
+          <Ionicons name="cube-outline" size={16} color={accent} />
           <Text style={styles.insightValue}>{metrics.activeProducts}</Text>
           <Text style={styles.insightLabel}>Active Products</Text>
         </View>
@@ -3528,8 +3794,98 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         {orders.length === 1 ? "" : "s"}, generating{" "}
         {formatPrice(metrics.netRevenue)} in net revenue after fees.
       </Text>
+      <View style={styles.chartCard}>
+        <View style={styles.chartHeader}>
+          <View>
+            <Text style={styles.chartTitle}>Revenue trend</Text>
+            <Text style={styles.chartSubtitle}>{rangeConfig.subtitle}</Text>
+          </View>
+          <Ionicons name="trending-up" size={20} color={accent} />
+        </View>
+        <LineChart
+          data={revenueChartData.map((item) => ({ ...item, value: item.value || 0.01 }))}
+          width={chartWidth}
+          height={156}
+          color={accent}
+          dataPointsColor={accent}
+          dataPointsRadius={4}
+          thickness={3}
+          curved
+          areaChart
+          startFillColor={accent}
+          endFillColor={accent}
+          startOpacity={0.22}
+          endOpacity={0.02}
+          yAxisColor={themeColors.border}
+          xAxisColor={themeColors.border}
+          yAxisTextStyle={styles.chartAxisText}
+          xAxisLabelTextStyle={styles.chartAxisText}
+          noOfSections={3}
+          maxValue={Math.max(...revenueByRange.map((item) => item.value), 1)}
+          hideDataPoints={false}
+          isAnimated
+          rulesColor={themeColors.border}
+          spacing={Math.max(24, (chartWidth - 48) / Math.max(1, rangeCount - 1))}
+          initialSpacing={12}
+          endSpacing={8}
+          focusEnabled
+          showStripOnFocus
+          showTextOnFocus
+          focusedDataPointColor={accent}
+          onFocus={(item, index) => {
+            setFocusedTrendPoint(revenueByRange[index] || item);
+          }}
+        />
+        {focusedTrendPoint ? (
+          <View style={styles.chartDetailPopup}>
+            <View>
+              <Text style={styles.chartDetailLabel}>{focusedTrendPoint.label}</Text>
+              <Text style={styles.chartDetailTitle}>Revenue detail</Text>
+            </View>
+            <View style={styles.chartDetailStats}>
+              <Text style={styles.chartDetailValue}>
+                {formatPrice(focusedTrendPoint.value)}
+              </Text>
+              <Text style={styles.chartDetailMeta}>
+                {focusedTrendPoint.paidOrders || 0} paid order
+                {focusedTrendPoint.paidOrders === 1 ? "" : "s"}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.chartHint}>Touch a point to see details</Text>
+        )}
+      </View>
+      <View style={styles.chartCard}>
+        <View style={styles.chartHeader}>
+          <View>
+            <Text style={styles.chartTitle}>Order pipeline</Text>
+            <Text style={styles.chartSubtitle}>Current order distribution</Text>
+          </View>
+          <Ionicons name="bar-chart-outline" size={20} color={themeColors.primary} />
+        </View>
+        <BarChart
+          data={orderChartData.map((item) => ({ ...item, value: item.value || 0.01 }))}
+          width={chartWidth}
+          height={156}
+          barWidth={26}
+          spacing={Math.max(18, (chartWidth - 150) / 4)}
+          initialSpacing={14}
+          endSpacing={8}
+          roundedTop
+          noOfSections={3}
+          maxValue={Math.max(...orderDistribution.map((item) => item.total), 1)}
+          yAxisColor={themeColors.border}
+          xAxisColor={themeColors.border}
+          yAxisTextStyle={styles.chartAxisText}
+          xAxisLabelTextStyle={styles.chartAxisText}
+          rulesColor={themeColors.border}
+          isAnimated
+        />
+      </View>
     </View>
-  );
+    );
+  };
 
   // The reels grid shows store reels AND product videos. Product videos are
   // attached from the "Add video" flow where a product is chosen from a modal
@@ -5271,6 +5627,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         <View style={styles.tabContent}>
           {activeTab === "catalog" && renderCatalog()}
           {activeTab === "orders" && renderOrders()}
+          {activeTab === "statuses" && renderStatuses()}
           {activeTab === "flash" && renderFlash()}
           {activeTab === "reels" && renderReels()}
           {activeTab === "insights" && renderInsights()}
@@ -5860,13 +6217,14 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                           { color: accent, flex: 1 },
                         ]}
                       >
-                        Auto-create ·{" "}
-                        {generatingProduct ? "Running" : "Stopped"}
+                        {generatingProduct
+                          ? "Creating product details..."
+                          : "Product details ready for review"}
                       </Text>
                       {generatingProduct && (
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel="Cancel auto-create agent"
+                          accessibilityLabel="Cancel product creation"
                           onPress={cancelProductAgent}
                           style={{ padding: 8 }}
                         >
@@ -5876,51 +6234,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                         </Pressable>
                       )}
                     </View>
-                    <Text
-                      selectable
-                      style={[styles.agentActivityText, { flex: 0 }]}
-                    >
-                      {agentDebug
-                        ? [
-                            `Database model: ${agentDebug.requestedModel || "Not reported"}`,
-                            `Model used: ${agentDebug.selectedModel || "Not reported"}`,
-                            `Model selector: ${agentDebug.selectionSource || "Not reported"}`,
-                            `Model names checked: ${Array.isArray(agentDebug.modelNames) && agentDebug.modelNames.length ? agentDebug.modelNames.join(", ") : Array.isArray(agentDebug.modelsUsed) && agentDebug.modelsUsed.length ? agentDebug.modelsUsed.join(", ") : "Not reported"}`,
-                            `Models attempted: ${Array.isArray(agentDebug.modelsUsed) && agentDebug.modelsUsed.length ? agentDebug.modelsUsed.join(", ") : "Not reported"}`,
-                            `Actual response model: ${agentDebug.actualModel || "Not reported"}`,
-                          ].join("\n")
-                        : "Model: awaiting server diagnostics (not yet confirmed)"}
-                    </Text>
                     <Text style={styles.hintText}>
-                      Retries until a valid draft or cancellation. Server events
-                      arrive with each response. Latest 100 events.
+                      {generatingProduct
+                        ? "Please wait while we prepare the product information."
+                        : "Review the generated information before saving."}
                     </Text>
-                    <ScrollView style={{ maxHeight: 120 }} nestedScrollEnabled>
-                      {agentActivity.map((activity) => (
-                        <Text
-                          selectable
-                          key={activity.id}
-                          style={[
-                            styles.agentActivityText,
-                            {
-                              flex: 0,
-                              fontFamily:
-                                Platform.OS === "ios" ? "Menlo" : "monospace",
-                              color:
-                                activity.status === "error"
-                                  ? "#EF4444"
-                                  : activity.status === "done"
-                                    ? "#10B981"
-                                    : themeColors.muted,
-                            },
-                          ]}
-                        >
-                          {activity.time}{" "}
-                          {activity.attempt ? `#${activity.attempt} ` : ""} [
-                          {activity.status}] {activity.message}
-                        </Text>
-                      ))}
-                    </ScrollView>
                   </View>
                 )}
 
@@ -7224,6 +7542,109 @@ const buildSellerAdminStyles = (c) =>
       marginTop: 16,
       paddingHorizontal: 16,
     },
+    statusAdminHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      marginBottom: 14,
+    },
+    statusAdminSubtitle: {
+      color: c.muted,
+      fontSize: 12,
+      marginTop: 3,
+    },
+    statusCreateButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: radius.full,
+    },
+    statusCreateText: {
+      color: "#fff",
+      fontSize: 13,
+      fontWeight: "800",
+    },
+    statusAdminCard: {
+      flexDirection: "row",
+      minHeight: 122,
+      marginBottom: 12,
+      overflow: "hidden",
+      borderRadius: radius.md,
+      backgroundColor: c.light,
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    statusAdminCardExpired: {
+      opacity: 0.62,
+    },
+    statusAdminPreview: {
+      width: 92,
+      height: 164,
+      overflow: "hidden",
+      backgroundColor: c.surface,
+    },
+    statusAdminPreviewImage: {
+      width: "100%",
+      height: "100%",
+      backgroundColor: c.surface,
+    },
+    statusAdminPreviewText: {
+      flex: 1,
+      padding: 9,
+      textAlign: "center",
+      textAlignVertical: "center",
+      fontWeight: "800",
+    },
+    statusAdminPreviewFallback: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    statusAdminBody: {
+      flex: 1,
+      justifyContent: "space-between",
+      padding: 12,
+    },
+    statusAdminMeta: {
+      gap: 4,
+    },
+    statusAdminType: {
+      color: c.dark,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    statusAdminExpiry: {
+      color: c.muted,
+      fontSize: 12,
+    },
+    statusDeleteButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 5,
+      paddingVertical: 4,
+    },
+    statusDeleteText: {
+      color: c.badgeDanger,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    statusEmptyState: {
+      alignItems: "center",
+      paddingVertical: 28,
+      borderRadius: radius.md,
+      backgroundColor: c.surface,
+    },
+    statusArchivedTitle: {
+      color: c.muted,
+      fontSize: 13,
+      fontWeight: "800",
+      marginTop: 12,
+      marginBottom: 8,
+    },
     reelsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
     reelCard: {
       width: "47%",
@@ -7964,23 +8385,46 @@ const buildSellerAdminStyles = (c) =>
       flex: 1,
       backgroundColor: c.light,
       borderRadius: radius.md,
-      padding: 14,
+      padding: 10,
       alignItems: "center",
       borderWidth: 1,
       borderColor: c.surface,
     },
     insightValue: {
-      fontSize: 18,
+      fontSize: 13,
       fontWeight: "900",
       color: c.dark,
-      marginTop: 6,
+      marginTop: 4,
     },
     insightLabel: {
-      fontSize: 11,
+      fontSize: 9,
       color: c.muted,
-      marginTop: 4,
+      marginTop: 3,
       fontWeight: "600",
       textAlign: "center",
+    },
+    trendRangeBar: {
+      flexGrow: 0,
+      marginTop: 10,
+      marginBottom: 4,
+    },
+    trendRangeContent: {
+      gap: 7,
+      paddingVertical: 3,
+    },
+    trendRangePill: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: radius.full,
+      backgroundColor: c.surface,
+    },
+    trendRangeText: {
+      color: c.muted,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    trendRangeTextActive: {
+      color: "#fff",
     },
     insightSummary: {
       borderRadius: radius.md,
@@ -7989,6 +8433,153 @@ const buildSellerAdminStyles = (c) =>
       marginTop: 14,
       lineHeight: 19,
       textAlign: "center",
+    },
+    chartCard: {
+      marginTop: 16,
+      padding: 14,
+      borderRadius: radius.md,
+      backgroundColor: c.light,
+      borderWidth: 1,
+      borderColor: c.surface,
+    },
+    chartHeader: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    chartTitle: {
+      color: c.dark,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+    chartSubtitle: {
+      color: c.muted,
+      fontSize: 11,
+      marginTop: 3,
+    },
+    chartAxisText: {
+      color: c.muted,
+      fontSize: 10,
+    },
+    chartBarValue: {
+      color: c.muted,
+      fontSize: 10,
+      marginBottom: 4,
+    },
+    chartHint: {
+      color: c.muted,
+      fontSize: 11,
+      textAlign: "center",
+      marginTop: 2,
+    },
+    chartDetailPopup: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: radius.sm,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    chartDetailLabel: {
+      color: c.muted,
+      fontSize: 10,
+      fontWeight: "700",
+      textTransform: "uppercase",
+    },
+    chartDetailTitle: {
+      color: c.dark,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 2,
+    },
+    chartDetailStats: {
+      alignItems: "flex-end",
+    },
+    chartDetailValue: {
+      color: c.dark,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    chartDetailMeta: {
+      color: c.muted,
+      fontSize: 10,
+      marginTop: 2,
+    },
+    revenueChart: {
+      height: 176,
+      flexDirection: "row",
+      alignItems: "flex-end",
+      justifyContent: "space-between",
+      gap: 8,
+      marginTop: 18,
+    },
+    revenueColumn: {
+      flex: 1,
+      height: "100%",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      minWidth: 0,
+    },
+    chartValue: {
+      color: c.muted,
+      fontSize: 9,
+      marginBottom: 5,
+    },
+    revenueTrack: {
+      width: "72%",
+      height: 120,
+      justifyContent: "flex-end",
+      borderRadius: radius.xs,
+      backgroundColor: c.surface,
+      overflow: "hidden",
+    },
+    revenueBar: {
+      width: "100%",
+      minHeight: 5,
+      borderRadius: radius.xs,
+    },
+    chartLabel: {
+      color: c.muted,
+      fontSize: 10,
+      marginTop: 7,
+    },
+    pipelineChart: {
+      gap: 12,
+      marginTop: 18,
+    },
+    pipelineRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    pipelineLabel: {
+      width: 72,
+      color: c.muted,
+      fontSize: 11,
+      textTransform: "capitalize",
+    },
+    pipelineTrack: {
+      flex: 1,
+      height: 9,
+      borderRadius: radius.full,
+      overflow: "hidden",
+      backgroundColor: c.surface,
+    },
+    pipelineFill: {
+      height: "100%",
+      borderRadius: radius.full,
+    },
+    pipelineValue: {
+      width: 24,
+      color: c.dark,
+      fontSize: 12,
+      fontWeight: "800",
+      textAlign: "right",
     },
     modalContainer: { flex: 1, backgroundColor: c.background },
     modalHeader: {

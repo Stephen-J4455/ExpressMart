@@ -728,12 +728,6 @@ const buildChatsStyles = (c) =>
     backgroundColor: c.background,
     paddingHorizontal: 20,
     paddingBottom: 16,
-    borderBottomLeftRadius: radius.xl,
-    borderBottomRightRadius: radius.xl,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 6,
   },
   headerRow: {
     flexDirection: "row",

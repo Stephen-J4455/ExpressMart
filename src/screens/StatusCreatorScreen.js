@@ -59,6 +59,14 @@ export const StatusCreatorScreen = ({ navigation }) => {
 
   const [loading, setLoading] = useState(false);
 
+  const handleClose = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate("Main", { screen: "Account" });
+  };
+
   useEffect(() => {
     let active = true;
     const loadSeller = async () => {
@@ -189,7 +197,7 @@ export const StatusCreatorScreen = ({ navigation }) => {
       }
 
       toast.success("Status posted successfully!");
-      navigation.goBack();
+      handleClose();
     } catch (error) {
       console.error("Error posting status:", error);
       toast.error("Failed to post status");
@@ -205,7 +213,7 @@ export const StatusCreatorScreen = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 16 }}>
           <View style={styles.headerRow}>
-            <Pressable onPress={() => navigation.goBack()}>
+            <Pressable onPress={handleClose}>
               <Ionicons name="arrow-back" size={24} color={themeColors.dark} />
             </Pressable>
             <Text style={styles.title}>Create Status</Text>

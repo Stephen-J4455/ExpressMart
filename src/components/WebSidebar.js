@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View, ScrollView } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -52,7 +52,7 @@ export const WebSidebar = ({
   onHoverChange,
 }) => {
   const insets = useSafeAreaInsets();
-  const { colors: themeColors } = useTheme();
+  const { colors: themeColors, isDark } = useTheme();
   const styles = useAppStyles((c) => buildStyles(c));
   const { items } = useCart();
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
@@ -75,11 +75,23 @@ export const WebSidebar = ({
       )}
       <View style={styles.navItemContent}>
         <View style={styles.iconContainer}>
-          <Ionicons
-            name={isActive ? item.iconFocused : item.icon}
-            size={22}
-            color={isActive ? themeColors.primary : themeColors.muted}
-          />
+          {item.name === "TagAI" ? (
+            <Image
+              source={
+                isDark
+                  ? require("../../assets/tagit_ai_dark.png")
+                  : require("../../assets/tagit_ai_light.png")
+              }
+              style={styles.aiIcon}
+              resizeMode="contain"
+            />
+          ) : (
+            <Ionicons
+              name={isActive ? item.iconFocused : item.icon}
+              size={22}
+              color={isActive ? themeColors.primary : themeColors.muted}
+            />
+          )}
           {item.name === "Cart" && cartCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{cartCount}</Text>
@@ -123,14 +135,11 @@ export const WebSidebar = ({
       >
         {/* Brand */}
         <View style={styles.brandContainer}>
-          <LinearGradient
-            colors={[themeColors.primary, themeColors.accent]}
+          <Image
+            source={require("../../assets/icon.png")}
             style={styles.brandIcon}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Ionicons name="flash" size={22} color="#fff" />
-          </LinearGradient>
+            resizeMode="cover"
+          />
           {expanded && <Text style={styles.brandText}>tagit</Text>}
           <Pressable
             style={styles.toggleButton}
@@ -151,6 +160,7 @@ export const WebSidebar = ({
 
         {/* Nav Items */}
         <ScrollView
+          style={styles.navScroll}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.navList}
         >
@@ -182,16 +192,13 @@ const buildStyles = (c) =>
     brandContainer: {
       flexDirection: "row",
       alignItems: "center",
-      position: "relative",
-      paddingHorizontal: 20,
+      paddingHorizontal: 8,
       paddingBottom: 28,
       paddingTop: 12,
       gap: 12,
     },
     toggleButton: {
-      position: "absolute",
-      right: 8,
-      top: 16,
+      marginLeft: "auto",
       width: 28,
       height: 28,
       borderRadius: 14,
@@ -206,6 +213,10 @@ const buildStyles = (c) =>
       alignItems: "center",
       justifyContent: "center",
     },
+    aiIcon: {
+      width: 22,
+      height: 22,
+    },
     brandText: {
       fontSize: 20,
       fontWeight: "800",
@@ -215,6 +226,10 @@ const buildStyles = (c) =>
     navList: {
       paddingHorizontal: 10,
       gap: 4,
+    },
+    navScroll: {
+      flex: 1,
+      minHeight: 0,
     },
     navItem: {
       flexDirection: "row",
