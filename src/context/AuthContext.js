@@ -9,6 +9,10 @@ import {
 import { AppState, Platform } from "react-native";
 import * as Linking from "expo-linking";
 import { callEdgeFunction, supabase } from "../lib/supabase";
+import {
+  WEB_AUTH_CALLBACK_URL,
+  WEB_PASSWORD_RESET_URL,
+} from "../lib/authRedirects";
 
 const AuthContext = createContext();
 
@@ -418,6 +422,9 @@ export const AuthProvider = ({ children }) => {
             full_name: fullName,
             role: "customer",
           },
+          ...(Platform.OS === "web"
+            ? { emailRedirectTo: WEB_AUTH_CALLBACK_URL }
+            : {}),
         },
       });
 
@@ -523,7 +530,7 @@ export const AuthProvider = ({ children }) => {
 
   const getResetRedirectTo = () =>
     Platform.OS === "web" && typeof window !== "undefined"
-      ? new URL("/reset-password", window.location.origin).toString()
+      ? WEB_PASSWORD_RESET_URL
       : Linking.createURL("reset-password", { scheme: "expressmart" });
 
   const resetPassword = async (email) => {

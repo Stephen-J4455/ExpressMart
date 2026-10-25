@@ -974,7 +974,7 @@ const normalizeRecoveryDeepLink = (url) => {
       typeof window !== "undefined" && window.location?.origin
         ? window.location.origin
         : "";
-    return `${origin}/reset-password${queryPart}${hashPart}`;
+    return `${origin}/auth/reset-password${queryPart}${hashPart}`;
   }
   if (hasResetPath && isNativeResetDeepLink) return raw;
 
@@ -995,7 +995,7 @@ const normalizeRecoveryDeepLink = (url) => {
         typeof window !== "undefined" && window.location?.origin
           ? window.location.origin
           : "";
-      return `${origin}/reset-password${queryPart}${hashPart}`;
+      return `${origin}/auth/reset-password${queryPart}${hashPart}`;
     }
 
     return `expressmart://reset-password${queryPart}${hashPart}`;
@@ -1091,6 +1091,13 @@ const linking = {
       };
     }
 
+    if (isGoogleOAuthCallbackLink(normalizedPath)) {
+      return {
+        index: 0,
+        routes: [{ name: "Auth" }],
+      };
+    }
+
     const state = defaultGetStateFromPath(path, options);
     if (state) return state;
 
@@ -1117,7 +1124,7 @@ const linking = {
       Stores: "stores",
       Auth: "login",
       ForgotPassword: "forgot-password",
-      ResetPassword: "reset-password",
+      ResetPassword: "auth/reset-password",
       Checkout: {
         path: "checkout",
         parse: {

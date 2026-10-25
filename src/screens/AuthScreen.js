@@ -23,6 +23,7 @@ import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../lib/supabase";
+import { WEB_AUTH_CALLBACK_URL } from "../lib/authRedirects";
 import { useToast } from "../context/ToastContext";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -320,7 +321,7 @@ export const AuthScreen = ({ navigation, route }) => {
 
   const getOAuthRedirectUrl = () => {
     if (Platform.OS === "web" && typeof window !== "undefined") {
-      return new URL("/login", window.location.origin).toString();
+      return WEB_AUTH_CALLBACK_URL;
     }
 
     return Linking.createURL("auth/callback", { scheme: "expressmart" });

@@ -4,7 +4,7 @@ This app uses a shared password reset flow for web and native, with different re
 
 ## Web
 
-- `resetPasswordForEmail()` uses `https://<site>/reset-password`
+- `resetPasswordForEmail()` uses `https://tagitshop.online/auth/reset-password`
 - Recovery URLs are routed internally to `PasswordResetScreen`
 - The shared auth provider skips auto-login for recovery/reset URLs
 - The deep-link handler ignores recovery links on web so they do not promote a normal session
