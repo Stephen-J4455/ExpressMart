@@ -374,16 +374,21 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     gridColumns,
     contentMaxWidth,
   } = useResponsive();
+  const isLargeScreen = viewportWidth >= 1440;
+  const sellerContentMaxWidth = isLargeScreen ? viewportWidth : contentMaxWidth;
+  const catalogGridColumns =
+    viewportWidth >= 1680 ? 6 : gridColumns;
   const drawerWidth = Math.min(Math.round(viewportWidth * 0.78), 320);
   const drawerSlide = drawerAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [-drawerWidth, 0],
   });
   const catalogContentWidth = isWide
-    ? Math.min(viewportWidth, contentMaxWidth) - 32
+    ? sellerContentMaxWidth - 32
     : viewportWidth - 32;
   const catalogCardWidth = Math.floor(
-    (catalogContentWidth - 12 * (gridColumns - 1)) / gridColumns,
+    (catalogContentWidth - 12 * (catalogGridColumns - 1)) /
+      catalogGridColumns,
   );
 
   // ── Seller data layer (mirrors Express-Store SellerContext) ──────────────
@@ -2879,7 +2884,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         key={p.id}
         style={({ pressed }) => [
           styles.catalogCard,
-          { width: catalogCardWidth },
+          { width: catalogCardWidth, flexGrow: 1 },
           isDesktop && styles.catalogCardWide,
           pressed && { opacity: 0.85 },
         ]}
@@ -3041,7 +3046,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       style={[
         styles.catalogContent,
         isWide && {
-          maxWidth: contentMaxWidth - 32,
+          maxWidth: sellerContentMaxWidth - 32,
           alignSelf: "center",
         },
       ]}
@@ -3255,7 +3260,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
             {Array.from({ length: 4 }).map((_, i) => (
               <View
                 key={`ph-${i}`}
-                style={{ width: catalogCardWidth }}
+                style={{ width: catalogCardWidth, flexGrow: 1 }}
               >
                 <ProductCardPlaceholder />
               </View>
@@ -5211,7 +5216,13 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         }
       >
         {/* ── Cover ──────────────────────────────────────────────────── */}
-        <View style={[styles.cover, { paddingTop: insets.top }]}>
+        <View
+          style={[
+            styles.cover,
+            isLargeScreen && styles.coverLarge,
+            { paddingTop: insets.top },
+          ]}
+        >
           {avatarUri ? (
             <Image
               source={{ uri: avatarUri }}
@@ -5268,7 +5279,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         </View>
 
         {/* ── Profile sheet ──────────────────────────────────────────── */}
-        <View style={styles.profileSheet}>
+        <View
+          style={[
+            styles.profileSheet,
+            isLargeScreen && styles.profileSheetLarge,
+          ]}
+        >
           <View style={styles.profileRow}>
             <Pressable
               style={styles.avatarWrap}
@@ -7306,6 +7322,7 @@ const buildSellerAdminStyles = (c) =>
       overflow: "hidden",
       backgroundColor: c.primary,
     },
+    coverLarge: { height: 300 },
     coverImage: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
     coverOverlay: {
       position: "absolute",
@@ -7361,6 +7378,11 @@ const buildSellerAdminStyles = (c) =>
       paddingHorizontal: 16,
       paddingTop: 16,
       paddingBottom: 18,
+    },
+    profileSheetLarge: {
+      paddingHorizontal: 32,
+      paddingTop: 24,
+      paddingBottom: 24,
     },
     profileRow: {
       flexDirection: "row",

@@ -46,6 +46,10 @@ import { AdsProvider } from "./src/context/AdsContext";
 import { NotificationProvider } from "./src/context/NotificationContext";
 import { TagAIAssistantProvider } from "./src/context/TagAIAssistantContext";
 import { ScreenPointerOverlay } from "./src/components/tagai/ScreenPointerOverlay";
+import {
+  ScreenTransition,
+  WebStackScreenTransition,
+} from "./src/components/ScreenTransition";
 import { TagAIAssistantScreen } from "./src/screens/TagAIAssistantScreen";
 import { FeedScreen } from "./src/screens/FeedScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
@@ -217,74 +221,13 @@ const TabNavigator = () => {
   );
 };
 
-/**
- * AnimatedScreen — wraps tab screen content with a quick fade + subtle
- * upward-slide transition that plays when the tab mounts (first focus),
- * giving tab switches a polished entrance without a heavy animation library.
- */
-const AnimatedScreen = ({ children }) => {
-  const progress = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    progress.setValue(0);
-    Animated.timing(progress, {
-      toValue: 1,
-      duration: 260,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
-  }, [progress]);
-
-  return (
-    <Animated.View
-      style={[
-        StyleSheet.absoluteFill,
-        {
-          opacity: progress,
-          transform: [
-            {
-              translateY: progress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [14, 0],
-              }),
-            },
-          ],
-        },
-      ]}
-    >
-      {children}
-    </Animated.View>
-  );
-};
-
-/**
- * withTabTransition — HOC that keeps React Navigation's injected props
- * (navigation, route) intact while wrapping the screen in AnimatedScreen.
- * Using Tab.Screen's `children` prop instead would strip those props and
- * crash any screen that calls navigation.navigate.
- *
- * IMPORTANT: the wrapped screens below are created ONCE at module level.
- * Calling withTabTransition(...) inline inside the JSX would produce a new
- * component type on every TabNavigator render (e.g. whenever a toast shows),
- * causing React to unmount + remount the whole tab screen.
- */
 const withTabTransition = (Wrapped) => {
-  // Guard against undefined screens (e.g. a stale/hot-reloaded module or a
-  // broken import resolving to undefined). Previously this line crashed the
-  // whole app with "[TypeError: Cannot read property 'displayName' of
-  // undefined]" before React could even render a helpful message.
-  if (!Wrapped) {
-    console.warn(
-      "[App] withTabTransition received an undefined screen component. " +
-        "Check the import for the screen passed to it.",
-    );
-  }
   const Transitioned = (props) => (
-    <AnimatedScreen>{Wrapped ? <Wrapped {...props} /> : null}</AnimatedScreen>
+    <ScreenTransition>
+      <Wrapped {...props} />
+    </ScreenTransition>
   );
-  Transitioned.displayName = `withTabTransition(${
-    (Wrapped && (Wrapped.displayName || Wrapped.name)) || "Screen"
-  })`;
+  Transitioned.displayName = `withTabTransition(${Wrapped.displayName || Wrapped.name || "Screen"})`;
   return Transitioned;
 };
 
@@ -1232,9 +1175,7 @@ const withAuthGate = (Component, title, message) => {
   return guardedScreenCache.get(Component);
 };
 
-// Guarded + transitioned Chats for the bottom tab bar. Created ONCE at module
-// level (like the other Transitioned* screens) so the tab never remounts when
-// TabNavigator re-renders.
+// Keep the tab guard at module scope so navigator updates do not remount it.
 const TransitionedChatsScreen = withTabTransition(
   withAuthGate(
     ChatsScreen,
@@ -1390,6 +1331,9 @@ const AuthenticatedApp = () => {
         onClose={() => setUpdateVisible(false)}
       />
       <Stack.Navigator
+        screenLayout={
+          Platform.OS === "web" ? WebStackScreenTransition : undefined
+        }
         screenOptions={{
           headerShown: false,
           animation: "slide_from_right",
