@@ -1082,6 +1082,60 @@ export const HomeScreen = ({ navigation }) => {
     () => ({ minIndexForVisible: 0 }),
     [],
   );
+  const showHomeSideBySide = isDesktop && width >= 1680;
+  const feedHomePane = (
+    <View
+      style={[
+        styles.homePane,
+        showHomeSideBySide ? styles.wideHomePane : { width: pagerWidth },
+      ]}
+    >
+      <FlatList
+        key={showFeedPlaceholders ? "home-feed-loading" : "home-feed"}
+        style={styles.homeList}
+        data={showFeedPlaceholders ? FEED_PLACEHOLDER_ITEMS : feedItems}
+        keyExtractor={feedKeyExtractor}
+        renderItem={
+          showFeedPlaceholders ? renderPlaceholderItem : renderFeedItem
+        }
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        ListHeaderComponent={listHeader}
+        ListFooterComponent={listFooter}
+        ListEmptyComponent={!showFeedPlaceholders ? renderEmpty : null}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        decelerationRate="normal"
+        maintainVisibleContentPosition={maintainVisibleContentPosition}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={listContentStyle}
+        refreshControl={listRefreshControl}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        updateCellsBatchingPeriod={Platform.OS === "web" ? 16 : 50}
+        windowSize={Platform.OS === "web" ? 5 : 9}
+        disableVirtualization={false}
+        removeClippedSubviews={Platform.OS === "android"}
+      />
+    </View>
+  );
+  const storefrontHomePane = (
+    <View
+      style={[
+        styles.homePane,
+        showHomeSideBySide ? styles.wideHomePane : { width: pagerWidth },
+      ]}
+    >
+      <StorefrontHomeScreen
+        navigation={navigation}
+        width={showHomeSideBySide ? Math.floor(width / 2) : pagerWidth}
+        topInset={headerHeight + 8}
+        onScroll={handleStorefrontScroll}
+        onHorizontalTouchStart={() => lockPager(true)}
+        onHorizontalTouchEnd={() => lockPager(false)}
+      />
+    </View>
+  );
 
   return (
     // NOTE: no LazyScrollContext here — LazyImage's measureLayout-based lazy
@@ -1131,61 +1185,30 @@ export const HomeScreen = ({ navigation }) => {
           categories strip → feed-shaped skeletons) and the placeholders are
           scrollable exactly like the loaded feed. */}
       <View style={[styles.homeContent, isDesktop && styles.desktopContent]}>
-        <ScrollView
-          ref={pagerRef}
-          horizontal
-          pagingEnabled
-          directionalLockEnabled
-          disableIntervalMomentum
-          scrollEnabled={pagerScrollEnabled}
-          onScroll={handlePagerScroll}
-          onLayout={handlePagerLayout}
-          scrollEventThrottle={1}
-          showsHorizontalScrollIndicator={false}
-          nestedScrollEnabled
-          style={styles.homePager}
-        >
-          <View style={[styles.homePane, { width: pagerWidth }]}>
-            <FlatList
-              key={showFeedPlaceholders ? "home-feed-loading" : "home-feed"}
-              style={styles.homeList}
-              data={showFeedPlaceholders ? FEED_PLACEHOLDER_ITEMS : feedItems}
-              keyExtractor={feedKeyExtractor}
-              renderItem={
-                showFeedPlaceholders ? renderPlaceholderItem : renderFeedItem
-              }
-              onViewableItemsChanged={onViewableItemsChanged}
-              viewabilityConfig={viewabilityConfig}
-              ListHeaderComponent={listHeader}
-              ListFooterComponent={listFooter}
-              ListEmptyComponent={!showFeedPlaceholders ? renderEmpty : null}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              decelerationRate={Platform.OS === "android" ? "normal" : "normal"}
-              maintainVisibleContentPosition={maintainVisibleContentPosition}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={listContentStyle}
-              refreshControl={listRefreshControl}
-              initialNumToRender={Platform.OS === "web" ? 4 : 4}
-              maxToRenderPerBatch={Platform.OS === "web" ? 4 : 4}
-              updateCellsBatchingPeriod={Platform.OS === "web" ? 16 : 50}
-              windowSize={Platform.OS === "web" ? 5 : 9}
-              disableVirtualization={false}
-              removeClippedSubviews={Platform.OS === "android"}
-            />
+        {showHomeSideBySide ? (
+          <View style={styles.wideHomePages}>
+            {feedHomePane}
+            {storefrontHomePane}
           </View>
-
-          <View style={[styles.homePane, { width: pagerWidth }]}>
-            <StorefrontHomeScreen
-              navigation={navigation}
-              width={pagerWidth}
-              topInset={headerHeight + 8}
-              onScroll={handleStorefrontScroll}
-              onHorizontalTouchStart={() => lockPager(true)}
-              onHorizontalTouchEnd={() => lockPager(false)}
-            />
-          </View>
-        </ScrollView>
+        ) : (
+          <ScrollView
+            ref={pagerRef}
+            horizontal
+            pagingEnabled
+            directionalLockEnabled
+            disableIntervalMomentum
+            scrollEnabled={pagerScrollEnabled}
+            onScroll={handlePagerScroll}
+            onLayout={handlePagerLayout}
+            scrollEventThrottle={1}
+            showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled
+            style={styles.homePager}
+          >
+            {feedHomePane}
+            {storefrontHomePane}
+          </ScrollView>
+        )}
         {isDesktop ? (
           <View style={[styles.desktopRail, { paddingTop: headerHeight + 8 }]}>
             <View style={styles.messagesPanel}>
@@ -1571,6 +1594,14 @@ const buildHomeStyles = (c) =>
       flexDirection: "row",
       width: "100%",
     },
+    wideHomePages: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 0,
+      flexDirection: "row",
+      gap: 12,
+      paddingHorizontal: 12,
+    },
     homePager: {
       flex: 1,
       minWidth: 0,
@@ -1579,6 +1610,16 @@ const buildHomeStyles = (c) =>
     homePane: {
       flex: 1,
       minHeight: 0,
+    },
+    wideHomePane: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 0,
+      overflow: "hidden",
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.background,
     },
     homeList: {
       flex: 1,

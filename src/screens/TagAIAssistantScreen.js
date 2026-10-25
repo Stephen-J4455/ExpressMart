@@ -112,7 +112,11 @@ const TypingDots = () => {
   const styles = useAppStyles(buildStyles);
   return (
     <View style={styles.typingWrap}>
-      <ThinkingOrb state="connecting" size={64} color={colors.primary} />
+      {Platform.OS === "web" ? (
+        <ActivityIndicator size="small" color={colors.primary} />
+      ) : (
+        <ThinkingOrb state="connecting" size={64} color={colors.primary} />
+      )}
     </View>
   );
 };

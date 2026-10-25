@@ -140,7 +140,8 @@ export const AccountScreen = ({ navigation }) => {
       setUploadingAvatar(false);
     }
   };
-  const { isWide, contentMaxWidth } = useResponsive();
+  const { isWide, isDesktop, width, contentMaxWidth } = useResponsive();
+  const isLargeDesktop = width >= 1440;
 
   const [sellerRecord, setSellerRecord] = useState(
     // If auth profile already indicates seller role, show seller UI immediately
@@ -282,7 +283,11 @@ export const AccountScreen = ({ navigation }) => {
         overScrollMode="never"
         contentContainerStyle={[
           styles.scrollContent,
-          isWide && { maxWidth: 700, alignSelf: "center", width: "100%" },
+          isWide && {
+            maxWidth: isLargeDesktop ? 1760 : contentMaxWidth,
+            alignSelf: "center",
+            width: "100%",
+          },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -359,12 +364,90 @@ export const AccountScreen = ({ navigation }) => {
 
         </View>
 
+        {/* Register a Store Banner */}
+        <View style={isLargeDesktop && styles.desktopWorkspace}>
+          {isLargeDesktop && (
+            <View style={styles.desktopSidebar}>
+              <Text style={styles.desktopSidebarTitle}>Your account</Text>
+              {menuSections.map((section) => (
+                <View key={section.title} style={styles.desktopSidebarSection}>
+                  <Text style={styles.desktopSidebarHeading}>
+                    {section.title}
+                  </Text>
+                  {section.items.map((item) => (
+                    <Pressable
+                      key={item.label}
+                      style={styles.desktopSidebarItem}
+                      onPress={() =>
+                        item.screen && navigation.navigate(item.screen)
+                      }
+                    >
+                      <Ionicons
+                        name={item.icon}
+                        size={19}
+                        color={themeColors.primary}
+                      />
+                      <Text style={styles.desktopSidebarLabel}>
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ))}
+              <View style={styles.desktopSidebarSection}>
+                <Text style={styles.desktopSidebarHeading}>Appearance</Text>
+                {[
+                  { key: "light", label: "Light", icon: "sunny-outline" },
+                  { key: "dark", label: "Dark", icon: "moon-outline" },
+                  {
+                    key: "system",
+                    label: "System",
+                    icon: "phone-portrait-outline",
+                  },
+                ].map((option) => (
+                  <Pressable
+                    key={option.key}
+                    style={styles.desktopSidebarItem}
+                    onPress={() => setThemeMode(option.key)}
+                  >
+                    <Ionicons
+                      name={option.icon}
+                      size={19}
+                      color={themeColors.primary}
+                    />
+                    <Text style={styles.desktopSidebarLabel}>
+                      {option.label}
+                    </Text>
+                    {themeMode === option.key && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={18}
+                        color={themeColors.primary}
+                      />
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable
+                style={styles.desktopSidebarSignOut}
+                onPress={signOut}
+              >
+                <Ionicons name="log-out-outline" size={19} color="#EF4444" />
+                <Text style={styles.desktopSidebarSignOutLabel}>Sign Out</Text>
+              </Pressable>
+            </View>
+          )}
+          <View
+            style={[
+              styles.desktopMainContent,
+              !isLargeDesktop && styles.mobileMainContent,
+            ]}
+          >
         {profileAds.length > 0 && (
           <View style={styles.adSection}>
             <AdRenderer ads={profileAds} />
           </View>
         )}
-
         {/* Register a Store Banner */}
         <View style={styles.registerStoreSection}>
           <LinearGradient
@@ -420,108 +503,134 @@ export const AccountScreen = ({ navigation }) => {
         </View>
 
         {/* Menu Sections */}
-        {menuSections.map((section) => (
-          <View key={section.title} style={styles.menuSection}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            <View style={styles.menuCard}>
-              {section.items.map((item, index) => (
-                <Pressable
-                  key={item.label}
-                  style={[
-                    styles.menuItem,
-                    index < section.items.length - 1 && styles.menuItemBorder,
-                  ]}
-                  onPress={() =>
-                    item.screen && navigation.navigate(item.screen)
-                  }
-                >
-                  <View style={styles.menuItemLeft}>
-                    <View style={styles.menuIconContainer}>
-                      <Ionicons
-                        name={item.icon}
-                        size={20}
-                        color={themeColors.primary}
-                      />
+        {!isLargeDesktop && <View style={isDesktop && styles.desktopMenuGrid}>
+          {menuSections.map((section) => (
+            <View
+              key={section.title}
+              style={[
+                styles.menuSection,
+                isDesktop && styles.desktopMenuSection,
+              ]}
+            >
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              <View style={styles.menuCard}>
+                {section.items.map((item, index) => (
+                  <Pressable
+                    key={item.label}
+                    style={[
+                      styles.menuItem,
+                      index < section.items.length - 1 &&
+                        styles.menuItemBorder,
+                    ]}
+                    onPress={() =>
+                      item.screen && navigation.navigate(item.screen)
+                    }
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={styles.menuIconContainer}>
+                        <Ionicons
+                          name={item.icon}
+                          size={20}
+                          color={themeColors.primary}
+                        />
+                      </View>
+                      <Text style={styles.menuItemLabel}>{item.label}</Text>
                     </View>
-                    <Text style={styles.menuItemLabel}>{item.label}</Text>
-                  </View>
-                  <View style={styles.menuItemRight}>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color={themeColors.muted}
-                    />
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ))}
-
-        {/* Appearance / Theme */}
-        <View style={styles.menuSection}>
-          <Text style={styles.sectionTitle}>Appearance</Text>
-          <View style={styles.menuCard}>
-            {[
-              { key: "light", label: "Light", icon: "sunny-outline" },
-              { key: "dark", label: "Dark", icon: "moon-outline" },
-              {
-                key: "system",
-                label: "System",
-                icon: "phone-portrait-outline",
-              },
-            ].map((opt, index) => {
-              const selected = themeMode === opt.key;
-              return (
-                <Pressable
-                  key={opt.key}
-                  style={[styles.menuItem, index < 2 && styles.menuItemBorder]}
-                  onPress={() => setThemeMode(opt.key)}
-                >
-                  <View style={styles.menuItemLeft}>
-                    <View style={styles.menuIconContainer}>
-                      <Ionicons
-                        name={opt.icon}
-                        size={20}
-                        color={themeColors.primary}
-                      />
-                    </View>
-                    <Text style={styles.menuItemLabel}>{opt.label}</Text>
-                  </View>
-                  <View style={styles.menuItemRight}>
-                    {selected ? (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={20}
-                        color={themeColors.primary}
-                      />
-                    ) : (
+                    <View style={styles.menuItemRight}>
                       <Ionicons
                         name="chevron-forward"
                         size={18}
                         color={themeColors.muted}
                       />
-                    )}
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ))}
+
+          {/* Appearance / Theme */}
+          <View
+            style={[
+              styles.menuSection,
+              isDesktop && styles.desktopMenuSection,
+            ]}
+          >
+            <Text style={styles.sectionTitle}>Appearance</Text>
+            <View style={styles.menuCard}>
+              {[
+                { key: "light", label: "Light", icon: "sunny-outline" },
+                { key: "dark", label: "Dark", icon: "moon-outline" },
+                {
+                  key: "system",
+                  label: "System",
+                  icon: "phone-portrait-outline",
+                },
+              ].map((opt, index) => {
+                const selected = themeMode === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    style={[
+                      styles.menuItem,
+                      index < 2 && styles.menuItemBorder,
+                    ]}
+                    onPress={() => setThemeMode(opt.key)}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <View style={styles.menuIconContainer}>
+                        <Ionicons
+                          name={opt.icon}
+                          size={20}
+                          color={themeColors.primary}
+                        />
+                      </View>
+                      <Text style={styles.menuItemLabel}>{opt.label}</Text>
+                    </View>
+                    <View style={styles.menuItemRight}>
+                      {selected ? (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color={themeColors.primary}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="chevron-forward"
+                          size={18}
+                          color={themeColors.muted}
+                        />
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
         </View>
+        </View>}
 
         {/* Sign Out Button */}
-        <View style={styles.signOutSection}>
-          <Pressable style={styles.signOutButton} onPress={signOut}>
-            <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </Pressable>
-        </View>
+        {!isLargeDesktop && (
+          <View
+            style={[
+              styles.signOutSection,
+              isDesktop && styles.desktopSignOutSection,
+            ]}
+          >
+            <Pressable style={styles.signOutButton} onPress={signOut}>
+              <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+              <Text style={styles.signOutText}>Sign Out</Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* App Version - Clickable */}
         <Pressable onPress={() => setShowLoadingPreview(true)}>
           <Text style={styles.versionText}>tagit v1.0.1</Text>
         </Pressable>
         <View style={{ height: 30 }} />
+          </View>
+        </View>
       </ScrollView>
 
       {/* Loading Animation Preview Modal */}
@@ -559,6 +668,76 @@ const buildAccountStyles = (c) =>
       // Opaque so the bounce backdrop behind the scroll view only shows
       // during overscroll, never between sections while scrolling normally.
       backgroundColor: c.background,
+    },
+    desktopWorkspace: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 28,
+      paddingHorizontal: 28,
+      paddingTop: 24,
+    },
+    desktopSidebar: {
+      width: 280,
+      flexShrink: 0,
+      padding: 22,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.lg,
+    },
+    desktopSidebarTitle: {
+      color: c.dark,
+      fontSize: 20,
+      fontWeight: "800",
+      marginBottom: 8,
+    },
+    desktopSidebarSection: {
+      marginTop: 20,
+    },
+    desktopSidebarHeading: {
+      color: c.muted,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+      marginBottom: 8,
+    },
+    desktopSidebarItem: {
+      minHeight: 42,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingHorizontal: 10,
+      borderRadius: radius.sm,
+    },
+    desktopSidebarLabel: {
+      flex: 1,
+      color: c.dark,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    desktopSidebarSignOut: {
+      minHeight: 44,
+      marginTop: 24,
+      paddingHorizontal: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    desktopSidebarSignOutLabel: {
+      color: "#EF4444",
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    desktopMainContent: {
+      flex: 1,
+      minWidth: 0,
+      paddingBottom: 20,
+    },
+    mobileMainContent: {
+      flex: 1,
     },
     // ── Elastic-overscroll backdrop (see return) ────────────────────────────
     bounceWrap: {
@@ -906,6 +1085,17 @@ const buildAccountStyles = (c) =>
       paddingHorizontal: 20,
       paddingTop: 24,
     },
+    desktopMenuGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 24,
+      paddingHorizontal: 20,
+    },
+    desktopMenuSection: {
+      width: "30%",
+      paddingHorizontal: 0,
+      paddingTop: 24,
+    },
     menuCard: {
       backgroundColor: c.surface,
       borderRadius: radius.md,
@@ -951,6 +1141,11 @@ const buildAccountStyles = (c) =>
     signOutSection: {
       paddingHorizontal: 20,
       paddingTop: 32,
+    },
+    desktopSignOutSection: {
+      maxWidth: 500,
+      width: "100%",
+      alignSelf: "center",
     },
     signOutButton: {
       flexDirection: "row",
