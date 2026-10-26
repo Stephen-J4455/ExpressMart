@@ -5654,69 +5654,6 @@ export const SellerAdminScreen = ({ navigation, route }) => {
 
       {/* Product create/edit modal */}
       <Modal
-        visible={agentPromptVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => resolveAutoCreatePrompt({ cancelled: true })}
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1, justifyContent: "flex-end", paddingBottom: 10 }}
-          behavior="padding"
-          keyboardVerticalOffset={0}
-        >
-          <Pressable
-            style={styles.menuBackdrop}
-            onPress={() => resolveAutoCreatePrompt({ cancelled: true })}
-          >
-            <Pressable style={[styles.confirmCard, { marginBottom: 0 }]} onPress={() => {}}>
-              <Text style={styles.confirmTitle}>Set price & stock</Text>
-              <Text style={styles.confirmMessage}>
-                The agent will use these values to fill the price and quantity
-                fields.
-              </Text>
-              <Text style={styles.label}>Price (GH₵)</Text>
-              <TextInput
-                style={styles.input}
-                value={agentPriceInput}
-                onChangeText={setAgentPriceInput}
-                keyboardType="decimal-pad"
-                placeholder="e.g. 120.00"
-                placeholderTextColor={themeColors.muted}
-              />
-              <Text style={[styles.label, { marginTop: 12 }]}>Quantity</Text>
-              <TextInput
-                style={styles.input}
-                value={agentQuantityInput}
-                onChangeText={setAgentQuantityInput}
-                keyboardType="number-pad"
-                placeholder="e.g. 25"
-                placeholderTextColor={themeColors.muted}
-              />
-              <View style={styles.confirmButtonRow}>
-                <Pressable
-                  style={[styles.confirmButton, styles.confirmCancelButton]}
-                  onPress={() => resolveAutoCreatePrompt({ cancelled: true })}
-                >
-                  <Text style={styles.confirmCancelText}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.confirmButton, styles.confirmDeleteButton]}
-                  onPress={() =>
-                    resolveAutoCreatePrompt({
-                      price: agentPriceInput,
-                      quantity: agentQuantityInput,
-                    })
-                  }
-                >
-                  <Text style={styles.confirmDeleteText}>Use values</Text>
-                </Pressable>
-              </View>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal
         visible={modalVisible}
         animationType="slide"
         onRequestClose={() => {
@@ -6668,6 +6605,72 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               </TouchableOpacity>
             )}
           </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={agentPromptVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => resolveAutoCreatePrompt({ cancelled: true })}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1, justifyContent: "flex-end", paddingBottom: 10 }}
+          behavior="padding"
+          keyboardVerticalOffset={0}
+        >
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={() => resolveAutoCreatePrompt({ cancelled: true })}
+          >
+            <Pressable
+              style={[styles.confirmCard, { marginBottom: 0 }]}
+              onPress={() => {}}
+            >
+              <Text style={styles.confirmTitle}>Set price & stock</Text>
+              <Text style={styles.confirmMessage}>
+                The agent will use these values to fill the price and quantity
+                fields.
+              </Text>
+              <Text style={styles.label}>Price (GH₵)</Text>
+              <TextInput
+                style={styles.input}
+                value={agentPriceInput}
+                onChangeText={setAgentPriceInput}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 120.00"
+                placeholderTextColor={themeColors.muted}
+              />
+              <Text style={[styles.label, { marginTop: 12 }]}>Quantity</Text>
+              <TextInput
+                style={styles.input}
+                value={agentQuantityInput}
+                onChangeText={setAgentQuantityInput}
+                keyboardType="number-pad"
+                placeholder="e.g. 25"
+                placeholderTextColor={themeColors.muted}
+              />
+              <View style={styles.confirmButtonRow}>
+                <Pressable
+                  style={[styles.confirmButton, styles.confirmCancelButton]}
+                  onPress={() => resolveAutoCreatePrompt({ cancelled: true })}
+                >
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.confirmButton, styles.confirmDeleteButton]}
+                  onPress={() =>
+                    resolveAutoCreatePrompt({
+                      price: agentPriceInput,
+                      quantity: agentQuantityInput,
+                    })
+                  }
+                >
+                  <Text style={styles.confirmDeleteText}>Use values</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
         </KeyboardAvoidingView>
       </Modal>
 
