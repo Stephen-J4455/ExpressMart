@@ -814,8 +814,8 @@ const LoginRequiredScreen = ({
 const prefixes = [
   Linking.createURL("/"),
   "expressmart://",
-  "https://www.expressmart.me",
-  "https://expressmart.me",
+  "https://tagitshop.online",
+  "https://www.tagitshop.online",
 ];
 if (Platform.OS === "web" && typeof window !== "undefined" && window.location) {
   prefixes.push(window.location.origin);

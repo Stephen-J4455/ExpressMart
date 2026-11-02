@@ -9,8 +9,8 @@ import { supabase } from "../lib/supabase";
  * Supported formats:
  *   tagit://product/[sku]                      (custom scheme)
  *   expressmart://product/[id]                 (legacy custom scheme)
- *   https://expressmart.me/product/[id]        (universal link — product id)
- *   https://expressmart.me/p/[sku]             (universal link — SKU)
+ *   https://tagitshop.online/product/[id]      (universal link — product id)
+ *   https://tagitshop.online/p/[sku]           (universal link — SKU)
  *   /product/[id]?action=add_to_cart           (web path)
  *   /p/[sku]?action=add_to_cart                (web path — SKU)
  */

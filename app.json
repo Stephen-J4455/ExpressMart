@@ -15,8 +15,8 @@
       "bundleIdentifier": "com.stephenj.tagit",
       "googleServicesFile": "./GoogleService-Info.plist",
       "associatedDomains": [
-        "applinks:www.expressmart.me",
-        "applinks:expressmart.me"
+        "applinks:tagitshop.online",
+        "applinks:www.tagitshop.online"
       ],
       "infoPlist": {
         "UIBackgroundModes": [
@@ -53,32 +53,32 @@
           "data": [
             {
               "scheme": "https",
-              "host": "www.expressmart.me",
+              "host": "tagitshop.online",
               "pathPrefix": "/product"
             },
             {
               "scheme": "https",
-              "host": "expressmart.me",
+              "host": "www.tagitshop.online",
               "pathPrefix": "/product"
             },
             {
               "scheme": "https",
-              "host": "www.expressmart.me",
+              "host": "tagitshop.online",
               "pathPrefix": "/p"
             },
             {
               "scheme": "https",
-              "host": "expressmart.me",
+              "host": "www.tagitshop.online",
               "pathPrefix": "/p"
             },
             {
               "scheme": "https",
-              "host": "www.expressmart.me",
+              "host": "tagitshop.online",
               "pathPrefix": "/wa/callback"
             },
             {
               "scheme": "https",
-              "host": "expressmart.me",
+              "host": "www.tagitshop.online",
               "pathPrefix": "/wa/callback"
             }
           ],

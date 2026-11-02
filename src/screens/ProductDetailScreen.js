@@ -148,7 +148,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const markdownStyles = useAppStyles((c) =>
     buildProductDetailMarkdownStyles(c),
   );
-  // When opened via a universal link (https://www.expressmart.me/product/:id)
+  // When opened via a universal link (https://tagitshop.online/product/:id)
   // only `productId` is present; otherwise a full `product` object is passed.
   // SKU deep links (tagit://product/[sku], /p/[sku]) pass `sku` + optional
   // `action` (e.g. add_to_cart) instead of a product id.

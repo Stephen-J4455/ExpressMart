@@ -10,16 +10,16 @@ cart, and keep inventory in sync with Meta's catalog.
 | --- | --- | --- |
 | Custom scheme | `tagit://product/[sku]` | PDP by SKU |
 | Legacy scheme | `expressmart://product/[id]` | PDP by product id |
-| Universal link | `https://expressmart.me/product/[id]` | PDP by product id |
-| SKU universal link | `https://expressmart.me/p/[sku]` | PDP by SKU |
+| Universal link | `https://tagitshop.online/product/[id]` | PDP by product id |
+| SKU universal link | `https://tagitshop.online/p/[sku]` | PDP by SKU |
 | Cart hand-off | any of the above + `?action=add_to_cart` | auto-add to cart → Cart screen |
 
 ## App configuration (`app.json`)
 
 - `scheme`: `"expressmart"`
-- iOS `associatedDomains`: `applinks:www.expressmart.me`, `applinks:expressmart.me`
-- Android `intentFilters`: `autoVerify: true`, hosts `expressmart.me` /
-  `www.expressmart.me`, path prefixes `/product` and `/p`
+- iOS `associatedDomains`: `applinks:tagitshop.online`, `applinks:www.tagitshop.online`
+- Android `intentFilters`: `autoVerify: true`, hosts `tagitshop.online` /
+  `www.tagitshop.online`, path prefixes `/product` and `/p`
 
 ### Verification files (served from `public/.well-known/`)
 
@@ -78,7 +78,7 @@ cart, and keep inventory in sync with Meta's catalog.
 
 ## Web fallback (app not installed)
 
-Universal links fall through to `https://expressmart.me/product/[id]` or
+Universal links fall through to `https://tagitshop.online/product/[id]` or
 `/p/[sku]`. Vercel rewrites serve the Expo-web SPA which renders the normal
 PDP; `InstallAppBanner` shows an App Store / Play Store prompt on mobile web.
 

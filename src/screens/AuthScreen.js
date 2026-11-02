@@ -1,18 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ActivityIndicator,
-  Image,
-  KeyboardAvoidingView,
+  Animated,
+  Easing,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { radius } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -27,8 +29,6 @@ import { WEB_AUTH_CALLBACK_URL } from "../lib/authRedirects";
 import { useToast } from "../context/ToastContext";
 
 WebBrowser.maybeCompleteAuthSession();
-
-const AUTH_PRIMARY_PINK = "#FF5A79";
 
 export const AuthScreen = ({ navigation, route }) => {
   const getInitialIsLogin = useCallback(() => {
@@ -51,12 +51,38 @@ export const AuthScreen = ({ navigation, route }) => {
 
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildAuthStyles(c));
+  const { width: screenWidth } = useWindowDimensions();
 
   const { signIn, signUp, isAuthenticated } = useAuth();
   const toast = useToast();
   const redirectHandledRef = useRef(false);
   const oauthCallbackInFlightRef = useRef(false);
   const handledOAuthCallbackUrlRef = useRef(null);
+  const authTransitionX = useRef(new Animated.Value(0)).current;
+
+  const switchAuthMode = useCallback(
+    (nextIsLogin) => {
+      if (nextIsLogin === isLogin) return;
+      const direction = nextIsLogin ? -1 : 1;
+
+      Animated.timing(authTransitionX, {
+        toValue: direction * -screenWidth,
+        duration: 300,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start(() => {
+        setIsLogin(nextIsLogin);
+        authTransitionX.setValue(direction * screenWidth);
+        Animated.timing(authTransitionX, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start();
+      });
+    },
+    [authTransitionX, isLogin, screenWidth],
+  );
 
   const navigateAfterLogin = useCallback(() => {
     const redirectTo = route?.params?.redirectTo;
@@ -464,7 +490,7 @@ export const AuthScreen = ({ navigation, route }) => {
         }
         const { error } = await signUp(email, password, fullName);
         if (error) throw error;
-        setIsLogin(true);
+        switchAuthMode(true);
         toast.success("Account created! Please sign in.");
       }
     } catch (error) {
@@ -475,7 +501,8 @@ export const AuthScreen = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
       {/* Subtle background circles */}
       <View style={styles.bgCircle1} />
       <View style={styles.bgCircle2} />
@@ -484,42 +511,51 @@ export const AuthScreen = ({ navigation, route }) => {
       <View style={styles.bgCircle5} />
       <View style={styles.bgCircle6} />
 
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         style={styles.content}
-        behavior={Platform.OS === "ios" ? "padding" : "padding"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-      >
-        <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
             isWide && { maxWidth: 480, alignSelf: "center", width: "100%" },
           ]}
-          keyboardShouldPersistTaps="always"
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          bounces={false}
-          nestedScrollEnabled={true}
+          bottomOffset={24}
+          extraKeyboardSpace={16}
+          mode="insets"
+          disableScrollOnKeyboardHide
         >
+          <Animated.View
+            style={[
+              styles.authTransition,
+              {
+                transform: [{ translateX: authTransitionX }],
+              },
+            ]}
+          >
           {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <Image
-                source={require("../../assets/express.png")}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
+          <View style={[styles.header, !isLogin && styles.signupHeader]}>
+            {isLogin && (
+              <View style={styles.topBar}>
+                <View style={styles.topBarSpacer} />
+                <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
+              </View>
+            )}
+            <View style={styles.brandLabelContainer}>
+              <Text style={styles.brandLabel}>TAGIT</Text>
             </View>
             <Text style={styles.title}>
-              {isLogin ? "Welcome Back!" : "Create Account"}
+              {isLogin ? "Welcome back\nSign in to continue" : "Create your\naccount"}
             </Text>
             <Text style={styles.subtitle}>
               {isLogin
-                ? "Sign in to continue shopping"
-                : "Join tagit and start shopping"}
+                ? "Access your account and keep shopping."
+                : "Join Tagit and start shopping."}
             </Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
+            <View style={styles.sheetHandle} />
             {!isLogin && (
               <View style={styles.inputContainer}>
                 <Ionicons
@@ -660,14 +696,14 @@ export const AuthScreen = ({ navigation, route }) => {
             <Text style={styles.footerText}>
               {isLogin ? "Don't have an account?" : "Already have an account?"}
             </Text>
-            <Pressable onPress={() => setIsLogin(!isLogin)}>
+            <Pressable onPress={() => switchAuthMode(!isLogin)}>
               <Text style={styles.footerLink}>
                 {isLogin ? "Sign Up" : "Sign In"}
               </Text>
             </Pressable>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </Animated.View>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 };
@@ -676,7 +712,7 @@ const buildAuthStyles = (c) =>
   StyleSheet.create({ 
   container: {
     flex: 1,
-    backgroundColor: c.background,
+    backgroundColor: c.surface,
   },
   // Subtle background circles
   bgCircle1: {
@@ -738,56 +774,89 @@ const buildAuthStyles = (c) =>
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 24,
+    paddingBottom: 20,
+  },
+  authTransition: {
+    width: "100%",
   },
   header: {
-    alignItems: "center",
-    marginTop: 20,
-    marginBottom: 40,
+    minHeight: 310,
+    marginTop: 0,
+    marginBottom: 0,
+    paddingHorizontal: 28,
+    paddingTop: 22,
+    paddingBottom: 76,
+    alignItems: "flex-start",
+    backgroundColor: c.primaryDark,
+    borderBottomLeftRadius: 42,
+    borderBottomRightRadius: 42,
   },
-  iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: `${c.primary}15`,
+  signupHeader: {
+    paddingTop: 84,
+  },
+  topBar: {
+    width: "100%",
+    flexDirection: "row",
     alignItems: "center",
+    marginBottom: 42,
+  },
+  topBarSpacer: {
+    flex: 1,
+  },
+  brandLabelContainer: {
+    alignItems: "flex-start",
     justifyContent: "center",
-    marginBottom: 24,
+    marginBottom: 22,
   },
-  logoImage: {
-    width: 95,
-    height: 95,
-    borderRadius: 50,
+  brandLabel: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 2,
+    marginTop: 7,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: c.dark,
+    fontSize: 38,
+    lineHeight: 42,
+    fontWeight: "800",
+    color: "#fff",
     marginBottom: 12,
   },
   subtitle: {
-    fontSize: 16,
-    color: c.muted,
-    textAlign: "center",
-    lineHeight: 24,
-    paddingHorizontal: 20,
+    fontSize: 14,
+    color: "#ffd6df",
+    textAlign: "left",
+    lineHeight: 20,
   },
   form: {
+    marginTop: -52,
+    marginHorizontal: 18,
+    padding: 24,
+    paddingTop: 18,
+    backgroundColor: c.light,
+    borderRadius: 28,
+    shadowColor: c.dark,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    elevation: 8,
     gap: 16,
+  },
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 3,
+    backgroundColor: c.border,
+    alignSelf: "center",
+    marginBottom: 4,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: c.light,
-    borderRadius: radius.full,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: "#E4E8F0",
-    shadowColor: c.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: c.border,
   },
   inputIcon: {
     marginRight: 12,
@@ -811,7 +880,7 @@ const buildAuthStyles = (c) =>
   submitButton: {
     borderRadius: radius.full,
     overflow: "hidden",
-    backgroundColor: AUTH_PRIMARY_PINK,
+    backgroundColor: c.primaryDark,
     marginTop: 8,
     shadowColor: c.primary,
     shadowOffset: { width: 0, height: 6 },
@@ -876,9 +945,9 @@ const buildAuthStyles = (c) =>
     justifyContent: "center",
     alignItems: "center",
     gap: 8,
-    marginTop: "auto",
-    paddingTop: 24,
-    paddingBottom: 20,
+    marginTop: 24,
+    paddingTop: 4,
+    paddingBottom: 12,
   },
   footerText: {
     fontSize: 16,

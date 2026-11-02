@@ -84,6 +84,7 @@ CREATE TABLE public.express_products (
   sku text,
   barcode text,
   quantity integer DEFAULT 0 CHECK (quantity >= 0),
+  reorder_level integer NOT NULL DEFAULT 0 CHECK (reorder_level >= 0),
   track_inventory boolean DEFAULT true,
   allow_backorder boolean DEFAULT false,
   weight numeric,

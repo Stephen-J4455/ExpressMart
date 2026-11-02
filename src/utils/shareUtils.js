@@ -36,7 +36,7 @@ export const generateDeepLink = (type, id, params = {}) => {
  * Generate web URLs for sharing (fallback for non-app users)
  */
 export const generateWebUrl = (type, id, params = {}) => {
-  const baseUrl = 'https://www.expressmart.me';
+  const baseUrl = 'https://tagitshop.online';
   
   switch (type) {
     case 'product':
@@ -95,7 +95,6 @@ export const shareContent = async (title, message, url = null) => {
  * Share a product with deeplink
  */
 export const shareProduct = async (productId, productTitle, productImage = null) => {
-  const deeplink = generateDeepLink('product', productId);
   const webUrl = generateWebUrl('product', productId);
   
   const message = `Check out "${productTitle}" on tagit!`;
@@ -117,19 +116,18 @@ export const shareReel = async (reel) => {
     return { success: false, error: 'Missing product' };
   }
   const message = `Check out "${title}" on tagit!`;
-  return shareContent('Share Product', message, generateDeepLink('product', productId));
+  return shareContent('Share Product', message, generateWebUrl('product', productId));
 };
 
 /**
  * Share a store/seller with deeplink
  */
 export const shareStore = async (sellerId, storeName, storeImage = null) => {
-  const deeplink = generateDeepLink('store', sellerId);
   const webUrl = generateWebUrl('store', sellerId);
   
   const message = `Check out "${storeName}" on tagit!`;
   
-  return shareContent('Share Store', message, deeplink);
+  return shareContent('Share Store', message, webUrl);
 };
 
 /**
@@ -193,7 +191,7 @@ export const useShare = () => {
       const result = await shareContent(
         title,
         `Check this out on tagit!`,
-        generateDeepLink(type, id, params)
+        generateWebUrl(type, id, params)
       );
       
       if (result.success) {
