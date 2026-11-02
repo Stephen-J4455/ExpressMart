@@ -1,8 +1,8 @@
-   {
+{
   "expo": {
     "name": "tagit",
     "slug": "tagit",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "expressmart",
@@ -19,9 +19,7 @@
         "applinks:www.tagitshop.online"
       ],
       "infoPlist": {
-        "UIBackgroundModes": [
-          "remote-notification"
-        ],
+        "UIBackgroundModes": ["remote-notification"],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -42,10 +40,7 @@
               "scheme": "expressmart"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         },
         {
           "action": "VIEW",
@@ -82,10 +77,7 @@
               "pathPrefix": "/wa/callback"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
