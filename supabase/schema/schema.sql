@@ -67,6 +67,14 @@ CREATE TABLE public.express_sellers (
   last_seen_at timestamp with time zone,
   account_verified boolean NOT NULL DEFAULT false,
   store_description text,
+  storefront_enabled boolean NOT NULL DEFAULT false,
+  enterprise_enabled boolean NOT NULL DEFAULT false,
+  storefront_theme text NOT NULL DEFAULT 'chicwave'
+    CHECK (storefront_theme = ANY (ARRAY['chicwave'::text, 'fashionia'::text, 'minimal'::text, 'botanical'::text, 'luxe'::text])),
+  storefront_layout text NOT NULL DEFAULT 'classic'
+    CHECK (storefront_layout = ANY (ARRAY['classic'::text, 'editorial'::text, 'catalog'::text, 'split'::text, 'spotlight'::text])),
+  storefront_color_mode text NOT NULL DEFAULT 'system'
+    CHECK (storefront_color_mode = ANY (ARRAY['light'::text, 'dark'::text, 'system'::text])),
   CONSTRAINT express_sellers_pkey PRIMARY KEY (id),
   CONSTRAINT express_sellers_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
@@ -253,7 +261,7 @@ CREATE TABLE public.express_payments (
   platform_commission numeric DEFAULT 0,
   seller_amount numeric,
   platform_amount numeric,
-  payment_type text NOT NULL DEFAULT 'order'::text CHECK (payment_type = ANY (ARRAY['order'::text, 'store_registration'::text])),
+  payment_type text NOT NULL DEFAULT 'order'::text CHECK (payment_type = ANY (ARRAY['order'::text, 'store_registration'::text, 'enterprise_upgrade'::text])),
   seller_id uuid,
   CONSTRAINT express_payments_pkey PRIMARY KEY (id),
   CONSTRAINT express_payments_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.express_orders(id),

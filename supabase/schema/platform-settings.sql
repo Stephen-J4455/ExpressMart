@@ -16,6 +16,8 @@ INSERT INTO public.express_settings (key, value, description) VALUES
     'OpenRouter model id used by the in-app AI assistant (e.g. openai/gpt-4o-mini, anthropic/claude-3.5-haiku).'),
   ('store_registration_fee', '150'::jsonb,
     'One-time store registration fee in GHS charged via Paystack.'),
+  ('enterprise_upgrade_fee', '0'::jsonb,
+    'One-time Enterprise upgrade fee in GHS charged via Paystack. Configure in the Admin app before offering upgrades.'),
   ('store_registration_free_enabled', 'false'::jsonb,
     'When true, the customer/seller app bypasses the Paystack payment session during store registration and creates the store directly (admin-driven promotion).')
 ON CONFLICT (key) DO NOTHING;
@@ -38,7 +40,22 @@ CREATE POLICY "settings_public_read" ON public.express_settings
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "settings_authenticated_write" ON public.express_settings;
-CREATE POLICY "settings_authenticated_write" ON public.express_settings
+DROP POLICY IF EXISTS "settings_admin_write" ON public.express_settings;
+CREATE POLICY "settings_admin_write" ON public.express_settings
   FOR ALL TO authenticated
-  USING (true)
-  WITH CHECK (true);
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.express_profiles p
+      WHERE p.id = auth.uid()
+        AND p.role = 'admin'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.express_profiles p
+      WHERE p.id = auth.uid()
+        AND p.role = 'admin'
+    )
+  );

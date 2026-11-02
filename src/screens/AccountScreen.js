@@ -482,23 +482,29 @@ export const AccountScreen = ({ navigation }) => {
         <View style={styles.quickActionsSection}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.quickActionsCard}>
-            {quickActions.map((action) => (
-              <Pressable
-                key={action.label}
-                style={styles.quickActionCard}
-                onPress={() => navigation.navigate(action.screen)}
-              >
-                <View
-                  style={[
-                    styles.quickActionIcon,
-                    { backgroundColor: action.bg },
-                  ]}
+            {quickActions
+              .filter((action) => !action.sellerOnly || !!sellerRecord)
+              .map((action) => (
+                <Pressable
+                  key={action.label}
+                  style={styles.quickActionCard}
+                  onPress={() => navigation.navigate(action.screen)}
                 >
-                  <Ionicons name={action.icon} size={22} color={action.color} />
-                </View>
-                <Text style={styles.quickActionLabel}>{action.label}</Text>
-              </Pressable>
-            ))}
+                  <View
+                    style={[
+                      styles.quickActionIcon,
+                      { backgroundColor: action.bg },
+                    ]}
+                  >
+                    <Ionicons
+                      name={action.icon}
+                      size={22}
+                      color={action.color}
+                    />
+                  </View>
+                  <Text style={styles.quickActionLabel}>{action.label}</Text>
+                </Pressable>
+              ))}
           </View>
         </View>
 

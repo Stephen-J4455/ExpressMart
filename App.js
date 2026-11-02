@@ -82,6 +82,7 @@ import { ForgotPasswordScreen } from "./src/screens/ForgotPasswordScreen";
 import PasswordResetScreen from "./src/screens/PasswordResetScreen";
 import { ProfileEditScreen } from "./src/screens/ProfileEditScreen";
 import { SellerProfileScreen } from "./src/screens/SellerProfileScreen";
+import { StorefrontEditorScreen } from "./src/screens/StorefrontEditorScreen";
 import { ChangePasswordScreen } from "./src/screens/ChangePasswordScreen";
 import { ChangeEmailScreen } from "./src/screens/ChangeEmailScreen";
 import { PrivacySettingsScreen } from "./src/screens/PrivacySettingsScreen";
@@ -986,6 +987,63 @@ const hasResetPasswordPath = (value) => {
   );
 };
 
+const getProductDeepLinkState = (value) => {
+  const raw = String(value || "");
+  let pathname = raw;
+  let search = "";
+
+  try {
+    const parsed = new URL(
+      raw,
+      Platform.OS === "web" && typeof window !== "undefined"
+        ? window.location.origin
+        : "https://tagitshop.online",
+    );
+    pathname = parsed.pathname;
+    search = parsed.search;
+  } catch {
+    const queryIndex = raw.indexOf("?");
+    if (queryIndex >= 0) {
+      pathname = raw.slice(0, queryIndex);
+      search = raw.slice(queryIndex);
+    }
+  }
+
+  const productMatch = pathname.match(/^\/product\/([^/]+)\/?$/i);
+  if (productMatch) {
+    return {
+      index: 0,
+      routes: [
+        {
+          name: "ProductDetail",
+          params: {
+            productId: decodeURIComponent(productMatch[1]),
+            ...(search ? Object.fromEntries(new URLSearchParams(search)) : {}),
+          },
+        },
+      ],
+    };
+  }
+
+  const skuMatch = pathname.match(/^\/p\/([^/]+)\/?$/i);
+  if (skuMatch) {
+    return {
+      index: 0,
+      routes: [
+        {
+          name: "ProductDetailBySku",
+          params: {
+            sku: decodeURIComponent(skuMatch[1]),
+            ...(search ? Object.fromEntries(new URLSearchParams(search)) : {}),
+          },
+        },
+      ],
+    };
+  }
+
+  return null;
+};
+
 const linking = {
   prefixes,
   getInitialURL: async () => {
@@ -1040,6 +1098,9 @@ const linking = {
         routes: [{ name: "Auth" }],
       };
     }
+
+    const productState = getProductDeepLinkState(normalizedPath);
+    if (productState) return productState;
 
     const state = defaultGetStateFromPath(path, options);
     if (state) return state;
@@ -1291,6 +1352,11 @@ const AuthenticatedApp = () => {
     "Login to view store profile",
     "Please sign in to access your store profile.",
   );
+  const GuardedStorefrontEditor = withAuthGate(
+    StorefrontEditorScreen,
+    "Login to customize your storefront",
+    "Please sign in to access your storefront.",
+  );
   const GuardedChangePassword = withAuthGate(
     ChangePasswordScreen,
     "Login to change password",
@@ -1387,6 +1453,10 @@ const AuthenticatedApp = () => {
         <Stack.Screen name="Terms" component={TermsScreen} />
         <Stack.Screen name="ProfileEdit" component={GuardedProfileEdit} />
         <Stack.Screen name="SellerProfile" component={GuardedSellerProfile} />
+        <Stack.Screen
+          name="StorefrontEditor"
+          component={GuardedStorefrontEditor}
+        />
         <Stack.Screen name="ChangePassword" component={GuardedChangePassword} />
         <Stack.Screen name="ChangeEmail" component={GuardedChangeEmail} />
         <Stack.Screen

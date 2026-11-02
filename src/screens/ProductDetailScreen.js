@@ -36,6 +36,7 @@ import { shareProduct } from "../utils/shareUtils";
 import { trackEvent } from "../services/feedPersonalizationService";
 import { useDeepLinkProductHandler } from "../hooks/useDeepLinkProductHandler";
 import { InstallAppBanner } from "../components/InstallAppBanner";
+import { FeedVideo } from "../components/FeedVideo";
 import { radius } from "../theme/colors";
 import { R2_FOLDERS, resolveMediaUrl } from "../services/r2Storage";
 
@@ -197,6 +198,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   const [loadingFlashSale, setLoadingFlashSale] = useState(true);
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [previewImageIndex, setPreviewImageIndex] = useState(0);
+  const [videoMuted, setVideoMuted] = useState(true);
   const [expandedReviews, setExpandedReviews] = useState({});
   const [similarProducts, setSimilarProducts] = useState([]);
   const [loadingSimilarProducts, setLoadingSimilarProducts] = useState(false);
@@ -218,6 +220,61 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   });
 
   const screenWidth = Dimensions.get("window").width;
+  const productImages =
+    product.thumbnails && product.thumbnails.length > 0
+      ? product.thumbnails
+      : [product.thumbnail];
+  const productVideoUri = product.video_url || product.video_hls_url;
+  const resolvedProductVideoUri = productVideoUri
+    ? resolveMediaUrl(productVideoUri, R2_FOLDERS.PRODUCTS)
+    : null;
+  const mediaItems = useMemo(() => {
+    const items = productImages.map((imageUri, index) => ({
+      id: `image-${index}`,
+      type: "image",
+      uri: imageUri,
+    }));
+    if (resolvedProductVideoUri) {
+      items.push({
+        id: "video",
+        type: "video",
+        uri: resolvedProductVideoUri,
+      });
+    }
+    return items;
+  }, [productImages, resolvedProductVideoUri]);
+  const thumbnailItems = useMemo(() => {
+    const items = productImages.map((imageUri, index) => ({
+      id: `thumb-image-${index}`,
+      type: "image",
+      uri: imageUri,
+    }));
+    if (resolvedProductVideoUri) {
+      items.push({
+        id: "thumb-video",
+        type: "video",
+        uri: resolvedProductVideoUri,
+        previewImageUri: productImages[0] || product.thumbnail,
+      });
+    }
+    return items;
+  }, [productImages, resolvedProductVideoUri, product.thumbnail]);
+  const previewMediaItems = useMemo(() => {
+    const items = productImages.map((imageUri, index) => ({
+      id: `preview-image-${index}`,
+      type: "image",
+      uri: imageUri,
+    }));
+    if (resolvedProductVideoUri) {
+      items.push({
+        id: "preview-video",
+        type: "video",
+        uri: resolvedProductVideoUri,
+      });
+    }
+    return items;
+  }, [productImages, resolvedProductVideoUri]);
+  const mediaCount = mediaItems.length;
 
   // Check if product has active flash sale
   const hasFlashSale = !!flashSale && new Date(flashSale.end_time) > new Date();
@@ -1105,28 +1162,53 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             }}
             scrollEventThrottle={16}
           >
-            {(product.thumbnails && product.thumbnails.length > 0
-              ? product.thumbnails
-              : [product.thumbnail]
-            ).map((imageUri, index) => (
-              <Pressable
-                key={index}
-                onPress={() => {
-                  setPreviewImageIndex(index);
-                  setShowImagePreview(true);
-                }}
-              >
-                <ProductDetailImage
-                  imageUri={imageUri}
-                  style={[styles.heroImage, { width: screenWidth - 32 }]}
-                />
-              </Pressable>
-            ))}
+            {mediaItems.map((item, index) =>
+              item.type === "video" ? (
+                <View
+                  key={item.id}
+                  style={[styles.productVideoSlide, { width: screenWidth - 32 }]}
+                >
+                  <FeedVideo
+                    source={{ uri: item.uri }}
+                    style={styles.productVideoSlide}
+                    resizeMode="contain"
+                    paused={activeImageIndex !== index}
+                    muted={videoMuted}
+                    repeat
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={videoMuted ? "Turn sound on" : "Mute video"}
+                    onPress={() => setVideoMuted((muted) => !muted)}
+                    style={styles.videoSoundButton}
+                  >
+                    <Ionicons
+                      name={videoMuted ? "volume-mute" : "volume-high"}
+                      size={18}
+                      color="#fff"
+                    />
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  key={item.id}
+                  onPress={() => {
+                    setPreviewImageIndex(index);
+                    setShowImagePreview(true);
+                  }}
+                >
+                  <ProductDetailImage
+                    imageUri={item.uri}
+                    style={[styles.heroImage, { width: screenWidth - 32 }]}
+                  />
+                </Pressable>
+              ),
+            )}
           </ScrollView>
 
-          {product.thumbnails && product.thumbnails.length > 1 && (
+          {mediaCount > 1 && (
             <View style={styles.pagination}>
-              {product.thumbnails.map((_, index) => (
+              {Array.from({ length: mediaCount }, (_, index) => (
                 <View
                   key={index}
                   style={[
@@ -1140,11 +1222,11 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         </View>
 
         {/* Thumbnail strip — tap to jump, +N opens the fullscreen preview */}
-        {product.thumbnails && product.thumbnails.length > 1 && (
+        {thumbnailItems.length > 1 && (
           <View style={styles.thumbStrip}>
-            {product.thumbnails.slice(0, 5).map((imageUri, index) => (
+            {thumbnailItems.slice(0, 5).map((item, index) => (
               <Pressable
-                key={index}
+                key={item.id}
                 onPress={() => {
                   heroScrollRef.current?.scrollTo({
                     x: index * (screenWidth - 32),
@@ -1158,12 +1240,18 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 ]}
               >
                 <ProductDetailImage
-                  imageUri={imageUri}
+                  imageUri={item.type === "video" ? item.previewImageUri : item.uri}
                   style={styles.thumbImage}
                 />
+                {item.type === "video" && (
+                  <View style={styles.thumbVideoBadge}>
+                    <Ionicons name="videocam" size={12} color="#fff" />
+                    <Text style={styles.thumbVideoLabel}>VIDEO</Text>
+                  </View>
+                )}
               </Pressable>
             ))}
-            {product.thumbnails.length > 5 && (
+            {thumbnailItems.length > 5 && (
               <Pressable
                 style={styles.thumbMore}
                 onPress={() => {
@@ -1172,12 +1260,12 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 }}
               >
                 <ProductDetailImage
-                  imageUri={product.thumbnails[4]}
+                  imageUri={thumbnailItems[4]?.previewImageUri || thumbnailItems[4]?.uri}
                   style={styles.thumbImage}
                 />
                 <View style={styles.thumbMoreOverlay}>
                   <Text style={styles.thumbMoreText}>
-                    +{product.thumbnails.length - 5}
+                    +{thumbnailItems.length - 5}
                   </Text>
                 </View>
               </Pressable>
@@ -1881,26 +1969,48 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             contentContainerStyle={{ alignItems: "center" }}
             style={{ flex: 1 }}
           >
-            {(product.thumbnails && product.thumbnails.length > 0
-              ? product.thumbnails
-              : [product.thumbnail]
-            ).map((imageUri, index) => (
-              <View key={index} style={styles.previewPage}>
-                <ProductDetailImage
-                  imageUri={imageUri}
-                  style={styles.previewImage}
-                  resizeMode="contain"
-                />
+            {previewMediaItems.map((item, index) => (
+              <View key={item.id} style={styles.previewPage}>
+                {item.type === "video" ? (
+                  <View style={styles.previewVideoPage}>
+                    <FeedVideo
+                      source={{ uri: item.uri }}
+                      style={styles.previewImage}
+                      resizeMode="contain"
+                      paused={previewImageIndex !== index}
+                      muted={videoMuted}
+                      repeat
+                    />
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={videoMuted ? "Turn sound on" : "Mute video"}
+                      onPress={() => setVideoMuted((muted) => !muted)}
+                      style={styles.videoSoundButton}
+                    >
+                      <Ionicons
+                        name={videoMuted ? "volume-mute" : "volume-high"}
+                        size={20}
+                        color="#fff"
+                      />
+                    </Pressable>
+                  </View>
+                ) : (
+                  <ProductDetailImage
+                    imageUri={item.uri}
+                    style={styles.previewImage}
+                    resizeMode="contain"
+                  />
+                )}
               </View>
             ))}
           </ScrollView>
 
           {/* Bottom: page indicator dots + counter */}
-          {(product.thumbnails?.length || 1) > 1 && (
+          {previewMediaItems.length > 1 && (
             <View
               style={[styles.previewDotsRow, { bottom: 52 + insets.bottom }]}
             >
-              {(product.thumbnails || [product.thumbnail]).map((_, i) => (
+              {previewMediaItems.map((_, i) => (
                 <View
                   key={i}
                   style={[
@@ -1912,7 +2022,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             </View>
           )}
           <Text style={[styles.previewCounter, { bottom: 24 + insets.bottom }]}>
-            {previewImageIndex + 1} / {product.thumbnails?.length || 1}
+            {previewImageIndex + 1} / {previewMediaItems.length}
           </Text>
         </View>
       </Modal>
@@ -3213,6 +3323,27 @@ const buildProductDetailStyles = (c) =>
       width: "100%",
       height: "100%",
     },
+    thumbVideoBadge: {
+      position: "absolute",
+      right: 4,
+      bottom: 4,
+      height: 20,
+      paddingHorizontal: 5,
+      borderRadius: 10,
+      backgroundColor: "rgba(15, 23, 42, 0.75)",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 3,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.4)",
+    },
+    thumbVideoLabel: {
+      color: "#fff",
+      fontSize: 7,
+      fontWeight: "800",
+      letterSpacing: 0.3,
+    },
     thumbMore: {
       width: 56,
       height: 56,
@@ -3229,6 +3360,31 @@ const buildProductDetailStyles = (c) =>
       color: "#FFFFFF",
       fontSize: 13,
       fontWeight: "800",
+    },
+    productVideoSlide: {
+      height: 360,
+      backgroundColor: c.border,
+      borderRadius: 20,
+      overflow: "hidden",
+    },
+    videoSoundButton: {
+      position: "absolute",
+      right: 14,
+      bottom: 14,
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(15, 23, 42, 0.72)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.45)",
+    },
+    previewVideoPage: {
+      width: "100%",
+      height: "100%",
+      alignItems: "center",
+      justifyContent: "center",
     },
     infoTopRow: {
       flexDirection: "row",

@@ -300,6 +300,12 @@ const MENU_ITEMS = [
     icon: "color-palette-outline",
     screen: "Settings",
   },
+  { section: "Enterprise" },
+  {
+    label: "Storefront",
+    icon: "storefront-outline",
+    screen: "StorefrontEditor",
+  },
   { section: "Account" },
   { label: "Security", icon: "shield-checkmark-outline", screen: "Security" },
   { label: "Privacy", icon: "lock-closed-outline", screen: "PrivacySettings" },
@@ -756,7 +762,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     const { data: existing } = await supabase
       .from("express_sellers")
       .select(
-        "id, name, theme_color, avatar, badges, store_description, payment_account, account_verified, is_active",
+        "id, name, theme_color, avatar, badges, store_description, payment_account, account_verified, is_active, enterprise_enabled",
       )
       .eq("user_id", user.id)
       .maybeSingle();
@@ -5311,6 +5317,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 <Text style={styles.name} numberOfLines={1}>
                   {sellerName}
                 </Text>
+                {seller?.enterprise_enabled && (
+                  <View style={styles.enterpriseBadge}>
+                    <Ionicons name="diamond" size={12} color="#fff" />
+                    <Text style={styles.enterpriseBadgeText}>Enterprise</Text>
+                  </View>
+                )}
                 <Pressable
                   style={styles.chevronBtn}
                   onPress={() => setControlsExpanded((v) => !v)}
@@ -7435,6 +7447,20 @@ const buildSellerAdminStyles = (c) =>
       fontSize: 22,
       fontWeight: "800",
       color: c.dark,
+    },
+    enterpriseBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: "#7C3AED",
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      borderRadius: radius.full,
+    },
+    enterpriseBadgeText: {
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: "700",
     },
     chevronBtn: {
       width: 34,

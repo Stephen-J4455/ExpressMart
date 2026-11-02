@@ -210,7 +210,7 @@ export const ShopProvider = ({ children }) => {
           supabase
             .from("express_sellers")
             .select(
-              "id,name,avatar,rating,total_ratings,badges,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
+              "id,name,avatar,rating,total_ratings,badges,enterprise_enabled,store_description,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website,theme_color,theme_apply_customer",
             )
             .eq("is_active", true)
             .order("rating", { ascending: false })

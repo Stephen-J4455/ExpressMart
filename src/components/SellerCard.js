@@ -27,7 +27,7 @@ export const SellerCard = ({ seller, onPress }) => {
     const toast = useToast();
     const [followLoading, setFollowLoading] = useState(false);
     const isVerified = seller.badges && seller.badges.includes("verified");
-    const otherBadges = seller.badges?.filter((badge) => badge !== "verified") || [];
+    const isEnterprise = seller.enterprise_enabled === true;
 
     const handleFollowPress = async (e) => {
         e.preventDefault();
@@ -90,9 +90,17 @@ export const SellerCard = ({ seller, onPress }) => {
 
             {/* Content Section */}
             <View style={styles.content}>
-                <Text numberOfLines={1} style={styles.title}>
-                    {seller.name}
-                </Text>
+                <View style={styles.titleRow}>
+                    <Text numberOfLines={1} style={styles.title}>
+                        {seller.name}
+                    </Text>
+                    {isEnterprise && (
+                        <View style={styles.enterpriseBadge}>
+                            <Ionicons name="diamond" size={11} color="#fff" />
+                            <Text style={styles.enterpriseBadgeText}>Enterprise</Text>
+                        </View>
+                    )}
+                </View>
 
                 {/* Info Row */}
                 <View style={styles.infoRow}>
@@ -219,10 +227,30 @@ const buildStyles = (c) =>
         gap: 8,
     },
     title: {
+        flex: 1,
         fontSize: 15,
         fontWeight: "800",
         color: c.dark,
         letterSpacing: -0.3,
+    },
+    titleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+    enterpriseBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 3,
+        backgroundColor: "#7C3AED",
+        paddingHorizontal: 6,
+        paddingVertical: 4,
+        borderRadius: 10,
+    },
+    enterpriseBadgeText: {
+        color: "#fff",
+        fontSize: 9,
+        fontWeight: "700",
     },
     infoRow: {
         flexDirection: "row",

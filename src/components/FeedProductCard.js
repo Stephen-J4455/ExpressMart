@@ -273,6 +273,43 @@ export const FeedProductCard = memo(function FeedProductCard({
   const singleImageRatio =
     singleImageSize.uri === images[0] ? singleImageSize.ratio : 1;
   const [videoMuted, setVideoMuted] = useGlobalVideoMuted();
+  const [videoPaused, setVideoPaused] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoProgressWidth, setVideoProgressWidth] = useState(0);
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (!isVideoActive) setVideoPaused(false);
+  }, [isVideoActive]);
+
+  useEffect(() => {
+    setVideoReady(false);
+    setVideoDuration(0);
+    setVideoProgress(0);
+  }, [videoUrl]);
+
+  const formatVideoTime = (seconds) => {
+    const totalSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+    const minutes = Math.floor(totalSeconds / 60);
+    return `${minutes}:${String(totalSeconds % 60).padStart(2, "0")}`;
+  };
+
+  const seekVideo = (event) => {
+    const duration = Number(videoDuration);
+    if (!videoRef.current?.seek || !duration) return;
+    const nextTime = Math.max(
+      0,
+      Math.min(
+        duration,
+        (event.nativeEvent.locationX / Math.max(videoProgressWidth, 1)) *
+          duration,
+      ),
+    );
+    videoRef.current.seek(nextTime);
+    setVideoProgress(nextTime);
+  };
 
   // Sub-modals opened from the overflow menu. Kept outside the main menu
   // modal so the user can return to the same menu state if they back out.
@@ -705,34 +742,113 @@ export const FeedProductCard = memo(function FeedProductCard({
       {showVideo && videoUrl ? (
         <Pressable onPress={openProduct} style={styles.mediaWrap}>
           <View style={[styles.mediaGridSingle, styles.videoMedia]}>
+            {images[0] ? (
+              <FeedCardImage
+                uri={images[0]}
+                style={StyleSheet.absoluteFill}
+                resizeMode="cover"
+                loadSource
+              />
+            ) : null}
             <FeedVideo
+              ref={videoRef}
               source={{ uri: resolveMediaUrl(videoUrl, R2_FOLDERS.PRODUCTS) }}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, !videoReady && styles.videoHidden]}
               resizeMode="cover"
-              paused={!isVideoActive}
+              paused={!isVideoActive || videoPaused}
               muted={videoMuted}
               repeat
-            />
-            <View style={styles.videoBadge}>
-              <Ionicons name="play" size={11} color="#fff" />
-              <Text style={styles.videoBadgeText}>Video</Text>
-            </View>
-            <Pressable
-              style={styles.videoSoundButton}
-              onPress={(event) => {
-                event.stopPropagation?.();
-                setVideoMuted((muted) => !muted);
+              onLoad={(meta) => {
+                setVideoDuration(Number(meta?.duration) || 0);
               }}
-              accessibilityRole="button"
-              accessibilityLabel={videoMuted ? "Unmute video" : "Mute video"}
-              hitSlop={8}
-            >
-              <Ionicons
-                name={videoMuted ? "volume-mute" : "volume-high"}
-                size={16}
-                color="#fff"
-              />
-            </Pressable>
+              onReadyForDisplay={() => setVideoReady(true)}
+              onProgress={(progress) => {
+                if (progress?.currentTime != null) {
+                  setVideoProgress(Number(progress.currentTime) || 0);
+                }
+              }}
+            />
+            {!videoReady && (
+              <View style={styles.videoLoadingOverlay} pointerEvents="none">
+                <ActivityIndicator size="large" color="#fff" />
+              </View>
+            )}
+            <View style={styles.videoBottomRow}>
+              <View style={styles.videoBadge}>
+                <Ionicons name="play" size={11} color="#fff" />
+                <Text style={styles.videoBadgeText}>Video</Text>
+              </View>
+              {videoDuration > 0 && (
+                <View style={styles.videoProgressArea}>
+                  <Pressable
+                    style={styles.videoProgressTrack}
+                    onPress={(event) => {
+                      event.stopPropagation?.();
+                      seekVideo(event);
+                    }}
+                    onLayout={(event) =>
+                      setVideoProgressWidth(event.nativeEvent.layout.width)
+                    }
+                    accessibilityRole="adjustable"
+                    accessibilityLabel="Video progress"
+                  >
+                    <View
+                      style={[
+                        styles.videoProgressFill,
+                        {
+                          width: `${Math.min(
+                            100,
+                            (videoProgress / videoDuration) * 100,
+                          )}%`,
+                        },
+                      ]}
+                    />
+                  </Pressable>
+                  <View style={styles.videoTimeRow} pointerEvents="none">
+                    <Text style={styles.videoTimeText}>
+                      {formatVideoTime(videoProgress)}
+                    </Text>
+                    <Text style={styles.videoTimeText}>
+                      {formatVideoTime(videoDuration)}
+                    </Text>
+                  </View>
+                </View>
+              )}
+              <View style={styles.videoControls}>
+                <Pressable
+                  style={styles.videoControlButton}
+                  onPress={(event) => {
+                    event.stopPropagation?.();
+                    setVideoPaused((paused) => !paused);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={videoPaused ? "Play video" : "Pause video"}
+                  hitSlop={8}
+                >
+                  <Ionicons
+                    name={videoPaused ? "play" : "pause"}
+                    size={16}
+                    color="#fff"
+                  />
+                </Pressable>
+                <Pressable
+                  style={styles.videoControlButton}
+                  onPress={(event) => {
+                    event.stopPropagation?.();
+                    setVideoMuted((muted) => !muted);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={videoMuted ? "Unmute video" : "Mute video"}
+                  hitSlop={8}
+                >
+                  <Ionicons
+                    name={videoMuted ? "volume-mute" : "volume-high"}
+                    size={16}
+                    color="#fff"
+                  />
+                </Pressable>
+              </View>
+            </View>
           </View>
           {hasDiscount && (
             <View style={styles.discountBadge}>
@@ -1708,10 +1824,16 @@ const buildFeedCardStyles = (c) =>
       height: 450,
       position: "relative",
     },
+    videoHidden: {
+      opacity: 0,
+    },
+    videoLoadingOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(15, 23, 42, 0.18)",
+    },
     videoBadge: {
-      position: "absolute",
-      top: 10,
-      left: 10,
       flexDirection: "row",
       alignItems: "center",
       gap: 4,
@@ -1725,16 +1847,55 @@ const buildFeedCardStyles = (c) =>
       fontSize: 10,
       fontWeight: "800",
     },
-    videoSoundButton: {
+    videoBottomRow: {
       position: "absolute",
-      top: 10,
-      right: 10,
-      width: 32,
+      left: 12,
+      right: 12,
+      bottom: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    videoControls: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    videoControlButton: {
+      width: 34,
       height: 32,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: c.scrim,
       borderRadius: radius.full,
+    },
+    videoProgressArea: {
+      flex: 1,
+      minWidth: 40,
+    },
+    videoProgressTrack: {
+      height: 5,
+      borderRadius: radius.full,
+      overflow: "hidden",
+      backgroundColor: "rgba(255,255,255,0.38)",
+    },
+    videoProgressFill: {
+      height: "100%",
+      borderRadius: radius.full,
+      backgroundColor: c.primary,
+    },
+    videoTimeRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 4,
+    },
+    videoTimeText: {
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: "700",
+      textShadowColor: "rgba(0,0,0,0.7)",
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
     },
     // Single-image layout: full product visible (no crop), centered on a
     // neutral surface instead of being zoomed/cropped by "cover".

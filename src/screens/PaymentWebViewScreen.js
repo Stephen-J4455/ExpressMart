@@ -415,6 +415,12 @@ export const PaymentWebViewScreen = () => {
         reference,
         orderData,
       });
+    } else if (routeName === "StorefrontEditor") {
+      navigation.replace("StorefrontEditor", {
+        payment: "success",
+        reference,
+        orderData,
+      });
     } else {
       navigation.replace("Checkout", {
         payment: "success",

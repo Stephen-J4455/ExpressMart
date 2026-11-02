@@ -193,6 +193,305 @@ serve(async (req) => {
       );
     }
 
+    if (action === "activate-free-enterprise") {
+      const supabaseClient = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+        {
+          global: {
+            headers: { Authorization: req.headers.get("Authorization") ?? "" },
+          },
+        },
+      );
+      const {
+        data: { user },
+      } = await supabaseClient.auth.getUser();
+      if (!user) throw new Error("Authentication required");
+
+      const { data: feeSetting, error: feeError } = await supabaseClient
+        .from("express_settings")
+        .select("value")
+        .eq("key", "enterprise_upgrade_fee")
+        .maybeSingle();
+      if (feeError) throw feeError;
+      if (feeSetting === null || Number(feeSetting.value) !== 0) {
+        throw new Error("Free Enterprise activation is not currently available");
+      }
+
+      const { data: seller, error: sellerError } = await supabaseClient
+        .from("express_sellers")
+        .select("id,enterprise_enabled")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (sellerError) throw sellerError;
+      if (!seller) throw new Error("Seller account not found");
+      if (seller.enterprise_enabled) {
+        return new Response(
+          JSON.stringify({ success: true, activated: true }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!serviceRoleKey) {
+        throw new Error("Enterprise activation is not configured");
+      }
+      const writeClient = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        serviceRoleKey,
+      );
+      const { error: activateError } = await writeClient
+        .from("express_sellers")
+        .update({ enterprise_enabled: true })
+        .eq("id", seller.id);
+      if (activateError) throw activateError;
+
+      return new Response(
+        JSON.stringify({ success: true, activated: true }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
+    if (action === "initialize-enterprise-upgrade") {
+      const { reference } = body || {};
+      if (!reference) throw new Error("reference is required");
+
+      const supabaseClient = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+        {
+          global: {
+            headers: { Authorization: req.headers.get("Authorization") ?? "" },
+          },
+        },
+      );
+      const {
+        data: { user },
+      } = await supabaseClient.auth.getUser();
+      if (!user) throw new Error("Authentication required");
+
+      const { data: seller, error: sellerError } = await supabaseClient
+        .from("express_sellers")
+        .select("id,enterprise_enabled")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (sellerError) throw sellerError;
+      if (!seller) throw new Error("Seller account not found");
+      if (seller.enterprise_enabled) throw new Error("Enterprise is already enabled");
+
+      const { data: feeSetting, error: feeError } = await supabaseClient
+        .from("express_settings")
+        .select("value")
+        .eq("key", "enterprise_upgrade_fee")
+        .maybeSingle();
+      if (feeError) throw feeError;
+      const configuredAmount = Number(feeSetting?.value);
+      if (
+        !Number.isFinite(configuredAmount) ||
+        configuredAmount <= 0 ||
+        Math.abs(configuredAmount * 100 - Math.round(configuredAmount * 100)) >
+          0.000001
+      ) {
+        throw new Error("Enterprise upgrade pricing is not configured");
+      }
+      const amount = Math.round(configuredAmount * 100) / 100;
+
+      const initPayload = {
+        email: user.email,
+        amount: Math.round(amount * 100),
+        currency: "GHS",
+        reference,
+        metadata: {
+          type: "enterprise_upgrade",
+          user_id: user.id,
+          seller_id: seller.id,
+          amount,
+        },
+      };
+      if (!user.email) throw new Error("Authenticated user has no email address");
+
+      const initRes = await fetch(
+        "https://api.paystack.co/transaction/initialize",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${paystackSecretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(initPayload),
+        },
+      );
+      const initData = await initRes.json();
+      if (!initRes.ok || initData.status !== true) {
+        throw new Error(initData?.message || "Paystack initialize failed");
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            ...initData.data,
+            amount_ghs: amount,
+            paystack_public_key: paystackPublicKey || null,
+          },
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
+    if (action === "verify-enterprise-upgrade") {
+      const { reference } = body || {};
+      if (!reference) throw new Error("reference is required");
+
+      const supabaseClient = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+        {
+          global: {
+            headers: { Authorization: req.headers.get("Authorization") ?? "" },
+          },
+        },
+      );
+      const {
+        data: { user },
+      } = await supabaseClient.auth.getUser();
+      if (!user) throw new Error("Authentication required");
+
+      const paystackResponse = await fetch(
+        `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${paystackSecretKey}` },
+        },
+      );
+      const paystackData = await paystackResponse.json();
+      if (
+        !paystackResponse.ok ||
+        !paystackData?.status ||
+        paystackData?.data?.status !== "success"
+      ) {
+        return new Response(
+          JSON.stringify({ success: true, verified: false }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      const payment = paystackData.data;
+      const metadata = payment.metadata ?? {};
+      const sellerId = metadata.seller_id;
+      const metadataAmount = Number(metadata.amount);
+      if (
+        metadata.type !== "enterprise_upgrade" ||
+        metadata.user_id !== user.id ||
+        !sellerId ||
+        !Number.isFinite(metadataAmount) ||
+        Math.round(metadataAmount * 100) !== Number(payment.amount) ||
+        payment.currency !== "GHS"
+      ) {
+        throw new Error("Payment does not match this Enterprise upgrade");
+      }
+
+      const { data: seller, error: sellerError } = await supabaseClient
+        .from("express_sellers")
+        .select("id")
+        .eq("id", sellerId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (sellerError) throw sellerError;
+      if (!seller) throw new Error("Payment is not for your seller account");
+
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!serviceRoleKey) {
+        throw new Error("Enterprise payment verification is not configured");
+      }
+      const writeClient = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        serviceRoleKey,
+      );
+      const { data: existingPayment, error: existingError } = await writeClient
+        .from("express_payments")
+        .select("payment_type,user_id,seller_id,amount,status")
+        .eq("reference", reference)
+        .maybeSingle();
+      if (existingError) throw existingError;
+      if (
+        existingPayment &&
+        (existingPayment.payment_type !== "enterprise_upgrade" ||
+          existingPayment.user_id !== user.id ||
+          existingPayment.seller_id !== seller.id ||
+          Number(existingPayment.amount) !== metadataAmount)
+      ) {
+        throw new Error("Payment reference is already used");
+      }
+      if (!existingPayment) {
+        const { error: insertError } = await writeClient
+          .from("express_payments")
+          .insert({
+            user_id: user.id,
+            seller_id: seller.id,
+            amount: payment.amount / 100,
+            currency: payment.currency,
+            provider: "paystack",
+            reference,
+            authorization_code:
+              payment.authorization?.authorization_code ??
+              payment.authorization_code ??
+              null,
+            channel: payment.channel ?? null,
+            status: "success",
+            gateway_response: payment.gateway_response ?? null,
+            payment_type: "enterprise_upgrade",
+            metadata: { type: "enterprise_upgrade", seller_id: seller.id },
+            paid_at: payment.paid_at ?? new Date().toISOString(),
+          });
+        if (insertError) {
+          if (insertError.code !== "23505") throw insertError;
+          const { data: racedPayment, error: racedPaymentError } =
+            await writeClient
+              .from("express_payments")
+              .select("payment_type,user_id,seller_id,amount,status")
+              .eq("reference", reference)
+              .maybeSingle();
+          if (racedPaymentError) throw racedPaymentError;
+          if (
+            !racedPayment ||
+            racedPayment.payment_type !== "enterprise_upgrade" ||
+            racedPayment.user_id !== user.id ||
+            racedPayment.seller_id !== seller.id ||
+            Number(racedPayment.amount) !== metadataAmount
+          ) {
+            throw insertError;
+          }
+        }
+      }
+
+      const { error: entitlementError } = await writeClient
+        .from("express_sellers")
+        .update({ enterprise_enabled: true })
+        .eq("id", seller.id);
+      if (entitlementError) throw entitlementError;
+
+      return new Response(
+        JSON.stringify({ success: true, verified: true }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
     // Initialize store-registration payment (GH₵150 one-time activation fee)
     if (action === "initialize-store-registration") {
       const { amount, reference, email } = body || {};
@@ -651,7 +950,24 @@ serve(async (req) => {
 
       // Optional auto-return: see initialize-store-registration above.
       const checkoutCallbackUrl = Deno.env.get("PAYSTACK_CALLBACK_URL");
-      if (checkoutCallbackUrl) {
+      const storefrontCallback = body?.callback_url;
+      if (storefrontCallback) {
+        const storefrontUrl = Deno.env.get("STOREFRONT_URL");
+        if (!storefrontUrl) {
+          throw new Error("STOREFRONT_URL is required for storefront checkout callbacks");
+        }
+        const configuredOrigin = new URL(storefrontUrl).origin;
+        const requestedCallback = new URL(storefrontCallback);
+        if (
+          requestedCallback.origin !== configuredOrigin ||
+          requestedCallback.pathname !== "/checkout/complete" ||
+          requestedCallback.search ||
+          requestedCallback.hash
+        ) {
+          throw new Error("Invalid storefront checkout callback URL");
+        }
+        initPayload.callback_url = `${configuredOrigin}/checkout/complete`;
+      } else if (checkoutCallbackUrl) {
         initPayload.callback_url = checkoutCallbackUrl;
       }
 
@@ -813,6 +1129,10 @@ serve(async (req) => {
           status: 200,
         },
       );
+    }
+
+    if (action && action !== "verify-payment") {
+      throw new Error(`Unsupported payment action: ${action}`);
     }
 
     // Default: verify payment flow
