@@ -1,3 +1,6 @@
+// Native uses the app's React Navigation tree; Expo Router is used only on web.
+process.env.EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK ||= "1";
+
 const { getDefaultConfig } = require("expo/metro-config");
 const path = require("path");
 
