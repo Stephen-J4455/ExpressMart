@@ -1,7 +1,15 @@
 {
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm exec expo export -p web",
-  "outputDirectory": "dist",
+  "outputDirectory": "dist/client",
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "dist/server/**"
+    },
+    "api/[...path].js": {
+      "includeFiles": "dist/server/**"
+    }
+  },
   "cleanUrls": false,
   "trailingSlash": false,
   "headers": [
@@ -38,8 +46,12 @@
       "destination": "/favicon.ico"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/api/:path*"
     }
   ]
 }

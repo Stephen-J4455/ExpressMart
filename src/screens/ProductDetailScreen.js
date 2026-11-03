@@ -34,7 +34,10 @@ import { flashSaleService } from "../services/flashSaleService";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 import { shareProduct } from "../utils/shareUtils";
 import { trackEvent } from "../services/feedPersonalizationService";
-import { useDeepLinkProductHandler } from "../hooks/useDeepLinkProductHandler";
+import {
+  fetchProductBySku,
+  useDeepLinkProductHandler,
+} from "../hooks/useDeepLinkProductHandler";
 import { InstallAppBanner } from "../components/InstallAppBanner";
 import { FeedVideo } from "../components/FeedVideo";
 import { radius } from "../theme/colors";
@@ -160,7 +163,9 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     action: deepLinkAction,
   } = route.params || {};
   const productId = deepLinkProductId || initialProduct?.id;
-  const [loadingDeepLink, setLoadingDeepLink] = useState(false);
+  const [loadingDeepLink, setLoadingDeepLink] = useState(
+    !!(deepLinkProductId || deepLinkSku) && !initialProduct,
+  );
   const insets = useSafeAreaInsets();
   const { addToCart } = useCart();
   const { user } = useAuth();
@@ -210,7 +215,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   // Deep-link cart hand-off (?action=add_to_cart). Resolves SKU links, adds to
   // cart once details are loaded, and navigates to Cart. Dedup-guarded.
   const { resolvingSku: resolvingSkuLink } = useDeepLinkProductHandler({
-    product: initialProduct || null,
+    product,
     skuParam: deepLinkSku || null,
     actionParam: deepLinkAction || null,
     loading: loadingDeepLink,
@@ -221,10 +226,12 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
   const screenWidth = Dimensions.get("window").width;
   const productImages =
-    product.thumbnails && product.thumbnails.length > 0
+    product?.thumbnails && product.thumbnails.length > 0
       ? product.thumbnails
-      : [product.thumbnail];
-  const productVideoUri = product.video_url || product.video_hls_url;
+      : product?.thumbnail
+        ? [product.thumbnail]
+        : [];
+  const productVideoUri = product?.video_url || product?.video_hls_url;
   const resolvedProductVideoUri = productVideoUri
     ? resolveMediaUrl(productVideoUri, R2_FOLDERS.PRODUCTS)
     : null;
@@ -254,11 +261,11 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         id: "thumb-video",
         type: "video",
         uri: resolvedProductVideoUri,
-        previewImageUri: productImages[0] || product.thumbnail,
+        previewImageUri: productImages[0] || product?.thumbnail,
       });
     }
     return items;
-  }, [productImages, resolvedProductVideoUri, product.thumbnail]);
+  }, [productImages, resolvedProductVideoUri, product?.thumbnail]);
   const previewMediaItems = useMemo(() => {
     const items = productImages.map((imageUri, index) => ({
       id: `preview-image-${index}`,
@@ -291,15 +298,15 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     !isPreorder && hasInventoryValue && availableStock <= 0 && !allowsBackorder;
   const originalDisplayPrice = Number(
     hasFlashSale
-      ? flashSale?.original_price || product.price || 0
-      : product.price || 0,
+      ? flashSale?.original_price || product?.price || 0
+      : product?.price || 0,
   );
   const currentDisplayPrice = Number(
     hasFlashSale
-      ? flashSale?.flash_price || product.price || 0
-      : product.discount > 0
-        ? (product.price || 0) * (1 - product.discount / 100)
-        : product.price || 0,
+      ? flashSale?.flash_price || product?.price || 0
+      : product?.discount > 0
+        ? (product?.price || 0) * (1 - product.discount / 100)
+        : product?.price || 0,
   );
   const savingsAmount = Math.max(0, originalDisplayPrice - currentDisplayPrice);
 
@@ -361,24 +368,34 @@ export const ProductDetailScreen = ({ route, navigation }) => {
   // When the screen is opened via a universal link, only the productId is
   // available. Fetch the full product record so the screen can render.
   useEffect(() => {
-    if (initialProduct || !productId || !supabase) return;
+    if (initialProduct || (!productId && !deepLinkSku)) return;
+    if (!supabase) {
+      setLoadingDeepLink(false);
+      return;
+    }
     let mounted = true;
     const loadByDeepLink = async () => {
       setLoadingDeepLink(true);
       try {
-        const { data, error } = await supabase
-          .from("express_products")
-          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
-          .eq("id", productId)
-          .single();
-        if (error) throw error;
-        if (mounted && data) {
-          setProduct({
-            ...data,
-            seller: data.seller_id,
-            quantity: data.quantity ?? data.stock ?? data.stock_quantity ?? 0,
-            stock: data.stock ?? data.quantity ?? data.stock_quantity ?? 0,
-          });
+        if (deepLinkSku) {
+          const skuProduct = await fetchProductBySku(deepLinkSku);
+          if (!skuProduct) throw new Error("Product not found for SKU link");
+          if (mounted) setProduct(skuProduct);
+        } else {
+          const { data, error } = await supabase
+            .from("express_products")
+            .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+            .eq("id", productId)
+            .single();
+          if (error) throw error;
+          if (mounted && data) {
+            setProduct({
+              ...data,
+              seller: data.seller_id,
+              quantity: data.quantity ?? data.stock ?? data.stock_quantity ?? 0,
+              stock: data.stock ?? data.quantity ?? data.stock_quantity ?? 0,
+            });
+          }
         }
       } catch (err) {
         console.error("Error loading product from deep link:", err);
@@ -390,7 +407,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     return () => {
       mounted = false;
     };
-  }, [initialProduct, productId]);
+  }, [deepLinkSku, initialProduct, productId]);
 
   // Check if product is wishlisted
   useEffect(() => {
@@ -528,8 +545,8 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
   const productDetailsText = useMemo(() => {
     const baseDescription = String(
-      product.description ||
-        `High-quality product from ${product.vendor}. Category: ${product.category}. Perfect for your needs with excellent features and durability.`,
+      product?.description ||
+        `High-quality product from ${product?.vendor}. Category: ${product?.category}. Perfect for your needs with excellent features and durability.`,
     ).trim();
 
     const extraBits = [];
@@ -570,14 +587,14 @@ export const ProductDetailScreen = ({ route, navigation }) => {
 
     return [baseDescription, ...extraBits].join("\n\n");
   }, [
-    product.description,
-    product.vendor,
-    product.category,
-    product.weight,
-    product.weight_unit,
-    product.sizes,
-    product.colors,
-    product.specifications,
+    product?.description,
+    product?.vendor,
+    product?.category,
+    product?.weight,
+    product?.weight_unit,
+    product?.sizes,
+    product?.colors,
+    product?.specifications,
     productTagList,
   ]);
 
@@ -1063,7 +1080,10 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     }
   }, [showImagePreview]);
 
-  if (loadingDeepLink || resolvingSkuLink || (!product && deepLinkSku)) {
+  if (
+    loadingDeepLink ||
+    resolvingSkuLink
+  ) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color={themeColors.primary} />

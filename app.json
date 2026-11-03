@@ -19,7 +19,9 @@
         "applinks:www.tagitshop.online"
       ],
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -40,7 +42,10 @@
               "scheme": "expressmart"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "VIEW",
@@ -77,12 +82,16 @@
               "pathPrefix": "/wa/callback"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
     "web": {
-      "output": "single",
+      "bundler": "metro",
+      "output": "server",
       "favicon": "./assets/ico.webp"
     },
     "plugins": [
@@ -129,7 +138,16 @@
         }
       ],
       "expo-audio",
-      "react-native-compressor"
+      "react-native-compressor",
+      [
+        "expo-router",
+        {
+          "origin": "https://tagitshop.online",
+          "unstable_useServerRendering": true,
+          "unstable_useServerDataLoaders": true
+        }
+      ],
+      "expo-image"
     ],
     "extra": {
       "eas": {
