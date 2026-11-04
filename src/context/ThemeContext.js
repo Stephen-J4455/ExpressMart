@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Appearance } from "react-native";
+import { Appearance, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { buildPalette, THEME_STORAGE_KEY } from "../theme/colors";
 
@@ -36,11 +36,13 @@ try {
 try {
   // AsyncStorage is async; hydrate at import time so a cold start restores the
   // saved theme before first paint where possible.
-  AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
-    if (_isValidMode(stored) && stored !== _persistedMode) {
-      _persistedMode = stored;
-    }
-  });
+  if (Platform.OS !== "web") {
+    AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
+      if (_isValidMode(stored) && stored !== _persistedMode) {
+        _persistedMode = stored;
+      }
+    });
+  }
 } catch {
   /* ignore */
 }

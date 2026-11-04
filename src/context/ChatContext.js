@@ -23,25 +23,9 @@ export const useChat = () => {
   return context;
 };
 
-// Read the cached conversations synchronously so the UI can render instantly
-// (before any network request) on first paint.
-const readCachedConversations = () => {
-  try {
-    const cached = AsyncStorage.getItem(CACHE_KEY);
-    if (cached && typeof cached.then === "function") {
-      // AsyncStorage.getItem returns a promise; we can't await here, so fall
-      // back to an empty array and let loadFromCache populate it.
-      return [];
-    }
-  } catch (e) {
-    // ignore
-  }
-  return [];
-};
-
 export const ChatProvider = ({ children }) => {
   const { user } = useAuth();
-  const [conversations, setConversations] = useState(readCachedConversations());
+  const [conversations, setConversations] = useState([]);
   const [isOnline, setIsOnline] = useState(true);
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
