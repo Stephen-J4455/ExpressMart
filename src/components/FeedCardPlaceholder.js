@@ -5,7 +5,7 @@
 // shared global shimmer animation as ProductCardPlaceholder.
 // ---------------------------------------------------------------------------
 
-import { StyleSheet, View, Animated } from "react-native";
+import { StyleSheet, View, Animated, Platform } from "react-native";
 import { radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -36,6 +36,14 @@ const getGlobalShimmerValue = () => {
 };
 
 const Skeleton = ({ style }) => {
+  if (Platform.OS === "web" && typeof window === "undefined") {
+    return (
+      <View
+        style={[style, { backgroundColor: "#e0e0e0", opacity: 0.8 }]}
+      />
+    );
+  }
+
   const shimmerValue = getGlobalShimmerValue();
   const opacity = shimmerValue.interpolate({
     inputRange: [0, 1],

@@ -19,20 +19,10 @@ import { buildPalette, THEME_STORAGE_KEY } from "../theme/colors";
 const THEME_MODES = ["light", "dark", "system"];
 const _isValidMode = (v) => THEME_MODES.includes(v);
 
-// Synchronous read so the very first paint already matches the saved theme
-// (no flash of the wrong theme). AsyncStorage is async, so we keep an
-// in-memory cache that setTheme() writes synchronously, and hydrate from
-// AsyncStorage on import for cold starts.
+// AsyncStorage is async, so keep an in-memory cache for native cold starts.
+// Browser storage is read after hydration to keep SSR and the first client
+// render identical.
 let _persistedMode = "system";
-try {
-  if (typeof localStorage !== "undefined") {
-    const v = localStorage.getItem(THEME_STORAGE_KEY);
-    if (_isValidMode(v)) _persistedMode = v;
-  }
-} catch {
-  /* ignore */
-}
-
 try {
   // AsyncStorage is async; hydrate at import time so a cold start restores the
   // saved theme before first paint where possible.
@@ -59,8 +49,23 @@ const ThemeContext = createContext({
 export const ThemeProvider = ({ children }) => {
   const [theme, setThemeState] = useState(() => _readInitialMode());
   const [systemScheme, setSystemScheme] = useState(() =>
-    Appearance.getColorScheme(),
+    Platform.OS === "web" ? null : Appearance.getColorScheme(),
   );
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    try {
+      const stored = localStorage.getItem(THEME_STORAGE_KEY);
+      if (_isValidMode(stored)) {
+        _persistedMode = stored;
+        setThemeState(stored);
+      }
+    } catch {
+      // Storage may be disabled by the browser.
+    }
+
+    setSystemScheme(Appearance.getColorScheme());
+  }, []);
 
   // Subscribe to OS appearance changes (matters for "system" mode). Unsubscribe
   // on unmount. We only update local state — no remount, no reload.

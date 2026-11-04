@@ -4,19 +4,20 @@ import { createPageMetadata } from "../src/web/seoData";
 
 export function generateMetadata() {
   return createPageMetadata({
-    title: "ExpressMart Storefront | Shop Independent",
+    title: "Tagit Marketplace | Shop Independent Stores in Ghana",
     description:
-      "Visit the ExpressMart storefront to discover products and independent sellers in one marketplace.",
+      "Discover products and independent sellers from across Ghana in one marketplace with Tagit.",
     path: "/storefront",
+    indexable: false,
   });
 }
 
 export default function StorefrontPage() {
   return (
     <PageShell
-      title="Welcome to the ExpressMart storefront"
-      description="A marketplace for discovering products and connecting with independent stores."
-      eyebrow="Shop ExpressMart"
+      title="Welcome to Tagit"
+      description="A marketplace for discovering products and connecting with independent stores across Ghana."
+      eyebrow="Shop Tagit"
     >
       <Section title="Start shopping">
         <TextLink href="/products">Shop products</TextLink>

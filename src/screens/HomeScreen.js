@@ -26,7 +26,6 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -180,8 +179,7 @@ export const HomeScreen = ({ navigation }) => {
   const { colors: c } = useTheme();
   const { homeStyle } = useNavigationPreferences();
   const styles = useAppStyles(buildHomeStyles);
-  const { width } = useWindowDimensions();
-  const { isDesktop: isWideScreen } = useResponsive();
+  const { width, isDesktop: isWideScreen } = useResponsive();
   const isDesktop = Platform.OS === "web" && isWideScreen;
   const showCartRail = isDesktop && width >= CART_RAIL_BREAKPOINT;
   const { conversations } = useChat();

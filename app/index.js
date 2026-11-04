@@ -1,21 +1,16 @@
 import React from "react";
-import { NavigationIndependentTree } from "@react-navigation/native";
-import App from "../App";
 import { createPageMetadata } from "../src/web/seoData";
+import OriginalHomePage from "../src/web/OriginalHomePage";
 
 export function generateMetadata() {
   return createPageMetadata({
-    title: "ExpressMart | Discover independent stores and products",
+    title: "Tagit – Discover Stores, Shop Products & Connect with Sellers",
     description:
-      "Shop products from independent stores, explore new finds, and connect with sellers on ExpressMart.",
+      "Discover products, explore independent stores, follow sellers and shop from multiple stores in one place with Tagit.",
     path: "/",
   });
 }
 
 export default function HomePage() {
-  return (
-    <NavigationIndependentTree>
-      <App />
-    </NavigationIndependentTree>
-  );
+  return <OriginalHomePage />;
 }

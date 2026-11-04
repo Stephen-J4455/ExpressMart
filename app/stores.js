@@ -1,7 +1,12 @@
 import React from "react";
 import { useLoaderData } from "expo-router";
-import { PageShell, Section, StoreLinks } from "../src/web/SeoPage";
-import { createPageMetadata, getPublicStores } from "../src/web/seoData";
+import { JsonLd, PageShell, Section, StoreLinks } from "../src/web/SeoPage";
+import {
+  createPageMetadata,
+  getItemListStructuredData,
+  getPublicStores,
+  storePath,
+} from "../src/web/seoData";
 
 export function loader() {
   return getPublicStores();
@@ -9,9 +14,9 @@ export function loader() {
 
 export function generateMetadata() {
   return createPageMetadata({
-    title: "Discover Independent Stores | ExpressMart",
+    title: "Stores in Ghana | Shop Independent Sellers on Tagit",
     description:
-      "Find independent stores, browse their products, and connect with sellers on ExpressMart.",
+      "Discover stores in Ghana, browse their products, and connect with independent sellers on Tagit.",
     path: "/stores",
   });
 }
@@ -19,14 +24,23 @@ export function generateMetadata() {
 export default function StoresPage() {
   const stores = useLoaderData();
   return (
-    <PageShell
-      title="Discover independent stores"
-      description="Meet the people behind the products and shop directly from businesses on ExpressMart."
-      eyebrow="Our sellers"
-    >
-      <Section title="Explore stores">
-        <StoreLinks stores={stores} />
-      </Section>
-    </PageShell>
+    <>
+      <JsonLd
+        data={getItemListStructuredData(
+          stores,
+          (store) => store.name,
+          storePath,
+        )}
+      />
+      <PageShell
+        title="Discover independent stores"
+        description="Meet the people behind the products and shop directly from businesses across Ghana on Tagit."
+        eyebrow="Our sellers"
+      >
+        <Section title="Explore stores">
+          <StoreLinks stores={stores} />
+        </Section>
+      </PageShell>
+    </>
   );
 }

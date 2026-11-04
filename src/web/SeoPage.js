@@ -1,8 +1,7 @@
 import React from "react";
-import { Image } from "expo-image";
 import { Link } from "expo-router";
-import { Pressable, Text, View } from "react-native";
-import { publicImageUrl } from "./seoData";
+import { Image, Platform, Pressable, Text, View } from "react-native";
+import { productPath, publicImageUrl, storePath } from "./seoData";
 
 const styles = {
   page: {
@@ -112,6 +111,60 @@ export function TextLink({ href, children }) {
   );
 }
 
+export function SeoImage({
+  uri,
+  alt,
+  style,
+  resizeMode = "cover",
+  loading = "lazy",
+  fetchPriority,
+  width,
+  height,
+}) {
+  if (!uri) return null;
+  if (Platform.OS === "web") {
+    return (
+      <img
+        src={uri}
+        alt={alt || ""}
+        width={width}
+        height={height}
+        loading={loading}
+        fetchPriority={fetchPriority}
+        decoding="async"
+        style={{
+          ...style,
+          objectFit: resizeMode,
+        }}
+      />
+    );
+  }
+
+  return (
+    <Image
+      accessibilityLabel={alt}
+      source={{ uri }}
+      style={style}
+      resizeMode={resizeMode}
+    />
+  );
+}
+
+export function JsonLd({ data }) {
+  if (Platform.OS !== "web") return null;
+
+  const schemas = Array.isArray(data) ? data : [data];
+  return schemas.map((schema, index) => (
+    <script
+      key={`${schema["@type"] || "schema"}-${index}`}
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{
+        __html: JSON.stringify(schema).replace(/</g, "\\u003c"),
+      }}
+    />
+  ));
+}
+
 export function Section({ title, children }) {
   return (
     <View style={styles.section}>
@@ -130,7 +183,7 @@ export function PageShell({ title, description, eyebrow, children }) {
         <View style={styles.bannerInner}>
           <Link href="/" asChild>
             <Pressable accessibilityRole="link">
-              <Text style={styles.brand}>ExpressMart</Text>
+              <Text style={styles.brand}>Tagit</Text>
             </Pressable>
           </Link>
           <View accessibilityRole="navigation" style={styles.nav}>
@@ -142,6 +195,16 @@ export function PageShell({ title, description, eyebrow, children }) {
             <Link href="/stores" asChild>
               <Pressable accessibilityRole="link">
                 <Text style={styles.navText}>Stores</Text>
+              </Pressable>
+            </Link>
+            <Link href="/categories" asChild>
+              <Pressable accessibilityRole="link">
+                <Text style={styles.navText}>Categories</Text>
+              </Pressable>
+            </Link>
+            <Link href="/about" asChild>
+              <Pressable accessibilityRole="link">
+                <Text style={styles.navText}>About</Text>
               </Pressable>
             </Link>
             <Link href="/feed" asChild>
@@ -171,7 +234,7 @@ export function PageShell({ title, description, eyebrow, children }) {
 
       <View accessibilityRole="contentinfo" style={styles.footer}>
         <Text style={styles.footerText}>
-          © ExpressMart · Discover independent stores and products
+          © Tagit · Discover stores and shop products across Ghana
         </Text>
       </View>
     </View>
@@ -194,23 +257,25 @@ export function ProductGrid({ products = [] }) {
           product.thumbnail || product.thumbnails?.[0],
         );
         return (
-          <Link key={product.id} href={`/product/${product.id}`} asChild>
+          <Link key={product.id} href={productPath(product)} asChild>
             <Pressable style={styles.card}>
               {image ? (
-                <Image
-                  accessibilityLabel={product.title || "Product"}
-                  source={{ uri: image }}
+                <SeoImage
+                  alt={product.title || "Product"}
+                  uri={image}
                   style={styles.productImage}
-                  contentFit="cover"
-                  priority={index === 0 ? "high" : "normal"}
+                  resizeMode="cover"
+                  width={240}
+                  height={190}
                   loading={index === 0 ? "eager" : "lazy"}
+                  fetchPriority={index === 0 ? "high" : "auto"}
                 />
               ) : null}
               <Text style={styles.cardText}>{product.title}</Text>
               <Text style={styles.cardDetail}>
                 {product.price == null
                   ? ""
-                  : `₦${Number(product.price).toLocaleString()}`}
+                  : `GH₵${Number(product.price).toLocaleString()}`}
               </Text>
             </Pressable>
           </Link>
@@ -232,7 +297,7 @@ export function StoreLinks({ stores = [] }) {
   return (
     <View style={styles.links}>
       {stores.map((store) => (
-        <TextLink key={store.id} href={`/store/${store.id}`}>
+        <TextLink key={store.id} href={storePath(store)}>
           {store.name}
         </TextLink>
       ))}

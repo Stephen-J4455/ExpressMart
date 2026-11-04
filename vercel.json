@@ -34,6 +34,34 @@
   ],
   "rewrites": [
     {
+      "source": "/products/:productSlug",
+      "destination": "/api/index?__expoPath=/products/:productSlug"
+    },
+    {
+      "source": "/stores/:storeSlug",
+      "destination": "/api/index?__expoPath=/stores/:storeSlug"
+    },
+    {
+      "source": "/categories/:categorySlug",
+      "destination": "/api/index?__expoPath=/categories/:categorySlug"
+    },
+    {
+      "source": "/product/:productId",
+      "destination": "/api/index?__expoPath=/product/:productId"
+    },
+    {
+      "source": "/store/:sellerId",
+      "destination": "/api/index?__expoPath=/store/:sellerId"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/index?__expoPath=/sitemap.xml"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api/index?__expoPath=/robots.txt"
+    },
+    {
       "source": "/assets/(.*)",
       "destination": "/assets/$1"
     },
@@ -47,11 +75,11 @@
     },
     {
       "source": "/",
-      "destination": "/api/index"
+      "destination": "/api/index?__expoPath=/"
     },
     {
       "source": "/:path*",
-      "destination": "/api/:path*"
+      "destination": "/api/index?__expoPath=/:path*"
     }
   ]
 }
