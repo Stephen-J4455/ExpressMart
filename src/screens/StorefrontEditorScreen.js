@@ -742,7 +742,11 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
       setSocialWebsite(data.social_website || "");
       setThemeColor(data.theme_color || STOREFRONT_COLORS[0]);
       setStorefrontTheme(data.storefront_theme || "chicwave");
-      setStorefrontLayout(data.storefront_layout || "classic");
+      setStorefrontLayout(
+        data.storefront_layout === "watch"
+          ? "classic"
+          : data.storefront_layout || "classic",
+      );
       setStorefrontEnabled(data.storefront_enabled ?? false);
     } catch (error) {
       console.error("Failed to load storefront", error);
