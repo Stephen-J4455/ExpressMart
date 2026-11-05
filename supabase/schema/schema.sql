@@ -50,6 +50,7 @@ CREATE TABLE public.express_sellers (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
   badges ARRAY DEFAULT '{}'::text[],
+  cover_image_2 text,
   social_facebook text,
   social_instagram text,
   social_twitter text,
@@ -70,9 +71,16 @@ CREATE TABLE public.express_sellers (
   storefront_enabled boolean NOT NULL DEFAULT false,
   enterprise_enabled boolean NOT NULL DEFAULT false,
   storefront_theme text NOT NULL DEFAULT 'chicwave'
-    CHECK (storefront_theme = ANY (ARRAY['chicwave'::text, 'fashionia'::text, 'minimal'::text, 'botanical'::text, 'luxe'::text])),
-  storefront_layout text NOT NULL DEFAULT 'classic'
-    CHECK (storefront_layout = ANY (ARRAY['classic'::text, 'editorial'::text, 'catalog'::text, 'split'::text, 'spotlight'::text])),
+    CHECK (storefront_theme = ANY (ARRAY[
+      'chicwave'::text,
+      'fashionia'::text,
+      'minimal'::text,
+      'botanical'::text,
+      'luxe'::text,
+      'clarity'::text,
+      'studio-air'::text
+    ])),
+  storefront_layout text NOT NULL DEFAULT 'classic',
   storefront_color_mode text NOT NULL DEFAULT 'system'
     CHECK (storefront_color_mode = ANY (ARRAY['light'::text, 'dark'::text, 'system'::text])),
   CONSTRAINT express_sellers_pkey PRIMARY KEY (id),

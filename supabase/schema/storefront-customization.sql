@@ -3,6 +3,7 @@
 ALTER TABLE public.express_sellers
   ADD COLUMN IF NOT EXISTS storefront_enabled boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS enterprise_enabled boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS cover_image_2 text,
   ADD COLUMN IF NOT EXISTS storefront_theme text NOT NULL DEFAULT 'chicwave',
   ADD COLUMN IF NOT EXISTS storefront_layout text NOT NULL DEFAULT 'classic',
   ADD COLUMN IF NOT EXISTS storefront_color_mode text NOT NULL DEFAULT 'system';
@@ -22,13 +23,20 @@ BEGIN
     DROP CONSTRAINT IF EXISTS express_sellers_storefront_theme_check;
   ALTER TABLE public.express_sellers
     ADD CONSTRAINT express_sellers_storefront_theme_check
-    CHECK (storefront_theme IN ('chicwave', 'fashionia', 'minimal', 'botanical', 'luxe'));
+    CHECK (storefront_theme IN (
+      'chicwave',
+      'fashionia',
+      'minimal',
+      'botanical',
+      'luxe',
+      'clarity',
+      'studio-air'
+    ));
 
+  -- Layout IDs are intentionally extensible. New layouts only require an app
+  -- update and do not require a database constraint migration.
   ALTER TABLE public.express_sellers
     DROP CONSTRAINT IF EXISTS express_sellers_storefront_layout_check;
-  ALTER TABLE public.express_sellers
-    ADD CONSTRAINT express_sellers_storefront_layout_check
-    CHECK (storefront_layout IN ('classic', 'editorial', 'catalog', 'split', 'spotlight'));
 
   ALTER TABLE public.express_sellers
     DROP CONSTRAINT IF EXISTS express_sellers_storefront_color_mode_check;

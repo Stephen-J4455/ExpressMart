@@ -63,6 +63,20 @@ const STOREFRONT_TEMPLATES = [
     color: "#9A7848",
     background: "#F7F2E8",
   },
+  {
+    id: "clarity",
+    name: "Clarity",
+    description: "Airy editorial sections with a calm, focused feel",
+    color: "#171717",
+    background: "#F5F4F0",
+  },
+  {
+    id: "studio-air",
+    name: "Studio Air",
+    description: "Monochrome product storytelling for statement collections",
+    color: "#202020",
+    background: "#E8E8E8",
+  },
 ];
 
 const STOREFRONT_COLORS = [
@@ -81,29 +95,64 @@ const STOREFRONT_LAYOUTS = [
     id: "classic",
     name: "Classic",
     description: "Full-width image banner above a balanced product grid",
+    requirement: "Needs: store name, description, and optional cover image",
   },
   {
     id: "editorial",
     name: "Editorial",
     description: "Magazine-style image panel beside your store introduction",
+    requirement: "Needs: store name, description, and optional cover image",
   },
   {
     id: "catalog",
     name: "Catalog",
     description:
       "Compact store introduction and a dense five-column product grid",
+    requirement: "Needs: store name and products; cover image is optional",
   },
   {
     id: "split",
     name: "Split",
     description:
       "Store introduction on the left with your cover image on the right",
+    requirement: "Needs: store name and description; cover image is optional",
   },
   {
     id: "spotlight",
     name: "Spotlight",
     description:
       "Large featured product followed by the rest of your collection",
+    requirement: "Needs: at least one product; cover image is optional",
+  },
+  {
+    id: "immersive",
+    name: "Immersive",
+    description: "Full-bleed cover image with an overlay store introduction",
+    requirement: "Needs: store name and description; cover image recommended",
+  },
+  {
+    id: "gallery",
+    name: "Gallery",
+    description: "Visual three-panel landing area using one cover image and generated accents",
+    requirement: "Needs: two cover images for the split gallery",
+  },
+  {
+    id: "product-first",
+    name: "Product First",
+    description: "Featured product-led layout with a strong shopping focus",
+    requirement: "Needs: at least one product; cover image is optional",
+  },
+  {
+    id: "quiet",
+    name: "Quiet",
+    description: "Minimal typography, generous spacing, and an understated grid",
+    requirement: "Needs: store name and description; no image required",
+  },
+  {
+    id: "asymmetric",
+    name: "Asymmetric",
+    description: "Offset editorial composition with a less predictable rhythm",
+    requirement: "Needs: store name and description; cover image is optional",
   },
 ];
 
@@ -154,24 +203,29 @@ const buildStyles = (c) => ({
   section: { paddingHorizontal: 20, marginBottom: 24 },
   sectionTitle: { color: c.dark, fontSize: 17, fontWeight: "700" },
   sectionHint: { color: c.muted, fontSize: 13, lineHeight: 19, marginTop: 5 },
-  templateList: { gap: 12, marginTop: 14 },
+  templateList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 14,
+  },
   templateCard: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    borderRadius: 16,
+    padding: 9,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: c.border,
     backgroundColor: c.surface,
   },
   templateCardSelected: { borderWidth: 2, borderColor: c.primary },
   templateSwatch: {
-    width: 54,
-    height: 54,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 9,
     padding: 7,
     justifyContent: "space-between",
-    marginRight: 12,
+    marginRight: 9,
   },
   templateSwatchBar: {
     height: 6,
@@ -184,8 +238,8 @@ const buildStyles = (c) => ({
     borderRadius: 5,
     backgroundColor: "rgba(255,255,255,0.48)",
   },
-  templateName: { color: c.dark, fontSize: 15, fontWeight: "700" },
-  templateDescription: { color: c.muted, fontSize: 12, marginTop: 4 },
+  templateName: { color: c.dark, fontSize: 14, fontWeight: "700" },
+  templateDescription: { color: c.muted, fontSize: 11, marginTop: 3 },
   colorOptions: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -202,20 +256,31 @@ const buildStyles = (c) => ({
     borderColor: "transparent",
   },
   colorOptionSelected: { borderColor: c.dark },
-  layoutList: { gap: 10, marginTop: 14 },
+  layoutList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 14,
+  },
   layoutCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 14,
-    borderRadius: 14,
+    padding: 10,
+    borderRadius: 11,
     borderWidth: 1,
     borderColor: c.border,
     backgroundColor: c.surface,
   },
   layoutCardSelected: { borderWidth: 2, borderColor: c.primary },
-  layoutName: { color: c.dark, fontSize: 14, fontWeight: "700" },
-  layoutDescription: { color: c.muted, fontSize: 12, marginTop: 4 },
+  layoutName: { color: c.dark, fontSize: 13, fontWeight: "700" },
+  layoutDescription: { color: c.muted, fontSize: 11, marginTop: 3 },
+  layoutRequirement: {
+    color: c.primary,
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 4,
+  },
   activationCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -566,6 +631,13 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
   const [description, setDescription] = useState("");
   const [coverImage, setCoverImage] = useState("");
   const [coverFile, setCoverFile] = useState(null);
+  const [coverImage2, setCoverImage2] = useState("");
+  const [coverFile2, setCoverFile2] = useState(null);
+  const [socialFacebook, setSocialFacebook] = useState("");
+  const [socialInstagram, setSocialInstagram] = useState("");
+  const [socialTwitter, setSocialTwitter] = useState("");
+  const [socialWhatsapp, setSocialWhatsapp] = useState("");
+  const [socialWebsite, setSocialWebsite] = useState("");
   const [themeColor, setThemeColor] = useState(STOREFRONT_COLORS[0]);
   const [storefrontTheme, setStorefrontTheme] = useState("chicwave");
   const [storefrontLayout, setStorefrontLayout] = useState("classic");
@@ -574,9 +646,7 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
   const [enterpriseUpgradeFee, setEnterpriseUpgradeFee] = useState(null);
   const [processingUpgrade, setProcessingUpgrade] = useState(false);
   const processedPaymentReference = useRef("");
-  const [previewViewport, setPreviewViewport] = useState(
-    isDesktop ? "desktop" : isWide ? "tablet" : "mobile",
-  );
+  const [previewViewport, setPreviewViewport] = useState("desktop");
 
   const cleanSlug = makeSlug(slug || name);
   const storefrontUrl = cleanSlug
@@ -614,6 +684,8 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
           ? "#243327"
           : storefrontTheme === "luxe"
             ? "#342B20"
+            : storefrontTheme === "clarity" || storefrontTheme === "studio-air"
+              ? "#202020"
             : "#292524";
   const previewSplitHero = storefrontLayout === "split";
   const previewEditorialHero = storefrontLayout === "editorial";
@@ -634,7 +706,7 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
       const { data, error } = await supabase
         .from("express_sellers")
         .select(
-          "id,name,slug,avatar,cover_image,store_description,theme_color,storefront_enabled,storefront_theme,storefront_layout,enterprise_enabled",
+          "id,name,slug,avatar,cover_image,cover_image_2,store_description,theme_color,storefront_enabled,storefront_theme,storefront_layout,enterprise_enabled,social_facebook,social_instagram,social_twitter,social_whatsapp,social_website",
         )
         .eq("user_id", user.id)
         .maybeSingle();
@@ -662,6 +734,12 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
       setSlug(data.slug || makeSlug(data.name));
       setDescription(data.store_description || "");
       setCoverImage(data.cover_image || "");
+      setCoverImage2(data.cover_image_2 || "");
+      setSocialFacebook(data.social_facebook || "");
+      setSocialInstagram(data.social_instagram || "");
+      setSocialTwitter(data.social_twitter || "");
+      setSocialWhatsapp(data.social_whatsapp || "");
+      setSocialWebsite(data.social_website || "");
       setThemeColor(data.theme_color || STOREFRONT_COLORS[0]);
       setStorefrontTheme(data.storefront_theme || "chicwave");
       setStorefrontLayout(data.storefront_layout || "classic");
@@ -774,7 +852,7 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
     }
   };
 
-  const pickCoverImage = async () => {
+  const pickCoverImage = async (second = false) => {
     try {
       if (Platform.OS !== "web") {
         const { status } =
@@ -790,8 +868,13 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
       });
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
-      setCoverImage(asset.uri);
-      setCoverFile(asset.file instanceof Blob ? asset.file : null);
+      if (second) {
+        setCoverImage2(asset.uri);
+        setCoverFile2(asset.file instanceof Blob ? asset.file : null);
+      } else {
+        setCoverImage(asset.uri);
+        setCoverFile(asset.file instanceof Blob ? asset.file : null);
+      }
     } catch (error) {
       console.error("Storefront cover selection failed", error);
       toast.error(error.message || "Could not open image picker");
@@ -813,6 +896,10 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
       toast.error("Enter a valid hex accent color, such as #E85B55");
       return;
     }
+    if (storefrontLayout === "gallery" && (!coverImage || !coverImage2)) {
+      toast.error("Gallery layout requires two cover images");
+      return;
+    }
     if (!seller || !supabase) {
       toast.error("Your storefront could not be loaded");
       return;
@@ -821,6 +908,7 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
     setSaving(true);
     try {
       let coverUrl = coverImage || null;
+      let coverUrl2 = coverImage2 || null;
       if (coverImage && !/^https?:\/\//i.test(coverImage)) {
         const fileNamePart =
           coverImage.split("?")[0].split("/").pop() || "cover.jpg";
@@ -835,12 +923,32 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
         });
         coverUrl = publicUrl;
       }
+      if (coverImage2 && !/^https?:\/\//i.test(coverImage2)) {
+        const fileNamePart =
+          coverImage2.split("?")[0].split("/").pop() || "cover-2.jpg";
+        const extension = fileNamePart.includes(".")
+          ? fileNamePart.split(".").pop().toLowerCase()
+          : "jpg";
+        const { publicUrl } = await uploadToR2Presigned({
+          uri: coverImage2,
+          pickedFile: coverFile2,
+          folder: `${R2_FOLDERS.PROFILE}/${seller.id}`,
+          fileName: `storefront-cover-2-${Date.now()}.${extension}`,
+        });
+        coverUrl2 = publicUrl;
+      }
 
       const updates = {
         name: cleanName,
         slug: cleanSlug,
         store_description: description.trim() || null,
         cover_image: coverUrl,
+        cover_image_2: coverUrl2,
+        social_facebook: socialFacebook.trim() || null,
+        social_instagram: socialInstagram.trim() || null,
+        social_twitter: socialTwitter.trim() || null,
+        social_whatsapp: socialWhatsapp.trim() || null,
+        social_website: socialWebsite.trim() || null,
         theme_color: themeColor,
         storefront_theme: storefrontTheme,
         storefront_layout: storefrontLayout,
@@ -867,11 +975,19 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
       setSeller((current) => ({ ...current, ...updates }));
       setSlug(cleanSlug);
       setCoverImage(coverUrl || "");
+      setCoverImage2(coverUrl2 || "");
       setCoverFile(null);
+      setCoverFile2(null);
       toast.success("Storefront saved");
     } catch (error) {
       console.error("Failed to save storefront", error);
-      toast.error(error.message || "Could not save your storefront");
+      if (error?.code === "23514" && error?.message?.includes("storefront_layout")) {
+        toast.error(
+          "Your database needs the latest storefront layout migration before this layout can be saved.",
+        );
+      } else {
+        toast.error(error.message || "Could not save your storefront");
+      }
     } finally {
       setSaving(false);
     }
@@ -1256,7 +1372,51 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                     </View>
                   </View>
 
-                  {storefrontLayout === "catalog" ? (
+                  {storefrontLayout === "gallery" ? (
+                    <View style={{ flexDirection: previewIsWide ? "row" : "column", minHeight: previewIsWide ? 250 : undefined, gap: 2 }}>
+                      <View style={[styles.previewHeroImage, { flex: 1, minHeight: 150, backgroundColor: `${themeColor}35` }]} />
+                      <View style={{ flex: 1, minHeight: 150, padding: 18, alignItems: "center", justifyContent: "center", backgroundColor: previewBackground }}>
+                        <Text style={[styles.previewEyebrow, { color: previewForeground }]}>THE COLLECTION</Text>
+                        <Text numberOfLines={1} style={[styles.previewName, { color: previewForeground }]}>{name || "Your store name"}</Text>
+                        <View style={[styles.previewCta, { backgroundColor: themeColor, marginTop: 8 }]}><Text style={styles.previewCtaText}>Browse →</Text></View>
+                      </View>
+                      {previewIsWide ? <View style={[styles.previewHeroImage, { flex: 1, minHeight: 250, backgroundColor: `${themeColor}20` }]} /> : null}
+                    </View>
+                  ) : storefrontLayout === "immersive" ? (
+                    <View style={[styles.previewHero, { minHeight: 270, backgroundColor: themeColor, justifyContent: "flex-end", padding: 18 }]}>
+                      {coverImage ? <Image source={{ uri: coverImage }} style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, width: "100%", height: "100%", opacity: 0.62 }} resizeMode="cover" /> : null}
+                      <View style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,0.42)" }} />
+                      <Text style={styles.previewEyebrow}>WELCOME TO THE STORE</Text>
+                      <Text numberOfLines={2} style={styles.previewName}>{name || "Your store name"}</Text>
+                      <View style={[styles.previewCta, { backgroundColor: "#fff", borderRadius: 18 }]}><Text style={{ color: "#222", fontSize: 8, fontWeight: "700" }}>Shop collection →</Text></View>
+                    </View>
+                  ) : storefrontLayout === "product-first" ? (
+                    <View style={{ flexDirection: previewIsWide ? "row-reverse" : "column", minHeight: previewIsWide ? 250 : undefined, backgroundColor: previewBackground }}>
+                      <View style={[styles.previewHeroImage, previewIsWide ? { flex: 1.35, minHeight: 250 } : { height: 150 }, { backgroundColor: `${themeColor}22` }]}>
+                        <Text style={[styles.previewProductInitial, { color: themeColor }]}>P</Text>
+                      </View>
+                      <View style={[styles.previewHeroText, { flex: previewIsWide ? 0.65 : undefined }]}>
+                        <Text style={[styles.previewEyebrow, { color: themeColor }]}>FEATURED NOW</Text>
+                        <Text numberOfLines={2} style={[styles.previewName, { color: previewForeground }]}>Featured product</Text>
+                        <View style={[styles.previewCta, { backgroundColor: themeColor }]}><Text style={styles.previewCtaText}>Shop now →</Text></View>
+                      </View>
+                    </View>
+                  ) : storefrontLayout === "quiet" ? (
+                    <View style={{ minHeight: 220, padding: 22, justifyContent: "center", backgroundColor: previewBackground, borderTopWidth: 1, borderBottomWidth: 1, borderColor: "rgba(0,0,0,0.14)" }}>
+                      <Text style={[styles.previewEyebrow, { color: previewForeground, opacity: 0.55 }]}>A QUIET COLLECTION</Text>
+                      <Text numberOfLines={2} style={[styles.previewName, { color: previewForeground, fontSize: 28 }]}>{name || "Your store name"}</Text>
+                      <Text numberOfLines={2} style={[styles.previewDescription, { color: previewForeground }]}>View the collection →</Text>
+                    </View>
+                  ) : storefrontLayout === "asymmetric" ? (
+                    <View style={{ flexDirection: previewIsWide ? "row" : "column", minHeight: previewIsWide ? 250 : undefined, backgroundColor: previewBackground }}>
+                      <View style={[styles.previewHeroImage, previewIsWide ? { flex: 1.4, minHeight: 250 } : { height: 150 }, { backgroundColor: `${themeColor}35` }]} />
+                      <View style={[styles.previewHeroText, { flex: previewIsWide ? 0.8 : undefined, justifyContent: "flex-end" }]}>
+                        <Text style={[styles.previewEyebrow, { color: themeColor }]}>NEW PERSPECTIVE</Text>
+                        <Text numberOfLines={2} style={[styles.previewName, { color: previewForeground }]}>{name || "Your store name"}</Text>
+                        <Text style={[styles.previewDescription, { color: previewForeground }]}>Explore →</Text>
+                      </View>
+                    </View>
+                  ) : storefrontLayout === "catalog" ? (
                     <View
                       style={{
                         minHeight: 125,
@@ -1815,6 +1975,9 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                       onPress={() => setStorefrontTheme(template.id)}
                       style={[
                         styles.templateCard,
+                        isWide
+                          ? { width: "48%", flexGrow: 1 }
+                          : { width: "100%" },
                         isSelected && styles.templateCardSelected,
                       ]}
                     >
@@ -1878,6 +2041,37 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                   </Pressable>
                 ))}
               </View>
+              {Platform.OS === "web" ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                    marginTop: 12,
+                  }}
+                >
+                  <Text style={styles.fieldLabel}>Custom picker</Text>
+                  <input
+                    aria-label="Choose primary color"
+                    type="color"
+                    value={
+                      /^#[\da-f]{6}$/i.test(themeColor)
+                        ? themeColor
+                        : "#E85B55"
+                    }
+                    onChange={(event) => setThemeColor(event.target.value.toUpperCase())}
+                    style={{
+                      width: 44,
+                      height: 34,
+                      padding: 2,
+                      border: `1px solid ${themeColors.border}`,
+                      borderRadius: 8,
+                      backgroundColor: "transparent",
+                      cursor: "pointer",
+                    }}
+                  />
+                </View>
+              ) : null}
               <TextInput
                 value={themeColor}
                 onChangeText={(value) => setThemeColor(value.trim())}
@@ -1901,6 +2095,9 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                       onPress={() => setStorefrontLayout(layout.id)}
                       style={[
                         styles.layoutCard,
+                        isWide
+                          ? { width: "48%", flexGrow: 1 }
+                          : { width: "100%" },
                         isSelected && styles.layoutCardSelected,
                       ]}
                     >
@@ -1908,6 +2105,9 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                         <Text style={styles.layoutName}>{layout.name}</Text>
                         <Text style={styles.layoutDescription}>
                           {layout.description}
+                        </Text>
+                        <Text style={styles.layoutRequirement}>
+                          {layout.requirement}
                         </Text>
                       </View>
                       {isSelected && (
@@ -2036,6 +2236,77 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                   </Text>
                 </Pressable>
               ) : null}
+              {storefrontLayout === "gallery" ? (
+                <>
+                  <Text style={[styles.fieldLabel, { marginTop: 18 }]}>
+                    Gallery second cover
+                  </Text>
+                  <Text style={styles.sectionHint}>
+                    Gallery uses two cover images. Add a second image for the
+                    right-hand panel.
+                  </Text>
+                  <Pressable
+                    onPress={() => pickCoverImage(true)}
+                    style={styles.coverPicker}
+                  >
+                    {coverImage2 ? (
+                      <Image
+                        source={{ uri: coverImage2 }}
+                        style={styles.coverImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.coverPlaceholder}>
+                        <Ionicons
+                          name="images-outline"
+                          size={30}
+                          color={themeColors.muted}
+                        />
+                        <Text style={styles.coverPlaceholderText}>
+                          Add second cover image
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.coverAction}>
+                      <Ionicons name="camera-outline" size={17} color="#fff" />
+                      <Text style={styles.coverActionText}>
+                        {coverImage2 ? "Change second cover" : "Choose image"}
+                      </Text>
+                    </View>
+                  </Pressable>
+                </>
+              ) : null}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Social handles</Text>
+              <Text style={styles.sectionHint}>
+                Add full public URLs. They will appear in your storefront footer.
+              </Text>
+              {[
+                ["Facebook", socialFacebook, setSocialFacebook, "https://facebook.com/your-store", "logo-facebook", "#1877F2"],
+                ["Instagram", socialInstagram, setSocialInstagram, "https://instagram.com/your-store", "logo-instagram", "#E4405F"],
+                ["Twitter / X", socialTwitter, setSocialTwitter, "https://x.com/your-store", "logo-twitter", "#1DA1F2"],
+                ["WhatsApp", socialWhatsapp, setSocialWhatsapp, "https://wa.me/233...", "logo-whatsapp", "#25D366"],
+                ["Website", socialWebsite, setSocialWebsite, "https://your-store.com", "globe-outline", themeColors.primary],
+              ].map(([label, value, setter, placeholder, icon, color]) => (
+                <View key={label} style={{ marginTop: 10 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <Ionicons name={icon} size={18} color={color} />
+                    <Text style={styles.fieldLabel}>{label}</Text>
+                  </View>
+                  <TextInput
+                    value={value}
+                    onChangeText={setter}
+                    placeholder={placeholder}
+                    placeholderTextColor={themeColors.muted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.input}
+                    accessibilityLabel={`${label} URL`}
+                  />
+                </View>
+              ))}
             </View>
           </ScrollView>
         </View>
@@ -2245,7 +2516,108 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                   </View>
                 </View>
 
-                {storefrontLayout === "catalog" ? (
+                {storefrontLayout === "gallery" ? (
+                  <View
+                    style={{
+                      flexDirection: previewIsWide ? "row" : "column",
+                      minHeight: previewIsWide ? 250 : undefined,
+                      backgroundColor: previewBackground,
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.previewHeroText,
+                        { flex: previewIsWide ? 0.9 : undefined },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.previewEyebrow,
+                          { color: previewForeground, opacity: 0.65 },
+                        ]}
+                      >
+                        THE GALLERY EDIT
+                      </Text>
+                      <Text
+                        numberOfLines={2}
+                        style={[
+                          styles.previewName,
+                          {
+                            color: previewForeground,
+                            fontFamily:
+                              storefrontTheme === "fashionia" ||
+                              storefrontTheme === "luxe"
+                                ? "Georgia"
+                                : undefined,
+                          },
+                        ]}
+                      >
+                        {name || "Your store name"}
+                      </Text>
+                      <Text
+                        numberOfLines={3}
+                        style={[
+                          styles.previewDescription,
+                          { color: previewForeground, opacity: 0.72 },
+                        ]}
+                      >
+                        {description ||
+                          "Your store description will appear here."}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flex: previewIsWide ? 1.2 : undefined,
+                        flexDirection: "row",
+                        gap: 6,
+                        height: previewIsWide ? undefined : 150,
+                        padding: 6,
+                      }}
+                    >
+                      {[coverImage, coverImage2].map((image, index) => (
+                        <View
+                          key={`gallery-preview-${index}`}
+                          style={{
+                            flex: 1,
+                            overflow: "hidden",
+                            backgroundColor: `${themeColor}30`,
+                          }}
+                        >
+                          {image ? (
+                            <Image
+                              source={{ uri: image }}
+                              style={{ width: "100%", height: "100%" }}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View
+                              style={{
+                                flex: 1,
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <Ionicons
+                                name="image-outline"
+                                size={18}
+                                color={themeColor}
+                              />
+                              <Text
+                                style={{
+                                  color: themeColor,
+                                  fontSize: 8,
+                                  marginTop: 4,
+                                }}
+                              >
+                                Cover {index + 1}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : storefrontLayout === "catalog" ? (
                   <View
                     style={{
                       minHeight: 125,
@@ -2797,6 +3169,9 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                     onPress={() => setStorefrontTheme(template.id)}
                     style={[
                       styles.templateCard,
+                      isWide
+                        ? { width: "48%", flexGrow: 1 }
+                        : { width: "100%" },
                       isSelected && styles.templateCardSelected,
                     ]}
                   >
@@ -2860,6 +3235,37 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                 </Pressable>
               ))}
             </View>
+            {Platform.OS === "web" ? (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  marginTop: 12,
+                }}
+              >
+                <Text style={styles.fieldLabel}>Custom picker</Text>
+                <input
+                  aria-label="Choose primary color"
+                  type="color"
+                  value={
+                    /^#[\da-f]{6}$/i.test(themeColor)
+                      ? themeColor
+                      : "#E85B55"
+                  }
+                  onChange={(event) => setThemeColor(event.target.value.toUpperCase())}
+                  style={{
+                    width: 44,
+                    height: 34,
+                    padding: 2,
+                    border: `1px solid ${themeColors.border}`,
+                    borderRadius: 8,
+                    backgroundColor: "transparent",
+                    cursor: "pointer",
+                  }}
+                />
+              </View>
+            ) : null}
             <TextInput
               value={themeColor}
               onChangeText={(value) => setThemeColor(value.trim())}
@@ -2883,6 +3289,9 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                     onPress={() => setStorefrontLayout(layout.id)}
                     style={[
                       styles.layoutCard,
+                      isWide
+                        ? { width: "48%", flexGrow: 1 }
+                        : { width: "100%" },
                       isSelected && styles.layoutCardSelected,
                     ]}
                   >
@@ -2890,6 +3299,9 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                       <Text style={styles.layoutName}>{layout.name}</Text>
                       <Text style={styles.layoutDescription}>
                         {layout.description}
+                      </Text>
+                      <Text style={styles.layoutRequirement}>
+                        {layout.requirement}
                       </Text>
                     </View>
                     {isSelected && (
@@ -3018,6 +3430,76 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
                 </Text>
               </Pressable>
             ) : null}
+            {storefrontLayout === "gallery" ? (
+              <>
+                <Text style={[styles.fieldLabel, { marginTop: 18 }]}>
+                  Gallery second cover
+                </Text>
+                <Text style={styles.sectionHint}>
+                  Gallery uses two cover images. Add a second image for the
+                  right-hand panel.
+                </Text>
+                <Pressable
+                  onPress={() => pickCoverImage(true)}
+                  style={styles.coverPicker}
+                >
+                  {coverImage2 ? (
+                    <Image
+                      source={{ uri: coverImage2 }}
+                      style={styles.coverImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.coverPlaceholder}>
+                      <Ionicons
+                        name="images-outline"
+                        size={30}
+                        color={themeColors.muted}
+                      />
+                      <Text style={styles.coverPlaceholderText}>
+                        Add second cover image
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.coverAction}>
+                    <Ionicons name="camera-outline" size={17} color="#fff" />
+                    <Text style={styles.coverActionText}>
+                      {coverImage2 ? "Change second cover" : "Choose image"}
+                    </Text>
+                  </View>
+                </Pressable>
+              </>
+            ) : null}
+          </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Social handles</Text>
+            <Text style={styles.sectionHint}>
+              Add full public URLs. They will appear in your storefront footer.
+            </Text>
+            {[
+              ["Facebook", socialFacebook, setSocialFacebook, "https://facebook.com/your-store", "logo-facebook", "#1877F2"],
+              ["Instagram", socialInstagram, setSocialInstagram, "https://instagram.com/your-store", "logo-instagram", "#E4405F"],
+              ["Twitter / X", socialTwitter, setSocialTwitter, "https://x.com/your-store", "logo-twitter", "#1DA1F2"],
+              ["WhatsApp", socialWhatsapp, setSocialWhatsapp, "https://wa.me/233...", "logo-whatsapp", "#25D366"],
+              ["Website", socialWebsite, setSocialWebsite, "https://your-store.com", "globe-outline", themeColors.primary],
+            ].map(([label, value, setter, placeholder, icon, color]) => (
+              <View key={label} style={{ marginTop: 10 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <Ionicons name={icon} size={18} color={color} />
+                  <Text style={styles.fieldLabel}>{label}</Text>
+                </View>
+                <TextInput
+                  value={value}
+                  onChangeText={setter}
+                  placeholder={placeholder}
+                  placeholderTextColor={themeColors.muted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.input}
+                  accessibilityLabel={`${label} URL`}
+                />
+              </View>
+            ))}
           </View>
         </ScrollView>
       )}
