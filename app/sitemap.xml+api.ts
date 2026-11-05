@@ -54,6 +54,8 @@ export async function GET(request: Request) {
   const entries = [
     { path: "/" },
     { path: "/about" },
+    { path: "/terms" },
+    { path: "/privacy" },
     { path: "/products" },
     { path: "/stores" },
     { path: "/categories" },

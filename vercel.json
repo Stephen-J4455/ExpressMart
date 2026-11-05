@@ -32,6 +32,18 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/home",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/product",
+      "destination": "/products",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/products/:productSlug",
