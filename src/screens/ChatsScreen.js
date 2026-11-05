@@ -11,6 +11,7 @@ import {
   ScrollView,
   TextInput,
   Animated,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -184,10 +185,16 @@ export const ChatsScreen = ({ navigation, route }) => {
   const [searchVisible, setSearchVisible] = useState(false);
 
   // Entrance animation — mirrors HomeScreen's fade + slide
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const fadeAnim = useRef(new Animated.Value(Platform.OS === "web" ? 1 : 0)).current;
+  const slideAnim = useRef(new Animated.Value(Platform.OS === "web" ? 0 : 30)).current;
 
   useEffect(() => {
+    if (Platform.OS === "web") {
+      fadeAnim.setValue(1);
+      slideAnim.setValue(0);
+      return;
+    }
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,

@@ -152,6 +152,7 @@ No extra native configuration is required beyond the existing Expo setup.
 | ---------------------------------------- | ----------------------------------------------------------------- |
 | Edge function returns "R2 storage is not configured" | One of the 5 secrets is missing in Supabase.            |
 | Upload fails with 403                    | Wrong access key / secret, or token lacks write on the bucket.   |
+| Web upload fails with a CORS preflight error | Apply `r2-cors.json` under R2 **Settings → CORS Policy**. The origin must exactly match the browser origin (no trailing slash), and uploads require `PUT` plus `Content-Type`. |
 | `video_url` is null after save           | Network/upload error — check logs; the product still saves.      |
 | Video does not play                       | `R2_PUBLIC_DOMAIN` not serving public objects / wrong CORS.      |
 | CORS error from the device               | The function already returns `Access-Control-Allow-Origin: *`.   |

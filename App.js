@@ -1615,8 +1615,18 @@ const NavigationWithTheme = () => {
   // scroll position. Toggling the theme only updates context, so the stack and
   // in-screen state are preserved.
   const theme = useMemo(() => createNavTheme(colors, isDark), [colors, isDark]);
+  // The web app is embedded inside the Expo Router "/" page. If this nested
+  // container consumes browser URLs, internal tabs escape to paths such as
+  // "/messages", which Expo Router treats as page routes and renders as
+  // not-found. The outer router owns web URLs; native keeps deep-linking.
+  const navigationLinking = Platform.OS === "web" ? undefined : linking;
+
   return (
-    <NavigationContainer ref={navigationRef} theme={theme} linking={linking}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={theme}
+      linking={navigationLinking}
+    >
       <StatusBar style={isDark ? "light" : "dark-content"} />
       <TagAIAssistantProvider>
         {/* Global AI grounding overlay — renders the pointer/spotlight above

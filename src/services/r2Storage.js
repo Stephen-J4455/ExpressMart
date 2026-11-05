@@ -152,11 +152,20 @@ async function fetchPresignedUploadUrl(fileName, fileType, folder) {
 }
 
 async function putToR2(uploadUrl, body, contentType) {
-  const res = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": contentType },
-    body,
-  });
+  let res;
+  try {
+    res = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body,
+    });
+  } catch (error) {
+    throw new Error(
+      `Could not reach R2 upload endpoint (check bucket CORS): ${
+        error?.message || String(error)
+      }`,
+    );
+  }
   if (!res.ok) {
     throw new Error(`Upload failed with status ${res.status}`);
   }
@@ -168,9 +177,21 @@ async function putToR2(uploadUrl, body, contentType) {
  */
 async function readAssetBody(uri, pickedFile = null) {
   try {
-    if (pickedFile instanceof Blob) return pickedFile;
+    // ImagePicker returns a browser File on web. Do not rely only on
+    // `instanceof Blob`: files can come from another browser realm and fail
+    // that check even though fetch can upload them directly.
+    if (
+      pickedFile &&
+      typeof pickedFile.arrayBuffer === "function" &&
+      typeof pickedFile.size === "number"
+    ) {
+      return pickedFile;
+    }
     if (Platform.OS === "web") {
       const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error(`Selected file could not be read (status ${response.status})`);
+      }
       const blob = await response.blob();
       if (!blob) throw new Error("blob was empty");
       return blob;
@@ -236,7 +257,8 @@ export const uploadToR2Presigned = async ({
     // console alone (presigned-URL request vs local file read vs PUT).
     const stage = err?.message?.startsWith("Could not read")
       ? "reading file"
-      : err?.message?.startsWith("Upload failed")
+      : err?.message?.startsWith("Upload failed") ||
+          err?.message?.startsWith("Could not reach R2")
         ? "uploading to storage"
         : "requesting upload URL";
     console.error(

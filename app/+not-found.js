@@ -17,7 +17,38 @@ export function generateMetadata() {
 export default function NotFoundPage() {
   const pathname = usePathname();
 
-  if (pathname === "/") {
+  // The main customer app is embedded at the router root. Older web
+  // navigation entries can still contain React Navigation paths, so reopen
+  // the app for those paths instead of showing the SEO site's 404 page.
+  const appPaths = new Set([
+    "/home",
+    "/messages",
+    "/feed",
+    "/cart",
+    "/account",
+    "/login",
+    "/forgot-password",
+    "/auth/reset-password",
+    "/checkout",
+    "/orders",
+    "/notifications",
+    "/addresses",
+    "/payments",
+    "/following",
+    "/settings",
+    "/security",
+    "/profile/edit",
+    "/seller/profile",
+    "/store-registration",
+    "/help",
+    "/terms",
+    "/privacy",
+    "/privacy/settings",
+    "/change-password",
+    "/change-email",
+  ]);
+
+  if (pathname === "/" || appPaths.has(pathname)) {
     return <OriginalHomePage />;
   }
 

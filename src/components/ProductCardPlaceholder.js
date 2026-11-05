@@ -28,7 +28,7 @@ const getGlobalShimmerValue = () => {
 };
 
 const Skeleton = ({ style }) => {
-  if (Platform.OS === "web" && typeof window === "undefined") {
+  if (Platform.OS === "web") {
     return (
       <View
         style={[style, { backgroundColor: "#e0e0e0", opacity: 0.8 }]}
