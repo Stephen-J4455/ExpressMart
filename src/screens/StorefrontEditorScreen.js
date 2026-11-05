@@ -2201,7 +2201,10 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
               <Text style={styles.sectionHint}>
                 Add a wide image to introduce your products and brand.
               </Text>
-              <Pressable onPress={pickCoverImage} style={styles.coverPicker}>
+              <Pressable
+                onPress={() => pickCoverImage(false)}
+                style={styles.coverPicker}
+              >
                 {coverImage ? (
                   <Image
                     source={{ uri: coverImage }}
@@ -3395,7 +3398,10 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
             <Text style={styles.sectionHint}>
               Add a wide image to introduce your products and brand.
             </Text>
-            <Pressable onPress={pickCoverImage} style={styles.coverPicker}>
+            <Pressable
+              onPress={() => pickCoverImage(false)}
+              style={styles.coverPicker}
+            >
               {coverImage ? (
                 <Image
                   source={{ uri: coverImage }}
