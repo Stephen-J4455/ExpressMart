@@ -16,9 +16,7 @@ import { navigateToScreen } from "../utils/navigationRef";
 // expo-notifications was removed from Expo Go (SDK 53+).
 // Dynamic require with a no-op stub prevents a crash at module load time.
 let Notifications;
-try {
-  Notifications = require("expo-notifications");
-} catch (_) {
+if (Platform.OS === "web") {
   Notifications = {
     setNotificationHandler: () => {},
     getPermissionsAsync: async () => ({ status: "denied" }),
@@ -31,6 +29,23 @@ try {
     addPushTokenListener: () => ({ remove: () => {} }),
     AndroidImportance: { MAX: 5, HIGH: 4, DEFAULT: 3, LOW: 2, MIN: 1 },
   };
+} else {
+  try {
+    Notifications = require("expo-notifications");
+  } catch (_) {
+    Notifications = {
+      setNotificationHandler: () => {},
+      getPermissionsAsync: async () => ({ status: "denied" }),
+      requestPermissionsAsync: async () => ({ status: "denied" }),
+      getExpoPushTokenAsync: async () => ({ data: null }),
+      getDevicePushTokenAsync: async () => ({ data: null, type: null }),
+      setNotificationChannelAsync: async () => {},
+      addNotificationReceivedListener: () => ({ remove: () => {} }),
+      addNotificationResponseReceivedListener: () => ({ remove: () => {} }),
+      addPushTokenListener: () => ({ remove: () => {} }),
+      AndroidImportance: { MAX: 5, HIGH: 4, DEFAULT: 3, LOW: 2, MIN: 1 },
+    };
+  }
 }
 
 const NotificationContext = createContext();
@@ -338,6 +353,10 @@ export const NotificationProvider = ({ children, userId }) => {
 
   // Initialize notifications on mount
   useEffect(() => {
+    if (Platform.OS === "web") {
+      return undefined;
+    }
+
     let isMounted = true;
 
     const initializeNotifications = async () => {

@@ -12,7 +12,6 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
@@ -1244,11 +1243,11 @@ export const CheckoutScreen = ({ navigation }) => {
           onPress={handleCheckout}
           disabled={loading}
         >
-          <LinearGradient
-            colors={[themeColors.primary, themeColors.accent]}
-            style={styles.checkoutGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
+          <View
+            style={[
+              styles.checkoutButtonContent,
+              { backgroundColor: themeColors.primary },
+            ]}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
@@ -1258,7 +1257,7 @@ export const CheckoutScreen = ({ navigation }) => {
                 <Text style={styles.checkoutText}>Pay Now</Text>
               </>
             )}
-          </LinearGradient>
+          </View>
         </Pressable>
       </View>
     </View>
@@ -1647,7 +1646,7 @@ const buildCheckoutStyles = (c) =>
   checkoutButtonDisabled: {
     opacity: 0.7,
   },
-  checkoutGradient: {
+  checkoutButtonContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

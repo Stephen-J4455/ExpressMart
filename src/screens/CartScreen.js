@@ -9,7 +9,6 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -398,19 +397,19 @@ export const CartScreen = ({ navigation }) => {
       </View>
 
       <Pressable ref={checkoutBtnRef} style={styles.checkout} onPress={handleCheckout}>
-        <LinearGradient
-          colors={
-            hasOutOfStockItems
-              ? [themeColors.muted, themeColors.muted]
-              : [themeColors.primary, themeColors.accent]
-          }
-          style={styles.checkoutGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
+        <View
+          style={[
+            styles.checkoutButton,
+            {
+              backgroundColor: hasOutOfStockItems
+                ? themeColors.muted
+                : themeColors.primary,
+            },
+          ]}
         >
           <Ionicons name="lock-closed" size={18} color="#fff" />
           <Text style={styles.checkoutText}>Proceed to Checkout</Text>
-        </LinearGradient>
+        </View>
       </Pressable>
     </View>
   );
@@ -1060,7 +1059,7 @@ const buildCartStyles = (c) =>
       borderRadius: 18,
       overflow: "hidden",
     },
-    checkoutGradient: {
+    checkoutButton: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",

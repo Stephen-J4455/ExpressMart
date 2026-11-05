@@ -116,6 +116,7 @@ const Stack = createNativeStackNavigator();
 
 const MOBILE_TAB_BAR_PADDING_BOTTOM = 10;
 const COLLAPSED_SIDEBAR_WIDTH = 76;
+const useNativeAnimationDriver = Platform.OS !== "web";
 
 const TabNavigator = () => {
   const { items } = useCart();
@@ -269,7 +270,7 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
       toValue: 1,
       speed: 24,
       bounciness: 7,
-      useNativeDriver: true,
+      useNativeDriver: useNativeAnimationDriver,
     }).start();
   }, [focusedKey, selectedTabScale]);
 
@@ -280,7 +281,7 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
         toValue: shouldHide ? 0 : 1,
         duration: 220,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver: useNativeAnimationDriver,
       }).start();
     });
     return unsubscribe;
@@ -302,7 +303,7 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
       toValue: focusedTabIndex * dockedItemWidth,
       speed: 18,
       bounciness: 11,
-      useNativeDriver: true,
+      useNativeDriver: useNativeAnimationDriver,
     }).start();
   }, [
     activeIndicatorX,
@@ -319,13 +320,13 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
         toValue: focusedTabIndex * floatingTabWidth,
         speed: 16,
         bounciness: 12,
-        useNativeDriver: true,
+        useNativeDriver: useNativeAnimationDriver,
       }),
       Animated.spring(floatingBubbleStretch, {
         toValue: 1,
         speed: 20,
         bounciness: 10,
-        useNativeDriver: true,
+        useNativeDriver: useNativeAnimationDriver,
       }),
     ]).start();
   }, [
