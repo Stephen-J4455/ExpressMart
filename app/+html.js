@@ -9,6 +9,7 @@ export default function Root({ children }) {
     <html lang="en-GH" {...htmlAttributes}>
       <head>
         {headNodes}
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <ScrollViewStyleReset />
       </head>
       <body {...bodyAttributes}>
