@@ -29,6 +29,8 @@ export default function NotFoundPage() {
     "/login",
     "/forgot-password",
     "/auth/reset-password",
+    "/reset-password",
+    "/password-reset",
     "/checkout",
     "/orders",
     "/notifications",
@@ -46,6 +48,7 @@ export default function NotFoundPage() {
     "/privacy/settings",
     "/change-password",
     "/change-email",
+    "/auth/callback",
   ]);
 
   if (pathname === "/" || appPaths.has(pathname)) {
