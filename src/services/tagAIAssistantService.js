@@ -10,7 +10,7 @@
 // generative-UI pipeline — product cards, navigation, screen grounding — works
 // fully offline and can be swapped to a real LLM by replacing planTurn().
 
-import { supabase, callEdgeFunction } from "../lib/supabase";
+import { supabase, callEdgeFunction, cancelEdgeFunction } from "../lib/supabase";
 import { AGENT_TOOLS, AGENT_TOOL_NAMES } from "../tools/agentTools";
 
 // ── Navigable pages registry ─────────────────────────────────────────────────
@@ -44,6 +44,31 @@ export const PAGE_ROUTES = {
   categories: { route: "Categories", params: {}, label: "Categories" },
   stores: { route: "Stores", params: {}, label: "Stores" },
   help: { route: "HelpSupport", params: {}, label: "Help & Support" },
+  // Additional screens reachable by the agent
+  orderDetail: { route: "OrderDetail", params: {}, label: "order details" },
+  orderSuccess: { route: "OrderSuccess", params: {}, label: "order confirmation" },
+  collectionDetail: { route: "CollectionDetail", params: {}, label: "collection" },
+  following: { route: "Following", params: {}, label: "following" },
+  terms: { route: "Terms", params: {}, label: "terms of service" },
+  privacyPolicy: { route: "PrivacyPolicy", params: {}, label: "privacy policy" },
+  privacySettings: { route: "PrivacySettings", params: {}, label: "privacy settings" },
+  changePassword: { route: "ChangePassword", params: {}, label: "change password" },
+  changeEmail: { route: "ChangeEmail", params: {}, label: "change email" },
+  profileEdit: { route: "ProfileEdit", params: {}, label: "edit profile" },
+  sellerProfile: { route: "SellerProfile", params: {}, label: "seller profile" },
+  storeRegistration: { route: "StoreRegistration", params: {}, label: "store registration" },
+  sellerAdmin: { route: "Main", params: { screen: "Account" }, label: "seller dashboard" },
+  auth: { route: "Auth", params: {}, label: "sign in" },
+  forgotPassword: { route: "ForgotPassword", params: {}, label: "forgot password" },
+  resetPassword: { route: "ResetPassword", params: {}, label: "reset password" },
+  chat: { route: "Chat", params: {}, label: "chat" },
+  statusViewer: { route: "StatusViewer", params: {}, label: "status viewer" },
+  statusCreator: { route: "StatusCreator", params: {}, label: "status creator" },
+  paymentWebView: { route: "PaymentWebView", params: {}, label: "payment gateway" },
+  searchResults: { route: "SearchResults", params: {}, label: "search results" },
+  categoryProducts: { route: "CategoryProducts", params: {}, label: "category products" },
+  productDetailBySku: { route: "ProductDetailBySku", params: {}, label: "product by SKU" },
+  storefrontEditor: { route: "StorefrontEditor", params: {}, label: "storefront editor" },
 };
 
 // ── Grounding element registry ───────────────────────────────────────────────
@@ -571,6 +596,55 @@ export const ASSISTANT_TOOLS = [
       parameters: { type: "object", properties: {} },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "navigate_to_route",
+      description:
+        "Navigate to any registered screen in the app by route name, with optional params. Use when the destination isn't in the standard page list (e.g. a specific store, product, chat, or order).",
+      parameters: {
+        type: "object",
+        properties: {
+          route: {
+            type: "string",
+            description: "The navigation route name (e.g. 'Store', 'ProductDetail', 'Chat', 'OrderDetail').",
+          },
+          params: {
+            type: "object",
+            description: "Optional route params (e.g. { sellerId: '...' }, { productId: '...' }).",
+          },
+        },
+        required: ["route"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_navigation_history",
+      description:
+        "Return the list of recently visited screens so the user can jump back to a previous one.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "navigate_to_previous",
+      description:
+        "Navigate back to a previously visited screen by name (e.g. 'Home', 'Checkout', 'Cart').",
+      parameters: {
+        type: "object",
+        properties: {
+          screen: {
+            type: "string",
+            description: "Name of the previously visited screen to return to.",
+          },
+        },
+        required: ["screen"],
+      },
+    },
+  },
 ];
 
 // ── Tool executors ───────────────────────────────────────────────────────────
@@ -697,22 +771,22 @@ const scoreProductForQuery = (product, phrase, tokens) => {
       }
     }
   }
-  let score = matchedTags.size * 10;
+  let score = matchedTags.size * 20;
   if (
     tokens.length > 0 &&
     tokens.every((t) =>
       tags.some((tag) => tag === t || tag.includes(t) || t.includes(tag)),
     )
   ) {
-    score += 5;
+    score += 10;
   }
 
   // Phrase hit on the title (the user's literal query appears in the title).
-  if (phrase && title.includes(phrase.toLowerCase())) score += 8;
+  if (phrase && title.includes(phrase.toLowerCase())) score += 10;
 
   // Per-token title hits — secondary signal after tags.
   for (const tok of tokens) {
-    if (title.includes(tok)) score += 3;
+    if (title.includes(tok)) score += 5;
   }
 
   // Per-token category hits — tertiary signal.
@@ -1313,8 +1387,14 @@ export const executeNavigate = (pageKey, navigateTo) => {
  * caller's label/description, so TagAI can point at ANYTHING on ANY page
  * even without a registered ref. `shape` / `direction` / `size` / `coords`
  * give the overlay more expressive pointers.
+ *
+ * Before pointing, the executor ensures the target is actually visible:
+ *   • For item-id mode: if the item isn't on screen, it scrolls to bring it
+ *     into view, then re-checks.
+ *   • For registered keys: it snapshots the screen to confirm the element is
+ *     visible; if not, it scrolls and retries once.
  */
-export const executePointTo = (args = {}, ctx = {}) => {
+export const executePointTo = async (args = {}, ctx = {}) => {
   const elementKey = typeof args === "string" ? args : args?.element;
   const element = elementKey ? GROUNDING_ELEMENTS[elementKey] : null;
   const passThrough = {
@@ -1325,52 +1405,92 @@ export const executePointTo = (args = {}, ctx = {}) => {
     item_id: args?.item_id,
   };
 
-  // 1. Item-id mode — resolve from the live snapshot to get on-screen coords.
-  if (args?.item_id && typeof ctx.snapshotScreen === "function") {
-    return (async () => {
-      try {
-        const snap = await ctx.snapshotScreen({ region: "all", maxItems: 200 });
-        const item = (snap?.items || []).find(
-          (it) => String(it.id) === String(args.item_id),
-        );
-        if (item?.rect) {
-          return {
-            ok: true,
-            mode: "item",
-            message:
-              args?.description || `Pointing at ${item.text || args.item_id}.`,
-            element: elementKey || args.item_id,
-            label: args?.label || item.text || args.item_id,
-            hint: args?.description || "",
-            coords: {
-              x: Math.round(item.rect.x),
-              y: Math.round(item.rect.y),
-              w: Math.round(item.rect.width),
-              h: Math.round(item.rect.height),
-            },
-            ...passThrough,
-          };
+  // Helper: snapshot the screen and try to find a matching item by id.
+  const findItemById = async (itemId) => {
+    if (typeof ctx.snapshotScreen !== "function") return null;
+    try {
+      const snap = await ctx.snapshotScreen({ region: "all", maxItems: 200 });
+      return (snap?.items || []).find(
+        (it) => String(it.id) === String(itemId),
+      );
+    } catch {
+      return null;
+    }
+  };
+
+  // Helper: scroll the screen once to try to bring a target into view.
+  const scrollOnce = async (direction = "down") => {
+    if (typeof ctx.snapshotScreen !== "function") return false;
+    try {
+      // Scroll via the scroll tool if available.
+      if (typeof ctx.scrollSurface === "function") {
+        const surface = ctx.scrollSurface();
+        if (surface && typeof surface.scrollTo === "function") {
+          surface.scrollTo(0, 200); // scroll down ~200px
+          return true;
         }
-        return {
-          ok: false,
-          status: "not_found",
-          mode: "item",
-          message: `Item ${args.item_id} is registered but not currently on screen. Try scrolling or re-running read_screen.`,
-          ...passThrough,
-        };
-      } catch (e) {
-        return {
-          ok: false,
-          status: "error",
-          message: e?.message || String(e),
-          ...passThrough,
-        };
       }
-    })();
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  // 1. Item-id mode — resolve from the live snapshot to get on-screen coords.
+  if (args?.item_id) {
+    let item = await findItemById(args.item_id);
+    if (!item) {
+      // Item not visible — scroll once and retry.
+      await scrollOnce("down");
+      item = await findItemById(args.item_id);
+    }
+    if (item?.rect) {
+      return {
+        ok: true,
+        mode: "item",
+        message:
+          args?.description || `Pointing at ${item.text || args.item_id}.`,
+        element: elementKey || args.item_id,
+        label: args?.label || item.text || args.item_id,
+        hint: args?.description || "",
+        coords: {
+          x: Math.round(item.rect.x),
+          y: Math.round(item.rect.y),
+          w: Math.round(item.rect.width),
+          h: Math.round(item.rect.height),
+        },
+        ...passThrough,
+      };
+    }
+    return {
+      ok: false,
+      status: "not_found",
+      mode: "item",
+      message: `Item ${args.item_id} is registered but not currently on screen. Try scrolling or re-running read_screen.`,
+      ...passThrough,
+    };
   }
 
   // 2. Registered key mode.
   if (element) {
+    // For registered keys with a known screen, verify the element is visible
+    // by snapshotting. If not visible, scroll once and retry.
+    if (element.screen && typeof ctx.snapshotScreen === "function") {
+      try {
+        const snap = await ctx.snapshotScreen({ region: "all", maxItems: 200 });
+        const visible = (snap?.items || []).some(
+          (it) => String(it.id).includes(elementKey) ||
+            String(it.text || "").toLowerCase().includes(
+              element.label.toLowerCase().split(" ")[0],
+            ),
+        );
+        if (!visible) {
+          await scrollOnce("down");
+        }
+      } catch {
+        // Snapshot failed — proceed with generic point.
+      }
+    }
     return {
       ok: true,
       mode: "registered",
@@ -1456,8 +1576,35 @@ const matchPageKey = (text) => {
   if (/\bsecur(ity|e)\b/.test(t)) return "security";
   if (/\bcategor(y|ies)\b/.test(t)) return "categories";
   if (/\bstores?\b/.test(t)) return "stores";
+  if (/\b(storefront|store front|storefront editor|customize store)\b/.test(t)) return "storefrontEditor";
   if (/\bhelp\b|\bsupport\b/.test(t)) return "help";
   if (/\bsearch\b/.test(t)) return "search";
+  if (/\border detail\b|\border #\b|\btrack (my )?order\b/.test(t)) return "orderDetail";
+  if (/\border (success|confirmation|placed|confirm)\b/.test(t)) return "orderSuccess";
+  if (/\bfollowing\b|\bfollowed (stores|sellers)\b/.test(t)) return "following";
+  if (/\bterms? (of service)?\b/.test(t)) return "terms";
+  if (/\bprivacy (policy|settings)\b/.test(t)) {
+    if (/\bsettings\b/.test(t)) return "privacySettings";
+    return "privacyPolicy";
+  }
+  if (/\bchange (password|email)\b/.test(t)) {
+    if (/\bemail\b/.test(t)) return "changeEmail";
+    return "changePassword";
+  }
+  if (/\b(edit|update) (my )?(profile|name|bio|avatar)\b/.test(t)) return "profileEdit";
+  if (/\bseller (profile|store profile)\b/.test(t)) return "sellerProfile";
+  if (/\b(store registration|become a seller|open a store)\b/.test(t)) return "storeRegistration";
+  if (/\bseller (admin|dashboard)\b/.test(t)) return "sellerAdmin";
+  if (/\bsign ?in|login|auth\b/.test(t)) return "auth";
+  if (/\bforgot (password|reset)\b/.test(t)) return "forgotPassword";
+  if (/\breset (password|my password)\b/.test(t)) return "resetPassword";
+  if (/\bchat\b|\bmessages?\b/.test(t)) return "chats";
+  if (/\b(status|story)\b/.test(t)) return "statusViewer";
+  if (/\bpayment (gateway|webview)\b/.test(t)) return "paymentWebView";
+  if (/\bsearch results\b/.test(t)) return "searchResults";
+  if (/\bcategory products\b/.test(t)) return "categoryProducts";
+  if (/\bproduct by sku\b|\bp\/[a-z0-9-]+\b/.test(t)) return "productDetailBySku";
+  if (/\b(storefront|store front|storefront editor|customize store)\b/.test(t)) return "storefrontEditor";
   return null;
 };
 
@@ -1616,7 +1763,8 @@ export const planLocalTurn = (text, ctx = {}) => {
         "• 🏪 Store details — “who sells this?”, “is this store verified?”\n" +
         "• 🔎 Search stores — “any stores in Accra?”, “verified sellers selling fresh fish”\n" +
         "• 🛒 Add to cart — tap “Add” on any card I show you\n" +
-        "• 🧭 Navigate — “take me to my checkout”\n" +
+        "• 🧭 Navigate — “take me to my checkout”, “go back”, “back to cart”\n" +
+        "• 📜 Navigation history — “what screens have I visited?”\n" +
         "• 🎯 Point at the UI — “where is my coupon code box?”\n" +
         "• 👀 Read the screen — “what's on screen right now?”\n" +
         "• ⬇️ Scroll — “scroll down to see more”",
@@ -1799,24 +1947,64 @@ export const planLocalTurn = (text, ctx = {}) => {
     if (meta.screen) {
       toolCalls.push({ name: "navigate_to_page", args: { page: meta.screen } });
     }
+    // Always read the screen first so we know what's visible before pointing.
+    toolCalls.push({ name: "read_screen", args: { region: "viewport", max_items: 30 } });
+    // Then point at the registered element.
     toolCalls.push({ name: "point_to_element", args: { element: elementKey } });
     return {
-      reply: `${meta.label} — ${meta.hint} Highlighting it for you now. ✨`,
+      reply: `${meta.label} — ${meta.hint} Let me find and highlight it for you. ✨`,
       toolCalls,
     };
   }
 
-  // Pointing at something NOT in the registry — still point! The overlay
-  // highlights the middle of the screen with our label, so any "where is /
-  // point at X" request works even for unknown elements.
+  // Pointing at something NOT in the registry — read the screen first, then
+  // scroll if needed, then point. This prevents pointing at empty space.
   if (POINT_ONLY_RE.test(lower)) {
     const label = extractPointLabel(t);
     if (label) {
       return {
-        reply: `Here's ${label}. ✨`,
+        reply: `Let me look for ${label} on screen and point at it. 🔍`,
         toolCalls: [
+          { name: "read_screen", args: { region: "viewport", max_items: 30 } },
           { name: "point_to_element", args: { element: "custom", label } },
         ],
+      };
+    }
+  }
+
+  // 4b. Go back ("go back", "back", "previous screen", "return")
+  const GO_BACK_RE =
+    /\b(go back|go back|go back|back (to|one)|previous screen|last screen|return (to|back)|undo|back up)\b/i;
+  if (GO_BACK_RE.test(lower)) {
+    return {
+      reply: "Going back to the previous screen. ↩️",
+      toolCalls: [{ name: "go_back", args: {} }],
+    };
+  }
+
+  // 4c. Navigation history ("where have I been", "recent screens", "history")
+  const NAV_HISTORY_RE =
+    /\b(recent(ly)? (visited|screens|pages)|navigation history|where (have|did) i (been|go)|screen history)\b/i;
+  if (NAV_HISTORY_RE.test(lower)) {
+    return {
+      reply: "Pulling up your recent screens… 📜",
+      toolCalls: [{ name: "list_navigation_history", args: {} }],
+    };
+  }
+
+  // 4d. Go back to a specific screen ("take me back to checkout", "back to cart")
+  const BACK_TO_SCREEN_RE =
+    /\b(back to|return to|go back to|take me back to)\b/i;
+  if (BACK_TO_SCREEN_RE.test(lower)) {
+    const target = lower
+      .replace(BACK_TO_SCREEN_RE, " ")
+      .replace(/^(the|a|an|my)\s+/i, "")
+      .replace(/[?.!,]+$/g, "")
+      .trim();
+    if (target) {
+      return {
+        reply: `Taking you back to ${target}. ↩️`,
+        toolCalls: [{ name: "navigate_to_previous", args: { screen: target } }],
       };
     }
   }
@@ -1898,7 +2086,7 @@ export const planLocalTurn = (text, ctx = {}) => {
   // 8. Fallback
   return {
     reply:
-      "I can take you to: Home, Feed, Chats, Cart, Account, Checkout, Orders, Wishlist, Notifications, Addresses, Payments, Settings, Categories, Stores or Help — or just tell me what to shop for, like “find wireless earbuds under 200”. 🛍️",
+      "I can take you to: Home, Feed, Chats, Cart, Account, Checkout, Orders, Wishlist, Notifications, Addresses, Payments, Settings, Categories, Stores or Help — or just tell me what to shop for, like “find wireless earbuds under 200”. I can also “go back”, “back to cart”, or show your recent screens. 🛍️",
     toolCalls: [],
   };
 };
@@ -1927,17 +2115,20 @@ const buildFallbackDebug = (source = "Local planner fallback") => ({
   events: [{ message: source, status: "info" }],
 });
 
-const callAiAssistantWithRetry = async (body, maxAttempts = 5) => {
+const callAiAssistantWithRetry = async (body, maxAttempts = 5, { signal } = {}) => {
   let lastError = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const data = await callEdgeFunction("ai-assistant", body);
+      const data = await callEdgeFunction("ai-assistant", body, { signal });
       if (data?.success && typeof data.reply === "string") {
         return data;
       }
       lastError = new Error(data?.error || "AI service unavailable");
     } catch (error) {
+      if (signal?.aborted) {
+        throw new Error("Request cancelled");
+      }
       lastError = error;
     }
 
@@ -1955,16 +2146,17 @@ const callAiAssistantWithRetry = async (body, maxAttempts = 5) => {
   throw lastError || new Error("AI service unavailable");
 };
 
-export const planTurn = async (text, history = [], image = null) => {
+export const planTurn = async (text, history = [], image = null, userProfile = null, { signal } = {}) => {
   try {
     const data = await callAiAssistantWithRetry({
       message: text,
       image: image || null,
+      user_profile: userProfile || undefined,
       history: (Array.isArray(history) ? history : []).slice(-8).map((m) => ({
         role: m?.role === "assistant" ? "assistant" : "user",
         text: m?.text || "",
       })),
-    });
+    }, 5, { signal });
 
     return {
       reply: data.reply,
@@ -2140,6 +2332,70 @@ export const executeToolCall = async (call, ctx) => {
             status: "error",
             label: "Open product",
             message: e?.message || "Couldn't open that product.",
+          };
+        }
+      }
+      case "navigate_to_route": {
+        const route = String(args?.route || "").trim();
+        const params = args?.params || {};
+        if (!route) {
+          return {
+            name,
+            status: "error",
+            label: "Navigate to route",
+            message: "I need a route name to navigate to.",
+          };
+        }
+        try {
+          if (typeof ctx.navigateTo !== "function") {
+            return {
+              name,
+              status: "unsupported",
+              label: "Navigate to route",
+              message: "This screen can't navigate right now.",
+            };
+          }
+          ctx.navigateTo(route, params);
+          return {
+            name,
+            status: "done",
+            label: `Navigate → ${route}`,
+            message: `Opening ${route}. 🧭`,
+            route,
+            params,
+          };
+        } catch (e) {
+          return {
+            name,
+            status: "error",
+            label: "Navigate to route",
+            message: e?.message || `Couldn't open ${route}.`,
+          };
+        }
+      }
+      case "go_back": {
+        try {
+          if (typeof ctx.goBack !== "function") {
+            return {
+              name,
+              status: "unsupported",
+              label: "Go back",
+              message: "This screen can't go back right now.",
+            };
+          }
+          const ok = ctx.goBack();
+          return {
+            name,
+            status: ok ? "done" : "error",
+            label: "Go back",
+            message: ok ? "Going back to the previous screen. ↩️" : "There's no previous screen to go back to.",
+          };
+        } catch (e) {
+          return {
+            name,
+            status: "error",
+            label: "Go back",
+            message: e?.message || "Couldn't go back.",
           };
         }
       }
@@ -2329,6 +2585,73 @@ export const executeToolCall = async (call, ctx) => {
           coords: resolved?.coords,
         };
       }
+      case "list_navigation_history": {
+        const history = typeof ctx.getNavigationHistory === "function"
+          ? ctx.getNavigationHistory()
+          : [];
+        return {
+          name,
+          status: "done",
+          label: "Navigation history",
+          message: history.length
+            ? `Recently visited: ${history.join(" → ")}.`
+            : "No navigation history yet.",
+          history,
+        };
+      }
+      case "navigate_to_previous": {
+        const screen = String(args?.screen || "").trim();
+        if (!screen) {
+          return {
+            name,
+            status: "error",
+            label: "Go back to screen",
+            message: "Please tell me which screen to go back to.",
+          };
+        }
+        const history = typeof ctx.getNavigationHistory === "function"
+          ? ctx.getNavigationHistory()
+          : [];
+        const match = history.find((s) =>
+          String(s).toLowerCase().includes(screen.toLowerCase()) ||
+          screen.toLowerCase().includes(String(s).toLowerCase()),
+        );
+        if (!match) {
+          return {
+            name,
+            status: "not_found",
+            label: "Go back to screen",
+            message: `I don't have "${screen}" in your recent navigation history.`,
+            history,
+          };
+        }
+        // Navigate back to the matched screen using the page registry.
+        const pageKey = Object.keys(PAGE_ROUTES).find((k) => {
+          const p = PAGE_ROUTES[k];
+          return p.label?.toLowerCase().includes(match.toLowerCase()) ||
+            match.toLowerCase().includes(p.label?.toLowerCase()) ||
+            k.toLowerCase().includes(match.toLowerCase()) ||
+            match.toLowerCase().includes(k.toLowerCase());
+        });
+        if (pageKey && typeof ctx.navigateTo === "function") {
+          const page = PAGE_ROUTES[pageKey];
+          ctx.navigateTo(page.route, page.params);
+          return {
+            name,
+            status: "done",
+            label: "Go back to screen",
+            message: `Taking you back to ${page.label}. ↩️`,
+            screen: match,
+          };
+        }
+        return {
+          name,
+          status: "error",
+          label: "Go back to screen",
+          message: `I found "${match}" in your history but can't navigate to it right now.`,
+          history,
+        };
+      }
       default: {
         // New "agent has eyes" tools — registered in src/tools/agentTools.js.
         const tool = AGENT_TOOLS.find((t) => t.name === name);
@@ -2384,10 +2707,16 @@ const labelForTool = (name) => {
       return "Opening store";
     case "navigate_to_product":
       return "Opening product";
+    case "navigate_to_route":
+      return "Navigating to route";
     case "get_product_reviews":
       return "Reading product reviews";
     case "get_store_reviews":
       return "Reading store reviews";
+    case "list_navigation_history":
+      return "Reading navigation history";
+    case "navigate_to_previous":
+      return "Going back to screen";
     default:
       return name;
   }

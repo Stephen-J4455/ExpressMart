@@ -28,6 +28,7 @@ import {
   findItemsOnScreen,
 } from "../services/screenScanner";
 import { goBack as navigationGoBack } from "../utils/navigationRef";
+import { cancelEdgeFunction } from "../lib/supabase";
 
 const CHAT_STORAGE_KEY = "expressmart.tagai.chat";
 const MAX_PERSISTED_MESSAGES = 60;
@@ -66,6 +67,10 @@ export const TagAIAssistantProvider = ({ children }) => {
   const scrollSurfaces = useRef(new Map());
   // Active route — screens call setActiveRoute('Home') on mount.
   const activeRouteRef = useRef(null);
+  // Navigation history — tracks visited routes so the agent can offer
+  // "back to previous" navigation beyond a single pop.
+  const navigationHistoryRef = useRef([]);
+  const MAX_NAV_HISTORY = 50;
   // App-state provider — set by App.js with helpers like getCartCount().
   const appStateProviderRef = useRef(null);
   // Tap-target registry. Screens register a callback under a stable item id
@@ -268,7 +273,19 @@ export const TagAIAssistantProvider = ({ children }) => {
 
   const setActiveRoute = useCallback((route) => {
     activeRouteRef.current = route || null;
+    // Record navigation history (dedupe consecutive duplicates).
+    if (!route) return;
+    const last = navigationHistoryRef.current[navigationHistoryRef.current.length - 1];
+    if (last !== route) {
+      navigationHistoryRef.current.push(route);
+      if (navigationHistoryRef.current.length > MAX_NAV_HISTORY) {
+        navigationHistoryRef.current = navigationHistoryRef.current.slice(-MAX_NAV_HISTORY);
+      }
+    }
   }, []);
+
+  /** Return the navigation history (most recent last). */
+  const getNavigationHistory = useCallback(() => [...navigationHistoryRef.current], []);
 
   const setAppStateProvider = useCallback((provider) => {
     appStateProviderRef.current =
@@ -308,6 +325,7 @@ export const TagAIAssistantProvider = ({ children }) => {
   // surface renders them after the assistant message lands. Cheap, doesn't
   // cause re-renders during the loop.
   const thinkingBuffer = useRef([]);
+  const abortControllerRef = useRef(null);
   const pushThinking = useCallback((text) => {
     if (!text) return;
     const entry = { ts: Date.now(), text: String(text) };
@@ -339,6 +357,12 @@ export const TagAIAssistantProvider = ({ children }) => {
       const trimmed = (text || "").trim();
       if ((!trimmed && !nav.image) || isThinking) return;
 
+      // Cancel any in-flight request first.
+      cancelEdgeFunction("ai-assistant");
+
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       appendMessage({
         id: makeId(),
         role: "user",
@@ -363,7 +387,13 @@ export const TagAIAssistantProvider = ({ children }) => {
           reply,
           toolCalls,
           products: remoteProducts = [],
-        } = await planTurn(trimmed, messages, nav.image || null);
+        } = await planTurn(
+          trimmed,
+          messages,
+          nav.image || null,
+          nav.userProfile || null,
+          { signal: abortController.signal },
+        );
 
         // Execute tool calls sequentially (order matters: navigate before
         // point_to_element, search before add_to_cart, etc.)
@@ -381,6 +411,7 @@ export const TagAIAssistantProvider = ({ children }) => {
             snapshotScreen,
             findOnScreen,
             getAppState,
+            getNavigationHistory,
             // Tap + screen-map support.
             invokeTapTarget,
             listTapTargets,
@@ -457,6 +488,7 @@ export const TagAIAssistantProvider = ({ children }) => {
         });
       } finally {
         setIsThinking(false);
+        abortControllerRef.current = null;
       }
     },
     [
@@ -468,10 +500,21 @@ export const TagAIAssistantProvider = ({ children }) => {
       snapshotScreen,
       findOnScreen,
       getAppState,
+      getNavigationHistory,
+      cancelEdgeFunction,
+      planTurn,
+      executeToolCall,
     ],
   );
 
   const clearChat = useCallback(() => setMessages([]), []);
+
+  // Cancel in-flight AI request — defined before useMemo so it can be
+  // referenced in the dependency array.
+  const cancelRequest = useCallback(() => {
+    cancelEdgeFunction("ai-assistant");
+    abortControllerRef.current?.abort();
+  }, [cancelEdgeFunction, abortControllerRef]);
 
   const value = useMemo(
     () => ({
@@ -498,6 +541,7 @@ export const TagAIAssistantProvider = ({ children }) => {
       snapshotScreen,
       findOnScreen,
       getAppState,
+      getNavigationHistory,
       goBack: navigationGoBack,
       // Tap-target registry (the agent's `tap_element` tool)
       registerTapTarget,
@@ -506,6 +550,7 @@ export const TagAIAssistantProvider = ({ children }) => {
       listTapTargets,
       // Thinking trace
       pushThinking,
+      cancelRequest,
     }),
     [
       messages,
@@ -530,11 +575,13 @@ export const TagAIAssistantProvider = ({ children }) => {
       snapshotScreen,
       findOnScreen,
       getAppState,
+      getNavigationHistory,
       registerTapTarget,
       unregisterTapTarget,
       invokeTapTarget,
       listTapTargets,
       pushThinking,
+      cancelRequest,
     ],
   );
 

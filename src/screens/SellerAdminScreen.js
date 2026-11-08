@@ -44,6 +44,7 @@ import { sellerFlashSaleService } from "../services/sellerFlashSaleService";
 import { colors as brandColors, getTheme, radius } from "../theme/colors";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
+import { useTapTarget } from "../hooks/useGrounding";
 import { getImageContentType } from "../utils/webUpload";
 import {
   compressProductImage,
@@ -461,6 +462,61 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   // (service_fee_percentage), the same single source of truth the payment
   // edge function uses. null = not loaded / unavailable (breakdown hidden).
   const [serviceFeePercent, setServiceFeePercent] = useState(null);
+
+  // ── TagAI tap targets for internal seller-admin features ───────────────
+  // These let the AI assistant navigate to sub-features that aren't separate
+  // Stack.Screen routes (tabs, modals, toggles) via the tap_element tool.
+  useTapTarget("sellerAdmin.tab.dashboard", () => setActiveTab("catalog"), {
+    screen: "SellerAdmin",
+    label: "Dashboard",
+  });
+  useTapTarget("sellerAdmin.tab.catalog", () => setActiveTab("catalog"), {
+    screen: "SellerAdmin",
+    label: "Catalog",
+  });
+  useTapTarget("sellerAdmin.tab.orders", () => setActiveTab("orders"), {
+    screen: "SellerAdmin",
+    label: "Orders",
+  });
+  useTapTarget("sellerAdmin.tab.statuses", () => setActiveTab("statuses"), {
+    screen: "SellerAdmin",
+    label: "Statuses",
+  });
+  useTapTarget("sellerAdmin.tab.flash", () => setActiveTab("flash"), {
+    screen: "SellerAdmin",
+    label: "Flash sales",
+  });
+  useTapTarget("sellerAdmin.tab.reels", () => setActiveTab("reels"), {
+    screen: "SellerAdmin",
+    label: "Reels",
+  });
+  useTapTarget("sellerAdmin.tab.insights", () => setActiveTab("insights"), {
+    screen: "SellerAdmin",
+    label: "Insights",
+  });
+  useTapTarget("sellerAdmin.addProduct", () => setModalVisible(true), {
+    screen: "SellerAdmin",
+    label: "Add product",
+  });
+  useTapTarget("sellerAdmin.coupons", () => setCouponManagerVisible(true), {
+    screen: "SellerAdmin",
+    label: "Coupons",
+  });
+  useTapTarget("sellerAdmin.goLive", () => {
+    // Toggled via the Go Live control in the profile sheet.
+  }, { screen: "SellerAdmin", label: "Go live" });
+  useTapTarget("sellerAdmin.openStorefront", () => {
+    nav.navigate("StorefrontEditor");
+  }, { screen: "SellerAdmin", label: "Open storefront" });
+  useTapTarget("sellerAdmin.createCoupon", () => setCouponFormVisible(true), {
+    screen: "SellerAdmin",
+    label: "Create coupon",
+  });
+  useTapTarget("sellerAdmin.createFlashSale", () => setFlashSaleModalVisible(true), {
+    screen: "SellerAdmin",
+    label: "Create flash sale",
+  });
+
   useEffect(() => {
     let mounted = true;
     (async () => {

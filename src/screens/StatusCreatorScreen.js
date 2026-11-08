@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
   Dimensions,
+  FlatList,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -26,6 +27,12 @@ import { ResponsiveContainer } from "../components/ResponsiveContainer";
 import { useResponsive } from "../hooks/useResponsive";
 import { getImageContentType } from "../utils/webUpload";
 import { R2_FOLDERS, uploadToR2Presigned } from "../services/r2Storage";
+
+/** Extract hashtags (#tag) from a string, normalized lowercase without the #. */
+const extractHashtags = (text = "") => {
+  const tags = [...text.matchAll(/#(\w+)/g)].map((m) => m[1].toLowerCase());
+  return [...new Set(tags)];
+};
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 
@@ -57,6 +64,15 @@ export const StatusCreatorScreen = ({ navigation }) => {
   const [textColor, setTextColor] = useState("#FFFFFF");
   const [fontSize, setFontSize] = useState(28);
 
+  // Product tagging state (image mode only)
+  const [taggedProducts, setTaggedProducts] = useState([]); // { product_id, x, y }
+  const [tagMode, setTagMode] = useState(false);
+  const [tagProducts, setTagProducts] = useState([]); // search results
+  const [tagQuery, setTagQuery] = useState("");
+
+  // Hashtags parsed from caption/status text
+  const [hashtags, setHashtags] = useState([]);
+
   const [loading, setLoading] = useState(false);
 
   const handleClose = () => {
@@ -87,6 +103,48 @@ export const StatusCreatorScreen = ({ navigation }) => {
       active = false;
     };
   }, [user]);
+
+  // Search seller's own products to tag in a status.
+  const searchTagProducts = useCallback(async (q) => {
+    if (!q || q.length < 2) {
+      setTagProducts([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from("express_products")
+        .select("id, title, thumbnail, price")
+        .eq("seller_id", sellerId)
+        .ilike("title", `%${q}%`)
+        .limit(8);
+      if (error) throw error;
+      setTagProducts(data || []);
+    } catch (err) {
+      console.warn("Product tag search failed:", err);
+      setTagProducts([]);
+    }
+  }, [sellerId]);
+
+  const toggleTagProduct = (product) => {
+    setTaggedProducts((prev) => {
+      const exists = prev.find((t) => t.product_id === product.id);
+      if (exists) return prev.filter((t) => t.product_id !== product.id);
+      return [...prev, { product_id: product.id, x: 50, y: 50 }];
+    });
+    setTagQuery("");
+    setTagProducts([]);
+    setTagMode(false);
+  };
+
+  const removeTag = (productId) => {
+    setTaggedProducts((prev) => prev.filter((t) => t.product_id !== productId));
+  };
+
+  // Parse hashtags from the caption / status text whenever it changes.
+  useEffect(() => {
+    const text = statusMode === "image" ? imageCaption : statusText;
+    setHashtags(extractHashtags(text));
+  }, [imageCaption, statusText, statusMode]);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -165,10 +223,11 @@ export const StatusCreatorScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
+      let statusId;
       if (statusMode === "image") {
         const mediaUrl = await uploadStatusImage(image, imageFile);
 
-        const { error: dbError } = await supabase
+        const { data: inserted, error: dbError } = await supabase
           .from("express_seller_statuses")
           .insert({
             seller_id: sellerId,
@@ -176,10 +235,13 @@ export const StatusCreatorScreen = ({ navigation }) => {
             media_url: mediaUrl,
             status_text: imageCaption || null,
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          });
+          })
+          .select("id")
+          .single();
         if (dbError) throw dbError;
+        statusId = inserted.id;
       } else {
-        const { error } = await supabase
+        const { data: inserted, error } = await supabase
           .from("express_seller_statuses")
           .insert({
             seller_id: sellerId,
@@ -192,8 +254,56 @@ export const StatusCreatorScreen = ({ navigation }) => {
             font_size: fontSize,
             media_url: "text-status",
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          });
+          })
+          .select("id")
+          .single();
         if (error) throw error;
+        statusId = inserted.id;
+      }
+
+      // ── Insert product tags ─────────────────────────────────────────────
+      if (statusId && taggedProducts.length > 0) {
+        const { error: tagError } = await supabase
+          .from("status_product_tags")
+          .insert(
+            taggedProducts.map((t) => ({
+              status_id: statusId,
+              product_id: t.product_id,
+              x_position: t.x ?? 50,
+              y_position: t.y ?? 50,
+            })),
+          );
+        if (tagError) throw tagError;
+      }
+
+      // ── Insert hashtags ─────────────────────────────────────────────────
+      if (statusId && hashtags.length > 0) {
+        // Upsert hashtags and link them to the status.
+        for (const tag of hashtags) {
+          const { data: existing } = await supabase
+            .from("hashtags")
+            .select("id")
+            .eq("tag", tag)
+            .maybeSingle();
+
+          let hashtagId;
+          if (existing) {
+            hashtagId = existing.id;
+          } else {
+            const { data: created, error: hErr } = await supabase
+              .from("hashtags")
+              .insert({ tag, post_count: 1 })
+              .select("id")
+              .single();
+            if (hErr) throw hErr;
+            hashtagId = created.id;
+          }
+
+          await supabase.from("status_hashtags").insert({
+            status_id: statusId,
+            hashtag_id: hashtagId,
+          });
+        }
       }
 
       toast.success("Status posted successfully!");
@@ -243,8 +353,59 @@ export const StatusCreatorScreen = ({ navigation }) => {
                   <Ionicons name="camera" size={20} color={themeColors.primary} />
                   <Text style={[styles.imagePickBtnText, { color: themeColors.primary }]}>Camera</Text>
                 </TouchableOpacity>
+                {image && (
+                  <Pressable onPress={() => setTagMode(!tagMode)} style={[styles.tagModeBtn, tagMode && styles.tagModeBtnActive]}>
+                    <Ionicons name={tagMode ? "close" : "pricetag"} size={18} color={tagMode ? themeColors.red.primary : themeColors.primary} />
+                    <Text style={[styles.tagModeBtnText, tagMode && { color: themeColors.red.primary }]}>
+                      {tagMode ? "Done Tagging" : "Tag Product"}
+                    </Text>
+                  </Pressable>
+                )}
               </View>
-              <TextInput style={styles.textInput} placeholder="Caption (optional)" placeholderTextColor={themeColors.muted} value={imageCaption} onChangeText={setImageCaption} />
+              <TextInput style={styles.textInput} placeholder="Caption (optional) — add #hashtags" placeholderTextColor={themeColors.muted} value={imageCaption} onChangeText={setImageCaption} />
+              {hashtags.length > 0 && (
+                <View style={styles.hashtagRow}>
+                  {hashtags.map((tag) => (
+                    <Pressable key={tag} style={styles.hashtagChip}>
+                      <Text style={styles.hashtagChipText}>#{tag}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              {tagMode && image && (
+                <View style={styles.tagSearchSection}>
+                  <Text style={styles.sectionTitle}>Tag a Product</Text>
+                  <TextInput style={styles.textInput} placeholder="Search your products..." value={tagQuery} onChangeText={(t) => { setTagQuery(t); searchTagProducts(t); }} />
+                  {tagProducts.length > 0 && (
+                    <FlatList
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      data={tagProducts}
+                      keyExtractor={(item) => item.id}
+                      renderItem={({ item }) => (
+                        <Pressable onPress={() => toggleTagProduct(item)} style={styles.tagChip}>
+                          <Image source={{ uri: item.thumbnail }} style={styles.tagChipImage} />
+                          <Text style={styles.tagChipText}>{item.title}</Text>
+                        </Pressable>
+                      )}
+                    />
+                  )}
+                </View>
+              )}
+              {taggedProducts.length > 0 && (
+                <View style={styles.taggedList}>
+                  <Text style={styles.sectionTitle}>Tagged Products</Text>
+                  {taggedProducts.map((t) => {
+                    const product = tagProducts.find((p) => p.id === t.product_id);
+                    return (
+                      <Pressable key={t.product_id} onPress={() => removeTag(t.product_id)} style={styles.taggedRow}>
+                        <Text style={styles.taggedRowText}>{product?.title || "Product"}</Text>
+                        <Ionicons name="close" size={16} color={themeColors.muted} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           ) : (
             <View style={styles.section}>
@@ -274,6 +435,23 @@ export const StatusCreatorScreen = ({ navigation }) => {
                           </Text>
                         </LinearGradient>
                       ) : null}
+                      {/* Tag overlays on the preview image */}
+                      {taggedProducts.map((t) => {
+                        const product = tagProducts.find((p) => p.id === t.product_id);
+                        if (!product) return null;
+                        return (
+                          <Pressable
+                            key={t.product_id}
+                            onPress={() => removeTag(t.product_id)}
+                            style={styles.tagOverlay}
+                          >
+                            <View style={styles.tagOverlayBadge}>
+                              <Ionicons name="pricetag" size={14} color="#fff" />
+                              <Text style={styles.tagOverlayText}>{product.title}</Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
                     </>
                   ) : (
                     <View style={styles.previewPlaceholder}>
@@ -340,6 +518,24 @@ const buildStatusCreatorStyles = (c) =>
   textInput: { borderWidth: 1, borderColor: c.light, padding: 12, borderRadius: radius.lg, backgroundColor: c.light },
   postBtn: { padding: 14, borderRadius: radius.xl, alignItems: "center", marginTop: 12 },
   postText: { color: c.light, fontWeight: "800" },
+  // ── Product tagging styles ─────────────────────────────────────────────
+  tagModeBtn: { padding: 8, borderRadius: radius.md, borderWidth: 1, borderColor: c.light, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6 },
+  tagModeBtnActive: { borderColor: c.primary, backgroundColor: c.primary + "10" },
+  tagModeBtnText: { fontSize: 12, fontWeight: "700" },
+  tagSearchSection: { marginTop: 12 },
+  tagChip: { flexDirection: "row", alignItems: "center", gap: 6, padding: 8, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, backgroundColor: c.light },
+  tagChipImage: { width: 32, height: 32, borderRadius: radius.sm },
+  tagChipText: { fontSize: 12, fontWeight: "600", color: c.dark },
+  taggedList: { marginTop: 12 },
+  taggedRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 8, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, backgroundColor: c.light, marginBottom: 6 },
+  taggedRowText: { fontSize: 13, fontWeight: "600", color: c.dark },
+  hashtagRow: { flexDirection: "row", gap: 8, marginTop: 8, flexWrap: "wrap" },
+  hashtagChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1, borderColor: c.primary, backgroundColor: c.primary + "10" },
+  hashtagChipText: { color: c.primary, fontWeight: "700", fontSize: 13 },
+  // Tag overlay badge on the preview image
+  tagOverlay: { position: "absolute", bottom: 12, left: 12 },
+  tagOverlayBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.full, backgroundColor: "rgba(0,0,0,0.7)" },
+  tagOverlayText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   // ── Live preview card (9:16 story format) ──────────────────────────────
   previewWrap: { alignItems: "center" },
   previewCard: {

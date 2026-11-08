@@ -19,6 +19,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
+import { useTapTarget } from "../hooks/useGrounding";
 import { callEdgeFunction, supabase } from "../lib/supabase";
 import { generatePaymentReference } from "../services/payment";
 import {
@@ -647,6 +648,25 @@ export const StorefrontEditorScreen = ({ navigation, route }) => {
   const [processingUpgrade, setProcessingUpgrade] = useState(false);
   const processedPaymentReference = useRef("");
   const [previewViewport, setPreviewViewport] = useState("desktop");
+
+  // ── TagAI tap targets for storefront editor features ───────────────────
+  // Lets the AI assistant navigate to specific storefront customization
+  // areas via the tap_element tool.
+  useTapTarget("storefrontEditor.layout", () => {
+    // Layout picker is always visible; this is a no-op target for pointing.
+  }, { screen: "StorefrontEditor", label: "Layout picker" });
+  useTapTarget("storefrontEditor.theme", () => {
+    // Theme picker is always visible; this is a no-op target for pointing.
+  }, { screen: "StorefrontEditor", label: "Theme picker" });
+  useTapTarget("storefrontEditor.gallery", () => {
+    // Gallery uploader is always visible; this is a no-op target for pointing.
+  }, { screen: "StorefrontEditor", label: "Gallery uploader" });
+  useTapTarget("storefrontEditor.socials", () => {
+    // Social links editor is always visible; this is a no-op target for pointing.
+  }, { screen: "StorefrontEditor", label: "Social links" });
+  useTapTarget("storefrontEditor.save", () => {
+    // Save is handled by the form's save button; this is a no-op target.
+  }, { screen: "StorefrontEditor", label: "Save storefront" });
 
   const cleanSlug = makeSlug(slug || name);
   const storefrontUrl = cleanSlug

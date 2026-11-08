@@ -38,84 +38,83 @@ export const EDGE_FUNCTIONS = {
 };
 
 // Helper to call edge functions
-export const callEdgeFunction = async (functionName, body) => {
+// Active edge function abort controllers — keyed by function name so a
+// caller can cancel an in-flight request (e.g. user taps "Stop" on the AI).
+export const activeAbortControllers = new Map();
+
+// Helper to call edge functions
+export const callEdgeFunction = async (functionName, body, { signal } = {}) => {
   if (!supabase) {
     console.error("❌ Supabase not configured");
     throw new Error("Supabase not configured");
   }
 
-  // ── Path 1: use supabase.functions.invoke (handles auth automatically) ──
-  if (supabase.functions && typeof supabase.functions.invoke === "function") {
-    try {
-      const { data, error } = await supabase.functions.invoke(functionName, {
-        body,
-      });
-
-      if (error) {
-        // Propagate only real errors; let network/timeout errors fall through
-        // to the manual fetch path below.
-        const msg = typeof error === "string" ? error : (error?.message ?? "");
-        if (
-          !msg.toLowerCase().includes("timeout") &&
-          !msg.toLowerCase().includes("network") &&
-          !msg.toLowerCase().includes("abort") &&
-          !msg.toLowerCase().includes("fetch")
-        ) {
-          let detail = msg || "Edge function returned an error";
-          try {
-            const response = error?.context;
-            if (response && typeof response.clone === "function") {
-              const payload = await response.clone().json();
-              detail = payload?.error || payload?.message || detail;
-            }
-          } catch {
-            // Keep the SDK message when the error response is not JSON.
-          }
-          const enrichedError = new Error(
-            `${functionName} failed: ${detail}`,
-          );
-          enrichedError.name = error?.name || "FunctionsHttpError";
-          enrichedError.isNonTransientEdgeError = true;
-          console.error("supabase.functions.invoke returned error:", detail);
-          throw enrichedError;
-        }
-        console.warn(
-          "supabase.functions.invoke transient error, falling back:",
-          error,
-        );
-      } else {
-        return data;
-      }
-    } catch (invokeErr) {
-      if (invokeErr?.isNonTransientEdgeError) throw invokeErr;
-      console.warn(
-        "supabase.functions.invoke threw, falling back to fetch:",
-        invokeErr,
-      );
-    }
-  }
-
-  // ── Path 2: manual fetch fallback ────────────────────────────────────────
-  // Use getSession() — the supabase-js client handles token refresh internally
-  // without a network round-trip. Calling refreshSession() is unnecessary and
-  // causes timeouts on slow connections (especially for multi-seller orders).
-  const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
-
-  if (sessionError || !session?.access_token) {
-    throw new Error("Authentication session expired. Please log in again.");
-  }
-
-  const url = `${supabaseUrl}/functions/v1/${functionName}`;
-
-  // 45-second timeout — multi-seller orders involve several sequential
-  // Paystack API calls + one order record per seller.
+  // Register an abort controller so the caller can cancel this request.
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000);
+  const effectiveSignal = signal || controller.signal;
+  activeAbortControllers.set(functionName, controller);
 
   try {
+    // ── Path 1: use supabase.functions.invoke (handles auth automatically) ──
+    if (supabase.functions && typeof supabase.functions.invoke === "function") {
+      try {
+        const { data, error } = await supabase.functions.invoke(functionName, {
+          body,
+          signal: effectiveSignal,
+        });
+
+        if (error) {
+          // Propagate only real errors; let network/timeout errors fall through
+          // to the manual fetch path below.
+          const msg = typeof error === "string" ? error : (error?.message ?? "");
+          if (
+            !msg.toLowerCase().includes("timeout") &&
+            !msg.toLowerCase().includes("network") &&
+            !msg.toLowerCase().includes("abort") &&
+            !msg.toLowerCase().includes("fetch")
+          ) {
+            let detail = msg || "Edge function returned an error";
+            try {
+              const response = error?.context;
+              if (response && typeof response.clone === "function") {
+                const payload = await response.clone().json();
+                detail = payload?.error || payload?.message || detail;
+              }
+            } catch {
+              // Keep the SDK message when the error response is not JSON.
+            }
+            const enrichedError = new Error(
+              `${functionName} failed: ${detail}`,
+            );
+            enrichedError.name = error?.name || "FunctionsHttpError";
+            enrichedError.isNonTransientEdgeError = true;
+            console.error("supabase.functions.invoke returned error:", detail);
+            throw enrichedError;
+          }
+        } else {
+          return data;
+        }
+      } catch (invokeErr) {
+        if (invokeErr?.isNonTransientEdgeError) throw invokeErr;
+        console.warn(
+          "supabase.functions.invoke threw, falling back to fetch:",
+          invokeErr,
+        );
+      }
+    }
+
+    // ── Path 2: manual fetch fallback ────────────────────────────────────────
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !session?.access_token) {
+      throw new Error("Authentication session expired. Please log in again.");
+    }
+
+    const url = `${supabaseUrl}/functions/v1/${functionName}`;
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -124,10 +123,8 @@ export const callEdgeFunction = async (functionName, body) => {
         apikey: supabaseAnonKey,
       },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal: effectiveSignal,
     });
-
-    clearTimeout(timeoutId);
 
     const result = await response.json();
 
@@ -139,14 +136,35 @@ export const callEdgeFunction = async (functionName, body) => {
     }
     return result;
   } catch (fetchError) {
-    clearTimeout(timeoutId);
     if (fetchError.name === "AbortError") {
-      console.error("❌ Edge function fetch timed out after 45s");
-      throw new Error(
-        "Payment request timed out. Please check your order status before retrying.",
-      );
+      console.error("❌ Edge function request was cancelled");
+      throw new Error("Request cancelled");
     }
-    console.error("❌ Fetch error:", fetchError);
     throw fetchError;
+  } finally {
+    activeAbortControllers.delete(functionName);
   }
 };
+
+/** Cancel an in-flight edge function request by name. */
+export const cancelEdgeFunction = (functionName) => {
+  const controller = activeAbortControllers.get(functionName);
+  if (controller) {
+    controller.abort();
+    activeAbortControllers.delete(functionName);
+    return true;
+  }
+  return false;
+};
+
+/** Cancel all in-flight edge function requests. */
+export const cancelAllEdgeFunctions = () => {
+  let cancelled = 0;
+  for (const [name, controller] of activeAbortControllers.entries()) {
+    controller.abort();
+    activeAbortControllers.delete(name);
+    cancelled += 1;
+  }
+  return cancelled;
+};
+

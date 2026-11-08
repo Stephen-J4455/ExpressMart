@@ -1680,6 +1680,50 @@ serve(async (req) => {
         );
       }
 
+      // ── WhatsApp order notification to the seller ─────────────────────────
+      try {
+        const { data: sellerRow } = await writeClient
+          .from("express_sellers")
+          .select("name, phone, social_whatsapp")
+          .eq("id", sid)
+          .maybeSingle();
+
+        const sellerPhone =
+          sellerRow?.phone ||
+          sellerRow?.social_whatsapp?.replace(/\D/g, "") ||
+          null;
+
+        if (sellerPhone) {
+          const orderNumber = order.id.slice(-8).toUpperCase();
+          const itemsSummary = group.items
+            .map((i: any) => `${i.quantity}x ${i.title}`)
+            .join(", ");
+
+          await fetch(
+            `${Deno.env.get("SUPABASE_URL")}/functions/v1/send-whatsapp-message`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              },
+              body: JSON.stringify({
+                order_id: order.id,
+                seller_id: sid,
+                to_phone: sellerPhone,
+                order_number: orderNumber,
+                amount: groupTotal,
+                items: itemsSummary,
+                store_name: sellerRow?.name || "Your store",
+              }),
+            },
+          );
+        }
+      } catch (waErr) {
+        // WhatsApp notification must never block order completion.
+        console.error("❌ WhatsApp order notification failed for seller", sid, waErr);
+      }
+
       createdOrders.push(order);
     }
 

@@ -41,6 +41,7 @@ import { useCart } from "../context/CartContext";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
 import { useGrounding } from "../hooks/useGrounding";
+import { useUserProfile } from "../hooks/useUserProfile";
 import { useTagAIAssistant } from "../context/TagAIAssistantContext";
 import { useToast } from "../context/ToastContext";
 import { radius } from "../theme/colors";
@@ -106,8 +107,56 @@ const sanitizeAssistantText = (rawText) => {
     .trim();
 };
 
+/** Map TagAI tool names / phases to ThinkingOrb states. */
+const TOOL_ORB_STATE = {
+  // Image / vision
+  imagine: "imagining",
+  vision: "imagining",
+  // Search / discovery
+  search_products: "searching",
+  filter_catalog: "searching",
+  find_on_screen: "searching",
+  get_store_products: "searching",
+  // Reasoning / matching
+  get_product_details: "solving",
+  get_store_details: "solving",
+  get_product_reviews: "solving",
+  get_store_reviews: "solving",
+  // Navigation / movement
+  navigate_to_page: "working",
+  navigate_to_store: "working",
+  navigate_to_product: "working",
+  navigate_to_route: "working",
+  navigate_to_previous: "working",
+  go_back: "working",
+  scroll: "working",
+  scroll_to: "working",
+  tap_element: "working",
+  // UI focus
+  point_to_element: "focusing",
+  read_screen: "focusing",
+  // Waiting / listening
+  wait_for: "listening",
+  get_app_state: "listening",
+  get_user_profile: "working",
+  list_navigation_history: "working",
+  dismiss_overlay: "working",
+  list_screens: "working",
+  get_screen_info: "working",
+  // Default
+  default: "working",
+};
+
+/** Resolve a ThinkingOrb state from the latest thinking trail entry. */
+const resolveOrbState = (trail, isImage) => {
+  if (isImage) return "imagining";
+  const latest = trail[trail.length - 1]?.text || "";
+  const toolName = latest.replace("Running ", "").replace("…", "");
+  return TOOL_ORB_STATE[toolName] || TOOL_ORB_STATE.default;
+};
+
 /** Animated thinking indicator. */
-const TypingDots = () => {
+const TypingDots = ({ state = "working" }) => {
   const { colors } = useTheme();
   const styles = useAppStyles(buildStyles);
   return (
@@ -115,7 +164,7 @@ const TypingDots = () => {
       {Platform.OS === "web" ? (
         <ActivityIndicator size="small" color={colors.primary} />
       ) : (
-        <ThinkingOrb state="connecting" size={64} color={colors.primary} />
+        <ThinkingOrb state={state} size={64} speed={1} />
       )}
     </View>
   );
@@ -127,6 +176,8 @@ const PROCESS_DEBUG_TEXTS = [
   "Planning request…",
   "Checking the best matches…",
   "Preparing results…",
+  "Reading the screen…",
+  "Waiting for screen…",
 ];
 
 const IMAGE_PROCESS_TEXTS = [
@@ -135,35 +186,63 @@ const IMAGE_PROCESS_TEXTS = [
   "Looking for similar items…",
   "Comparing product matches…",
   "Preparing results…",
+  "Reading the screen…",
+  "Waiting for screen…",
 ];
+
+// Map tool names to human-readable status text so the ticker shows what the
+// AI is actually doing instead of cycling through generic phrases.
+const TOOL_STATUS_TEXT = {
+  search_products: "Searching products",
+  filter_catalog: "Filtering catalog",
+  add_to_cart: "Adding to cart",
+  navigate_to_page: "Navigating",
+  navigate_to_store: "Opening store",
+  navigate_to_product: "Opening product",
+  navigate_to_route: "Navigating",
+  navigate_to_previous: "Going back",
+  go_back: "Going back",
+  point_to_element: "Pointing at UI",
+  read_screen: "Reading screen",
+  find_on_screen: "Finding on screen",
+  scroll: "Scrolling",
+  scroll_to: "Scrolling to item",
+  wait_for: "Waiting for screen",
+  tap_element: "Tapping control",
+  get_product_details: "Reading product details",
+  get_store_details: "Reading store details",
+  get_store_products: "Browsing store catalog",
+  get_product_reviews: "Reading reviews",
+  get_store_reviews: "Reading store reviews",
+  get_user_profile: "Reading your profile",
+  list_navigation_history: "Checking history",
+  dismiss_overlay: "Dismissing overlay",
+  list_screens: "Listing screens",
+  get_screen_info: "Getting screen info",
+  get_app_state: "Checking app state",
+};
 
 const ThinkingStatusTicker = ({ items = [], hasImage = false }) => {
   const { colors } = useTheme();
   const styles = useAppStyles(buildStyles);
-  const statusTexts = hasImage ? IMAGE_PROCESS_TEXTS : PROCESS_DEBUG_TEXTS;
-  const [visibleText, setVisibleText] = useState(statusTexts[0]);
+  const [visibleText, setVisibleText] = useState("");
   const translateY = useRef(new Animated.Value(16)).current;
   const opacity = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    const latestText = items[items.length - 1]?.text;
-    const isGenericStatus = !latestText || statusTexts.includes(latestText);
-
-    if (isGenericStatus || hasImage) {
-      const cycleIndex = setInterval(() => {
-        setVisibleText((prev) => {
-          const currentIndex = statusTexts.indexOf(prev);
-          const nextIndex =
-            currentIndex >= 0
-              ? (currentIndex + 1) % statusTexts.length
-              : 0;
-          return statusTexts[nextIndex];
-        });
-      }, 1200);
-      return () => clearInterval(cycleIndex);
+  // Determine what status to show based on the latest thinking item.
+  const latestText = items[items.length - 1]?.text;
+  const targetText = useMemo(() => {
+    if (!latestText) return "Understanding your request…";
+    if (latestText.startsWith("Running ")) {
+      const toolName = latestText.replace("Running ", "").replace("…", "");
+      return TOOL_STATUS_TEXT[toolName] || toolName;
     }
+    return latestText;
+  }, [latestText]);
 
-    if (latestText === visibleText) return;
+  useEffect(() => {
+    // When the target changes, animate the transition.
+    if (targetText === visibleText) return;
     Animated.sequence([
       Animated.timing(translateY, {
         toValue: -16,
@@ -176,7 +255,7 @@ const ThinkingStatusTicker = ({ items = [], hasImage = false }) => {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      setVisibleText(latestText);
+      setVisibleText(targetText);
       translateY.setValue(16);
       opacity.setValue(1);
       Animated.parallel([
@@ -192,7 +271,25 @@ const ThinkingStatusTicker = ({ items = [], hasImage = false }) => {
         }),
       ]).start();
     });
-  }, [items, hasImage, statusTexts, visibleText, translateY, opacity]);
+  }, [targetText, visibleText, translateY, opacity]);
+
+  // Only cycle through generic statuses when there's no specific tool
+  // running and no image being processed.
+  useEffect(() => {
+    if (!latestText && !hasImage) {
+      const cycleIndex = setInterval(() => {
+        setVisibleText((prev) => {
+          const currentIndex = PROCESS_DEBUG_TEXTS.indexOf(prev);
+          const nextIndex =
+            currentIndex >= 0
+              ? (currentIndex + 1) % PROCESS_DEBUG_TEXTS.length
+              : 0;
+          return PROCESS_DEBUG_TEXTS[nextIndex];
+        });
+      }, 1200);
+      return () => clearInterval(cycleIndex);
+    }
+  }, [latestText, hasImage]);
 
   return (
     <View style={styles.statusTickerWrap}>
@@ -264,11 +361,18 @@ export const TagAIAssistantScreen = () => {
   const styles = useAppStyles(buildStyles);
   // Markdown theme for assistant replies (same pattern as ProductDetailScreen)
   const markdownStyles = useAppStyles(buildTagAIMarkdownStyles);
-  const { user, profile } = useAuth();
+  const { user, profile: authProfile } = useAuth();
   const { addToCart } = useCart();
   const toast = useToast();
-  const { messages, isThinking, thinkingTrail, sendMessage, clearChat } =
-    useTagAIAssistant();
+  const {
+    messages,
+    isThinking,
+    thinkingTrail,
+    sendMessage,
+    clearChat,
+    cancelRequest,
+  } = useTagAIAssistant();
+  const { profile: algoProfile } = useUserProfile();
 
   const [input, setInput] = useState("");
   const [visionImage, setVisionImage] = useState(null);
@@ -279,9 +383,10 @@ export const TagAIAssistantScreen = () => {
   const inputBarRef = useGrounding("tagAI.inputBar");
 
   const firstName = useMemo(() => {
-    const name = profile?.full_name || user?.email?.split("@")[0] || "there";
+    const name =
+      authProfile?.full_name || user?.email?.split("@")[0] || "there";
     return String(name).split(" ")[0];
-  }, [profile?.full_name, user?.email]);
+  }, [authProfile?.full_name, user?.email]);
 
   /** Send a message through the agent loop, wiring navigation + cart. */
   const handleSend = useCallback(
@@ -295,6 +400,9 @@ export const TagAIAssistantScreen = () => {
         addProductToCart: async (product, qty) => {
           await addToCart(product, qty);
         },
+        // Pass the user's algorithmic profile so the AI assistant can
+        // personalize recommendations (price band, preferred tags, etc.).
+        userProfile: algoProfile || null,
         // No local cache needed — the service resolves product ids straight
         // from the catalog via resolveProductById when this is omitted.
       });
@@ -308,6 +416,7 @@ export const TagAIAssistantScreen = () => {
       sendMessage,
       visionImage,
       processingImage,
+      algoProfile,
     ],
   );
 
@@ -363,7 +472,10 @@ export const TagAIAssistantScreen = () => {
         setVisionImage(`data:image/jpeg;base64,${base64}`);
       } catch (error) {
         console.error("[TagAIAssistantScreen] image selection failed:", error);
-        toast.error("Could not attach image", error?.message || "Please try again.");
+        toast.error(
+          "Could not attach image",
+          error?.message || "Please try again.",
+        );
       } finally {
         setProcessingImage(false);
       }
@@ -571,7 +683,9 @@ export const TagAIAssistantScreen = () => {
 
         {isThinking ? (
           <View style={styles.thinkingStatusRow}>
-            <TypingDots />
+            <TypingDots
+              state={resolveOrbState(thinkingTrail, Boolean(visionImage))}
+            />
             <ThinkingStatusTicker
               items={thinkingTrail}
               hasImage={Boolean(messages[messages.length - 1]?.image)}
@@ -657,28 +771,32 @@ export const TagAIAssistantScreen = () => {
                 )}
               </Pressable>
               <Pressable
-                onPress={() => handleSend()}
-                disabled={
-                  (!input.trim() && !visionImage) ||
-                  isThinking ||
-                  processingImage
-                }
+                onPress={isThinking ? cancelRequest : () => handleSend()}
+                disabled={!input.trim() && !visionImage && !isThinking}
                 style={({ pressed }) => [
                   styles.sendButton,
+                  isThinking && styles.stopButton,
                   ((!input.trim() && !visionImage) ||
                     isThinking ||
                     processingImage) && { opacity: 0.4 },
                   pressed && { transform: [{ scale: 0.94 }] },
                 ]}
+                accessibilityLabel={
+                  isThinking ? "Stop AI request" : "Send message"
+                }
               >
-                <LinearGradient
-                  colors={[colors.gradientStart, colors.gradientEnd]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.sendGradient}
-                >
-                  <Ionicons name="arrow-up" size={17} color="#FFFFFF" />
-                </LinearGradient>
+                {isThinking ? (
+                  <Ionicons name="close" size={17} color="#FFFFFF" />
+                ) : (
+                  <LinearGradient
+                    colors={[colors.gradientStart, colors.gradientEnd]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.sendGradient}
+                  >
+                    <Ionicons name="arrow-up" size={17} color="#FFFFFF" />
+                  </LinearGradient>
+                )}
               </Pressable>
             </View>
           </LinearGradient>
@@ -739,10 +857,20 @@ export const TagAIAssistantScreen = () => {
                 />
               </View>
               <View style={styles.imageSourceText}>
-                <Text style={[styles.imageSourceOptionTitle, { color: colors.dark }]}>
+                <Text
+                  style={[
+                    styles.imageSourceOptionTitle,
+                    { color: colors.dark },
+                  ]}
+                >
                   Choose from device
                 </Text>
-                <Text style={[styles.imageSourceOptionSubtitle, { color: colors.muted }]}>
+                <Text
+                  style={[
+                    styles.imageSourceOptionSubtitle,
+                    { color: colors.muted },
+                  ]}
+                >
                   Select a photo from your library
                 </Text>
               </View>
@@ -763,13 +891,27 @@ export const TagAIAssistantScreen = () => {
                   { backgroundColor: colors.surfaceAlpha },
                 ]}
               >
-                <Ionicons name="camera-outline" size={20} color={colors.primary} />
+                <Ionicons
+                  name="camera-outline"
+                  size={20}
+                  color={colors.primary}
+                />
               </View>
               <View style={styles.imageSourceText}>
-                <Text style={[styles.imageSourceOptionTitle, { color: colors.dark }]}>
+                <Text
+                  style={[
+                    styles.imageSourceOptionTitle,
+                    { color: colors.dark },
+                  ]}
+                >
                   Take a photo
                 </Text>
-                <Text style={[styles.imageSourceOptionSubtitle, { color: colors.muted }]}>
+                <Text
+                  style={[
+                    styles.imageSourceOptionSubtitle,
+                    { color: colors.muted },
+                  ]}
+                >
                   Open your camera
                 </Text>
               </View>
@@ -780,7 +922,9 @@ export const TagAIAssistantScreen = () => {
               style={styles.imageSourceCancel}
               accessibilityRole="button"
             >
-              <Text style={[styles.imageSourceCancelText, { color: colors.muted }]}>
+              <Text
+                style={[styles.imageSourceCancelText, { color: colors.muted }]}
+              >
                 Cancel
               </Text>
             </Pressable>
@@ -846,6 +990,22 @@ const buildStyles = (c) =>
     headerStatus: {
       fontSize: 10.5,
       fontWeight: "500",
+    },
+    activeToolPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 10,
+      backgroundColor: c.primaryAlpha || "rgba(99, 102, 241, 0.12)",
+      borderWidth: 1,
+      borderColor: c.primaryAlphaBorder || "rgba(99, 102, 241, 0.32)",
+      marginLeft: 6,
+    },
+    activeToolText: {
+      fontSize: 9.5,
+      fontWeight: "600",
     },
     hero: {
       flex: 1,
@@ -983,7 +1143,7 @@ const buildStyles = (c) =>
     thinkingStatusRow: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
+      justifyContent: "space-between",
       alignSelf: "stretch",
       gap: 8,
       paddingHorizontal: 16,
@@ -993,12 +1153,22 @@ const buildStyles = (c) =>
       marginLeft: 0,
       width: "100%",
     },
+    stopButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.badgeDanger,
+    },
     statusTickerWrap: {
       flex: 1,
       minWidth: 0,
-      justifyContent: "center",
-      paddingRight: 8,
-      marginTop: -50,
+      justifyContent: "flex-end",
+      alignItems: "center",
+      paddingRight: 4,
+      marginTop: -8,
+      marginLeft: -150,
     },
     statusTickerText: {
       fontSize: 11.5,

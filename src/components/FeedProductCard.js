@@ -773,13 +773,17 @@ export const FeedProductCard = memo(function FeedProductCard({
                 <ActivityIndicator size="large" color="#fff" />
               </View>
             )}
-            <View style={styles.videoBottomRow}>
-              <View style={styles.videoBadge}>
-                <Ionicons name="play" size={11} color="#fff" />
-                <Text style={styles.videoBadgeText}>Video</Text>
+            {videoReady && videoPaused && (
+              <View style={styles.videoCenterPlay} pointerEvents="none">
+                <Ionicons name="play" size={44} color="#fff" />
               </View>
+            )}
+            <View style={styles.videoBottomRow}>
               {videoDuration > 0 && (
-                <View style={styles.videoProgressArea}>
+                <View style={styles.videoProgressContainer}>
+                  <Text style={styles.videoTimeText}>
+                    {formatVideoTime(videoProgress)}
+                  </Text>
                   <Pressable
                     style={styles.videoProgressTrack}
                     onPress={(event) => {
@@ -804,14 +808,9 @@ export const FeedProductCard = memo(function FeedProductCard({
                       ]}
                     />
                   </Pressable>
-                  <View style={styles.videoTimeRow} pointerEvents="none">
-                    <Text style={styles.videoTimeText}>
-                      {formatVideoTime(videoProgress)}
-                    </Text>
-                    <Text style={styles.videoTimeText}>
-                      {formatVideoTime(videoDuration)}
-                    </Text>
-                  </View>
+                  <Text style={styles.videoTimeText}>
+                    {formatVideoTime(videoDuration)}
+                  </Text>
                 </View>
               )}
               <View style={styles.videoControls}>
@@ -1703,7 +1702,6 @@ const buildFeedCardStyles = (c) =>
       borderColor: c.border,
       minHeight: 400,
 
-      overflow: "hidden",
       shadowColor: "#000",
       shadowOpacity: 0.08,
       shadowRadius: 16,
@@ -1817,7 +1815,6 @@ const buildFeedCardStyles = (c) =>
     },
     mediaGridSingle: {
       width: "100%",
-      overflow: "hidden",
       backgroundColor: c.surface,
     },
     videoMedia: {
@@ -1828,24 +1825,25 @@ const buildFeedCardStyles = (c) =>
       opacity: 0,
     },
     videoLoadingOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: "rgba(15, 23, 42, 0.18)",
+      zIndex: 10,
     },
-    videoBadge: {
-      flexDirection: "row",
+    videoCenterPlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
       alignItems: "center",
-      gap: 4,
-      backgroundColor: c.scrim,
-      borderRadius: radius.full,
-      paddingHorizontal: 8,
-      paddingVertical: 5,
-    },
-    videoBadgeText: {
-      color: c.light,
-      fontSize: 10,
-      fontWeight: "800",
+      justifyContent: "center",
+      zIndex: 10,
     },
     videoBottomRow: {
       position: "absolute",
@@ -1855,6 +1853,13 @@ const buildFeedCardStyles = (c) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
+    },
+    videoProgressContainer: {
+      flex: 1,
+      minWidth: 60,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
     },
     videoControls: {
       flexDirection: "row",
@@ -1869,25 +1874,17 @@ const buildFeedCardStyles = (c) =>
       backgroundColor: c.scrim,
       borderRadius: radius.full,
     },
-    videoProgressArea: {
-      flex: 1,
-      minWidth: 40,
-    },
     videoProgressTrack: {
       height: 5,
       borderRadius: radius.full,
       overflow: "hidden",
       backgroundColor: "rgba(255,255,255,0.38)",
+      flex: 1,
     },
     videoProgressFill: {
       height: "100%",
       borderRadius: radius.full,
       backgroundColor: c.primary,
-    },
-    videoTimeRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      marginTop: 4,
     },
     videoTimeText: {
       color: "#fff",
@@ -1986,9 +1983,9 @@ const buildFeedCardStyles = (c) =>
     },
     labelPill: {
       position: "absolute",
-      bottom: 8,
-      left: 8,
-      maxWidth: "70%",
+      top: 10,
+      right: 10,
+      maxWidth: "60%",
       backgroundColor: c.scrim,
       borderRadius: radius.full,
       paddingHorizontal: 9,

@@ -131,6 +131,173 @@ export const shareStore = async (sellerId, storeName, storeImage = null) => {
 };
 
 /**
+ * Share content to a specific social platform.
+ * platform: 'instagram' | 'facebook' | 'twitter' | 'whatsapp' | 'messenger'
+ */
+export const shareToPlatform = async (platform, title, message, url = null) => {
+  const content = {
+    title,
+    message: url ? `${message}\n\n${url}` : message,
+  };
+
+  try {
+    if (Platform.OS === 'web') {
+      // On web, open the platform's share URL in a new tab/window.
+      const shareUrl = buildPlatformShareUrl(platform, message, url);
+      if (shareUrl) {
+        window.open(shareUrl, '_blank');
+        return { success: true, method: 'web', platform };
+      }
+      // Fallback: copy to clipboard.
+      await Clipboard.setStringAsync(url ? `${message}\n${url}` : message);
+      return { success: true, method: 'clipboard', platform };
+    }
+
+    // Native: use the platform-specific URL scheme when available, otherwise
+    // fall back to the generic share sheet.
+    const schemeUrl = buildPlatformShareUrl(platform, message, url);
+    if (schemeUrl) {
+      const canOpen = await Linking.canOpenURL(schemeUrl);
+      if (canOpen) {
+        await Linking.openURL(schemeUrl);
+        return { success: true, method: 'native', platform };
+      }
+    }
+
+    // Fallback to generic share sheet.
+    const result = await Share.share(content);
+    if (result.action === Share.sharedAction) {
+      return { success: true, method: 'share_sheet', platform };
+    }
+    return { success: true, method: 'share_sheet', platform };
+  } catch (error) {
+    console.error(`Error sharing to ${platform}:`, error);
+    return { success: false, error: error.message, platform };
+  }
+};
+
+/**
+ * Build a platform-specific share URL.
+ */
+const buildPlatformShareUrl = (platform, message, url = null) => {
+  const encodedMessage = encodeURIComponent(message);
+  const encodedUrl = url ? encodeURIComponent(url) : '';
+
+  switch (platform) {
+    case 'whatsapp':
+      return `whatsapp://send?text=${encodedMessage}${encodedUrl ? `%20${encodedUrl}` : ''}`;
+    case 'instagram':
+      // Instagram doesn't support deep-link prefill for posts; open the app.
+      return 'instagram://';
+    case 'facebook':
+      return `fb://share?link=${encodedUrl}&text=${encodedMessage}`;
+    case 'twitter':
+      return `twitter://post?message=${encodedMessage}${encodedUrl ? `%20${encodedUrl}` : ''}`;
+    case 'messenger':
+      return `fb-messenger://share?link=${encodedUrl}&text=${encodedMessage}`;
+    default:
+      return null;
+  }
+};
+
+/**
+ * Share a product to a specific platform.
+ */
+export const shareProductToPlatform = async (platform, productId, productTitle, productImage = null) => {
+  const webUrl = generateWebUrl('product', productId);
+  const message = `Check out "${productTitle}" on tagit!`;
+  return shareToPlatform(platform, 'Share Product', message, webUrl);
+};
+
+/**
+ * Share a store to a specific platform.
+ */
+export const shareStoreToPlatform = async (platform, sellerId, storeName, storeImage = null) => {
+  const webUrl = generateWebUrl('store', sellerId);
+  const message = `Check out "${storeName}" on tagit!`;
+  return shareToPlatform(platform, 'Share Store', message, webUrl);
+};
+
+/**
+ * Hook for using share utilities with toast notifications
+ */
+export const useShare = () => {
+  const toast = useToast();
+  
+  const shareWithToast = async (type, id, params = {}, title = 'Share') => {
+    try {
+      const result = await shareContent(
+        title,
+        `Check this out on tagit!`,
+        generateWebUrl(type, id, params)
+      );
+      
+      if (result.success) {
+        toast.success('Shared successfully!');
+      } else {
+        toast.error('Failed to share');
+      }
+      
+      return result;
+    } catch (error) {
+      toast.error('Failed to share');
+      return { success: false, error: error.message };
+    }
+  };
+
+  const copyLinkWithToast = async (type, id, params = {}) => {
+    try {
+      const result = await copyDeepLink(type, id, params);
+      
+      if (result.success) {
+        toast.success('Link copied to clipboard!');
+      } else {
+        toast.error('Failed to copy link');
+      }
+      
+      return result;
+    } catch (error) {
+      toast.error('Failed to share');
+      return { success: false, error: error.message };
+    }
+  };
+
+  const shareToPlatformWithToast = async (platform, type, id, params = {}) => {
+    const webUrl = generateWebUrl(type, id, params);
+    const title = type === 'store' ? 'Check out this store!' : 'Check out this product!';
+    try {
+      const result = await shareToPlatform(platform, title, `Check this out on tagit!`, webUrl);
+      if (result.success) {
+        toast.success(`Shared to ${platform.charAt(0).toUpperCase() + platform.slice(1)}`);
+      } else {
+        toast.error(`Failed to share to ${platform}`);
+      }
+      return result;
+    } catch (error) {
+      toast.error(`Failed to share to ${platform}`);
+      return { success: false, error: error.message };
+    }
+  };
+  
+  return {
+    generateDeepLink,
+    generateWebUrl,
+    shareContent,
+    shareProduct,
+    shareStore,
+    shareSearch,
+    copyDeepLink,
+    openDeepLink,
+    shareToPlatform,
+    shareProductToPlatform,
+    shareStoreToPlatform,
+    shareWithToast,
+    copyLinkWithToast,
+    shareToPlatformWithToast,
+  };
+};
+
+/**
  * Share a search query
  */
 export const shareSearch = async (query) => {
@@ -180,64 +347,6 @@ export const openDeepLink = async (type, id, params = {}) => {
   }
 };
 
-/**
- * Hook for using share utilities with toast notifications
- */
-export const useShare = () => {
-  const toast = useToast();
-  
-  const shareWithToast = async (type, id, params = {}, title = 'Share') => {
-    try {
-      const result = await shareContent(
-        title,
-        `Check this out on tagit!`,
-        generateWebUrl(type, id, params)
-      );
-      
-      if (result.success) {
-        toast.success('Shared successfully!');
-      } else {
-        toast.error('Failed to share');
-      }
-      
-      return result;
-    } catch (error) {
-      toast.error('Failed to share');
-      return { success: false, error: error.message };
-    }
-  };
-  
-  const copyLinkWithToast = async (type, id, params = {}) => {
-    try {
-      const result = await copyDeepLink(type, id, params);
-      
-      if (result.success) {
-        toast.success('Link copied to clipboard!');
-      } else {
-        toast.error('Failed to copy link');
-      }
-      
-      return result;
-    } catch (error) {
-      toast.error('Failed to copy link');
-      return { success: false, error: error.message };
-    }
-  };
-  
-  return {
-    generateDeepLink,
-    generateWebUrl,
-    shareContent,
-    shareProduct,
-    shareStore,
-    shareSearch,
-    copyDeepLink,
-    openDeepLink,
-    shareWithToast,
-    copyLinkWithToast,
-  };
-};
-
 export default {
   generateDeepLink,
   generateWebUrl,
@@ -247,5 +356,8 @@ export default {
   shareSearch,
   copyDeepLink,
   openDeepLink,
+  shareToPlatform,
+  shareProductToPlatform,
+  shareStoreToPlatform,
   useShare,
 };
