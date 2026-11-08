@@ -32,6 +32,25 @@ const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 const MAX_AGENT_ITERATIONS = 5;
 const MAX_HISTORY_MESSAGES = 10;
 
+// ── Low-latency free model preferences ─────────────────────────────────
+// When the configured model is the OpenRouter free router, we prefer
+// specific fast, low-latency free models over the generic router which
+// can be slow and unpredictable. Order matters: earlier = preferred.
+const LOW_LATENCY_FREE_MODELS = [
+  "openrouter/free",
+  "meta-llama/llama-3.1-8b-instruct:free",
+  "microsoft/phi-3-mini-128k-instruct:free",
+  "google/gemma-2-9b-it:free",
+  "qwen/qwen-2.5-7b-instruct:free",
+];
+
+const modelLatencyRank = (modelId: string): number => {
+  const idx = LOW_LATENCY_FREE_MODELS.findIndex((m) =>
+    modelId.includes(m),
+  );
+  return idx >= 0 ? idx : LOW_LATENCY_FREE_MODELS.length;
+};
+
 const supportsImageInput = (model: any) =>
   Array.isArray(model?.architecture?.input_modalities) &&
   model.architecture.input_modalities.some(
@@ -1650,6 +1669,32 @@ serve(async (req) => {
       modelSelectionSource = `Database model: ${model}`;
       debug.selectedModel = model;
       debug.selectionSource = modelSelectionSource;
+    } else {
+      // Configured model is the OpenRouter free router — pick the lowest
+      // latency free model available for faster responses.
+      try {
+        const models = await getOpenRouterModels(apiKey);
+        const freeModels = models.filter((m) => isFreeModel(m));
+        freeModels.sort((a, b) =>
+          modelLatencyRank(String(a.id || "")) -
+          modelLatencyRank(String(b.id || "")),
+        );
+        const fastest = freeModels[0];
+        if (fastest?.id && fastest.id !== configuredModel) {
+          model = fastest.id;
+          modelSelectionSource = `Low-latency free model: ${fastest.id}`;
+          debug.selectedModel = fastest.id;
+          debug.selectionSource = modelSelectionSource;
+          traceDebug(
+            `Selected low-latency model: ${fastest.id} (rank ${modelLatencyRank(fastest.id)})`,
+          );
+        }
+      } catch (e) {
+        console.warn(
+          "[ai-assistant] failed to fetch models for low-latency selection:",
+          e,
+        );
+      }
     }
     debug.modelSource =
       configuredModel === DEFAULT_MODEL
