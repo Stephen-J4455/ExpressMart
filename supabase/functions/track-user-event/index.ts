@@ -258,6 +258,39 @@ serve(async (req) => {
       `[track-user-event] user=${user.id} inserted=${rows.length} dropped=${dropped}`,
     );
 
+    // ── 5. Rebuild the user's algorithmic profile (best-effort). ───────
+    // Fire-and-forget: a profile rebuild failure must never surface as an
+    // error to the client. We don't await it — the profile is eventually
+    // consistent with the event log.
+    if (rows.length > 0) {
+      void (async () => {
+        try {
+          const profileResp = await fetch(
+            `${supabaseUrl}/functions/v1/build-user-profile`,
+            {
+              method: "POST",
+              headers: {
+                ...corsHeaders,
+                "Content-Type": "application/json",
+                Authorization: req.headers.get("Authorization") ?? "",
+              },
+              body: JSON.stringify({ user_id: user.id }),
+            },
+          );
+          if (!profileResp.ok) {
+            console.warn(
+              `[track-user-event] profile rebuild returned ${profileResp.status}`,
+            );
+          }
+        } catch (profileErr) {
+          console.warn(
+            "[track-user-event] profile rebuild failed (non-fatal):",
+            profileErr,
+          );
+        }
+      })();
+    }
+
     return new Response(
       JSON.stringify({ inserted: rows.length, dropped }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },

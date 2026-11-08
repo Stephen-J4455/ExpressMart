@@ -156,16 +156,43 @@ const TOOLS = [
               "profile",
               "checkout",
               "orders",
+              "orderDetail",
+              "orderSuccess",
               "wishlist",
+              "collections",
+              "collectionDetail",
               "notifications",
               "addresses",
               "payments",
               "settings",
               "security",
               "search",
+              "searchResults",
               "categories",
+              "categoryProducts",
               "stores",
+              "store",
+              "storefrontEditor",
+              "storeRegistration",
+              "sellerProfile",
+              "sellerAdmin",
               "help",
+              "terms",
+              "privacyPolicy",
+              "privacySettings",
+              "changePassword",
+              "changeEmail",
+              "profileEdit",
+              "auth",
+              "forgotPassword",
+              "resetPassword",
+              "chat",
+              "statusViewer",
+              "statusCreator",
+              "paymentWebView",
+              "productDetail",
+              "productDetailBySku",
+              "following",
             ],
             description: "Destination page key.",
           },
@@ -577,6 +604,15 @@ const TOOLS = [
       parameters: { type: "object", properties: {} },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_user_profile",
+      description:
+        "Fetch the current user's algorithmic profile: price band, average order value, preferred tags/categories/sellers, and event count. Use when the user asks about their own preferences, shopping habits, or 'what do you know about me?'.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
 ];
 
 const SYSTEM_PROMPT = `You are the tagit in-app shopping assistant — friendly, concise and action-oriented.
@@ -590,13 +626,14 @@ Capabilities:
 • navigate_to_store — open a seller's storefront page (device-side). Pair with a seller_id from get_store_details, search_stores, or a product's seller_id field.
 • navigate_to_product — open a specific product detail page (device-side). Pair with a product_id.
 • add_to_cart — add a known product id to the cart (device-side).
-• navigate_to_page — open any app screen (device-side).
+• navigate_to_page — open any app screen (device-side). Available pages include home, feed, chats, cart, account, profile, checkout, orders, orderDetail, orderSuccess, wishlist, collections, collectionDetail, notifications, addresses, payments, settings, security, search, searchResults, categories, categoryProducts, stores, store, storefrontEditor, storeRegistration, sellerProfile, sellerAdmin, help, terms, privacyPolicy, privacySettings, changePassword, changeEmail, profileEdit, auth, forgotPassword, resetPassword, chat, statusViewer, statusCreator, paymentWebView, productDetail, productDetailBySku, following.
 • point_to_element — visually point at ANYTHING in the app (device-side). Three modes: (1) pass a known key (checkout.promoCode, checkout.payButton, checkout.orderSummary, cart.checkoutButton, tagAI.inputBar) to spotlight the exact control; (2) pass an \`item_id\` discovered via read_screen to point at an indexed item; (3) for anything else, pass a free-form 'element' name plus a short 'label' and one-sentence 'description'. Optional: \`shape\` (rect|circle|arrow|bracket), \`direction\` (up|down|left|right|auto), \`size\` (sm|md|lg), \`coords\` ({x, y, w, h}) for absolute free-form pointing.
 • read_screen / find_on_screen / scroll / scroll_to / wait_for / get_app_state / dismiss_overlay — as before.
 • get_product_reviews / get_store_reviews — fetch approved reviews + 5/4/3/2/1 star distribution. Use for "what do people say?", "is this product any good?", "show me the bad reviews", "what's this store's rating like?".
 • list_screens / get_screen_info — discover every navigable screen (and the seller admin) and its tap targets before issuing tap_element calls.
 • tap_element — programmatically tap a registered UI element (e.g. "productDetail.addToCart", "store.follow", "checkout.payButton"). Pass an optional \`screen\` name to navigate first.
 • go_back / list_tap_targets — pop the stack / list live tap targets.
+• get_user_profile — fetch the current user's algorithmic profile (price band, avg order value, preferred tags/categories/sellers).
 
 Tool selection and UI control rules:
 1. For navigation requests, use navigate_to_page, navigate_to_store, or navigate_to_product first. After navigation, use wait_for before reading or pointing at the destination.
@@ -1497,6 +1534,7 @@ serve(async (req) => {
     const body = await req.json();
     const message = String(body?.message || "").trim();
     const visionImage = String(body?.image || "").trim();
+    const clientProfile = body?.user_profile ?? null;
     const isContentGeneration = body?.mode === "content_generation";
     const hasVisionImage =
       /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(visionImage) ||
@@ -1522,6 +1560,48 @@ serve(async (req) => {
 
     const writeClient = createClient(supabaseUrl, serviceRoleKey);
     const configuredModel = await resolveModel(writeClient);
+
+    // ── Resolve the authenticated user id (from JWT). ────────────────
+    // The ai-assistant is always called with a valid user JWT from the
+    // client (supabase.functions.invoke attaches it automatically).
+    let userId: string | null = null;
+    let userProfile: Record<string, unknown> | null = null;
+    try {
+      const authHeader = req.headers.get("Authorization") ?? "";
+      const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
+      if (jwt) {
+        const {
+          data: { user },
+          error,
+        } = await writeClient.auth.getUser(jwt);
+        if (!error && user) {
+          userId = user.id;
+          // ── Load the user's algorithmic profile. ───────────────────
+          // Best-effort: a missing profile just means no personalization
+          // context is injected into the system prompt.
+          const { data: profile } = await writeClient
+            .from("express_user_algorithmic_profiles")
+            .select("*")
+            .eq("id", userId)
+            .maybeSingle();
+          if (profile) {
+            userProfile = profile as Record<string, unknown>;
+          } else if (clientProfile && typeof clientProfile === "object") {
+            // Client-supplied profile (fresh from the device) as fallback.
+            userProfile = clientProfile as Record<string, unknown>;
+          }
+        }
+      } else if (clientProfile && typeof clientProfile === "object") {
+        // No JWT but client supplied a profile — use it for context only.
+        userProfile = clientProfile as Record<string, unknown>;
+      }
+    } catch {
+      // Auth/profile failures are non-fatal — the assistant still works
+      // without personalization context.
+      if (clientProfile && typeof clientProfile === "object") {
+        userProfile = clientProfile as Record<string, unknown>;
+      }
+    }
     const debug = {
       requestedModel: configuredModel,
       modelSource: "Database: express_settings.ai_model",
@@ -1676,6 +1756,56 @@ serve(async (req) => {
       return serveCors({ success: true, draft, model });
     }
 
+    // ── Build a personalized system prompt from the user's profile. ────
+    // The model receives the user's algorithmic profile so it can tailor
+    // recommendations, price-band guidance, and navigation suggestions.
+    let personalizedSystemPrompt = SYSTEM_PROMPT;
+    if (userProfile && userId) {
+      const priceBand = String(userProfile.price_band || "unknown");
+      const avgOrderValue =
+        userProfile.avg_order_value != null
+          ? `GH₵${Number(userProfile.avg_order_value).toFixed(2)}`
+          : "not yet established";
+      const preferredTags = Array.isArray(userProfile.preferred_tags)
+        ? userProfile.preferred_tags.join(", ")
+        : "none yet";
+      const preferredCategories = Array.isArray(
+        userProfile.preferred_categories,
+      )
+        ? userProfile.preferred_categories.join(", ")
+        : "none yet";
+      const preferredSellers = Array.isArray(userProfile.preferred_sellers)
+        ? userProfile.preferred_sellers.join(", ")
+        : "none yet";
+      const eventCount = Number(userProfile.event_count || 0);
+      const lastEvent = userProfile.last_event_at
+        ? new Date(String(userProfile.last_event_at)).toLocaleDateString()
+        : "never";
+
+      personalizedSystemPrompt = [
+        SYSTEM_PROMPT,
+        "",
+        "── User algorithmic profile (personalization context) ──",
+        `User id: ${userId}`,
+        `Price band: ${priceBand}`,
+        `Average order value: ${avgOrderValue}`,
+        `Preferred tags: ${preferredTags}`,
+        `Preferred categories: ${preferredCategories}`,
+        `Preferred sellers: ${preferredSellers}`,
+        `Events tracked: ${eventCount}`,
+        `Last event: ${lastEvent}`,
+        "",
+        "Personalization rules:",
+        "• When the user asks for product recommendations, bias toward their",
+        "  preferred tags, categories, and sellers unless they ask for something else.",
+        "• When discussing price, reference their price band (budget/mid/premium).",
+        "• If the user has no profile events yet, treat them as a new shopper",
+        "  and ask what they're looking for rather than assuming preferences.",
+        "• Do not reveal the user's internal profile data or scores directly;",
+        "  use them only to shape recommendations.",
+      ].join("\n");
+    }
+
     // Conversation so far (trimmed + role-normalised).
     const history = (Array.isArray(body?.history) ? body.history : [])
       .slice(-MAX_HISTORY_MESSAGES)
@@ -1686,7 +1816,7 @@ serve(async (req) => {
       .filter((m) => m.content);
 
     const chatMessages = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: personalizedSystemPrompt },
       ...history,
       {
         role: "user",
@@ -1905,6 +2035,59 @@ serve(async (req) => {
               role: "tool",
               tool_call_id: call.id,
               content: `get_store_reviews failed: ${e?.message || e}`,
+            });
+          }
+          continue;
+        }
+        if (name === "get_user_profile") {
+          try {
+            if (!userId) {
+              chatMessages.push({
+                role: "tool",
+                tool_call_id: call.id,
+                content: "No authenticated user — profile unavailable.",
+              });
+              continue;
+            }
+            const { data: profile, error } = await writeClient
+              .from("express_user_algorithmic_profiles")
+              .select("*")
+              .eq("id", userId)
+              .maybeSingle();
+            if (error || !profile) {
+              chatMessages.push({
+                role: "tool",
+                tool_call_id: call.id,
+                content: "No algorithmic profile found for this user yet.",
+              });
+              continue;
+            }
+            const priceBand = String(profile.price_band || "unknown");
+            const avgOrderValue =
+              profile.avg_order_value != null
+                ? `GH₵${Number(profile.avg_order_value).toFixed(2)}`
+                : "not yet established";
+            const preferredTags = Array.isArray(profile.preferred_tags)
+              ? profile.preferred_tags.join(", ")
+              : "none yet";
+            const preferredCategories = Array.isArray(
+              profile.preferred_categories,
+            )
+              ? profile.preferred_categories.join(", ")
+              : "none yet";
+            const preferredSellers = Array.isArray(profile.preferred_sellers)
+              ? profile.preferred_sellers.join(", ")
+              : "none yet";
+            chatMessages.push({
+              role: "tool",
+              tool_call_id: call.id,
+              content: `User algorithmic profile: price band ${priceBand}, average order value ${avgOrderValue}, preferred tags [${preferredTags}], preferred categories [${preferredCategories}], preferred sellers [${preferredSellers}], events tracked ${Number(profile.event_count || 0)}.`,
+            });
+          } catch (e) {
+            chatMessages.push({
+              role: "tool",
+              tool_call_id: call.id,
+              content: `get_user_profile failed: ${e?.message || e}`,
             });
           }
           continue;

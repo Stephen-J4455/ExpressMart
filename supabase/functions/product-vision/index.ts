@@ -25,7 +25,33 @@ const extractJson = (value: string) => {
   const end = candidate.lastIndexOf("}");
   if (start < 0 || end <= start)
     throw new Error("AI returned invalid product data");
-  return JSON.parse(candidate.slice(start, end + 1));
+  try {
+    return JSON.parse(candidate.slice(start, end + 1));
+  } catch {
+    throw new Error("AI returned invalid product data");
+  }
+};
+
+const contentToText = (content: unknown): string => {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (!part || typeof part !== "object") return "";
+        const value = part as { text?: unknown; content?: unknown };
+        if (typeof value.text === "string") return value.text;
+        return typeof value.content === "string" ? value.content : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (content && typeof content === "object") {
+    const value = content as { text?: unknown; content?: unknown };
+    if (typeof value.text === "string") return value.text;
+    if (typeof value.content === "string") return value.content;
+  }
+  return "";
 };
 
 const supportsImageInput = (model: any) =>
@@ -257,6 +283,7 @@ serve(async (req) => {
     ];
     let openRouterResponse;
     let lastGenerationError;
+    let product;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
       const requestModel =
         requestModelsUnique[Math.min(attempt, requestModelsUnique.length - 1)];
@@ -307,11 +334,27 @@ serve(async (req) => {
             ],
           }),
         });
-        if (openRouterResponse.ok) break;
-        const errorText = await openRouterResponse.text();
-        lastGenerationError = new Error(
-          `Vision model error (${openRouterResponse.status}): ${errorText.slice(0, 300)}`,
-        );
+        if (openRouterResponse.ok) {
+          const result = await openRouterResponse.json();
+          const content = result?.choices?.[0]?.message?.content;
+          try {
+            product = extractJson(contentToText(content));
+            debug.actualModel =
+              typeof result?.model === "string" ? result.model : null;
+            break;
+          } catch (error) {
+            lastGenerationError = error;
+            trace(
+              "Provider returned an unreadable product draft; retrying",
+              "error",
+            );
+          }
+        } else {
+          const errorText = await openRouterResponse.text();
+          lastGenerationError = new Error(
+            `Vision model error (${openRouterResponse.status}): ${errorText.slice(0, 300)}`,
+          );
+        }
       } catch (error) {
         lastGenerationError = error;
       }
@@ -321,16 +364,12 @@ serve(async (req) => {
       );
       if (attempt < MAX_RETRIES - 1) await waitBeforeRetry(attempt);
     }
-    if (!openRouterResponse?.ok)
+    if (!product)
       throw lastGenerationError || new Error("Vision model request failed");
-    const result = await openRouterResponse.json();
-    debug.actualModel = typeof result?.model === "string" ? result.model : null;
     trace(
       `Response model: ${debug.actualModel || "not reported by provider"}`,
       "done",
     );
-    const content = result?.choices?.[0]?.message?.content;
-    const product = extractJson(typeof content === "string" ? content : "");
     trace("Parsed product draft; client will validate required fields", "done");
     return responseJson({ success: true, product, debug });
   } catch (error) {
