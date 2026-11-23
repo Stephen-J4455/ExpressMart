@@ -86,7 +86,8 @@ const areHomeFeedItemPropsEqual = (previous, next) =>
   previous.isVideoActive === next.isVideoActive &&
   previous.loadImages === next.loadImages &&
   previous.navigation === next.navigation &&
-  previous.styles === next.styles;
+  previous.styles === next.styles &&
+  previous.lockPager === next.lockPager;
 
 const HomeFeedItem = memo(function HomeFeedItem({
   item,
@@ -94,6 +95,7 @@ const HomeFeedItem = memo(function HomeFeedItem({
   loadImages,
   navigation,
   styles,
+  lockPager,
 }) {
   if (item?.__type === "flash_sale_row") {
     return (
@@ -118,13 +120,23 @@ const HomeFeedItem = memo(function HomeFeedItem({
         </View>
         <ScrollView
           horizontal
+          directionalLockEnabled
+          nestedScrollEnabled
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.flashSaleRow}
+          onTouchStart={() => lockPager(true)}
+          onTouchMove={() => lockPager(true)}
+          onTouchEnd={() => lockPager(false)}
+          onTouchCancel={() => lockPager(false)}
         >
           {item.sales.map((fs) => (
             <View
               key={fs.id || `${fs.product_id}-${fs.start_time}`}
               style={styles.flashSaleCardWrap}
+              onTouchStart={() => lockPager(true)}
+              onTouchMove={() => lockPager(true)}
+              onTouchEnd={() => lockPager(false)}
+              onTouchCancel={() => lockPager(false)}
             >
               <ProductCard
                 product={fs.product}
@@ -182,7 +194,7 @@ export const HomeScreen = ({ navigation }) => {
   const { width, isDesktop: isWideScreen } = useResponsive();
   const isDesktop = Platform.OS === "web" && isWideScreen;
   const showCartRail = isDesktop && width >= CART_RAIL_BREAKPOINT;
-  const { conversations } = useChat();
+  const { conversations, unreadCounts } = useChat();
   const {
     addToCart,
     items: cartItems,
@@ -817,6 +829,7 @@ export const HomeScreen = ({ navigation }) => {
         loadImages={loadedImageIds.has(String(getFeedProductId(item) ?? ""))}
         navigation={navigation}
         styles={styles}
+        lockPager={lockPager}
       />
     ),
     [loadedImageIds, navigation, styles, visibleVideoId],
@@ -879,6 +892,10 @@ export const HomeScreen = ({ navigation }) => {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filterRow}
+            onTouchStart={() => lockPager(true)}
+            onTouchMove={() => lockPager(true)}
+            onTouchEnd={() => lockPager(false)}
+            onTouchCancel={() => lockPager(false)}
           >
             {FILTERS.map((filter) => {
               const isActive = filter === activeFilter;
@@ -1272,7 +1289,7 @@ export const HomeScreen = ({ navigation }) => {
                               "Start a conversation"}
                           </Text>
                         </View>
-                        {conversation.unread_count > 0 ? (
+                        {(unreadCounts[conversation.id] ?? 0) > 0 ? (
                           <View style={styles.unreadDot} />
                         ) : null}
                       </Pressable>

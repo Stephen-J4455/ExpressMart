@@ -76,7 +76,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildChatStyles(c));
   const { user } = useAuth();
-  const { getConversationBySeller, addConversation, updateConversation } =
+  const { getConversationBySeller, addConversation, updateConversation, markConversationRead } =
     useChat();
   const toast = useToast();
   const sellerData = route?.params?.seller || seller;
@@ -190,7 +190,9 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     senderType: "user",
     onSent: notifySellerOfSentMessage,
     onIncoming: (incoming) => {
-      if (incoming.sender_id !== user?.id) markAsRead();
+      // New messages arriving while the chat is open stay unread until the
+      // user explicitly opens the conversation — markConversationRead only
+      // fires on conversation change, not on every incoming message.
     },
   });
 
@@ -245,7 +247,7 @@ export const ChatScreen = ({ route, navigation, seller }) => {
     if (!conversation || !sellerUserId) return undefined;
 
     const channel = supabase.channel(
-      `presence:user:${sellerUserId}-${instanceIdRef.current}`,
+      `presence:user:${sellerUserId}`,
     );
     const syncSellerPresence = () => {
       const state = channel.presenceState();
@@ -416,27 +418,10 @@ export const ChatScreen = ({ route, navigation, seller }) => {
   };
 
   useEffect(() => {
-    if (messages.length > 0) {
-      markAsRead();
+    if (conversation?.id) {
+      markConversationRead(conversation.id);
     }
-  }, [messages]);
-
-  const markAsRead = async () => {
-    if (!conversation || !user) return;
-
-    try {
-      const { error } = await supabase
-        .from("express_chat_messages")
-        .update({ is_read: true })
-        .eq("conversation_id", conversation.id)
-        .neq("sender_id", user.id)
-        .eq("is_read", false);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error("Error marking messages as read:", error);
-    }
-  };
+  }, [conversation?.id, markConversationRead]);
 
   const sendMessage = async () => {
     const hasText = newMessage.trim();

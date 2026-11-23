@@ -20,6 +20,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { useChat } from "../context/ChatContext";
 import { useToast } from "../context/ToastContext";
 import { getTheme, radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
@@ -69,6 +70,7 @@ export const SellerChatScreen = ({
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildSellerChatStyles(c));
   const { user } = useAuth();
+  const { markConversationRead } = useChat();
   const toast = useToast();
   const routeParams = route?.params || {};
   const conversationId = embeddedConversationId || routeParams.conversationId;
@@ -241,7 +243,7 @@ export const SellerChatScreen = ({
     // Include the component instance so Supabase never reuses an already
     // subscribed channel when the conversation changes.
     const channel = supabase.channel(
-      `presence:user:${customerId}-${instanceIdRef.current}`,
+      `presence:user:${customerId}`,
     );
     const syncCustomerPresence = () => {
       const state = channel.presenceState();
@@ -294,23 +296,9 @@ export const SellerChatScreen = ({
   }, [conversationId]);
 
   useEffect(() => {
-    if (messages.length > 0) markAsRead();
+    if (conversationId) markConversationRead(conversationId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages]);
-
-  const markAsRead = async () => {
-    if (!conversation || !user) return;
-    try {
-      await supabase
-        .from("express_chat_messages")
-        .update({ is_read: true })
-        .eq("conversation_id", conversation.id)
-        .neq("sender_id", user.id)
-        .eq("is_read", false);
-    } catch (error) {
-      console.error("Error marking messages as read:", error);
-    }
-  };
+  }, [conversationId, markConversationRead]);
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !conversation || sending || !user) return;

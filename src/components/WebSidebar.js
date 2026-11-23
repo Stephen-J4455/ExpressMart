@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
+import { useChat } from "../context/ChatContext";
 import { useTheme } from "../context/ThemeContext";
 import { useNavigationPreferences } from "../context/NavigationPreferencesContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -58,6 +59,7 @@ export const WebSidebar = ({
   const styles = useAppStyles((c) => buildStyles(c));
   const { items } = useCart();
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
+  const { unreadTotal: chatUnread } = useChat();
 
   const activeRoute = state?.routes?.[state.index]?.name;
   const navItems =
@@ -101,6 +103,19 @@ export const WebSidebar = ({
           {item.name === "Cart" && cartCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{cartCount}</Text>
+            </View>
+          )}
+          {item.name === "Chats" && chatUnread > 0 && (
+            <View
+              style={[
+                styles.badge,
+                chatUnread > 9 && styles.badgeWide,
+                styles.badgeAlert,
+              ]}
+            >
+              <Text style={styles.badgeText}>
+                {chatUnread > 99 ? "99+" : chatUnread}
+              </Text>
             </View>
           )}
         </View>
@@ -272,6 +287,14 @@ const buildStyles = (c) =>
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: 4,
+    },
+    // Unread messages read as an alert, so they use the danger token rather
+    // than the brand primary used by the cart badge.
+    badgeAlert: {
+      backgroundColor: c.badgeDanger,
+    },
+    badgeWide: {
+      paddingHorizontal: 5,
     },
     badgeText: {
       color: c.light,

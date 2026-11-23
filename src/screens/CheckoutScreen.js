@@ -32,6 +32,27 @@ import { useResponsive } from "../hooks/useResponsive";
 import { useGrounding } from "../hooks/useGrounding";
 import { radius } from "../theme/colors";
 
+const PAYMENT_METHODS = [
+  {
+    id: "momo",
+    name: "Mobile Money",
+    desc: "MTN · Telecel · AirtelTigo",
+    logo: <Ionicons name="phone-portrait" size={20} color="#10B981" />,
+  },
+  {
+    id: "card",
+    name: "Credit/Debit Card",
+    desc: "Visa · Mastercard · Verve",
+    logo: <Ionicons name="card" size={20} color="#3B82F6" />,
+  },
+  {
+    id: "bank",
+    name: "Bank Transfer",
+    desc: "Direct bank deposit",
+    logo: <Ionicons name="cash" size={20} color="#F59E0B" />,
+  },
+];
+
 export const CheckoutScreen = ({ navigation }) => {
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildCheckoutStyles(c));
@@ -58,6 +79,7 @@ export const CheckoutScreen = ({ navigation }) => {
   const payButtonRef = useGrounding("checkout.payButton");
   const [promoCode, setPromoCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState(null); // coupon row + resolved scope
+  const [paymentMethod, setPaymentMethod] = useState("momo");
   const [promoChecking, setPromoChecking] = useState(false);
 
   const [addresses, setAddresses] = useState([]);
@@ -610,6 +632,23 @@ export const CheckoutScreen = ({ navigation }) => {
       return;
     }
 
+    // Block checkout if any item's seller store is disabled
+    const inactiveSellerItems = items.filter(
+      (item) =>
+        item.product?.seller_id?.id &&
+        item.product?.seller_id?.is_active === false,
+    );
+    if (inactiveSellerItems.length > 0) {
+      const names = inactiveSellerItems
+        .map((i) => i.product?.title || "Item")
+        .join(", ");
+      toast.error(
+        "Store unavailable",
+        `Cannot order: ${names} — the seller's store is currently disabled.`,
+      );
+      return;
+    }
+
     const reference = generatePaymentReference(user.id);
     checkoutInitRef.current = true;
 
@@ -622,7 +661,7 @@ export const CheckoutScreen = ({ navigation }) => {
       // subtotal + shipping − promo discount (discount clamped server-side).
       const orderData = {
         shippingAddress: selectedAddress,
-        paymentMethod: "paystack",
+        paymentMethod,
         shippingFee: totalShippingFee,
         discountAmount: promoDiscount,
         couponCode: appliedCoupon?.code || null,
@@ -1207,21 +1246,22 @@ export const CheckoutScreen = ({ navigation }) => {
             <Ionicons name="card" size={20} color={themeColors.primary} />
             <Text style={styles.sectionTitle}>Payment Method</Text>
           </View>
-          <View style={styles.paymentMethod}>
-            <View style={styles.paymentIcon}>
-              <Text style={styles.paymentIconText}>P</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.paymentName}>Paystack</Text>
-              <Text style={styles.paymentDesc}>
-                Pay with Card, Bank Transfer, USSD
-              </Text>
-            </View>
-            <Ionicons
-              name="checkmark-circle"
-              size={24}
-              color={themeColors.primary}
-            />
+          <View style={styles.paymentOptions}>
+            {PAYMENT_METHODS.map((method) => (
+              <View key={method.id} style={styles.paymentOption}>
+                <View style={styles.paymentOptionIcon}>
+                  {method.logo}
+                </View>
+                <View style={styles.paymentOptionTextWrap}>
+                  <Text style={styles.paymentOptionName}>
+                    {method.name}
+                  </Text>
+                  <Text style={styles.paymentOptionDesc}>
+                    {method.desc}
+                  </Text>
+                </View>
+              </View>
+            ))}
           </View>
         </View>
       </ScrollView>
@@ -1582,36 +1622,50 @@ const buildCheckoutStyles = (c) =>
     fontWeight: "700",
     color: c.primary,
   },
-  paymentMethod: {
+  paymentOptions: {
     flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
+    flexWrap: "wrap",
+    gap: 10,
+    padding: 12,
     backgroundColor: c.light,
     borderRadius: 12,
   },
-  paymentIcon: {
-    width: 40,
-    height: 40,
+  paymentOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 10,
+    minWidth: 150,
+  },
+  paymentOptionSelected: {
+    borderColor: c.primary,
+    backgroundColor: "#DBEAFE",
+  },
+  paymentOptionIcon: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
-    backgroundColor: "#0BA4DB",
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
   },
-  paymentIconText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: c.light,
+  paymentOptionTextWrap: {
+    flex: 1,
   },
-  paymentName: {
-    fontSize: 14,
-    fontWeight: "600",
+  paymentOptionName: {
+    fontSize: 13,
+    fontWeight: "700",
     color: c.dark,
   },
-  paymentDesc: {
-    fontSize: 12,
+  paymentOptionDesc: {
+    fontSize: 10,
     color: c.muted,
-    marginTop: 2,
+    marginTop: 1,
   },
   footer: {
     position: "absolute",

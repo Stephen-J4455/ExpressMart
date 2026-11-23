@@ -9,6 +9,7 @@ import {
 } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
+import { useToast } from "./ToastContext";
 import { trackEvent } from "../services/feedPersonalizationService";
 
 const STORAGE_KEY = "expressmart.cart";
@@ -63,6 +64,7 @@ export const CartProvider = ({ children }) => {
   const [ready, setReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const { user } = useAuth();
+  const toast = useToast();
 
   // Load cart from database or local storage
   const loadCart = useCallback(async () => {
@@ -107,7 +109,7 @@ export const CartProvider = ({ children }) => {
               color,
               variant_id,
               price,
-              product:express_products(*)
+              product:express_products(*, seller_id(id,name,avatar,is_active))
             `,
             )
             .eq("cart_id", cart.id);
@@ -270,6 +272,15 @@ export const CartProvider = ({ children }) => {
     color = null,
     flashSalePrice = null,
   ) => {
+    // Block adding items from disabled stores
+    if (product?.seller_id?.is_active === false) {
+      toast.error(
+        "Store unavailable",
+        "This seller's store is currently disabled.",
+      );
+      return;
+    }
+
     const effectivePrice =
       flashSalePrice !== null
         ? flashSalePrice

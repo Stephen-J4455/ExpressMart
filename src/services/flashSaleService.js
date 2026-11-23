@@ -24,7 +24,7 @@ export const flashSaleService = {
         .select(
           `
           *,
-          product:express_products(*, seller_id(id,name,avatar,badges))
+          product:express_products(*, seller_id(id,name,avatar,badges,is_active))
         `,
         )
         .eq("is_active", true)
@@ -34,9 +34,11 @@ export const flashSaleService = {
 
       if (error) throw error;
 
-      // Filter out products that aren't active
+      // Filter out products that aren't active or whose seller's store is disabled
       const activeFlashSales = (data || []).filter(
-        (fs) => fs.product?.status === "active",
+        (fs) =>
+          fs.product?.status === "active" &&
+          fs.product?.seller_id?.is_active !== false,
       );
 
       return { success: true, data: activeFlashSales };
@@ -86,7 +88,7 @@ export const flashSaleService = {
         .select(
           `
           *,
-          product:express_products(*, seller_id(id,name,avatar,badges))
+          product:express_products(*, seller_id(id,name,avatar,badges,is_active))
         `,
         )
         .eq("is_active", true)
@@ -96,9 +98,11 @@ export const flashSaleService = {
 
       if (error) throw error;
 
-      // Filter out products that aren't active
+      // Filter out products that aren't active or whose seller's store is disabled
       const activeUpcoming = (data || []).filter(
-        (fs) => fs.product?.status === "active",
+        (fs) =>
+          fs.product?.status === "active" &&
+          fs.product?.seller_id?.is_active !== false,
       );
 
       return { success: true, data: activeUpcoming };
@@ -150,7 +154,7 @@ export const flashSaleService = {
         .select(
           `
           *,
-          product:express_products(*, seller_id(id,name,avatar,badges))
+          product:express_products(*, seller_id(id,name,avatar,badges,is_active))
         `,
         )
         .eq("is_active", true)
@@ -159,10 +163,12 @@ export const flashSaleService = {
 
       if (error) throw error;
 
-      // Filter by category and active products
+      // Filter by category, active products, and active seller stores
       const categoryFlashSales = (data || []).filter(
         (fs) =>
-          fs.product?.status === "active" && fs.product?.category === category,
+          fs.product?.status === "active" &&
+          fs.product?.category === category &&
+          fs.product?.seller_id?.is_active !== false,
       );
 
       return { success: true, data: categoryFlashSales };

@@ -49,6 +49,24 @@ import { TagAIProductCardRow } from "../components/tagai/TagAIProductCard";
 import { ThinkingTrace } from "../components/tagai/ThinkingTrace";
 import { ThinkingOrb } from "@mhaadi/thinking-orbs-native";
 
+const ORB_STATES = [
+  { value: "working", label: "Working" },
+  { value: "searching", label: "Searching" },
+  { value: "solving", label: "Solving" },
+  { value: "listening", label: "Listening" },
+  { value: "connecting", label: "Connecting" },
+  { value: "weaving", label: "Weaving" },
+  { value: "composing", label: "Composing" },
+  { value: "breathing", label: "Breathing" },
+  { value: "shaping", label: "Shaping" },
+];
+
+const ORB_THEMES = [
+  { value: "auto", label: "Auto" },
+  { value: "dark", label: "Dark" },
+  { value: "light", label: "Light" },
+];
+
 const TOOL_META = {
   search_products: { icon: "search", label: "Searching products" },
   filter_catalog: { icon: "options", label: "Filtering catalog" },
@@ -156,15 +174,13 @@ const resolveOrbState = (trail, isImage) => {
 };
 
 /** Animated thinking indicator. */
-const TypingDots = ({ state = "working" }) => {
-  const { colors } = useTheme();
-  const styles = useAppStyles(buildStyles);
+const TypingDots = ({ state = "working", theme = "auto", speed = 1, colors, styles }) => {
   return (
     <View style={styles.typingWrap}>
       {Platform.OS === "web" ? (
         <ActivityIndicator size="small" color={colors.primary} />
       ) : (
-        <ThinkingOrb state={state} size={64} speed={1} />
+        <ThinkingOrb state={state} theme={theme} speed={speed} size={64} />
       )}
     </View>
   );
@@ -378,6 +394,10 @@ export const TagAIAssistantScreen = () => {
   const [visionImage, setVisionImage] = useState(null);
   const [imageSourceModalVisible, setImageSourceModalVisible] = useState(false);
   const [processingImage, setProcessingImage] = useState(false);
+  const [orbSettingsVisible, setOrbSettingsVisible] = useState(false);
+  const [orbState, setOrbState] = useState("working");
+  const [orbTheme, setOrbTheme] = useState("auto");
+  const [orbSpeed, setOrbSpeed] = useState(1);
   const listRef = useRef(null);
   // Register the input bar so the assistant can point at its own chat box.
   const inputBarRef = useGrounding("tagAI.inputBar");
@@ -685,6 +705,10 @@ export const TagAIAssistantScreen = () => {
           <View style={styles.thinkingStatusRow}>
             <TypingDots
               state={resolveOrbState(thinkingTrail, Boolean(visionImage))}
+              theme={orbTheme}
+              speed={orbSpeed}
+              colors={colors}
+              styles={styles}
             />
             <ThinkingStatusTicker
               items={thinkingTrail}
@@ -930,6 +954,101 @@ export const TagAIAssistantScreen = () => {
             </Pressable>
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* Orb settings modal */}
+      <Modal
+        visible={orbSettingsVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setOrbSettingsVisible(false)}
+      >
+        <View style={styles.orbSettingsOverlay}>
+          <View style={styles.orbSettingsContainer}>
+            <View style={styles.orbSettingsHeader}>
+              <Pressable
+                style={styles.orbSettingsCloseBtn}
+                onPress={() => setOrbSettingsVisible(false)}
+              >
+                <Ionicons name="close" size={22} color={colors.muted} />
+              </Pressable>
+              <Text style={styles.orbSettingsTitle}>Thinking Orbs</Text>
+              <Pressable
+                style={styles.orbSettingsCloseBtn}
+                onPress={() => setOrbSettingsVisible(false)}
+              >
+                <Ionicons name="checkmark" size={22} color={colors.primary} />
+              </Pressable>
+            </View>
+            <View style={styles.orbSettingsBody}>
+              <View style={styles.orbSettingRow}>
+                <Text style={styles.orbSettingLabel}>State</Text>
+                <View style={styles.orbSettingSelect}>
+                  {ORB_STATES.map((o) => (
+                    <Pressable
+                      key={o.value}
+                      style={[
+                        styles.orbOption,
+                        orbState === o.value && styles.orbOptionActive,
+                      ]}
+                      onPress={() => setOrbState(o.value)}
+                    >
+                      <Text style={styles.orbOptionText}>{o.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+              <View style={styles.orbSettingRow}>
+                <Text style={styles.orbSettingLabel}>Theme</Text>
+                <View style={styles.orbSettingSelect}>
+                  {ORB_THEMES.map((t) => (
+                    <Pressable
+                      key={t.value}
+                      style={[
+                        styles.orbOption,
+                        orbTheme === t.value && styles.orbOptionActive,
+                      ]}
+                      onPress={() => setOrbTheme(t.value)}
+                    >
+                      <Text style={styles.orbOptionText}>{t.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+              <View style={styles.orbSettingRow}>
+                <Text style={styles.orbSettingLabel}>Speed</Text>
+                <View style={styles.orbSpeedRow}>
+                  <Text style={styles.orbSpeedLabel}>0.5x</Text>
+                  <Pressable
+                    style={styles.orbSpeedMinus}
+                    onPress={() => setOrbSpeed((s) => Math.max(0.5, s - 0.5))}
+                  >
+                    <Ionicons name="remove" size={18} color={colors.muted} />
+                  </Pressable>
+                  <Text style={styles.orbSpeedValue}>{orbSpeed}x</Text>
+                  <Pressable
+                    style={styles.orbSpeedPlus}
+                    onPress={() => setOrbSpeed((s) => Math.min(2, s + 0.5))}
+                  >
+                    <Ionicons name="add" size={18} color={colors.muted} />
+                  </Pressable>
+                  <Text style={styles.orbSpeedLabel}>2x</Text>
+                </View>
+              </View>
+              <View style={styles.orbPreviewRow}>
+                <Text style={styles.orbPreviewLabel}>Preview</Text>
+                <View style={styles.orbPreview}>
+                  <ThinkingOrb
+                    state={orbState}
+                    theme={orbTheme}
+                    speed={orbSpeed}
+                    size={64}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1295,6 +1414,129 @@ const buildStyles = (c) =>
     imageSourceCancelText: {
       fontSize: 14,
       fontWeight: "700",
+    },
+    // ── Orb settings modal ──────────────────────────────────────────────
+    orbSettingsOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.4)",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    orbSettingsContainer: {
+      width: "88%",
+      maxWidth: 340,
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      overflow: "hidden",
+    },
+    orbSettingsHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+      backgroundColor: c.background,
+    },
+    orbSettingsCloseBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: radius.full,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.surfaceAlpha,
+    },
+    orbSettingsTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    orbSettingsBody: {
+      padding: 16,
+    },
+    orbSettingRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    orbSettingLabel: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    orbSettingSelect: {
+      flexDirection: "row",
+      gap: 6,
+      flexWrap: "wrap",
+    },
+    orbOption: {
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.background,
+    },
+    orbOptionActive: {
+      borderColor: c.primary,
+      backgroundColor: c.surfaceAlpha,
+    },
+    orbOptionText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    orbSpeedRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    orbSpeedLabel: {
+      fontSize: 11,
+      color: c.muted,
+    },
+    orbSpeedMinus: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.surfaceAlpha,
+    },
+    orbSpeedPlus: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.surfaceAlpha,
+    },
+    orbSpeedValue: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: c.primary,
+      minWidth: 24,
+      textAlign: "center",
+    },
+    orbPreviewRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginTop: 16,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    orbPreviewLabel: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    orbPreview: {
+      alignItems: "center",
+      justifyContent: "center",
     },
     visionPreviewWrap: {
       position: "absolute",

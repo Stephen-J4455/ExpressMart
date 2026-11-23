@@ -175,19 +175,15 @@ export const AppHeader = ({
             <Ionicons name="search" size={20} color={themeColors.primary} />
           </Pressable>
           <Pressable
-            style={styles.iconButton}
+            style={[
+              styles.iconButton,
+              { backgroundColor: themeColors.primary, borderColor: "transparent" },
+            ]}
             onPress={onStoresPress}
             accessibilityRole="button"
             accessibilityLabel="Browse stores"
           >
-            <Ionicons name="storefront" size={20} color={themeColors.primary} />
-          </Pressable>
-          <Pressable style={styles.iconButton} onPress={onNotificationsPress}>
-            <Ionicons
-              name="notifications"
-              size={20}
-              color={themeColors.primary}
-            />
+            <Ionicons name="storefront" size={20} color={themeColors.light} />
           </Pressable>
         </View>
       </View>

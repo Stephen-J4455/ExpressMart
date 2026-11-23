@@ -41,7 +41,7 @@ import { ShopProvider } from "./src/context/ShopContext";
 import { OrderProvider } from "./src/context/OrderContext";
 import { FeedPersonalizationBoot } from "./src/components/FeedPersonalizationBoot";
 import { ToastProvider } from "./src/context/ToastContext";
-import { ChatProvider } from "./src/context/ChatContext";
+import { ChatProvider, useChat } from "./src/context/ChatContext";
 import { AdsProvider } from "./src/context/AdsContext";
 import { NotificationProvider } from "./src/context/NotificationContext";
 import { TagAIAssistantProvider } from "./src/context/TagAIAssistantContext";
@@ -104,7 +104,7 @@ import { StoreRegistrationScreen } from "./src/screens/StoreRegistrationScreen";
 // PasswordResetScreen handles recovery links on both web and native.
 
 import { supabase } from "./src/lib/supabase";
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { syncPaystackVerification } from "./src/services/payment";
 import UpdateModal from "./src/components/UpdateModal";
 import { checkForUpdate } from "./src/services/updateService";
@@ -121,8 +121,11 @@ const useNativeAnimationDriver = Platform.OS !== "web";
 const TabNavigator = () => {
   const { items } = useCart();
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
-  const { isWide, sidebarWidth } = useResponsive();
+  const { unreadTotal: chatUnread } = useChat();
+  const { user } = useAuth();
+  const [notifyUnread, setNotifyUnread] = useState(0);
   const { colors, isDark } = useTheme();
+  const { isWide, sidebarWidth } = useResponsive();
   const { homeFirst } = useNavigationPreferences();
   const [sidebarExpanded, setSidebarExpanded] = React.useState(false);
   const [sidebarPinned, setSidebarPinned] = React.useState(false);
@@ -149,6 +152,29 @@ const TabNavigator = () => {
       setSidebarExpanded(false);
     }
   };
+
+  // Unread notifications count for the Chats tab badge
+  useEffect(() => {
+    if (!supabase || !user?.id) {
+      setNotifyUnread(0);
+      return;
+    }
+    let active = true;
+    supabase
+      .from("express_notifications")
+      .select("id", { head: true, count: "exact" })
+      .eq("user_id", user.id)
+      .eq("is_read", false)
+      .then(({ count, error }) => {
+        if (active && !error) setNotifyUnread(count || 0);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  const totalUnread = chatUnread + notifyUnread;
 
   const activeSidebarWidth = sidebarExpanded
     ? sidebarWidth
@@ -199,7 +225,7 @@ const TabNavigator = () => {
             onHoverChange={handleSidebarHover}
           />
         ) : (
-          <DefaultTabBar {...props} cartCount={cartCount} />
+          <DefaultTabBar {...props} cartCount={cartCount} totalUnread={totalUnread} />
         )
       }
     >
@@ -247,7 +273,7 @@ const TransitionedAccountScreen = withTabTransition(AccountScreen);
  *  navigation.navigate("Main", { screen: "Account" }) deep-links keep working.
  *  Auto-hides when tab screens report upward scrolling and slides back in on
  *  downward scrolling (see src/utils/tabBarAutoHide.js). */
-const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
+const DefaultTabBar = ({ state, descriptors, navigation, cartCount, totalUnread }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = insets.bottom > 0 ? insets.bottom : 0;
   const { colors, isDark } = useTheme();
@@ -491,6 +517,24 @@ const DefaultTabBar = ({ state, descriptors, navigation, cartCount }) => {
                       <Text style={tabStyles.badgeText}>{cartCount}</Text>
                     </View>
                   )}
+                  {route.name === "Chats" && totalUnread > 0 && (
+                    <View
+                      style={[
+                        tabStyles.badge,
+                        totalUnread > 9 && tabStyles.badgeWide,
+                        {
+                          // Unread messages read as an alert, so they use the
+                          // danger token rather than the brand primary.
+                          backgroundColor: colors.badgeDanger,
+                          borderColor: isDark ? "#1C1C1E" : "#fff",
+                        },
+                      ]}
+                    >
+                      <Text style={tabStyles.badgeText}>
+                        {totalUnread > 99 ? "99+" : totalUnread}
+                      </Text>
+                    </View>
+                  )}
                 </Animated.View>
               </Pressable>
             );
@@ -718,6 +762,10 @@ const tabStyles = StyleSheet.create({
     paddingHorizontal: 4,
     borderWidth: 1.5,
     // borderColor applied inline from the theme (matches the pill surface)
+  },
+  // Double/triple-digit counts need a little more horizontal room.
+  badgeWide: {
+    paddingHorizontal: 5,
   },
   badgeText: {
     color: "#fff",

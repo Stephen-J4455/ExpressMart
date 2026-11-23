@@ -1358,6 +1358,14 @@ export const FeedScreen = ({ route, navigation }) => {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={themeColors.primary} />
         </View>
+      ) : reels.length === 0 ? (
+        <View style={styles.center}>
+          <Ionicons name="videocamera-outline" size={64} color="#334155" />
+          <Text style={styles.emptyText}>No reels yet</Text>
+          <Text style={styles.emptySubtext}>
+            Check back soon for product videos from stores.
+          </Text>
+        </View>
       ) : (
         <View style={styles.feedArea}>
           <FlatList
@@ -1401,6 +1409,19 @@ const buildFeedStyles = (c) =>
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
+    },
+    emptyText: {
+      marginTop: 16,
+      fontSize: 18,
+      fontWeight: "700",
+      color: "#F8FAFC",
+    },
+    emptySubtext: {
+      marginTop: 8,
+      fontSize: 14,
+      color: "#94A3B8",
+      textAlign: "center",
+      paddingHorizontal: 40,
     },
     reelContainer: {
       height: "100%",

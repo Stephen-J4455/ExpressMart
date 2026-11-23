@@ -107,9 +107,18 @@ export const ShopProvider = ({ children }) => {
         if (Array.isArray(data) && data.length > 0) {
           const cachedProductsToShow =
             productLimit === null ? data : sampleProducts(data, productLimit);
-          setProducts(cachedProductsToShow);
+          // Drop products from sellers whose store is disabled
+          const activeSellerIds = new Set(
+            (cachedSellers ? JSON.parse(cachedSellers).data || [] : [])
+              .map((s) => s.id)
+              .filter(Boolean),
+          );
+          const filteredCached = cachedProductsToShow.filter(
+            (p) => !p.seller?.id || activeSellerIds.has(p.seller.id),
+          );
+          setProducts(filteredCached);
           if (productLimit !== null) {
-            preserveCachedProductsRef.current = cachedProductsToShow.length > 0;
+            preserveCachedProductsRef.current = filteredCached.length > 0;
           }
         }
       }
@@ -290,29 +299,31 @@ export const ShopProvider = ({ children }) => {
               Number(product.comments_count || 0),
           }),
         );
-        if (preserveCachedProductsRef.current) {
-          if (fromUpstash || fromLocalCache) {
-            setProducts((cachedProducts) => {
-              const freshById = new Map(
-                mappedProducts.map((product) => [product.id, product]),
-              );
-              const cachedIds = new Set();
-              const mergedProducts = cachedProducts.map((cachedProduct) => {
-                cachedIds.add(cachedProduct.id);
-                return freshById.get(cachedProduct.id) || cachedProduct;
-              });
-              return [
-                ...mergedProducts,
-                ...mappedProducts.filter(
-                  (product) => !cachedIds.has(product.id),
-                ),
-              ];
-            });
-          }
-          preserveCachedProductsRef.current = false;
-        } else {
-          setProducts(mappedProducts);
-        }
+
+        // Drop products from sellers that are not active (store disabled)
+        const activeSellerIds = new Set(
+          (sellersData || []).map((s) => s.id).filter(Boolean),
+        );
+        const activeProducts = mappedProducts.filter(
+          (p) => !p.seller?.id || activeSellerIds.has(p.seller.id),
+        );
+
+        setProducts((existingProducts) => {
+          const freshById = new Map(
+            activeProducts.map((product) => [product.id, product]),
+          );
+          const existingIds = new Set();
+          const mergedProducts = existingProducts.map((existingProduct) => {
+            existingIds.add(existingProduct.id);
+            return freshById.get(existingProduct.id) || existingProduct;
+          });
+          return [
+            ...mergedProducts,
+            ...activeProducts.filter(
+              (product) => !existingIds.has(product.id),
+            ),
+          ];
+        });
         if (fromUpstash) {
           nextProductsOffsetRef.current = productsData.length;
         }
@@ -392,7 +403,14 @@ export const ShopProvider = ({ children }) => {
             console.warn(
               `[ShopContext] Network sync failed — serving ${cachedProducts.length} cached product(s) from local storage.`,
             );
-            setProducts(cachedProducts);
+            // Drop products from sellers whose store is disabled
+            const activeSellerIds = new Set(
+              (sellers || []).map((s) => s.id).filter(Boolean),
+            );
+            const filteredCached = cachedProducts.filter(
+              (p) => !p.seller?.id || activeSellerIds.has(p.seller.id),
+            );
+            setProducts(filteredCached);
             // The disk snapshot is a single finite page — disable further
             // infinite-scroll paging so we don't hammer the network offline.
             setHasMore(false);
@@ -466,10 +484,19 @@ export const ShopProvider = ({ children }) => {
       }
 
       const newProducts = rows.map(mapProduct);
+
+      // Drop products from sellers that are not active (store disabled)
+      const activeSellerIds = new Set(
+        (sellers || []).map((s) => s.id).filter(Boolean),
+      );
+      const activeNewProducts = newProducts.filter(
+        (p) => !p.seller?.id || activeSellerIds.has(p.seller.id),
+      );
+
       const existingIds = new Set(products.map((product) => product.id));
       const allProducts = [
         ...products,
-        ...newProducts.filter((product) => {
+        ...activeNewProducts.filter((product) => {
           if (existingIds.has(product.id)) return false;
           existingIds.add(product.id);
           return true;
@@ -484,7 +511,7 @@ export const ShopProvider = ({ children }) => {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [hasMore, loadingMore, loading, products, saveCache, fetchFromUpstash]);
+  }, [hasMore, loadingMore, loading, products, sellers, saveCache, fetchFromUpstash]);
 
   const refreshSellers = useCallback(async () => {
     await fetchProducts({ silent: true });

@@ -38,7 +38,7 @@ const mapStoryAdToStatus = (ad) => ({
   text_color: ad?.text_color || "#FFFFFF",
   seller: {
     id: `ad-${ad.id}`,
-    name: ad?.title || "Sponsored",
+    name: ad?.title || "Seller",
     avatar: ad?.image_url || null,
   },
   created_at: ad?.created_at || new Date().toISOString(),
@@ -161,12 +161,42 @@ export const ChatsScreen = ({ navigation, route }) => {
   const styles = useAppStyles((c) => buildChatsStyles(c));
   const insets = useSafeAreaInsets();
   const { isWide } = useResponsive();
-  const { conversations, isOnline, isLoading, refreshConversations } =
+  const { conversations, isOnline, isLoading, refreshConversations, unreadCounts } =
     useChat();
   const { user } = useAuth();
   const { followedSellers } = useShop();
   const { fetchAdsByPlacement } = useAds();
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // ChatContext.syncWithServer now returns both buyer and seller conversations,
+  // so keep this screen's buyer list scoped to conversations where the user is
+  // the buyer; seller conversations come from fetchSellerConversations below.
+  const buyerConversations = useMemo(
+    () => (conversations || []).filter((c) => c.user_id === user?.id),
+    [conversations, user?.id],
+  );
+
+  // Real-time unread notification count badge
+  useEffect(() => {
+    if (!supabase || !user?.id) {
+      setUnreadCount(0);
+      return;
+    }
+    let active = true;
+    supabase
+      .from("express_notifications")
+      .select("id", { head: true, count: "exact" })
+      .eq("user_id", user.id)
+      .eq("is_read", false)
+      .then(({ count, error }) => {
+        if (active && !error) setUnreadCount(count || 0);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
   // Seeded synchronously from the background prefetch cache so the screen
   // renders with content on the very first paint (no empty flash).
   const [followedStatuses, setFollowedStatuses] = useState(
@@ -267,6 +297,85 @@ export const ChatsScreen = ({ navigation, route }) => {
     fetchSellerConversations();
   }, [user]);
 
+  // Realtime: new seller-side conversation created for this store account.
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const channel = supabase
+      .channel(`chats-screen-seller-conv-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "express_chat_conversations",
+          filter: `seller_id=eq.${user.id}`,
+        },
+        (payload) => {
+          if (!active) return;
+          const incoming = payload.new;
+          setSellerConversations((prev) => {
+            if (prev.some((c) => c.id === incoming.id)) return prev;
+            return [
+              {
+                ...incoming,
+                customer: {
+                  id: incoming.express_profiles?.id,
+                  name:
+                    incoming.express_profiles?.full_name ||
+                    incoming.express_profiles?.email ||
+                    "Customer",
+                  avatar: incoming.express_profiles?.avatar_url || null,
+                },
+              },
+              ...prev,
+            ];
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  // Realtime: new message in a seller conversation — bump preview + time.
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const channel = supabase
+      .channel(`chats-screen-seller-msg-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "express_chat_messages",
+        },
+        (payload) => {
+          if (!active) return;
+          const incoming = payload.new;
+          setSellerConversations((prev) => {
+            const idx = prev.findIndex((c) => c.id === incoming.conversation_id);
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next[idx] = {
+              ...next[idx],
+              last_message: incoming.message,
+              last_message_at: incoming.created_at,
+            };
+            return next;
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const statusItems = [...messageStoryAds, ...followedStatuses];
 
   const formatTimestamp = (timestamp) => {
@@ -295,6 +404,10 @@ export const ChatsScreen = ({ navigation, route }) => {
     const sellerAvatar = item.seller?.avatar;
     const timestamp = formatTimestamp(item.last_message_at || item.created_at);
     const isSelected = isWide && selectedConversation?.id === item.id;
+    // Prefer the shared unread tally from ChatContext; fall back to the
+    // conversation row's own count so the badge still renders if the context
+    // fetch is still in flight.
+    const unread = unreadCounts[item.id] ?? item.unread_count ?? 0;
 
     return (
       <Pressable
@@ -335,13 +448,17 @@ export const ChatsScreen = ({ navigation, route }) => {
           </Text>
         </View>
         <View style={styles.rightAction}>
-          {item.unread_count > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>{item.unread_count}</Text>
+          {unread > 0 && (
+            <View
+              style={[
+                styles.unreadBadge,
+                unread > 9 && styles.unreadBadgeWide,
+              ]}
+            >
+              <Text style={styles.unreadText} numberOfLines={1}>
+                {unread > 99 ? "99+" : unread}
+              </Text>
             </View>
-          )}
-          {!isWide && (
-            <Ionicons name="chevron-forward" size={18} color={themeColors.muted} />
           )}
         </View>
       </Pressable>
@@ -352,6 +469,7 @@ export const ChatsScreen = ({ navigation, route }) => {
     const customerName = item.customer?.name || "Customer";
     const customerAvatar = item.customer?.avatar;
     const timestamp = formatTimestamp(item.last_message_at || item.created_at);
+    const unread = unreadCounts[item.id] ?? item.unread_count ?? 0;
 
     return (
       <Pressable
@@ -386,13 +504,17 @@ export const ChatsScreen = ({ navigation, route }) => {
           </Text>
         </View>
         <View style={styles.rightAction}>
-          {item.unread_count > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>{item.unread_count}</Text>
+          {unread > 0 && (
+            <View
+              style={[
+                styles.unreadBadge,
+                unread > 9 && styles.unreadBadgeWide,
+              ]}
+            >
+              <Text style={styles.unreadText} numberOfLines={1}>
+                {unread > 99 ? "99+" : unread}
+              </Text>
             </View>
-          )}
-          {!isWide && (
-            <Ionicons name="chevron-forward" size={18} color={themeColors.muted} />
           )}
         </View>
       </Pressable>
@@ -400,7 +522,7 @@ export const ChatsScreen = ({ navigation, route }) => {
   };
 
   const mergedConversations = useMemo(() => {
-    const customerItems = (conversations || []).map((c) => ({
+    const customerItems = (buyerConversations || []).map((c) => ({
       ...c,
       kind: "customer",
     }));
@@ -494,6 +616,34 @@ export const ChatsScreen = ({ navigation, route }) => {
           </View>
           <View style={styles.headerActions}>
             <Pressable
+              style={styles.notificationWrap}
+              onPress={() => navigation.navigate("Notifications")}
+              accessibilityRole="button"
+              accessibilityLabel={
+                unreadCount > 0
+                  ? `Notifications, ${unreadCount} unread`
+                  : "Notifications"
+              }
+            >
+              <Ionicons
+                name={unreadCount > 0 ? "notifications" : "notifications-outline"}
+                size={20}
+                color={themeColors.primary}
+              />
+              {unreadCount > 0 && (
+                <View
+                  style={[
+                    styles.notificationBadge,
+                    unreadCount > 9 && styles.notificationBadgeWide,
+                  ]}
+                >
+                  <Text style={styles.notificationBadgeText} numberOfLines={1}>
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+            <Pressable
               style={styles.searchIconButton}
               onPress={() => setSearchVisible((v) => !v)}
             >
@@ -505,12 +655,6 @@ export const ChatsScreen = ({ navigation, route }) => {
             </Pressable>
           </View>
         </View>
-        {!searchVisible && (
-          <View style={styles.headerSubtitleRow}>
-            <View style={styles.onlineDot} />
-            <Text style={styles.headerSubtitle}>Customer Support</Text>
-          </View>
-        )}
 
         {searchVisible && (
           <View style={styles.searchBar}>
@@ -803,6 +947,43 @@ const buildChatsStyles = (c) =>
     alignItems: "center",
     gap: 10,
   },
+  notificationWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 42,
+    height: 42,
+    borderRadius: radius.pill,
+    backgroundColor: c.primary + "15",
+    borderWidth: 1,
+    borderColor: c.primary + "30",
+  },
+  // Header bell badge — compact pill that hugs the bell's top-right corner.
+  notificationBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: radius.pill,
+    paddingHorizontal: 4,
+    backgroundColor: c.badgeDanger,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: c.background,
+    zIndex: 10,
+  },
+  notificationBadgeWide: {
+    paddingHorizontal: 6,
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "800",
+    color: c.light,
+    textAlign: "center",
+  },
   searchInput: {
     flex: 1,
     fontSize: 15,
@@ -904,17 +1085,22 @@ const buildChatsStyles = (c) =>
   },
   unreadBadge: {
     backgroundColor: c.primary,
-    minWidth: 20,
-    height: 20,
+    minWidth: 22,
+    height: 22,
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
+  },
+  unreadBadgeWide: {
+    paddingHorizontal: 8,
   },
   unreadText: {
     color: c.light,
     fontSize: 11,
-    fontWeight: "700",
+    lineHeight: 15,
+    fontWeight: "800",
+    textAlign: "center",
   },
   statusSection: {
     // Counteract the list container's 16px horizontal padding so the strip

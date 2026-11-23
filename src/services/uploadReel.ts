@@ -365,7 +365,7 @@ export async function fetchProductReels(
   const { data, error } = await supabase
     .from("express_products")
     .select(
-      "id, title, price, description, video_url, video_hls_url, thumbnail, thumbnails, category, tags, view_count, total_ratings, seller_id(id,name,avatar)",
+      "id, title, price, description, video_url, video_hls_url, thumbnail, thumbnails, category, tags, view_count, total_ratings, seller_id(id,name,avatar,is_active)",
     )
     .eq("status", "active")
     .or("video_url.not.is.null,video_hls_url.not.is.null")
@@ -437,6 +437,11 @@ export async function fetchProductReels(
       likes_count: likesByProductId[product.id] || 0,
       comments_count: commentsByProductId[product.id] || 0,
     }))
+    // Don't show videos from inactive stores.
+    .filter((product: any) => {
+      const seller = product.seller;
+      return !seller || seller.is_active !== false;
+    })
     .filter(
       (product: any) =>
         String(product.video_url || "").trim() ||

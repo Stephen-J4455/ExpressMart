@@ -33,6 +33,7 @@ import * as ImagePicker from "expo-image-picker";
 // exactly what we need to stream the raw video bytes to R2 via a binary PUT.
 import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { BarChart, LineChart } from "react-native-gifted-charts";
 import { WebView } from "react-native-webview";
 import { supabase, callEdgeFunction, supabaseUrl } from "../lib/supabase";
@@ -46,6 +47,10 @@ import { useAppStyles } from "../hooks/useAppStyles";
 import { useResponsive } from "../hooks/useResponsive";
 import { useTapTarget } from "../hooks/useGrounding";
 import { getImageContentType } from "../utils/webUpload";
+
+// Minimum selectable date for flash sales — stable reference so the
+// DateTimePicker doesn't reset on every render.
+const MIN_DATE = new Date();
 import {
   compressProductImage,
   compressProductVideo,
@@ -694,6 +699,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     new Date(Date.now() + 24 * 60 * 60 * 1000),
   );
   const [flashSaleMaxQty, setFlashSaleMaxQty] = useState("");
+  const [flashSaleDateVisible, setFlashSaleDateVisible] = useState(false);
+  const [flashSaleDateField, setFlashSaleDateField] = useState("start");
+  const [editingFlashSaleDate, setEditingFlashSaleDate] = useState(
+    new Date(),
+  );
   const [menuVisible, setMenuVisible] = useState(false);
   // Drawer slide-in animation — 0 = fully off-screen LEFT, 1 = fully open.
   // The modal itself renders instantly (animationType="none") so the drawer
@@ -2444,6 +2454,17 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     }
   };
 
+  const handleFlashSaleDateChange = (event, selectedDate) => {
+    const current = selectedDate || new Date();
+    setEditingFlashSaleDate(current);
+  };
+
+  const confirmFlashSaleDate = (field) => {
+    if (field === "start") setFlashSaleStartDate(editingFlashSaleDate);
+    if (field === "end") setFlashSaleEndDate(editingFlashSaleDate);
+    setFlashSaleDateVisible(false);
+  };
+
   const handleCreateFlashSale = async () => {
     if (!selectedProduct || !flashSalePrice) {
       toast.warning("Missing Info", "Please enter a flash sale price");
@@ -2476,6 +2497,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         `Flash sale for ${selectedProduct.title}`,
       );
       setFlashSaleModalVisible(false);
+      setFlashSaleDateVisible(false);
       setSelectedProduct(null);
     } else {
       toast.error("Error", error || "Failed to create flash sale");
@@ -7292,45 +7314,164 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           <ScrollView contentContainerStyle={styles.modalContent}>
             <View style={styles.modalHead}>
               <Text style={styles.modalTitle}>Create Flash Sale</Text>
-              <Pressable onPress={() => setFlashSaleModalVisible(false)}>
-                <Ionicons name="close" size={24} color={themeColors.dark} />
+              <Pressable onPress={() => {
+              setFlashSaleModalVisible(false);
+              setFlashSaleDateVisible(false);
+            }}>
+                <Ionicons name="close" size={24} color={themeColors.muted} />
               </Pressable>
             </View>
-            <Text style={styles.detailPrice}>
-              Original: {formatPrice(selectedProduct?.price)}
-            </Text>
-            <Text style={styles.label}>Flash Price (GH₵) *</Text>
-            <TextInput
-              style={styles.input}
-              value={flashSalePrice}
-              onChangeText={setFlashSalePrice}
-              keyboardType="numeric"
-              placeholder="0.00"
-              placeholderTextColor={themeColors.muted}
-            />
-            <Text style={styles.label}>Max Quantity (optional)</Text>
-            <TextInput
-              style={styles.input}
-              value={flashSaleMaxQty}
-              onChangeText={setFlashSaleMaxQty}
-              keyboardType="numeric"
-              placeholder="Unlimited"
-              placeholderTextColor={themeColors.muted}
-            />
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                { backgroundColor: accent },
-                submitting && { opacity: 0.6 },
-              ]}
-              onPress={handleCreateFlashSale}
-              disabled={submitting}
-            >
-              <Text style={styles.submitButtonText}>
-                {submitting ? "Creating..." : "Create Flash Sale"}
-              </Text>
-            </TouchableOpacity>
+
+            <View style={styles.flashSaleCard}>
+              <View style={styles.flashSaleCardHeader}>
+                <Ionicons
+                  name="flash-outline"
+                  size={20}
+                  color={themeColors.primary}
+                />
+                <Text style={styles.flashSaleCardTitle}>
+                  Flash Sale for {selectedProduct?.title}
+                </Text>
+              </View>
+
+              <Text style={styles.label}>Original Price</Text>
+              <View style={styles.priceRow}>
+                <Text style={styles.originalPrice}>
+                  {formatPrice(selectedProduct?.price)}
+                </Text>
+              </View>
+
+              <Text style={styles.label}>Flash Price (GH₵) *</Text>
+              <TextInput
+                style={styles.input}
+                value={flashSalePrice}
+                onChangeText={setFlashSalePrice}
+                keyboardType="numeric"
+                placeholder="0.00"
+                placeholderTextColor={themeColors.muted}
+              />
+
+              {flashSalePrice && selectedProduct && (
+                <View style={styles.discountPreview}>
+                  <Text style={styles.discountLabel}>Discount</Text>
+                  <Text style={styles.discountValue}>
+                    {getFlashDiscountPct({
+                      flash_price: flashSalePrice,
+                      original_price: selectedProduct.price,
+                    })}% off
+                  </Text>
+                </View>
+              )}
+
+              <Text style={styles.label}>Start Date &amp; Time</Text>
+              <Pressable
+                style={styles.dateInput}
+                onPress={() => {
+                  setFlashSaleDateField("start");
+                  setEditingFlashSaleDate(flashSaleStartDate);
+                  setFlashSaleDateVisible(true);
+                }}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={18}
+                  color={themeColors.muted}
+                />
+                <Text style={styles.dateText}>
+                  {flashSaleStartDate.toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              </Pressable>
+
+              <Text style={styles.label}>End Date &amp; Time</Text>
+              <Pressable
+                style={styles.dateInput}
+                onPress={() => {
+                  setFlashSaleDateField("end");
+                  setEditingFlashSaleDate(flashSaleEndDate);
+                  setFlashSaleDateVisible(true);
+                }}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={18}
+                  color={themeColors.muted}
+                />
+                <Text style={styles.dateText}>
+                  {flashSaleEndDate.toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              </Pressable>
+
+              <Text style={styles.label}>Max Quantity (optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={flashSaleMaxQty}
+                onChangeText={setFlashSaleMaxQty}
+                keyboardType="numeric"
+                placeholder="Unlimited"
+                placeholderTextColor={themeColors.muted}
+              />
+            </View>
           </ScrollView>
+
+          {flashSaleDateVisible && (
+            <>
+              {/* DateTimePicker inline — rendered outside the ScrollView so it
+                  overlays on top of the modal content rather than behind it. */}
+              <DateTimePicker
+                style={styles.dateTimePicker}
+                value={editingFlashSaleDate}
+                mode="datetime"
+                display={Platform.OS === "android" ? "spinner" : "default"}
+                onChange={handleFlashSaleDateChange}
+                onDismiss={() => setFlashSaleDateVisible(false)}
+                minimumDate={MIN_DATE}
+                is24Hour={false}
+              />
+              <View style={styles.datePickerActions}>
+                <Pressable
+                  style={styles.datePickerCancel}
+                  onPress={() => setFlashSaleDateVisible(false)}
+                >
+                  <Text style={styles.datePickerCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.datePickerConfirm}
+                  onPress={() => {
+                    confirmFlashSaleDate(flashSaleDateField);
+                  }}
+                >
+                  <Text style={styles.datePickerConfirmText}>
+                    {flashSaleDateField === "start"
+                      ? "Set Start Date"
+                      : "Set End Date"}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+          <TouchableOpacity
+            style={[
+              styles.submitButton,
+              { backgroundColor: accent },
+              submitting && { opacity: 0.6 },
+            ]}
+            onPress={handleCreateFlashSale}
+            disabled={submitting}
+          >
+            <Text style={styles.submitButtonText}>
+              {submitting ? "Creating..." : "Create Flash Sale"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </Modal>
       {renderMenuDrawer()}
@@ -8688,7 +8829,11 @@ const buildSellerAdminStyles = (c) =>
       fontWeight: "800",
       textAlign: "right",
     },
-    modalContainer: { flex: 1, backgroundColor: c.background },
+    modalContainer: {
+      flex: 1,
+      backgroundColor: c.background,
+      paddingVertical: 34,
+    },
     modalHeader: {
       flexDirection: "row",
       alignItems: "center",
@@ -8813,6 +8958,145 @@ const buildSellerAdminStyles = (c) =>
       paddingVertical: 11,
       fontSize: 14,
       color: c.dark,
+    },
+    // ── Flash sale modal styles ─────────────────────────────────────────
+    flashSaleCard: {
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      padding: 16,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    flashSaleCardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 16,
+    },
+    flashSaleCardTitle: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    priceRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 4,
+    },
+    originalPrice: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: c.muted,
+      textDecorationLine: "line-through",
+    },
+    discountPreview: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: radius.md,
+      backgroundColor: c.surfaceAlpha,
+    },
+    discountLabel: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: c.primary,
+      textTransform: "uppercase",
+    },
+    discountValue: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: c.primary,
+    },
+    dateInput: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      backgroundColor: c.background,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: radius.full,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+      marginBottom: 4,
+    },
+    dateText: {
+      flex: 1,
+      fontSize: 14,
+      color: c.dark,
+    },
+    // ── Date picker modal ───────────────────────────────────────────────
+    datePickerOverlay: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    datePickerContainer: {
+      width: "88%",
+      maxWidth: 340,
+      backgroundColor: c.light,
+      borderRadius: radius.lg,
+      overflow: "hidden",
+    },
+    datePickerHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+      backgroundColor: c.background,
+    },
+    datePickerBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: radius.full,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: c.surfaceAlpha,
+    },
+    datePickerTitle: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: c.dark,
+    },
+    datePickerBody: {
+      padding: 16,
+    },
+    // ── Inline DateTimePicker (inside flash sale modal) ─────────────────
+    dateTimePicker: {
+      marginTop: 12,
+    },
+    datePickerActions: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginTop: 10,
+      paddingHorizontal: 4,
+    },
+    datePickerCancel: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+    },
+    datePickerCancelText: {
+      fontSize: 14,
+      color: c.muted,
+    },
+    datePickerConfirm: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      backgroundColor: c.primary,
+      borderRadius: radius.md,
+    },
+    datePickerConfirmText: {
+      color: c.light,
+      fontWeight: "800",
+      fontSize: 14,
     },
     requiredEmpty: {
       borderColor: "#EF4444",

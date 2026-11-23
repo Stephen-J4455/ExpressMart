@@ -82,6 +82,15 @@ export const CartScreen = ({ navigation }) => {
   const { user, isAuthenticated } = useAuth();
   const { items, total, updateQuantity, removeFromCart, clearCart } = useCart();
   const { products } = useShop();
+
+  const isItemFromDisabledStore = useCallback(
+    (product) =>
+      Boolean(
+        product?.seller_id?.is_active === false ||
+          product?.seller?.is_active === false,
+      ),
+    [],
+  );
   const { fetchAdsByPlacement } = useAds();
   const toast = useToast();
   const { isWide, contentMaxWidth } = useResponsive();
@@ -183,10 +192,16 @@ export const CartScreen = ({ navigation }) => {
           .in("id", ids)
           .eq("status", "active");
         if (!mounted) return;
-        const mapped = (prods || []).map((p) => ({
-          ...p,
-          seller: p.seller_id,
-        }));
+        const mapped = (prods || [])
+          .filter(
+            (p) =>
+              !p.seller_id?.id ||
+              activeSellerIds.has(p.seller_id.id || p.seller_id),
+          )
+          .map((p) => ({
+            ...p,
+            seller: p.seller_id,
+          }));
         // Preserve wishlist recency order.
         const order = new Map(ids.map((id, i) => [id, i]));
         mapped.sort(
@@ -508,11 +523,45 @@ export const CartScreen = ({ navigation }) => {
                         </Text>
                       </View>
                     )}
+                    {isItemFromDisabledStore(product) && (
+                      <View style={styles.storeDisabledBadge}>
+                        <Text style={styles.storeDisabledBadgeText}>
+                          Store Disabled
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <View style={styles.itemContent}>
                     <Text style={styles.title} numberOfLines={2}>
                       {product.title}
                     </Text>
+                    {/* Tiny store profile */}
+                    {product?.seller_id && (
+                      <View style={styles.storeProfileRow}>
+                        {product.seller_id.avatar ? (
+                          <Image
+                            source={{ uri: product.seller_id.avatar }}
+                            style={styles.storeAvatar}
+                          />
+                        ) : (
+                          <View style={styles.storeAvatarPlaceholder}>
+                            <Text style={styles.storeAvatarText}>
+                              {(product.seller_id.name || "S")[0]}
+                            </Text>
+                          </View>
+                        )}
+                        <View style={styles.storeInfo}>
+                          <Text style={styles.storeName}>
+                            {product.seller_id.name || "Seller"}
+                          </Text>
+                          {isItemFromDisabledStore(product) && (
+                            <Text style={styles.storeStatusText}>
+                              Store Disabled
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    )}
                     {(size || color) && (
                       <View style={styles.specsRow}>
                         {size && (
@@ -807,6 +856,60 @@ const buildCartStyles = (c) =>
       fontWeight: "800",
       textTransform: "uppercase",
       letterSpacing: 0.3,
+    },
+    storeDisabledBadge: {
+      position: "absolute",
+      top: 6,
+      right: 6,
+      backgroundColor: "#B91C1C",
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    storeDisabledBadgeText: {
+      color: c.light,
+      fontSize: 9,
+      fontWeight: "800",
+      textTransform: "uppercase",
+      letterSpacing: 0.3,
+    },
+    storeProfileRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 4,
+    },
+    storeAvatar: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+    },
+    storeAvatarPlaceholder: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: "#E2E8F0",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    storeAvatarText: {
+      color: "#64748B",
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    storeInfo: {
+      flex: 1,
+    },
+    storeName: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: c.dark,
+    },
+    storeStatusText: {
+      fontSize: 9,
+      color: "#B91C1C",
+      fontWeight: "700",
+      marginTop: 1,
     },
     itemContent: {
       flex: 1,
