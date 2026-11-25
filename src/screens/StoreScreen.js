@@ -18,6 +18,7 @@ import {
   TouchableOpacity,
   Modal,
   Linking,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -37,6 +38,8 @@ import {
   loadHiddenSellers,
   unhideSeller,
 } from "../utils/hiddenSellers";
+
+import { getWhatsAppLinks } from "../utils/whatsappLinks";
 
 const TABS = ["products", "profile", "reviews"];
 
@@ -235,27 +238,25 @@ export const StoreScreen = ({ route, navigation }) => {
   );
 
   const openWhatsAppLink = useCallback(
-    (rawValue) => {
-      const value = String(rawValue || "").trim();
-      if (!value) {
-        toast.error("Invalid WhatsApp");
+    async (rawValue) => {
+      const links = getWhatsAppLinks(rawValue, { native: Platform.OS !== "web" });
+      if (!links.length) {
+        toast.error("Invalid WhatsApp link");
         return;
       }
 
-      if (/^(https?:|whatsapp:)/i.test(value)) {
-        openExternalLink(value, "WhatsApp");
-        return;
+      for (const link of links) {
+        try {
+          await Linking.openURL(link);
+          return;
+        } catch {
+          // Try the next app or the HTTPS link if this one cannot open.
+        }
       }
 
-      const digits = value.replace(/[^0-9]/g, "");
-      if (!digits) {
-        toast.error("Invalid WhatsApp");
-        return;
-      }
-
-      openExternalLink(`https://wa.me/${digits}`, "WhatsApp");
+      toast.error("Unable to open WhatsApp");
     },
-    [openExternalLink, toast],
+    [toast],
   );
 
   const averageRating =

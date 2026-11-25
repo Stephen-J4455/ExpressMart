@@ -47,6 +47,24 @@ import { radius } from "../theme/colors";
 
 const REVIEW_STAR_COLOR = "#F97316";
 
+const REEL_COMMENT_FIELDS =
+  "id, comment, created_at, express_profiles!express_product_reel_comments_user_id_fkey(full_name, avatar_url)";
+
+function toComment(row, source, fallbackName = "Customer") {
+  const profile = Array.isArray(row.express_profiles)
+    ? row.express_profiles[0]
+    : row.express_profiles;
+  return {
+    id: `${source}:${row.id}`,
+    source,
+    rating: row.rating,
+    comment: row.comment,
+    created_at: row.created_at,
+    author_name: profile?.full_name || fallbackName,
+    author_avatar: profile?.avatar_url || null,
+  };
+}
+
 // Cache the reels feed locally so it loads instantly from disk on every mount
 // instead of re-streaming the list from the network (saves data on metered
 // connections). The cache is used as the source of truth for the first paint,
@@ -528,8 +546,6 @@ export const FeedScreen = ({ route, navigation }) => {
         const baseLikeCount = Number(item.likes_count || 0);
         const baseCommentCount = Number(item.comments_count || 0);
 
-        // Product-based actions (like / comment / tag) operate on the linked
-        // product, mirroring the ProductDetail screen, not the video itself.
         const { user } = useAuth();
         const toast = useToast();
         const productId = item.product_id;
@@ -637,54 +653,60 @@ export const FeedScreen = ({ route, navigation }) => {
           }
         }, [user, isWishlisted, productId, toast, playLikeAnimation, item]);
 
-        // --- Comment: own modal in the feed, backed by PRODUCT comments
-        // (express_reviews + express_review_comments), mirroring the
-        // ProductDetail screen. ---
         const [commentModalVisible, setCommentModalVisible] = useState(false);
         const [comments, setComments] = useState([]);
         const [commentCount, setCommentCount] = useState(baseCommentCount);
         const [commentText, setCommentText] = useState("");
         const [commentPosting, setCommentPosting] = useState(false);
         const [commentsLoading, setCommentsLoading] = useState(false);
+        const [commentsError, setCommentsError] = useState(false);
+        const postingComment = useRef(false);
+        const loadingComments = useRef(false);
 
         const loadComments = useCallback(async () => {
-          if (!productId || !supabase) return;
+          if (!productId || !supabase || loadingComments.current || postingComment.current) return;
+          loadingComments.current = true;
           setCommentsLoading(true);
+          setCommentsError(false);
           try {
-            // Pull approved product reviews that have a comment, newest first.
-            const { data: reviews } = await supabase
-              .from("express_reviews")
-              .select(
-                "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
-              )
-              .eq("product_id", productId)
-              .eq("is_approved", true)
-              .not("comment", "is", null)
-              .order("created_at", { ascending: false })
-              .limit(50);
+            const [reels, reviews] = await Promise.all([
+              supabase
+                .from("express_product_reel_comments")
+                .select(REEL_COMMENT_FIELDS, { count: "exact" })
+                .eq("product_id", productId)
+                .order("created_at", { ascending: false })
+                .limit(50),
+              supabase
+                .from("express_reviews")
+                .select(
+                  "id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
+                  { count: "exact" },
+                )
+                .eq("product_id", productId)
+                .not("comment", "is", null)
+                .neq("comment", "")
+                .eq("is_approved", true)
+                .order("created_at", { ascending: false })
+                .limit(50),
+            ]);
 
-            const rows = (reviews ?? [])
-              .filter((r) => String(r.comment || "").trim())
-              .map((r) => {
-                const profile = Array.isArray(r.express_profiles)
-                  ? r.express_profiles[0]
-                  : r.express_profiles;
-                return {
-                  id: r.id,
-                  review_id: r.id,
-                  user_id: r.user_id,
-                  rating: r.rating,
-                  comment: r.comment,
-                  created_at: r.created_at,
-                  author_name: profile?.full_name || "Customer",
-                  author_avatar: profile?.avatar_url || null,
-                };
-              });
+            const rows = [
+              ...(reels.data ?? []).map((row) => toComment(row, "reel")),
+              ...(reviews.data ?? [])
+                .filter((row) => row.comment.trim())
+                .map((row) => toComment(row, "review")),
+            ].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+
             setComments(rows);
-            setCommentCount(rows.length);
-          } catch (e) {
-            console.warn("loadComments error:", e);
+            if (reels.error || reviews.error) {
+              setCommentsError(true);
+            } else {
+              setCommentCount(reels.count + reviews.count);
+            }
+          } catch {
+            setCommentsError(true);
           } finally {
+            loadingComments.current = false;
             setCommentsLoading(false);
           }
         }, [productId]);
@@ -695,59 +717,30 @@ export const FeedScreen = ({ route, navigation }) => {
         }, [loadComments]);
 
         const submitComment = useCallback(async () => {
-          const trimmed = String(commentText).trim();
-          if (!trimmed) return;
+          const trimmed = commentText.trim();
+          if (!trimmed || postingComment.current || loadingComments.current) return;
           if (!user) {
             toast.info("Sign in required", "Please sign in to comment");
             return;
           }
           if (!productId || !supabase) return;
+          postingComment.current = true;
           setCommentPosting(true);
           try {
-            // A feed comment is a product review with a comment (default 5-star
-            // rating). Users may post MULTIPLE comments, so we always INSERT a
-            // new row rather than upserting an existing one.
             const { data, error } = await supabase
-              .from("express_reviews")
-              .insert({
-                product_id: productId,
-                user_id: user.id,
-                rating: 5,
-                comment: trimmed,
-                is_approved: true,
-              })
-              .select(
-                "id, product_id, user_id, rating, comment, created_at, express_profiles!express_reviews_user_id_fkey(full_name, avatar_url)",
-              )
+              .from("express_product_reel_comments")
+              .insert({ product_id: productId, user_id: user.id, comment: trimmed })
+              .select(REEL_COMMENT_FIELDS)
               .single();
             if (error) throw error;
-            const saved = data;
 
-            const profile = Array.isArray(saved.express_profiles)
-              ? saved.express_profiles[0]
-              : saved.express_profiles;
-            const newComment = {
-              id: saved.id,
-              review_id: saved.id,
-              user_id: saved.user_id,
-              rating: saved.rating,
-              comment: saved.comment,
-              created_at: saved.created_at,
-              author_name: profile?.full_name || "You",
-              author_avatar: profile?.avatar_url || null,
-            };
-
-            // Prepend the new comment to the top of the list.
-            setComments((prev) => [newComment, ...prev]);
-            setCommentCount((c) => c + 1);
+            setComments((prev) => [toComment(data, "reel", "You"), ...prev]);
+            setCommentCount((count) => count + 1);
             setCommentText("");
-            toast.success(
-              "Comment posted",
-              "Your comment was added to the product",
-            );
           } catch (err) {
-            toast.error("Error", err.message);
+            toast.error("Couldn't post comment", err.message);
           } finally {
+            postingComment.current = false;
             setCommentPosting(false);
           }
         }, [commentText, user, productId, toast]);
@@ -1208,7 +1201,14 @@ export const FeedScreen = ({ route, navigation }) => {
                       contentContainerStyle={styles.commentListContent}
                       keyboardShouldPersistTaps="always"
                     >
-                      {comments.length === 0 ? (
+                      {commentsError && (
+                        <Pressable onPress={loadComments} style={styles.commentEmpty}>
+                          <Text style={styles.commentEmptyText}>
+                            Some comments couldn't load. Tap to retry.
+                          </Text>
+                        </Pressable>
+                      )}
+                      {!commentsError && comments.length === 0 ? (
                         <View style={styles.commentEmpty}>
                           <View style={styles.commentEmptyIcon}>
                             <Ionicons
@@ -1248,8 +1248,8 @@ export const FeedScreen = ({ route, navigation }) => {
                                 <Text style={styles.commentAuthor}>
                                   {c.author_name}
                                 </Text>
-                                {c.rating ? (
-                                  <View style={styles.commentStars}>
+                                {c.source === "review" ? (
+                                  <View style={styles.commentStars} accessibilityLabel={`Product review, ${c.rating} out of 5 stars`}>
                                     {[1, 2, 3, 4, 5].map((s) => (
                                       <Ionicons
                                         key={s}
@@ -1265,6 +1265,9 @@ export const FeedScreen = ({ route, navigation }) => {
                                   </View>
                                 ) : null}
                               </View>
+                              {c.source === "review" && (
+                                <Text style={styles.commentReviewLabel}>Product review</Text>
+                              )}
                               <Text style={styles.commentText}>
                                 {c.comment}
                               </Text>
@@ -1278,21 +1281,22 @@ export const FeedScreen = ({ route, navigation }) => {
                   <View style={styles.commentInputRow}>
                     <TextInput
                       style={styles.commentInput}
-                      placeholder="Add a comment…"
+                      placeholder="Comment on this Reel…"
                       placeholderTextColor={themeColors.muted}
                       value={commentText}
                       onChangeText={setCommentText}
                       multiline
+                      maxLength={1000}
                       editable={!commentPosting}
                     />
                     <Pressable
                       style={[
                         styles.commentSendBtn,
-                        (!commentText.trim() || commentPosting) &&
+                        (!commentText.trim() || commentPosting || commentsLoading) &&
                           styles.commentSendBtnDisabled,
                       ]}
                       onPress={handleSendComment}
-                      disabled={!commentText.trim() || commentPosting}
+                      disabled={!commentText.trim() || commentPosting || commentsLoading}
                     >
                       {commentPosting ? (
                         <ActivityIndicator size="small" color="#fff" />
@@ -1840,6 +1844,11 @@ const buildFeedStyles = (c) =>
       fontSize: 13,
       fontWeight: "700",
       color: c.dark,
+      marginBottom: 2,
+    },
+    commentReviewLabel: {
+      color: c.muted,
+      fontSize: 11,
       marginBottom: 2,
     },
     commentText: {

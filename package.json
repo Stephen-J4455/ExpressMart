@@ -11,7 +11,8 @@
     "ios": "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK=1 expo run:ios",
     "web": "expo start --web",
     "postinstall": "node scripts/patch-dom-webview.js",
-    "deploy:functions:production": "bash /run/media/stephenj/4D95FDD44D7E4AC2/Projects/tagit/tagit/supabase/deploy-functions.sh"
+    "deploy:functions": "bash supabase/deploy-functions.sh",
+    "deploy:functions:production": "bash supabase/deploy-functions.sh"
   },
   "dependencies": {
     "@expo/dom-webview": "57.0.1",

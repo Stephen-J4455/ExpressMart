@@ -382,19 +382,30 @@ export async function fetchProductReels(
 
   let likesByProductId: Record<string, number> = {};
   let commentsByProductId: Record<string, number> = {};
+  const reelCommentsByProductId: Record<string, number> = {};
 
   if (includeEngagement && productIds.length > 0) {
-    const [{ data: wishlistRows }, { data: reviewRows }] = await Promise.all([
-      supabase
-        .from("express_wishlists")
-        .select("product_id")
-        .in("product_id", productIds),
-      supabase
-        .from("express_reviews")
-        .select("product_id, comment")
-        .in("product_id", productIds)
-        .eq("is_approved", true),
-    ]);
+    const [{ data: wishlistRows }, { data: reviewRows }, { data: reelRows }] =
+      await Promise.all([
+        supabase
+          .from("express_wishlists")
+          .select("product_id")
+          .in("product_id", productIds),
+        supabase
+          .from("express_reviews")
+          .select("product_id, comment")
+          .in("product_id", productIds)
+          .eq("is_approved", true),
+        supabase
+          .from("express_products")
+          .select("id, express_product_reel_comments(count)")
+          .in("id", productIds),
+      ]);
+
+    for (const row of reelRows ?? []) {
+      reelCommentsByProductId[row.id] =
+        row.express_product_reel_comments?.[0]?.count ?? 0;
+    }
 
     likesByProductId = (wishlistRows ?? []).reduce(
       (acc: Record<string, number>, row: { product_id?: string | null }) => {
@@ -435,7 +446,8 @@ export async function fetchProductReels(
       view_count: product.view_count || 0,
       total_ratings: product.total_ratings || 0,
       likes_count: likesByProductId[product.id] || 0,
-      comments_count: commentsByProductId[product.id] || 0,
+      comments_count:
+        (commentsByProductId[product.id] || 0) + (reelCommentsByProductId[product.id] || 0),
     }))
     // Don't show videos from inactive stores.
     .filter((product: any) => {

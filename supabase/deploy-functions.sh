@@ -3,12 +3,11 @@
 # deploy-functions.sh
 #
 # Pushes all Supabase Edge Functions in tagit/supabase/functions to the
-# linked Supabase project.
+# ExpressMart Supabase project by default.
 #
 # Prerequisites:
 #   - Supabase CLI installed (npm install -g supabase)
 #   - Logged in (supabase login)
-#   - Project linked (supabase link --project-ref <ref>)
 #
 # Environment variables (optional, with sensible defaults):
 #   SUPABASE_PROJECT_REF   Supabase project ref (e.g. meiljgoztnhnyvtfkzuh)
@@ -25,9 +24,13 @@ FUNCTIONS_DIR="${FUNCTIONS_DIR:-${SCRIPT_DIR}/functions}"
 # Optional single-function deploy: first arg is the function name
 DEPLOY_FUNC="${1:-}"
 
-# Supabase CLI resolves paths relative to CWD, so run from the script dir
-cd "${SCRIPT_DIR}"
 SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-meiljgoztnhnyvtfkzuh}"
+
+if [[ "$DEPLOY_FUNC" == "--help" || "$DEPLOY_FUNC" == "-h" ]]; then
+  printf 'Usage: %s [function-name]\n' "$0"
+  printf 'Deploy one Edge Function or all local functions with an index.ts entry point.\n'
+  exit 0
+fi
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 log()  { printf '[deploy-functions] %s\n' "$*"; }
@@ -40,6 +43,9 @@ require_cmd() {
 
 # ── Validate environment ───────────────────────────────────────────────────
 require_cmd supabase
+if (( $# > 1 )); then
+  die "Usage: $0 [function-name]"
+fi
 
 if [[ ! -d "${FUNCTIONS_DIR}" ]]; then
   die "Functions directory not found: ${FUNCTIONS_DIR}"
@@ -61,18 +67,8 @@ fi
 
 log "Found ${#VALID_FUNCTIONS[@]} deployable function(s): ${VALID_FUNCTIONS[*]}"
 
-# ── Ensure Supabase CLI is authenticated ───────────────────────────────────
-if [[ -n "${SUPABASE_ACCESS_TOKEN:-}" ]]; then
-  export SUPABASE_ACCESS_TOKEN
-  log "Using SUPABASE_ACCESS_TOKEN for authentication"
-elif ! supabase projects list >/dev/null 2>&1; then
-  die "Not logged into Supabase. Run 'supabase login' or set SUPABASE_ACCESS_TOKEN."
-fi
-
-# ── Link project if not already linked ─────────────────────────────────────
-if ! supabase status --remote "${SUPABASE_PROJECT_REF}" >/dev/null 2>&1; then
-  log "Linking project ref: ${SUPABASE_PROJECT_REF}"
-  supabase link --project-ref "${SUPABASE_PROJECT_REF}" || die "Failed to link project"
+if [[ -n "$DEPLOY_FUNC" && ! -f "$FUNCTIONS_DIR/$DEPLOY_FUNC/index.ts" ]]; then
+  die "Function '$DEPLOY_FUNC' not found or not deployable (no index.ts entry point)"
 fi
 
 # ── Deploy each function ───────────────────────────────────────────────────
@@ -86,7 +82,7 @@ for func in "${VALID_FUNCTIONS[@]}"; do
   fi
 
   log "Deploying function: ${func}"
-  if supabase functions deploy "${func}" --remote="${SUPABASE_PROJECT_REF}" --yes; then
+  if supabase --workdir "${PROJECT_ROOT}" functions deploy "${func}" --remote="${SUPABASE_PROJECT_REF}" --yes; then
     DEPLOYED=$((DEPLOYED + 1))
     log "✓ Deployed ${func}"
   else
@@ -96,10 +92,6 @@ for func in "${VALID_FUNCTIONS[@]}"; do
 done
 
 # ── Summary ────────────────────────────────────────────────────────────────
-if [[ -n "${DEPLOY_FUNC}" && ${DEPLOYED} -eq 0 ]]; then
-  die "Function '${DEPLOY_FUNC}' not found or not deployable (no index.ts entrypoint)"
-fi
-
 log "Deployment complete: ${DEPLOYED} succeeded, ${FAILED} failed"
 
 if [[ ${FAILED} -gt 0 ]]; then
