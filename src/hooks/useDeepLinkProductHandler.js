@@ -78,7 +78,7 @@ export const fetchProductBySku = async (sku) => {
   try {
     const { data, error } = await supabase
       .from("express_products")
-      .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+      .select("*, seller_id(id,name,avatar,rating,total_ratings,badges,social_whatsapp)")
       .eq("sku", sku)
       .not("status", "in", "(draft,rejected,archived)")
       .limit(1)

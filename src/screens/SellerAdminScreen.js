@@ -28,6 +28,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { ProductPhotoCropper } from "../components/ProductPhotoCropper";
 // expo-file-system v57 deprecated createUploadTask on the main entry (it now
 // throws). The working implementation lives in the legacy subpath, which is
 // exactly what we need to stream the raw video bytes to R2 via a binary PUT.
@@ -551,7 +553,15 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [description, setDescription] = useState("");
   const [discount, setDiscount] = useState(0);
   const [imageUris, setImageUris] = useState([]);
-  const [imageFiles, setImageFiles] = useState({});
+  const [pickingProductPhoto, setPickingProductPhoto] = useState(false);
+  const productPhotoRequestRef = useRef(null);
+  const [productPhotoBatch, setProductPhotoBatch] = useState(null);
+  useEffect(() => {
+    if (Platform.OS !== "web" || !productPhotoBatch) return;
+    return () => {
+      productPhotoBatch.forEach((asset) => URL.revokeObjectURL(asset.uri));
+    };
+  }, [productPhotoBatch]);
   const [imageCompression, setImageCompression] = useState({});
   const [generatingProduct, setGeneratingProduct] = useState(false);
   const [agentActivity, setAgentActivity] = useState([]);
@@ -561,7 +571,14 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [agentPromptVisible, setAgentPromptVisible] = useState(false);
   const agentPromptResolverRef = useRef(null);
   const agentRunRef = useRef(null);
+  const autoCreateBusy = agentPromptVisible || generatingProduct;
   const cancelProductAgent = useCallback(() => {
+    const resolvePrompt = agentPromptResolverRef.current;
+    agentPromptResolverRef.current = null;
+    if (resolvePrompt) {
+      setAgentPromptVisible(false);
+      resolvePrompt({ cancelled: true });
+    }
     if (agentRunRef.current) {
       agentRunRef.current.abort();
       setAgentActivity((previous) => [
@@ -750,6 +767,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     useState(false);
   const isMediaCompressionActive = useMemo(
     () =>
+      pickingProductPhoto ||
       imageUris.some(
         (uri) =>
           !imageCompression[uri] ||
@@ -759,8 +777,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         (!videoCompression[videoUri] ||
           videoCompression[videoUri]?.status === "compressing")) ||
       (!!pendingVideo && pendingVideo.status === "compressing"),
-    [imageCompression, imageUris, pendingVideo, videoCompression, videoUri],
+    [imageCompression, imageUris, pendingVideo, pickingProductPhoto, videoCompression, videoUri],
   );
+  const continueDisabled = submitting || autoCreateBusy || isMediaCompressionActive;
   // Per-video popup menu (kebab) — holds the reel being acted on.
   const [cardMenu, setCardMenu] = useState(null); // reel object or null
   const [deleteConfirmProduct, setDeleteConfirmProduct] = useState(null); // product awaiting delete confirmation
@@ -1542,7 +1561,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setDescription("");
     setDiscount(0);
     setImageUris([]);
-    setImageFiles({});
+    productPhotoRequestRef.current = null;
+    setPickingProductPhoto(false);
+    setProductPhotoBatch(null);
     setImageCompression({});
     setAgentActivity([]);
     setExistingImageUrls([]);
@@ -1652,7 +1673,9 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setExistingImageUrls(current);
     setRemovingImageUrl(null);
     setImageUris([]);
-    setImageFiles({});
+    productPhotoRequestRef.current = null;
+    setPickingProductPhoto(false);
+    setProductPhotoBatch(null);
     setImageCompression({});
     setVideoUri(null);
     setVideoFile(null);
@@ -1702,62 +1725,134 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   };
 
   const pickImage = async () => {
-    const count = imageUris.length + existingImageUrls.length;
-    if (count >= 5) {
+    if (productPhotoRequestRef.current) return;
+    const remaining = 5 - imageUris.length - existingImageUrls.length;
+    if (remaining <= 0) {
       toast.warning("Maximum images", "You can upload up to 5 images");
       return;
     }
-    if (Platform.OS !== "web") {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        toast.error(
-          "Permission needed",
-          "Please grant camera roll permissions",
-        );
+
+    const request = {};
+    productPhotoRequestRef.current = request;
+    setPickingProductPhoto(true);
+    const isWeb = Platform.OS === "web";
+    try {
+      if (!isWeb) {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (productPhotoRequestRef.current !== request) return;
+        if (status !== "granted") {
+          toast.error("Permission needed", "Please grant camera roll permissions");
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 1,
+        allowsMultipleSelection: true,
+        orderedSelection: true,
+        selectionLimit: remaining,
+      });
+      if (result.canceled) return;
+
+      const assets = productPhotoRequestRef.current === request
+        ? result.assets.filter((asset) => asset.width > 0 && asset.height > 0).slice(0, remaining)
+        : [];
+      if (isWeb) {
+        const kept = new Set(assets.map((asset) => asset.uri));
+        result.assets.forEach((asset) => {
+          if (!kept.has(asset.uri)) URL.revokeObjectURL(asset.uri);
+        });
+      }
+      if (productPhotoRequestRef.current !== request) return;
+      if (!assets.length) {
+        toast.error("Couldn't read the selected photos", "Choose a readable image.");
         return;
       }
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 1,
-      allowsMultipleSelection: true,
-      selectionLimit: 5 - count,
-    });
-    if (!result.canceled) {
-      const uris = result.assets.map((a) => a.uri);
-      setImageUris((prev) => [...prev, ...uris]);
-      const compressedImages = await Promise.all(
-        result.assets.map((asset) =>
-          compressProductImage(
-            asset.uri,
-            Platform.OS === "web" ? asset.file || null : null,
-          ),
-        ),
-      );
-      setImageCompression((prev) => {
-        const next = { ...prev };
-        result.assets.forEach((asset, index) => {
-          next[asset.uri] = compressedImages[index];
-        });
-        return next;
-      });
-      if (Platform.OS === "web") {
-        setImageFiles((prev) => {
-          const next = { ...prev };
-          result.assets.forEach((a) => {
-            if (a?.uri && a?.file) {
-              next[a.uri] = {
-                file: a.file,
-                type: a.mimeType || a.file?.type || null,
-                name: a.fileName || a.file?.name || null,
-              };
-            }
-          });
-          return next;
-        });
+      if (result.assets.some((asset) => !asset.width || !asset.height)) {
+        toast.warning("Some photos couldn't be read");
+      }
+      setProductPhotoBatch(assets);
+    } catch (error) {
+      if (productPhotoRequestRef.current === request) {
+        toast.error("Couldn't add photo", error?.message || "Try selecting the photo again.");
+      }
+    } finally {
+      if (productPhotoRequestRef.current === request) {
+        productPhotoRequestRef.current = null;
+        setPickingProductPhoto(false);
       }
     }
+  };
+
+  const applyProductPhotoCrops = async (crops) => {
+    if (!productPhotoBatch || productPhotoRequestRef.current) return;
+    const request = {};
+    productPhotoRequestRef.current = request;
+    setPickingProductPhoto(true);
+    try {
+      const photos = [];
+      // Process sequentially to limit memory when cropping large camera photos.
+      for (const [index, asset] of productPhotoBatch.entries()) {
+        if (productPhotoRequestRef.current !== request) return;
+        if (Platform.OS === "web") {
+          const compressed = await compressProductImage(asset.uri, asset.file || null, {
+            crop: crops[index],
+          });
+          photos.push({ key: asset.uri, compressed });
+          continue;
+        }
+
+        const context = ImageManipulator.manipulate(asset.uri);
+        let image;
+        try {
+          context.crop(crops[index]);
+          if (crops[index].width > 1600) context.resize({ width: 1600 });
+          image = await context.renderAsync();
+          const result = await image.saveAsync({ compress: 0.82, format: SaveFormat.JPEG });
+          const info = await FileSystem.getInfoAsync(result.uri).catch(() => null);
+          photos.push({
+            key: result.uri,
+            compressed: {
+              uri: result.uri,
+              originalSize: asset.fileSize || 0,
+              compressedSize: info?.size || 0,
+              pickedFile: null,
+              contentType: "image/jpeg",
+              fileName: "product.jpg",
+            },
+          });
+        } finally {
+          image?.release();
+          context.release();
+        }
+      }
+
+      if (productPhotoRequestRef.current !== request) return;
+      setImageCompression((prev) => ({
+        ...prev,
+        ...Object.fromEntries(photos.map(({ key, compressed }) => [key, compressed])),
+      }));
+      setImageUris((prev) => [...new Set([...prev, ...photos.map(({ key }) => key)])]);
+      setProductPhotoBatch(null);
+    } catch (error) {
+      if (productPhotoRequestRef.current === request) {
+        toast.error("Couldn't crop photos", error?.message || "Try again or select different photos.");
+      }
+    } finally {
+      if (productPhotoRequestRef.current === request) {
+        productPhotoRequestRef.current = null;
+        setPickingProductPhoto(false);
+      }
+    }
+  };
+
+  const closeProductModal = () => {
+    cancelProductAgent();
+    productPhotoRequestRef.current = null;
+    setPickingProductPhoto(false);
+    setProductPhotoBatch(null);
+    setModalVisible(false);
   };
 
   const uploadImage = async (uri) => {
@@ -1769,12 +1864,8 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       if (!ext || ext.length > 5) return "jpg";
       return ext === "jpeg" ? "jpg" : ext;
     };
-    const picked =
-      Platform.OS === "web" ? imageFiles?.[uri]?.file || null : null;
-    const pickedType =
-      Platform.OS === "web" ? imageFiles?.[uri]?.type || null : null;
-    const compressed =
-      imageCompression?.[uri] || (await compressProductImage(uri, picked));
+    const compressed = imageCompression[uri];
+    if (!compressed) throw new Error("Product photo is still being prepared");
     const ext = compressed.fileName?.split(".").pop() || getExt(compressed.uri);
     const productSegment = storageSegment(title, "product");
     const storeSegment = storageSegment(seller?.name, "store");
@@ -1790,7 +1881,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       pickedFile: compressed.pickedFile,
       folder: r2Folder,
       fileName,
-      contentType: compressed.contentType || pickedType,
+      contentType: compressed.contentType,
     });
     return publicUrl;
   };
@@ -2108,7 +2199,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   };
 
   const generateProductFromImage = async () => {
-    if (agentRunRef.current || submitting) return;
+    if (agentPromptResolverRef.current || agentRunRef.current || submitting) return;
     const firstUri = imageUris[0];
     const compressed = firstUri ? imageCompression?.[firstUri] : null;
     const storedImageReference = existingImageUrls[0];
@@ -2325,6 +2416,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   };
 
   const goToNextProductStep = () => {
+    if (autoCreateBusy || agentPromptResolverRef.current || agentRunRef.current) return;
     if (
       productFormStep === 1 &&
       imageUris.length === 0 &&
@@ -5747,12 +5839,22 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         visible={modalVisible}
         animationType="slide"
         onRequestClose={() => {
-          cancelProductAgent();
-          setModalVisible(false);
+          if (!productPhotoBatch) closeProductModal();
+          else if (!pickingProductPhoto) setProductPhotoBatch(null);
         }}
       >
+        {productPhotoBatch && (
+          <ProductPhotoCropper
+            assets={productPhotoBatch}
+            busy={pickingProductPhoto}
+            colors={themeColors}
+            insets={insets}
+            onCancel={() => setProductPhotoBatch(null)}
+            onApply={applyProductPhotoCrops}
+          />
+        )}
         <KeyboardAvoidingView
-          style={styles.modalContainer}
+          style={[styles.modalContainer, productPhotoBatch && { display: "none" }]}
           behavior="padding"
           keyboardVerticalOffset={0}
         >
@@ -5767,10 +5869,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           >
             <Pressable
               style={styles.modalHeaderBtn}
-              onPress={() => {
-                cancelProductAgent();
-                setModalVisible(false);
-              }}
+              onPress={closeProductModal}
               hitSlop={8}
             >
               <Ionicons name="close" size={22} color={themeColors.dark} />
@@ -6199,7 +6298,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                     ))}
                     {imageUris.map((u) => (
                       <View key={u} style={styles.imageWrap}>
-                        <Image source={{ uri: u }} style={styles.imageThumb} />
+                        <Image source={{ uri: imageCompression[u]?.uri || u }} style={styles.imageThumb} />
                         <Pressable
                           style={styles.imageRemove}
                           onPress={() =>
@@ -6224,24 +6323,29 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                         <Text style={styles.imageSizeText}>
                           {imageCompression[u]?.originalSize
                             ? `${formatBytes(imageCompression[u].originalSize)} -> ${formatBytes(imageCompression[u].compressedSize)}`
-                            : "Compressing..."}
+                            : ""}
                         </Text>
                       </View>
                     ))}
                     {imageUris.length + existingImageUrls.length < 5 && (
-                      <Pressable style={styles.imageAdd} onPress={pickImage}>
-                        <Ionicons
-                          name="camera-outline"
-                          size={26}
-                          color={accent}
-                        />
+                      <Pressable
+                        style={styles.imageAdd}
+                        onPress={pickImage}
+                        disabled={pickingProductPhoto}
+                      >
+                        {pickingProductPhoto ? (
+                          <ActivityIndicator color={accent} />
+                        ) : (
+                          <Ionicons name="camera-outline" size={26} color={accent} />
+                        )}
                         <Text style={[styles.imageAddText, { color: accent }]}>
-                          Add photo
+                          {pickingProductPhoto ? "Preparing…" : "Add photos"}
                         </Text>
                       </Pressable>
                     )}
                   </View>
                   <Text style={styles.hintText}>
+                    Select photos together and adjust each square crop.
                     The first photo becomes the cover image.
                   </Text>
                 </View>
@@ -6623,7 +6727,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 style={[styles.stepButton, styles.agentButton]}
                 onPress={generateProductFromImage}
                 disabled={
-                  generatingProduct ||
+                  autoCreateBusy ||
                   submitting ||
                   isMediaCompressionActive ||
                   (imageUris.length === 0 && existingImageUrls.length === 0)
@@ -6646,11 +6750,11 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 style={[
                   styles.stepButton,
                   { backgroundColor: accent, flex: 1 },
+                  continueDisabled && { opacity: 0.5 },
                 ]}
                 onPress={goToNextProductStep}
-                disabled={
-                  submitting || generatingProduct || isMediaCompressionActive
-                }
+                disabled={continueDisabled}
+                accessibilityState={{ disabled: continueDisabled, busy: generatingProduct }}
               >
                 <Text style={styles.stepButtonText}>Continue</Text>
                 <Ionicons
@@ -6722,24 +6826,28 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                 The agent will use these values to fill the price and quantity
                 fields.
               </Text>
-              <Text style={styles.label}>Price (GH₵)</Text>
-              <TextInput
-                style={styles.input}
-                value={agentPriceInput}
-                onChangeText={setAgentPriceInput}
-                keyboardType="decimal-pad"
-                placeholder="e.g. 120.00"
-                placeholderTextColor={themeColors.muted}
-              />
-              <Text style={[styles.label, { marginTop: 12 }]}>Quantity</Text>
-              <TextInput
-                style={styles.input}
-                value={agentQuantityInput}
-                onChangeText={setAgentQuantityInput}
-                keyboardType="number-pad"
-                placeholder="e.g. 25"
-                placeholderTextColor={themeColors.muted}
-              />
+              <View style={styles.agentPromptFields}>
+                <Text style={styles.label}>Price (GH₵)</Text>
+                <TextInput
+                  style={styles.input}
+                  accessibilityLabel="Price in Ghana cedis"
+                  value={agentPriceInput}
+                  onChangeText={setAgentPriceInput}
+                  keyboardType="decimal-pad"
+                  placeholder="e.g. 120.00"
+                  placeholderTextColor={themeColors.muted}
+                />
+                <Text style={styles.label}>Quantity</Text>
+                <TextInput
+                  style={styles.input}
+                  accessibilityLabel="Quantity"
+                  value={agentQuantityInput}
+                  onChangeText={setAgentQuantityInput}
+                  keyboardType="number-pad"
+                  placeholder="e.g. 25"
+                  placeholderTextColor={themeColors.muted}
+                />
+              </View>
               <View style={styles.confirmButtonRow}>
                 <Pressable
                   style={[styles.confirmButton, styles.confirmCancelButton]}
@@ -8056,6 +8164,10 @@ const buildSellerAdminStyles = (c) =>
       color: c.muted,
       textAlign: "center",
       marginBottom: 18,
+    },
+    agentPromptFields: {
+      alignSelf: "stretch",
+      marginBottom: 16,
     },
     confirmButtonRow: {
       flexDirection: "row",

@@ -7,13 +7,17 @@ import {
   View,
   Alert,
   ActivityIndicator,
+  Animated,
+  Easing,
   Dimensions,
   Modal,
   TextInput,
   StatusBar,
   Platform,
+  Linking,
 } from "react-native";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Markdown from "react-native-markdown-display";
@@ -21,6 +25,8 @@ import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import { useShop } from "../context/ShopContext";
+import { useIsFocused } from "@react-navigation/native";
+import { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { useTheme } from "../context/ThemeContext";
@@ -32,7 +38,8 @@ import { FlashSaleCountdown } from "../components/FlashSaleCountdown";
 import { useAds } from "../context/AdsContext";
 import { flashSaleService } from "../services/flashSaleService";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
-import { shareProduct } from "../utils/shareUtils";
+import { getWhatsAppLinks, tryOpenWhatsAppLinks } from "../utils/whatsappLinks";
+import { generateWebUrl, shareProduct } from "../utils/shareUtils";
 import { trackEvent } from "../services/feedPersonalizationService";
 import {
   fetchProductBySku,
@@ -180,6 +187,82 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         }
       : null,
   );
+  const isFocused = useIsFocused();
+  const reduceMotion = useReducedMotion();
+  const chatPulse = useRef(new Animated.Value(0)).current;
+  const chatProductId = product?.seller ? product.id : null;
+
+  useEffect(() => {
+    chatPulse.setValue(0);
+    if (!isFocused || reduceMotion || !chatProductId) return;
+
+    const animation = Animated.loop(
+      Animated.timing(chatPulse, {
+        toValue: 1,
+        duration: 1850,
+        easing: Easing.linear,
+        useNativeDriver: Platform.OS !== "web",
+        isInteraction: false,
+      }),
+    );
+    animation.start();
+
+    return () => animation.stop();
+  }, [chatProductId, chatPulse, isFocused, reduceMotion]);
+
+  const chatIconPulseStyle = useMemo(
+    () => ({
+      transform: [{
+        scale: chatPulse.interpolate({
+          inputRange: [0, 0.14, 0.24, 0.39, 1],
+          outputRange: [1, 1, 1.28, 1, 1],
+        }),
+      }],
+    }),
+    [chatPulse],
+  );
+  const chatWaveStyles = useMemo(
+    () => [0.12, 0.26].map((start) => {
+      const inputRange = [start, start + 0.06, start + 0.43];
+      return {
+        opacity: chatPulse.interpolate({
+          inputRange,
+          outputRange: [0, 0.9, 0],
+          extrapolate: "clamp",
+        }),
+        transform: [{
+          scale: chatPulse.interpolate({
+            inputRange,
+            outputRange: [0.4, 0.85, 3.2],
+            extrapolate: "clamp",
+          }),
+        }],
+      };
+    }),
+    [chatPulse],
+  );
+
+  const renderMessageIcon = (name, size, color) => (
+    <View pointerEvents="none" style={[styles.messageIcon, { width: size, height: size }]}>
+      <Animated.View
+        style={[styles.messageIconLayer, styles.messageGlyph, chatIconPulseStyle]}
+      >
+        <Ionicons name={name} size={size} color={color} />
+      </Animated.View>
+      {chatWaveStyles.map((wave, index) => (
+        <Animated.View
+          key={index}
+          style={[
+            styles.messageIconLayer,
+            styles.chatPulseRing,
+            { borderRadius: size / 2, borderColor: color },
+            wave,
+          ]}
+        />
+      ))}
+    </View>
+  );
+
   const [productAds, setProductAds] = useState([]);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
@@ -326,7 +409,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     try {
       const { data, error } = await supabase
         .from("express_products")
-        .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+        .select("*, seller_id(id,name,avatar,rating,total_ratings,badges,social_whatsapp)")
         .eq("id", product.id)
         .single();
 
@@ -384,7 +467,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         } else {
           const { data, error } = await supabase
             .from("express_products")
-            .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+            .select("*, seller_id(id,name,avatar,rating,total_ratings,badges,social_whatsapp)")
             .eq("id", productId)
             .single();
           if (error) throw error;
@@ -666,7 +749,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         if (productTagList.length > 0) {
           const { data: tagData, error: tagError } = await supabase
             .from("express_products")
-            .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+            .select("*, seller_id(id,name,avatar,rating,total_ratings,badges,social_whatsapp)")
             .eq("status", "active")
             .neq("id", product.id)
             .overlaps("tags", productTagList)
@@ -683,7 +766,7 @@ export const ProductDetailScreen = ({ route, navigation }) => {
         if (similar.length === 0 && product?.category) {
           const { data: categoryData, error: categoryError } = await supabase
             .from("express_products")
-            .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+            .select("*, seller_id(id,name,avatar,rating,total_ratings,badges,social_whatsapp)")
             .eq("status", "active")
             .neq("id", product.id)
             .eq("category", product.category)
@@ -942,6 +1025,30 @@ export const ProductDetailScreen = ({ route, navigation }) => {
     setReviewComment(userReview.comment || "");
     setEditingReview(true);
     setShowReviewModal(true);
+  };
+
+  const whatsAppOptions = { native: Platform.OS !== "web" };
+  const sellerWhatsApp = product?.seller?.social_whatsapp;
+  const hasSellerWhatsApp = getWhatsAppLinks(sellerWhatsApp, whatsAppOptions).length > 0;
+  const sellerMessageColor = hasSellerWhatsApp ? "#168653" : themeColors.primary;
+
+  const handleSellerWhatsApp = async () => {
+    const productUrl = generateWebUrl("product", product.id);
+    const text = [product.title, productUrl].filter(Boolean).join("\n");
+    const links = getWhatsAppLinks(sellerWhatsApp, { ...whatsAppOptions, text });
+    if (links.some((link) => /^https?:\/\/wa\.me\/message\//i.test(link))) {
+      // Business short links can use the seller's preset message instead.
+      const copyLink = Clipboard.setStringAsync(productUrl)
+        .then((copied) => {
+          if (copied) toast.info("Product link copied", "Paste it if the WhatsApp draft omits it.");
+        })
+        .catch(() => {});
+      if (Platform.OS !== "web") await copyLink;
+    }
+
+    if (!(await tryOpenWhatsAppLinks(links, (link) => Linking.openURL(link)))) {
+      toast.error("Unable to open WhatsApp");
+    }
   };
 
   const handleChatWithSeller = () => {
@@ -1495,15 +1602,15 @@ export const ProductDetailScreen = ({ route, navigation }) => {
             <View style={styles.sellerActions}>
               <Pressable
                 style={styles.roundAction}
-                onPress={handleChatWithSeller}
+                onPress={hasSellerWhatsApp ? handleSellerWhatsApp : handleChatWithSeller}
                 accessibilityRole="button"
-                accessibilityLabel="Chat with seller"
+                accessibilityLabel={hasSellerWhatsApp ? "Message seller on WhatsApp" : "Chat with seller"}
               >
-                <Ionicons
-                  name="chatbubble-ellipses"
-                  size={18}
-                  color={themeColors.primary}
-                />
+                {renderMessageIcon(
+                  hasSellerWhatsApp ? "logo-whatsapp" : "chatbubble-ellipses",
+                  18,
+                  sellerMessageColor,
+                )}
               </Pressable>
               <Pressable
                 style={styles.roundAction}
@@ -1921,12 +2028,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
       })()}
 
       <View style={[styles.footer, { paddingBottom: 24 + insets.bottom }]}>
-        <Pressable style={styles.chatButton} onPress={handleChatWithSeller}>
-          <Ionicons
-            name="chatbubble-ellipses"
-            size={24}
-            color={themeColors.primary}
-          />
+        <Pressable
+          style={styles.chatButton}
+          onPress={handleChatWithSeller}
+          accessibilityRole="button"
+          accessibilityLabel="Chat with seller"
+        >
+          {renderMessageIcon("chatbubble-ellipses", 24, themeColors.primary)}
         </Pressable>
         <Pressable
           style={[styles.ctaButton, isOutOfStock && styles.ctaDisabled]}
@@ -2772,6 +2880,28 @@ const buildProductDetailStyles = (c) =>
       justifyContent: "center",
       borderWidth: 1.5,
       borderColor: c.primary + "40",
+    },
+    messageIcon: {
+      position: "relative",
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "visible",
+    },
+    messageIconLayer: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+    },
+    messageGlyph: {
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 1,
+    },
+    chatPulseRing: {
+      borderWidth: 1.5,
+      zIndex: 2,
     },
     ctaButton: {
       flex: 1,

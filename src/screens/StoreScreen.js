@@ -39,7 +39,7 @@ import {
   unhideSeller,
 } from "../utils/hiddenSellers";
 
-import { getWhatsAppLinks } from "../utils/whatsappLinks";
+import { getWhatsAppLinks, tryOpenWhatsAppLinks } from "../utils/whatsappLinks";
 
 const TABS = ["products", "profile", "reviews"];
 
@@ -245,16 +245,9 @@ export const StoreScreen = ({ route, navigation }) => {
         return;
       }
 
-      for (const link of links) {
-        try {
-          await Linking.openURL(link);
-          return;
-        } catch {
-          // Try the next app or the HTTPS link if this one cannot open.
-        }
+      if (!(await tryOpenWhatsAppLinks(links, (link) => Linking.openURL(link)))) {
+        toast.error("Unable to open WhatsApp");
       }
-
-      toast.error("Unable to open WhatsApp");
     },
     [toast],
   );

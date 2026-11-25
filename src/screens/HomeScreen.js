@@ -31,7 +31,10 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { NativeViewGestureHandler } from "react-native-gesture-handler";
+import {
+  NativeViewGestureHandler,
+  ScrollView as GestureScrollView,
+} from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { AppHeader } from "../components/AppHeader";
@@ -57,6 +60,9 @@ import { loadHiddenSellers } from "../utils/hiddenSellers";
 import { injectAdsIntoProducts } from "../utils/adPlacement";
 import { updateTabBarOnScroll, showTabBar } from "../utils/tabBarAutoHide";
 import { useNavigationPreferences } from "../context/NavigationPreferencesContext";
+
+const HomeHorizontalScrollView =
+  Platform.OS === "web" ? ScrollView : GestureScrollView;
 
 const FILTERS = ["For You", "Following", "Trending", "New Arrivals"];
 // Number of categories shown in the horizontal strip on Home — ranked by the
@@ -211,6 +217,7 @@ export const HomeScreen = ({ navigation }) => {
   const [pagerWidth, setPagerWidth] = useState(width);
   const [pagerScrollEnabled, setPagerScrollEnabled] = useState(true);
   const pagerRef = useRef(null);
+  const filterScrollRef = useRef(null);
   const pagerOffsetRef = useRef(0);
   const pagerLockedRef = useRef(false);
   const lockPager = useCallback((locked) => {
@@ -888,14 +895,16 @@ export const HomeScreen = ({ navigation }) => {
         {/* Filter pills — scroll with the feed: hide as you read down, come
           back when you scroll up. */}
         <View style={styles.filterBar}>
-          <ScrollView
+          <HomeHorizontalScrollView
+            ref={filterScrollRef}
             horizontal
+            directionalLockEnabled
+            nestedScrollEnabled
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filterRow}
-            onTouchStart={() => lockPager(true)}
-            onTouchMove={() => lockPager(true)}
-            onTouchEnd={() => lockPager(false)}
-            onTouchCancel={() => lockPager(false)}
+            onTouchStart={Platform.OS === "web" ? () => lockPager(true) : undefined}
+            onTouchEnd={Platform.OS === "web" ? () => lockPager(false) : undefined}
+            onTouchCancel={Platform.OS === "web" ? () => lockPager(false) : undefined}
           >
             {FILTERS.map((filter) => {
               const isActive = filter === activeFilter;
@@ -924,7 +933,7 @@ export const HomeScreen = ({ navigation }) => {
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </HomeHorizontalScrollView>
         </View>
 
         {/* ── Flash Sale strip (inline-injected into the FlatList data, NOT here).
@@ -1206,8 +1215,13 @@ export const HomeScreen = ({ navigation }) => {
             {storefrontHomePane}
           </View>
         ) : (
-          <ScrollView
+          <HomeHorizontalScrollView
             ref={pagerRef}
+            // Give the nested filter strip first chance at native swipes.
+            {...(Platform.OS !== "web" && {
+              waitFor: filterScrollRef,
+              disallowInterruption: false,
+            })}
             horizontal
             pagingEnabled
             directionalLockEnabled
@@ -1222,7 +1236,7 @@ export const HomeScreen = ({ navigation }) => {
           >
             {feedHomePane}
             {storefrontHomePane}
-          </ScrollView>
+          </HomeHorizontalScrollView>
         )}
         {isDesktop ? (
           <View style={[styles.desktopRail, { paddingTop: headerHeight + 8 }]}>

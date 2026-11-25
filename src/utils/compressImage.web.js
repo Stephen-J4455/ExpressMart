@@ -21,36 +21,46 @@ const canvasToBlob = (canvas) =>
     );
   });
 
-export const compressProductImage = async (uri, pickedFile = null) => {
+export const compressProductImage = async (
+  uri,
+  pickedFile = null,
+  { crop } = {},
+) => {
   if (!uri) throw new Error("A local image URI is required");
 
+  const sourceUrl = pickedFile ? URL.createObjectURL(pickedFile) : uri;
   try {
-    const sourceUrl = pickedFile ? URL.createObjectURL(pickedFile) : uri;
     const image = await loadImage(sourceUrl);
-    if (pickedFile) URL.revokeObjectURL(sourceUrl);
-
-    const scale = Math.min(
-      1,
-      MAX_IMAGE_DIMENSION /
-        Math.max(
-          image.naturalWidth || image.width,
-          image.naturalHeight || image.height,
-        ),
-    );
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    const cropWidth = crop?.width ?? width;
+    const cropHeight = crop?.height ?? height;
+    const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(cropWidth, cropHeight));
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(
-      1,
-      Math.round((image.naturalWidth || image.width) * scale),
+    canvas.width = Math.max(1, Math.round(cropWidth * scale));
+    canvas.height = Math.max(1, Math.round(cropHeight * scale));
+    canvas.getContext("2d").drawImage(
+      image,
+      crop?.originX ?? 0,
+      crop?.originY ?? 0,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
     );
-    canvas.height = Math.max(
-      1,
-      Math.round((image.naturalHeight || image.height) * scale),
-    );
-    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
 
     const compressedFile = await canvasToBlob(canvas);
     return {
-      uri,
+      uri: crop
+        ? await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(compressedFile);
+          })
+        : uri,
       originalSize: pickedFile?.size || 0,
       compressedSize: compressedFile.size || 0,
       pickedFile: compressedFile,
@@ -58,6 +68,7 @@ export const compressProductImage = async (uri, pickedFile = null) => {
       fileName: `product-${Date.now()}.jpg`,
     };
   } catch (error) {
+    if (crop) throw error;
     console.warn(
       "Product image compression failed; uploading original:",
       error,
@@ -70,6 +81,8 @@ export const compressProductImage = async (uri, pickedFile = null) => {
       contentType: pickedFile?.type || null,
       fileName: null,
     };
+  } finally {
+    if (pickedFile) URL.revokeObjectURL(sourceUrl);
   }
 };
 
