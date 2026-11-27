@@ -20,6 +20,7 @@ import { useChat } from "../context/ChatContext";
 import { useShop } from "../context/ShopContext";
 import { useAds } from "../context/AdsContext";
 import { useAuth } from "../context/AuthContext";
+import { useNotifications } from "../context/NotificationContext";
 import { radius } from "../theme/colors";
 import { useTheme } from "../context/ThemeContext";
 import { useAppStyles } from "../hooks/useAppStyles";
@@ -167,7 +168,7 @@ export const ChatsScreen = ({ navigation, route }) => {
   const { followedSellers } = useShop();
   const { fetchAdsByPlacement } = useAds();
   const [refreshing, setRefreshing] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { unreadCount } = useNotifications();
 
   // ChatContext.syncWithServer now returns both buyer and seller conversations,
   // so keep this screen's buyer list scoped to conversations where the user is
@@ -177,26 +178,6 @@ export const ChatsScreen = ({ navigation, route }) => {
     [conversations, user?.id],
   );
 
-  // Real-time unread notification count badge
-  useEffect(() => {
-    if (!supabase || !user?.id) {
-      setUnreadCount(0);
-      return;
-    }
-    let active = true;
-    supabase
-      .from("express_notifications")
-      .select("id", { head: true, count: "exact" })
-      .eq("user_id", user.id)
-      .eq("is_read", false)
-      .then(({ count, error }) => {
-        if (active && !error) setUnreadCount(count || 0);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [user?.id]);
   // Seeded synchronously from the background prefetch cache so the screen
   // renders with content on the very first paint (no empty flash).
   const [followedStatuses, setFollowedStatuses] = useState(

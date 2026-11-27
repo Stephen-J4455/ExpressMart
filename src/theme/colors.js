@@ -38,6 +38,7 @@ const LIGHT_NEUTRALS = {
   background: "#ffffff",
   splashback: "#ffffff",
   muted: "#64748B",
+  unreadNotification: "#F0F9FF",
   // Alpha tints derived from the neutral tokens — used for chips, borders,
   // backdrops and hover/press states so they adapt to light/dark mode.
   overlay: "rgba(15, 23, 42, 0.45)", // modal / drawer backdrop
@@ -55,6 +56,7 @@ const DARK_NEUTRALS = {
   background: "#070B14",
   splashback: "#1E293B",
   muted: "#94A3B8",
+  unreadNotification: "#1E293B",
   overlay: "rgba(0, 0, 0, 0.6)",
   scrim: "rgba(0, 0, 0, 0.55)",
   whiteAlpha: "rgba(241, 245, 249, 0.9)",

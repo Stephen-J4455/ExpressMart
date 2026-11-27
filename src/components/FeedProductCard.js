@@ -190,6 +190,7 @@ export const FeedProductCard = memo(function FeedProductCard({
   product,
   onPress,
   isVideoActive = false,
+  isPlaybackAllowed = true,
   showVideo = true,
   loadImages = true,
 }) {
@@ -755,7 +756,7 @@ export const FeedProductCard = memo(function FeedProductCard({
               source={{ uri: resolveMediaUrl(videoUrl, R2_FOLDERS.PRODUCTS) }}
               style={[StyleSheet.absoluteFill, !videoReady && styles.videoHidden]}
               resizeMode="cover"
-              paused={!isVideoActive || videoPaused}
+              paused={!isPlaybackAllowed || !isVideoActive || videoPaused}
               muted={videoMuted}
               repeat
               onLoad={(meta) => {

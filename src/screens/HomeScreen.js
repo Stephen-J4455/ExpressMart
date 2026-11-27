@@ -36,7 +36,7 @@ import {
   ScrollView as GestureScrollView,
 } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { AppHeader } from "../components/AppHeader";
 import { FeedProductCard } from "../components/FeedProductCard";
 import { FeedCardPlaceholder } from "../components/FeedCardPlaceholder";
@@ -90,6 +90,7 @@ const getFeedProductId = (item) => {
 const areHomeFeedItemPropsEqual = (previous, next) =>
   previous.item === next.item &&
   previous.isVideoActive === next.isVideoActive &&
+  previous.isPlaybackAllowed === next.isPlaybackAllowed &&
   previous.loadImages === next.loadImages &&
   previous.navigation === next.navigation &&
   previous.styles === next.styles &&
@@ -98,6 +99,7 @@ const areHomeFeedItemPropsEqual = (previous, next) =>
 const HomeFeedItem = memo(function HomeFeedItem({
   item,
   isVideoActive,
+  isPlaybackAllowed,
   loadImages,
   navigation,
   styles,
@@ -176,6 +178,7 @@ const HomeFeedItem = memo(function HomeFeedItem({
         <FeedProductCard
           product={item.product}
           isVideoActive={isVideoActive}
+          isPlaybackAllowed={isPlaybackAllowed}
           loadImages={loadImages}
         />
       </View>
@@ -194,6 +197,7 @@ const HomeFeedItem = memo(function HomeFeedItem({
 }, areHomeFeedItemPropsEqual);
 
 export const HomeScreen = ({ navigation }) => {
+  const isFocused = useIsFocused();
   const { colors: c } = useTheme();
   const { homeStyle } = useNavigationPreferences();
   const styles = useAppStyles(buildHomeStyles);
@@ -833,13 +837,14 @@ export const HomeScreen = ({ navigation }) => {
       <HomeFeedItem
         item={item}
         isVideoActive={visibleVideoId === String(item?.id)}
+        isPlaybackAllowed={isFocused}
         loadImages={loadedImageIds.has(String(getFeedProductId(item) ?? ""))}
         navigation={navigation}
         styles={styles}
         lockPager={lockPager}
       />
     ),
-    [loadedImageIds, navigation, styles, visibleVideoId],
+    [isFocused, loadedImageIds, navigation, styles, visibleVideoId],
   );
 
   // Skeleton rows for the initial load — same wrapper as renderFeedItem so

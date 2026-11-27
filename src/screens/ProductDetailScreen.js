@@ -1524,6 +1524,13 @@ export const ProductDetailScreen = ({ route, navigation }) => {
                 </Text>
               </View>
 
+              {product.allow_pay_on_delivery === true && (
+                <View style={styles.metaChip}>
+                  <Ionicons name="cash-outline" size={13} color="#059669" />
+                  <Text style={styles.metaChipText}>Pay on delivery</Text>
+                </View>
+              )}
+
               {/* Badges — shipping/delivery badges are filtered out so they
                   don't duplicate the shipping chip above. */}
               {(() => {

@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
+import { useNotifications } from "../context/NotificationContext";
 import { useToast } from "../context/ToastContext";
 import { supabase } from "../lib/supabase";
 import { useTheme } from "../context/ThemeContext";
@@ -47,6 +48,7 @@ export const NotificationsScreen = ({ navigation }) => {
   };
   const styles = useAppStyles((c) => buildNotificationsStyles(c));
   const { user } = useAuth();
+  const { unreadCount, refreshUnreadCount } = useNotifications();
   const toast = useToast();
   const { cardColumns, horizontalPadding, getItemWidth } = useResponsive();
   const cardItemWidth = getItemWidth(cardColumns);
@@ -97,7 +99,23 @@ export const NotificationsScreen = ({ navigation }) => {
             filter: `user_id=eq.${user.id}`,
           },
           (payload) => {
-            setNotifications((prev) => [payload.new, ...prev]);
+            setNotifications((prev) =>
+              [payload.new, ...prev.filter((n) => n.id !== payload.new.id)].slice(0, 50),
+            );
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "express_notifications",
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            setNotifications((prev) =>
+              prev.map((n) => (n.id === payload.new.id ? { ...n, ...payload.new } : n)),
+            );
           },
         )
         .subscribe();
@@ -111,17 +129,21 @@ export const NotificationsScreen = ({ navigation }) => {
   }, [fetchNotifications, user]);
 
   const markAsRead = async (notificationId) => {
-    if (!supabase) return;
+    if (!supabase || !user) return;
     try {
-      await supabase
+      const { error } = await supabase
         .from("express_notifications")
         .update({ is_read: true })
-        .eq("id", notificationId);
+        .eq("id", notificationId)
+        .eq("user_id", user.id)
+        .eq("is_read", false);
+      if (error) throw error;
       setNotifications((prev) =>
         prev.map((n) =>
           n.id === notificationId ? { ...n, is_read: true } : n,
         ),
       );
+      refreshUnreadCount();
     } catch (err) {
       console.error("Error marking notification as read:", err);
     }
@@ -130,25 +152,34 @@ export const NotificationsScreen = ({ navigation }) => {
   const markAllAsRead = async () => {
     if (!supabase || !user) return;
     try {
-      await supabase
+      const { data, error } = await supabase
         .from("express_notifications")
         .update({ is_read: true })
         .eq("user_id", user.id)
-        .eq("is_read", false);
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+        .eq("is_read", false)
+        .select("id");
+      if (error) throw error;
+      const readIds = new Set(data.map((n) => n.id));
+      setNotifications((prev) =>
+        prev.map((n) => (readIds.has(n.id) ? { ...n, is_read: true } : n)),
+      );
+      refreshUnreadCount();
     } catch (err) {
       toast.error("Error", err.message);
     }
   };
 
   const deleteNotification = async (notificationId) => {
-    if (!supabase) return;
+    if (!supabase || !user) return;
     try {
-      await supabase
+      const { error } = await supabase
         .from("express_notifications")
         .delete()
-        .eq("id", notificationId);
+        .eq("id", notificationId)
+        .eq("user_id", user.id);
+      if (error) throw error;
       setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+      refreshUnreadCount();
     } catch (err) {
       toast.error("Error", err.message);
     }
@@ -170,7 +201,7 @@ export const NotificationsScreen = ({ navigation }) => {
   };
 
   const handleNotificationPress = (notification) => {
-    markAsRead(notification.id);
+    if (!notification.is_read) markAsRead(notification.id);
     const orderId = notification.data?.order_id || notification.data?.orderId;
     if (orderId) {
       navigation.navigate("Orders");
@@ -216,8 +247,6 @@ export const NotificationsScreen = ({ navigation }) => {
       </Pressable>
     );
   };
-
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   if (!user) {
     return (
@@ -414,7 +443,7 @@ const buildNotificationsStyles = (c) =>
     elevation: 2,
   },
   unreadCard: {
-    backgroundColor: "#F0F9FF",
+    backgroundColor: c.unreadNotification,
     borderLeftWidth: 3,
     borderLeftColor: c.primary,
   },

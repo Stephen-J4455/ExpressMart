@@ -188,16 +188,12 @@ export const CartScreen = ({ navigation }) => {
         }
         const { data: prods } = await supabase
           .from("express_products")
-          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges)")
+          .select("*, seller_id(id,name,avatar,rating,total_ratings,badges,is_active)")
           .in("id", ids)
           .eq("status", "active");
         if (!mounted) return;
         const mapped = (prods || [])
-          .filter(
-            (p) =>
-              !p.seller_id?.id ||
-              activeSellerIds.has(p.seller_id.id || p.seller_id),
-          )
+          .filter((p) => !isItemFromDisabledStore(p))
           .map((p) => ({
             ...p,
             seller: p.seller_id,
@@ -215,7 +211,7 @@ export const CartScreen = ({ navigation }) => {
     return () => {
       mounted = false;
     };
-  }, [user]);
+  }, [user, isItemFromDisabledStore]);
 
   // Trending fallback: top-rated/discounted products from the shop feed.
   const trendingProducts = useMemo(() => {

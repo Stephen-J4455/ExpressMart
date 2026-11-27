@@ -501,7 +501,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     screen: "SellerAdmin",
     label: "Insights",
   });
-  useTapTarget("sellerAdmin.addProduct", () => setModalVisible(true), {
+  useTapTarget("sellerAdmin.addProduct", () => openCreateModal(), {
     screen: "SellerAdmin",
     label: "Add product",
   });
@@ -615,6 +615,10 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const [trackInventory, setTrackInventory] = useState(true);
   const [allowBackorder, setAllowBackorder] = useState(false);
   const [isPreorder, setIsPreorder] = useState(false);
+  const [allowPayOnDelivery, setAllowPayOnDelivery] = useState(false);
+  const [collectionOrder, setCollectionOrder] = useState(null);
+  const [confirmingCollection, setConfirmingCollection] = useState(false);
+  const collectingPayment = useRef(false);
   const [weightUnit, setWeightUnit] = useState("kg");
   const [slug, setSlug] = useState("");
   const [tags, setTags] = useState([]);
@@ -911,7 +915,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         supabase
           .from("express_orders")
           .select(
-            "id, order_number, user_id, status, total, service_fee, shipping_fee, customer, shipping_address, eta, payment_status, created_at, items:express_order_items(id,title,quantity,price,thumbnail,shipping_fee)",
+            "id, order_number, user_id, status, total, service_fee, shipping_fee, customer, shipping_address, eta, payment_status, payment_method, payment_reference, paid_at, created_at, items:express_order_items(id,title,quantity,price,thumbnail,shipping_fee)",
           )
           .eq("seller_id", s.id)
           .order("created_at", { ascending: false })
@@ -1506,16 +1510,21 @@ export const SellerAdminScreen = ({ navigation, route }) => {
   const advanceOrderStatus = useCallback(
     async (orderId, status) => {
       const existing = orders.find((o) => o.id === orderId);
-      const updates = { status, updated_at: new Date().toISOString() };
-      if (status === "shipped") updates.shipped_at = new Date().toISOString();
-      if (status === "delivered")
-        updates.delivered_at = new Date().toISOString();
-
-      const { error } = await supabase
-        .from("express_orders")
-        .update(updates)
-        .eq("id", orderId);
-      if (error) throw error;
+      let updates = { status, updated_at: new Date().toISOString() };
+      if (status === "delivered" && existing?.payment_method === "pay_on_delivery") {
+        const response = await callEdgeFunction("pay-on-delivery", {
+          action: "confirm-collection",
+          orderId,
+        });
+        if (!response?.data) throw new Error("Could not confirm collection.");
+        const { status: confirmedStatus, payment_status, paid_at, delivered_at, updated_at } = response.data;
+        updates = { status: confirmedStatus, payment_status, paid_at, delivered_at, updated_at };
+      } else {
+        if (status === "shipped") updates.shipped_at = new Date().toISOString();
+        if (status === "delivered") updates.delivered_at = new Date().toISOString();
+        const { error } = await supabase.from("express_orders").update(updates).eq("id", orderId);
+        if (error) throw error;
+      }
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o)),
       );
@@ -1580,6 +1589,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setTrackInventory(true);
     setAllowBackorder(false);
     setIsPreorder(false);
+    setAllowPayOnDelivery(false);
     setWeightUnit("kg");
     setSlug("");
     setTags([]);
@@ -1652,6 +1662,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
     setTrackInventory(product.track_inventory ?? true);
     setAllowBackorder(product.allow_backorder ?? false);
     setIsPreorder(!!product.is_preorder);
+    setAllowPayOnDelivery(product.allow_pay_on_delivery === true);
     setProductFormStep(1);
     if (product.specifications && typeof product.specifications === "object") {
       setSpecifications(
@@ -2830,6 +2841,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
         track_inventory: trackInventory,
         allow_backorder: allowBackorder,
         is_preorder: isPreorder,
+        allow_pay_on_delivery: allowPayOnDelivery,
         specifications: Object.keys(specsObj).length ? specsObj : null,
       };
       productData.thumbnail = merged[0] || null;
@@ -3594,6 +3606,12 @@ export const SellerAdminScreen = ({ navigation, route }) => {
               <Text style={styles.orderMeta}>
                 {o.customer?.name || "Guest"}
               </Text>
+              {o.payment_method === "pay_on_delivery" && (
+                <Text style={styles.orderMeta}>
+                  {o.payment_status === "success" ? "Payment collected" :
+                    o.status === "canceled" ? "Pay on delivery · canceled" : "Pay on delivery · unpaid"}
+                </Text>
+              )}
             </View>
             <View style={{ alignItems: "flex-end", gap: 6 }}>
               <Text style={styles.orderTotal}>{formatPrice(o.total)}</Text>
@@ -3607,12 +3625,18 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                   styles.progressButton,
                   { backgroundColor: accent + "14" },
                 ]}
-                onPress={() =>
-                  advanceOrderStatus(o.id, nextStatusMap[o.status])
-                }
+                onPress={() => {
+                  if (o.status === "shipped" && o.payment_method === "pay_on_delivery") {
+                    setCollectionOrder(o);
+                  } else {
+                    advanceOrderStatus(o.id, nextStatusMap[o.status])
+                      .catch((error) => toast.error("Couldn’t update order", error.message));
+                  }
+                }}
               >
                 <Text style={[styles.progressText, { color: accent }]}>
-                  Move to {nextStatusMap[o.status]}
+                  {o.status === "shipped" && o.payment_method === "pay_on_delivery"
+                    ? "Confirm collection" : `Move to ${nextStatusMap[o.status]}`}
                 </Text>
               </TouchableOpacity>
             ) : o.status === "delivered" ? (
@@ -4304,6 +4328,7 @@ export const SellerAdminScreen = ({ navigation, route }) => {
       </Modal>
 
       {renderCardMenu()}
+      {collectionOrder && renderCollectionModal()}
     </View>
   );
 
@@ -5005,6 +5030,50 @@ export const SellerAdminScreen = ({ navigation, route }) => {
           )}
         </Pressable>
       </Pressable>
+    </Modal>
+  );
+
+  const renderCollectionModal = () => (
+    <Modal
+      visible={!!collectionOrder}
+      transparent
+      animationType="fade"
+      onRequestClose={() => { if (!confirmingCollection) setCollectionOrder(null); }}
+    >
+      <View style={styles.menuBackdrop}>
+        <View style={styles.confirmCard}>
+          <Text style={styles.confirmTitle}>Confirm payment collected</Text>
+          <Text style={styles.confirmMessage}>
+            Confirm you received {formatPrice(collectionOrder?.total || 0)} for order #{collectionOrder?.order_number}. This marks the order paid and delivered.
+          </Text>
+          <View style={styles.confirmButtonRow}>
+            <Pressable style={[styles.confirmButton, styles.confirmCancelButton]} disabled={confirmingCollection} onPress={() => setCollectionOrder(null)}>
+              <Text style={styles.confirmCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.confirmButton, { backgroundColor: accent }]}
+              disabled={confirmingCollection}
+              onPress={async () => {
+                if (collectingPayment.current || !collectionOrder) return;
+                collectingPayment.current = true;
+                setConfirmingCollection(true);
+                try {
+                  await advanceOrderStatus(collectionOrder.id, "delivered");
+                  setCollectionOrder(null);
+                  toast.success("Payment recorded", "The order is marked delivered.");
+                } catch (error) {
+                  toast.error("Couldn’t confirm collection", error.message);
+                } finally {
+                  collectingPayment.current = false;
+                  setConfirmingCollection(false);
+                }
+              }}
+            >
+              <Text style={styles.confirmDeleteText}>{confirmingCollection ? "Confirming…" : "Confirm"}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
     </Modal>
   );
 
@@ -6258,6 +6327,26 @@ export const SellerAdminScreen = ({ navigation, route }) => {
                       <Text style={styles.checkHint}>
                         Keep selling after stock runs out
                       </Text>
+                    </View>
+                  </Pressable>
+                </View>
+
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Payment options</Text>
+                  <Pressable
+                    style={styles.checkRowItem}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: allowPayOnDelivery }}
+                    onPress={() => setAllowPayOnDelivery((value) => !value)}
+                  >
+                    <Ionicons
+                      name={allowPayOnDelivery ? "checkbox" : "square-outline"}
+                      size={20}
+                      color={allowPayOnDelivery ? accent : themeColors.muted}
+                    />
+                    <View style={styles.checkTextWrap}>
+                      <Text style={styles.checkLabel}>Allow pay on delivery</Text>
+                      <Text style={styles.checkHint}>Collect payment from the customer at delivery.</Text>
                     </View>
                   </Pressable>
                 </View>

@@ -41,13 +41,13 @@ const PAYMENT_METHODS = [
   },
   {
     id: "card",
-    name: "Credit/Debit Card",
+    name: "Card",
     desc: "Visa · Mastercard · Verve",
     logo: <Ionicons name="card" size={20} color="#3B82F6" />,
   },
   {
     id: "bank",
-    name: "Bank Transfer",
+    name: "Bank",
     desc: "Direct bank deposit",
     logo: <Ionicons name="cash" size={20} color="#F59E0B" />,
   },
@@ -60,7 +60,7 @@ export const CheckoutScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const route = useRoute();
   const { user, profile, isAuthenticated } = useAuth();
-  const { items, total, clearCart } = useCart();
+  const { items, total, clearCart, refreshCart } = useCart();
   const toast = useToast();
   const { fetchAdsByPlacement } = useAds();
   // Addresses are preloaded in the background by OrderContext (mounted at
@@ -80,6 +80,8 @@ export const CheckoutScreen = ({ navigation }) => {
   const [promoCode, setPromoCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState(null); // coupon row + resolved scope
   const [paymentMethod, setPaymentMethod] = useState("momo");
+  const [deliveryQuote, setDeliveryQuote] = useState(null);
+  const deliveryAttempt = useRef(null);
   const [promoChecking, setPromoChecking] = useState(false);
 
   const [addresses, setAddresses] = useState([]);
@@ -185,6 +187,24 @@ export const CheckoutScreen = ({ navigation }) => {
   // Customer-facing total: subtotal + shipping − promo discount.
   // Payment initialization and both summary displays derive from this.
   const grandTotal = Math.max(total + totalShippingFee - promoDiscount, 0);
+
+  const canPayOnDelivery = items.length > 0 && items.every(
+    ({ product }) => product?.allow_pay_on_delivery === true,
+  );
+  const payingOnDelivery = paymentMethod === "pay_on_delivery";
+  const deliveryItems = items.map(({ product, quantity, size, color }) => ({
+    product_id: product?.id, quantity, size: size ?? null, color: color ?? null,
+  }));
+  const deliveryKey = JSON.stringify([user?.id, selectedAddress?.id, appliedCoupon?.id, deliveryItems]);
+  const currentQuote = payingOnDelivery && deliveryQuote?.key === deliveryKey ? deliveryQuote : null;
+  const checkoutTotal = currentQuote?.total ?? grandTotal;
+  const summarySubtotal = currentQuote?.subtotal ?? total;
+  const summaryShipping = currentQuote?.shipping ?? totalShippingFee;
+  const summaryDiscount = currentQuote?.discount ?? promoDiscount;
+
+  useEffect(() => {
+    if (!canPayOnDelivery && payingOnDelivery) setPaymentMethod("momo");
+  }, [canPayOnDelivery, payingOnDelivery]);
 
   const applyPromoCode = async () => {
     const code = promoCode.trim().toUpperCase();
@@ -655,6 +675,49 @@ export const CheckoutScreen = ({ navigation }) => {
     try {
       setLoading(true);
 
+      if (payingOnDelivery) {
+        if (!canPayOnDelivery) throw new Error("Some items no longer support pay on delivery.");
+        if (deliveryAttempt.current?.key !== deliveryKey) {
+          deliveryAttempt.current = {
+            key: deliveryKey,
+            reference: reference.replace(/^express_/, "cod_"),
+          };
+        }
+        const codReference = deliveryAttempt.current.reference;
+        const { data } = await callEdgeFunction("pay-on-delivery", {
+          action: "place-order",
+          reference: codReference,
+          addressId: selectedAddress.id,
+          couponId: appliedCoupon?.id ?? null,
+          expectedTotal: Math.round((checkoutTotal + Number.EPSILON) * 100) / 100,
+          items: deliveryItems,
+        });
+        if (data?.price_changed) {
+          setDeliveryQuote({
+            key: deliveryKey,
+            total: Number(data.total),
+            subtotal: Number(data.subtotal),
+            shipping: Number(data.shipping),
+            discount: Number(data.discount),
+          });
+          toast.info("Order total updated", "Review the new total and tap Place Order to confirm.");
+          return;
+        }
+        if (!data?.orders?.length) throw new Error("Could not place your order. Try again.");
+
+        // The transaction removed only the purchased items. Reload the cart
+        // without clearing anything the shopper may have since added.
+        refreshCart();
+        navigation.reset({
+          index: 1,
+          routes: [
+            { name: "Main" },
+            { name: "OrderSuccess", params: { reference: codReference, total: data.total, paymentMethod: "pay_on_delivery" } },
+          ],
+        });
+        return;
+      }
+
       // Order data — split & service fee computation handled entirely server-side.
       // The edge function fetches service_fee_percentage from express_settings and
       // deducts the fee from each seller's subaccount share. Customer pays
@@ -737,9 +800,12 @@ export const CheckoutScreen = ({ navigation }) => {
     } catch (err) {
       console.error("Payment initialization failed:", err);
       toast.error(
-        "Payment Error",
-        err.message || "Could not initialize payment. Please try again.",
+        payingOnDelivery ? "Couldn’t place order" : "Payment Error",
+        err.message || "Please try again.",
       );
+      if (payingOnDelivery && /cart changed|unavailable|enough stock/i.test(err.message || "")) {
+        refreshCart();
+      }
     } finally {
       checkoutInitRef.current = false;
       setLoading(false);
@@ -1105,12 +1171,12 @@ export const CheckoutScreen = ({ navigation }) => {
 
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>GH₵{total.toLocaleString()}</Text>
+            <Text style={styles.summaryValue}>GH₵{summarySubtotal.toLocaleString()}</Text>
           </View>
           <View style={styles.summaryRow}>
             <View style={styles.summaryLabelCluster}>
               <Text style={styles.summaryLabel}>Shipping Fee</Text>
-              {appliedCoupon && totalShippingFee > 0 && (
+              {appliedCoupon && summaryShipping > 0 && (
                 <Text style={styles.summaryNote}>
                   {"\u00B7"} not affected by coupon
                 </Text>
@@ -1119,16 +1185,16 @@ export const CheckoutScreen = ({ navigation }) => {
             <Text
               style={[
                 styles.summaryValue,
-                totalShippingFee === 0 && styles.freeShippingText,
+                summaryShipping === 0 && styles.freeShippingText,
               ]}
             >
-              {totalShippingFee > 0
-                ? `GH₵${totalShippingFee.toLocaleString()}`
+              {summaryShipping > 0
+                ? `GH₵${summaryShipping.toLocaleString()}`
                 : "Free"}
             </Text>
           </View>
           {/* Promo discount line (only when a coupon is applied) */}
-          {promoDiscount > 0 && (
+          {summaryDiscount > 0 && (
             <>
               <View style={styles.divider} />
               <View style={styles.summaryRow}>
@@ -1136,7 +1202,7 @@ export const CheckoutScreen = ({ navigation }) => {
                   Discount ({appliedCoupon?.code})
                 </Text>
                 <Text style={[styles.totalValue, { color: "#10B981" }]}>
-                  -GH₵{promoDiscount.toFixed(2)}
+                  -GH₵{summaryDiscount.toFixed(2)}
                 </Text>
               </View>
             </>
@@ -1147,7 +1213,7 @@ export const CheckoutScreen = ({ navigation }) => {
           <View style={styles.summaryRow}>
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={styles.totalValue}>
-              GH₵{grandTotal.toLocaleString()}
+              GH₵{checkoutTotal.toLocaleString()}
             </Text>
           </View>
         </View>
@@ -1246,23 +1312,53 @@ export const CheckoutScreen = ({ navigation }) => {
             <Ionicons name="card" size={20} color={themeColors.primary} />
             <Text style={styles.sectionTitle}>Payment Method</Text>
           </View>
-          <View style={styles.paymentOptions}>
+          {canPayOnDelivery && (
+            <View style={styles.paymentChoices}>
+              {[
+                { id: "momo", label: "Pay online", icon: "card-outline", description: "Secure checkout with Paystack" },
+                { id: "pay_on_delivery", label: "Pay on delivery", icon: "cash-outline", description: "Pay the seller when your order arrives" },
+              ].map(({ id, label, icon, description }) => {
+                const selected = paymentMethod === id;
+                return (
+                  <Pressable
+                    key={id}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected, disabled: loading }}
+                    onPress={() => setPaymentMethod(id)}
+                    disabled={loading}
+                    style={[styles.paymentOption, selected && styles.paymentOptionSelected]}
+                  >
+                    <Ionicons name={icon} size={20} color={themeColors.primary} />
+                    <View style={styles.paymentOptionTextWrap}>
+                      <Text style={styles.paymentOptionName}>{label}</Text>
+                      <Text style={styles.paymentOptionDesc}>{description}</Text>
+                    </View>
+                    <Ionicons name={selected ? "radio-button-on" : "radio-button-off"} size={20} color={themeColors.primary} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+          {currentQuote && (
+            <Text style={styles.paymentQuoteNotice}>
+              Updated pay-on-delivery total: GH₵{checkoutTotal.toFixed(2)}
+            </Text>
+          )}
+          {!payingOnDelivery && <View style={styles.paymentOptions}>
             {PAYMENT_METHODS.map((method) => (
-              <View key={method.id} style={styles.paymentOption}>
+              <View key={method.id} style={[styles.paymentOption, styles.paymentMethodCard]}>
                 <View style={styles.paymentOptionIcon}>
                   {method.logo}
                 </View>
-                <View style={styles.paymentOptionTextWrap}>
-                  <Text style={styles.paymentOptionName}>
-                    {method.name}
-                  </Text>
-                  <Text style={styles.paymentOptionDesc}>
-                    {method.desc}
-                  </Text>
-                </View>
+                <Text style={[styles.paymentOptionName, styles.paymentMethodText]}>
+                  {method.name}
+                </Text>
+                <Text style={[styles.paymentOptionDesc, styles.paymentMethodText]}>
+                  {method.desc}
+                </Text>
               </View>
             ))}
-          </View>
+          </View>}
         </View>
       </ScrollView>
 
@@ -1271,7 +1367,7 @@ export const CheckoutScreen = ({ navigation }) => {
         <View style={styles.footerTotal}>
           <Text style={styles.footerLabel}>Total</Text>
           <Text style={styles.footerValue}>
-            GH₵{grandTotal.toLocaleString()}
+            GH₵{checkoutTotal.toLocaleString()}
           </Text>
         </View>
         <Pressable
@@ -1293,8 +1389,8 @@ export const CheckoutScreen = ({ navigation }) => {
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Ionicons name="lock-closed" size={18} color="#fff" />
-                <Text style={styles.checkoutText}>Pay Now</Text>
+                <Ionicons name={payingOnDelivery ? "bag-check-outline" : "lock-closed"} size={18} color="#fff" />
+                <Text style={styles.checkoutText}>{payingOnDelivery ? "Place Order" : "Pay Now"}</Text>
               </>
             )}
           </View>
@@ -1624,11 +1720,7 @@ const buildCheckoutStyles = (c) =>
   },
   paymentOptions: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    padding: 12,
-    backgroundColor: c.light,
-    borderRadius: 12,
+    gap: 6,
   },
   paymentOption: {
     flexDirection: "row",
@@ -1636,21 +1728,36 @@ const buildCheckoutStyles = (c) =>
     gap: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: c.border,
     borderRadius: 10,
     minWidth: 150,
   },
+  paymentMethodCard: {
+    flexBasis: 0,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    flexDirection: "column",
+    gap: 4,
+    paddingHorizontal: 4,
+  },
+  paymentMethodText: {
+    alignSelf: "stretch",
+    textAlign: "center",
+  },
+  paymentChoices: { gap: 8, marginBottom: 10 },
+  paymentQuoteNotice: { color: c.dark, fontSize: 13, fontWeight: "600" },
   paymentOptionSelected: {
     borderColor: c.primary,
-    backgroundColor: "#DBEAFE",
+    backgroundColor: c.primary + "12",
   },
   paymentOptionIcon: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: c.surfaceAlpha,
     alignItems: "center",
     justifyContent: "center",
   },

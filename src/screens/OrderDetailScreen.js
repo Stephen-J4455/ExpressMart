@@ -347,7 +347,19 @@ export const OrderDetailScreen = () => {
                 <Text style={styles.paymentMethodValue}>
                   {order.payment_method === "paystack"
                     ? "Paystack"
-                    : order.payment_method}
+                    : order.payment_method === "pay_on_delivery"
+                      ? "Pay on delivery"
+                      : order.payment_method}
+                </Text>
+              </View>
+            )}
+
+            {order.payment_method === "pay_on_delivery" && (
+              <View style={styles.paymentMethodRow}>
+                <Text style={styles.paymentMethodLabel}>Payment Status</Text>
+                <Text style={styles.paymentMethodValue}>
+                  {order.payment_status === "success" ? "Payment collected" :
+                    order.status === "canceled" ? "Canceled" : "Due on delivery"}
                 </Text>
               </View>
             )}

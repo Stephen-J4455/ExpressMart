@@ -43,7 +43,8 @@ export const OrderSuccessScreen = ({ route, navigation }) => {
   const { colors } = useTheme();
   const styles = useAppStyles(buildStyles);
   const insets = useSafeAreaInsets();
-  const { reference, total } = route.params || {};
+  const { reference, total, paymentMethod } = route.params || {};
+  const payOnDelivery = paymentMethod === "pay_on_delivery";
 
   // ── Animation values ──────────────────────────────────────────────────────
   const badgeScale = useRef(new Animated.Value(0)).current;
@@ -332,8 +333,9 @@ export const OrderSuccessScreen = ({ route, navigation }) => {
             },
           ]}
         >
-          Thank you for shopping with us. Your order has been received and is
-          being prepared.
+          {payOnDelivery
+            ? `Your order is being prepared. Pay each seller on delivery. Total due: GH₵${Number(total).toFixed(2)}.`
+            : "Thank you for shopping with us. Your order has been received and is being prepared."}
         </Animated.Text>
 
         {!!reference && (
@@ -347,7 +349,7 @@ export const OrderSuccessScreen = ({ route, navigation }) => {
             <View style={styles.refRow}>
               <Ionicons name="receipt-outline" size={15} color={colors.primary} />
               <Text style={[styles.refLabel, { color: colors.muted }]}>
-                Payment reference
+                {payOnDelivery ? "Order reference" : "Payment reference"}
               </Text>
             </View>
             <Text

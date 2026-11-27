@@ -55,6 +55,7 @@ const mapProduct = (product) => ({
   discount: product.discount || 0,
   quantity: product.quantity || 0,
   is_preorder: product.is_preorder || false,
+  allow_pay_on_delivery: product.allow_pay_on_delivery === true,
   allow_backorder: product.allow_backorder || false,
   sizes: product.sizes || [],
   colors: product.colors || [],

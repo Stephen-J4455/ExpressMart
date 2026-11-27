@@ -103,6 +103,56 @@ export const NotificationProvider = ({ children, userId }) => {
   const responseListener = useRef();
   const deviceTokenListener = useRef();
   const appState = useRef(AppState.currentState);
+  const [unread, setUnread] = useState(null);
+  const refreshUnreadRef = useRef(null);
+  const refreshUnreadCount = useCallback(() => refreshUnreadRef.current?.(), []);
+
+  useEffect(() => {
+    if (!userId || !supabase) return;
+    let active = true;
+    let latestRequest = 0;
+    const refresh = async () => {
+      if (!active) return;
+      const request = ++latestRequest;
+      try {
+        const { count, error } = await supabase
+          .from("express_notifications")
+          .select("id", { head: true, count: "exact" })
+          .eq("user_id", userId)
+          .eq("is_read", false);
+        if (active && request === latestRequest && !error) {
+          setUnread({ userId, count: count ?? 0 });
+        }
+      } catch (error) {
+        console.warn("Failed to refresh notification count:", error?.message);
+      }
+    };
+    refreshUnreadRef.current = refresh;
+    refresh();
+
+    const changes = {
+      schema: "public",
+      table: "express_notifications",
+      filter: `user_id=eq.${userId}`,
+    };
+    const channel = supabase
+      .channel(`unread-notifications-${userId}`)
+      .on("postgres_changes", { ...changes, event: "INSERT" }, refresh)
+      .on("postgres_changes", { ...changes, event: "UPDATE" }, refresh)
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") refresh();
+      });
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refresh();
+    });
+
+    return () => {
+      active = false;
+      refreshUnreadRef.current = null;
+      subscription.remove();
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
 
   // Register device token with Supabase
   const registerDeviceToken = useCallback(async (uid, token, platform) => {
@@ -495,6 +545,8 @@ export const NotificationProvider = ({ children, userId }) => {
     expoPushToken,
     notification,
     notificationPermission,
+    unreadCount: unread?.userId === userId ? (unread?.count ?? 0) : 0,
+    refreshUnreadCount,
     sendNotification,
     registerDeviceToken,
     unregisterDeviceToken,
