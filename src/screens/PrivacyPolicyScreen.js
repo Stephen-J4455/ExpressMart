@@ -54,6 +54,7 @@ While we strive to protect your data, no method of electronic transmission or st
   },
   {
     title: "5. Your Rights",
+    showAccountDeletionLink: true,
     body: `You have the right to:
 
 • Access and review the personal data we hold about you
@@ -85,7 +86,7 @@ To exercise any of these rights, please contact us through the Help & Support se
   },
 ];
 
-export const PrivacyPolicyScreen = ({ navigation }) => {
+export const PrivacyPolicyScreen = ({ navigation, accountDeletionLink }) => {
   const { colors: themeColors } = useTheme();
   const styles = useAppStyles((c) => buildPrivacyPolicyStyles(c));
 
@@ -118,6 +119,7 @@ export const PrivacyPolicyScreen = ({ navigation }) => {
           <View key={index} style={styles.section}>
             <Text style={styles.sectionTitle}>{section.title}</Text>
             <Text style={styles.sectionBody}>{section.body}</Text>
+            {section.showAccountDeletionLink ? accountDeletionLink : null}
           </View>
         ))}
 

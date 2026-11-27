@@ -236,6 +236,9 @@ export function PageShell({ title, description, eyebrow, children }) {
         <Text style={styles.footerText}>
           © Tagit · Discover stores and shop products across Ghana
         </Text>
+        <Link href="/delete-account" style={[styles.linkText, { marginTop: 10 }]}>
+          Account and data deletion
+        </Link>
       </View>
     </View>
   );
